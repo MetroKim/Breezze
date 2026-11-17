@@ -1,0 +1,10 @@
+/// Breezze audio contracts package — the single Dart playback contract
+/// shared by every platform shell (ADR-001).
+library;
+
+export 'src/audio_engine_adapter.dart';
+export 'src/crossfade_controller.dart';
+export 'src/lrc_parser.dart';
+export 'src/playback_state_machine.dart';
+export 'src/queue_manager.dart';
+export 'src/scrobble_bus.dart';
