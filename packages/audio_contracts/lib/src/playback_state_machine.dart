@@ -112,9 +112,6 @@ class PlaybackStateMachine {
 
       case PlaybackState.buffering:
         if (e is PlayPressed) return PlaybackState.playing;
-        if (e is BufferingStarted && s == PlaybackState.buffering) {
-          return PlaybackState.playing;
-        }
         if (e is ConnectionLost) return PlaybackState.offline;
         return s;
 
@@ -124,7 +121,7 @@ class PlaybackStateMachine {
         if (e is TrackTransitioned) return PlaybackState.transitioning;
         if (e is TrackCompleted) return PlaybackState.ended;
         if (e is InterruptionDetected) return PlaybackState.interrupted;
-        if (e is ConnectionLost) return PlaybackState offline;
+        if (e is ConnectionLost) return PlaybackState.offline;
         return s;
 
       case PlaybackState.paused:
