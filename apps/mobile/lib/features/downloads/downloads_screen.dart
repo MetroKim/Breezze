@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../../app/downloads_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
-/// Downloads library — real offline tracks with cover art + lyrics (§6.1).
+/// Downloads library — offline tracks with cover art + lyrics, plus a
+/// live in-progress section (§6.1).
 class DownloadsScreen extends ConsumerStatefulWidget {
   const DownloadsScreen({super.key});
 
@@ -65,6 +67,13 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final progress = ref.watch(downloadProgressProvider);
+    final inProgress = progress.entries.toList();
+
+    // Refresh the completed list when the last in-flight download ends.
+    if (inProgress.isEmpty && _tracks.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshIfNeeded());
+    }
 
     return SafeArea(
       child: Column(
@@ -88,27 +97,54 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _tracks.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            BzBnoteMark(size: 64, color: theme.bzText2),
-                            const SizedBox(height: 16),
-                            Text('No downloads yet',
-                                style: theme.textTheme.titleMedium),
-                            const SizedBox(height: 8),
-                            Text('Search a song and tap the download icon.',
-                                style: theme.textTheme.bodyMedium),
-                          ],
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 220),
+                    children: [
+                      // In-progress section (live)
+                      for (final entry in inProgress)
+                        ListTile(
+                          leading: const SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2),
+                            ),
+                          ),
+                          title: Text(
+                              'Downloading… ${(entry.value * 100).round()}%',
+                              style: theme.textTheme.titleMedium),
+                          subtitle: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: entry.value,
+                              minHeight: 3,
+                              backgroundColor: theme.bzSeparator,
+                              color: theme.bzAccent,
+                            ),
+                          ),
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(0, 8, 0, 220),
-                        itemCount: _tracks.length,
-                        itemBuilder: (context, i) {
-                          final track = _tracks[i];
-                          return ListTile(
+                      // Completed downloads
+                      if (_tracks.isEmpty && inProgress.isEmpty)
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 48),
+                              BzBnoteMark(size: 64, color: theme.bzText2),
+                              const SizedBox(height: 16),
+                              Text('No downloads yet',
+                                  style: theme.textTheme.titleMedium),
+                              const SizedBox(height: 8),
+                              Text(
+                                  'Search a song and tap the download icon.',
+                                  style: theme.textTheme.bodyMedium),
+                            ],
+                          ),
+                        )
+                      else
+                        for (final track in _tracks)
+                          ListTile(
                             leading: track.coverPath != null
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(
@@ -124,7 +160,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                                   )
                                 : BzBnoteMark(size: 48, color: theme.bzText2),
                             title: Text(track.title,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
                             subtitle: Text(
                               '${track.artist}'
                               '${track.lyricsPath != null ? ' · lyrics saved' : ''}',
@@ -143,12 +180,21 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                               ],
                             ),
                             onTap: () => _play(track),
-                          );
-                        },
-                      ),
+                          ),
+                    ],
+                  ),
           ),
         ],
       ),
     );
+  }
+
+  var _refreshedAt = 0;
+
+  void _refreshIfNeeded() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _refreshedAt < 1000) return; // throttle
+    _refreshedAt = now;
+    _refresh();
   }
 }
