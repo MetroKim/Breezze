@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
+import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -104,7 +103,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 letterSpacing: 1,
                                 color: theme.bzText2)),
                         Text('Breezze',
-                            style: TextStyle(fontSize: BzType.footnote,
+                            style: TextStyle(
+                                fontSize: BzType.footnote,
                                 color: theme.bzText1)),
                       ],
                     ),
@@ -172,9 +172,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                               .clamp(0, player.duration.inMilliseconds)
                               .toDouble()
                           : 0,
-                      max: player.duration.inMilliseconds.toDouble(),
-                      onChanged: (v) => controller.seekTo(
-                          Duration(milliseconds: v.toInt())),
+                      max: player.duration.inMilliseconds > 0
+                          ? player.duration.inMilliseconds.toDouble()
+                          : 1,
+                      onChanged: (v) =>
+                          controller.seekTo(Duration(milliseconds: v.toInt())),
                     ),
                   ),
                   Row(
@@ -280,9 +282,11 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
   void didUpdateWidget(covariant _BreathingArtwork oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.playing != oldWidget.playing) {
-      widget.playing
-          ? _controller.repeat(reverse: true)
-          : _controller.stop();
+      if (widget.playing) {
+        _controller.repeat(reverse: true);
+      } else {
+        _controller.stop();
+      }
     }
   }
 
@@ -310,13 +314,13 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
                   widget.artworkUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Center(
-                    child: BzBnoteMark(
-                        size: 96, color: widget.fallbackColor),
+                    child:
+                        BzBnoteMark(size: 96, color: widget.fallbackColor),
                   ),
                 )
               : Center(
-                  child: BzBnoteMark(
-                      size: 96, color: widget.fallbackColor),
+                  child:
+                      BzBnoteMark(size: 96, color: widget.fallbackColor),
                 ),
         ),
       ),
@@ -324,7 +328,7 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
   }
 }
 
-/// Play/pause pill with press animation.
+/// Play/pause pill.
 class _PlayPauseButton extends StatelessWidget {
   final bool playing;
   final double size;
@@ -395,9 +399,24 @@ class _LyricsView extends StatelessWidget {
         final activeWord =
             active && isSynced ? lyrics!.activeWordIndex(i, position) : -1;
 
+        if (line.words.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: TextStyle(
+                fontSize: BzType.headline,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w400,
+                color: active ? theme.bzText1 : theme.bzText2,
+              ),
+              child: Text(line.text),
+            ),
+          );
+        }
+
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
+          child: Wrap(
             children: [
               for (var w = 0; w < line.words.length; w++)
                 Padding(
@@ -408,23 +427,11 @@ class _LyricsView extends StatelessWidget {
                       fontSize: BzType.headline,
                       fontWeight: active ? FontWeight.w700 : FontWeight.w400,
                       color: active
-                          ? (w <= activeWord
-                              ? theme.bzText1
-                              : theme.bzText2)
+                          ? (w <= activeWord ? theme.bzText1 : theme.bzText2)
                           : theme.bzText2,
                     ),
                     child: Text(line.words[w].text),
                   ),
-                ),
-              if (line.words.isEmpty)
-                AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 200),
-                  style: TextStyle(
-                    fontSize: BzType.headline,
-                    fontWeight: active ? FontWeight.w700 : FontWeight.w400,
-                    color: active ? theme.bzText1 : theme.bzText2,
-                  ),
-                  child: Text(line.text),
                 ),
             ],
           ),
@@ -462,9 +469,4 @@ class _FavoriteButton extends ConsumerWidget {
       },
     );
   }
-}
-
-/// Offline cover art: load from the downloads library when local.
-File? offlineCoverFor(String trackId) {
-  return null; // resolved by the downloads screen via DownloadsLibrary
 }
