@@ -29,6 +29,7 @@ model User {
   reportsFiled   ContentReport[]  @relation("reporter")
   notifications  Notification[]
   pushTokens     PushToken[]
+  artistClaims   ArtistClaim[]
 }
 
 model RefreshToken {
@@ -94,6 +95,17 @@ model ContentReport {
   status      String   @default("open")
   createdAt   DateTime @default(now())
   reporter    User     @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+}
+
+model ArtistClaim {
+  id        String   @id @default(uuid())
+  userId    String
+  artistId  String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, artistId])
 }
 
 model Artist {
@@ -220,7 +232,7 @@ model DownloadRecord {
   status    String    @default("active")
   createdAt DateTime  @default(now())
   expiresAt DateTime?
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, trackId])
 }
