@@ -14,6 +14,7 @@ import { PlaylistsModule } from './playlists/playlists.module';
 import { DownloadsModule } from './downloads/downloads.module';
 import { HomeModule } from './home/home.module';
 import { LyricsModule } from './lyrics/lyrics.module';
+import { RadioModule } from './radio/radio.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { LyricsModule } from './lyrics/lyrics.module';
     DownloadsModule,
     HomeModule,
     LyricsModule,
+    RadioModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
