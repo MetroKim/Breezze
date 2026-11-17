@@ -13,9 +13,8 @@ import { SearchModule } from './search/search.module';
 import { PlaylistsModule } from './playlists/playlists.module';
 import { DownloadsModule } from './downloads/downloads.module';
 import { HomeModule } from './home/home.module';
+import { LyricsModule } from './lyrics/lyrics.module';
 
-// Only modules that exist — every import resolves. Add modules here
-// only after their files land.
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -31,6 +30,7 @@ import { HomeModule } from './home/home.module';
     PlaylistsModule,
     DownloadsModule,
     HomeModule,
+    LyricsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
