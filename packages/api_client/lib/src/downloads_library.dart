@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'dart:io';
 
-import 'bitchord_adapter.dart';
 import 'bz_track.dart';
 import 'lyrics_provider.dart';
 import 'youtube_source_adapter.dart';
@@ -28,7 +26,13 @@ class DownloadsLibrary {
   Directory _dirFor(String trackId) => Directory('${root.path}/$trackId');
 
   /// Downloads audio + cover art + lyrics for one track.
-  Future<bool> download(BzTrack track) async {
+  ///
+  /// [onProgress] receives 0.0–1.0 across the audio transfer (the
+  /// dominant cost); lyrics and art are near-instant.
+  Future<bool> download(
+    BzTrack track, {
+    void Function(double progress)? onProgress,
+  }) async {
     final dir = _dirFor(track.id);
     final videoId =
         track.id.startsWith('bz:') ? track.id.substring(3) : track.id;
@@ -36,12 +40,15 @@ class DownloadsLibrary {
     try {
       await dir.create(recursive: true);
 
-      // 1. Audio
+      // 1. Audio (with byte-accurate progress)
       final audioFile = File('${dir.path}/audio.m4a');
       if (!await audioFile.exists()) {
         final sink = audioFile.openWrite();
         try {
-          await for (final chunk in source.audioBytes(videoId)) {
+          await for (final chunk in source.audioBytes(
+            videoId,
+            onProgress: onProgress,
+          )) {
             sink.add(chunk);
           }
           await sink.flush();
@@ -49,6 +56,7 @@ class DownloadsLibrary {
           await sink.close();
         }
       }
+      onProgress?.call(1.0);
 
       // 2. Cover art
       if (track.artworkUrl != null) {
@@ -75,12 +83,21 @@ class DownloadsLibrary {
       // 4. Metadata
       final metaFile = File('${dir.path}/meta.json');
       await metaFile.writeAsString(
-          '{"title":"${track.title}","artist":"${track.artist}"}');
+          '{"title":${_jsonEncode(track.title)},"artist":${_jsonEncode(track.artist)}}');
 
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Minimal JSON string escaping for the metadata file.
+  String _jsonEncode(String value) {
+    final escaped = value
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')
+        .replaceAll('\n', '\\n');
+    return '"$escaped"';
   }
 
   /// All downloaded tracks with their local assets resolved.
@@ -93,12 +110,22 @@ class DownloadsLibrary {
       if (!await metaFile.exists()) continue;
       try {
         final raw = await metaFile.readAsString();
-        final title = RegExp(r'"title"\s*:\s*"([^"]*)"').firstMatch(raw);
-        final artist = RegExp(r'"artist"\s*:\s*"([^"]*)"').firstMatch(raw);
+        final title = RegExp(r'"title"\s*:\s*"((?:[^"\\]|\\.)*)"')
+            .firstMatch(raw)
+            ?.group(1)
+            ?.replaceAll('\\\\"', '"')
+            .replaceAll('\\\\n', '\n')
+            .replaceAll('\\\\', '\\');
+        final artist = RegExp(r'"artist"\s*:\s*"((?:[^"\\]|\\.)*)"')
+            .firstMatch(raw)
+            ?.group(1)
+            ?.replaceAll('\\\\"', '"')
+            .replaceAll('\\\\n', '\n')
+            .replaceAll('\\\\', '\\');
         tracks.add(DownloadedTrack(
           trackId: entry.uri.pathSegments.last,
-          title: title?.group(1) ?? 'Unknown',
-          artist: artist?.group(1) ?? 'Unknown',
+          title: (title ?? 'Unknown').isNotEmpty ? title! : 'Unknown',
+          artist: artist ?? 'Unknown',
           audioPath: '${entry.path}/audio.m4a',
           coverPath: await File('${entry.path}/cover.jpg').exists()
               ? '${entry.path}/cover.jpg'
