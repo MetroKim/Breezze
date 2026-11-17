@@ -11,6 +11,7 @@ import { PlaybackModule } from './playback/playback.module';
 import { LibraryModule } from './library/library.module';
 import { SearchModule } from './search/search.module';
 import { PlaylistsModule } from './playlists/playlists.module';
+import { DownloadsModule } from './downloads/downloads.module';
 
 // Only modules that exist — every import resolves. Add modules here
 // only after their files land.
@@ -27,6 +28,7 @@ import { PlaylistsModule } from './playlists/playlists.module';
     LibraryModule,
     SearchModule,
     PlaylistsModule,
+    DownloadsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
