@@ -30,6 +30,7 @@ model User {
   notifications  Notification[]
   pushTokens     PushToken[]
   artistClaims   ArtistClaim[]
+  releases       ReleaseSubmission[]
 }
 
 model RefreshToken {
@@ -108,9 +109,20 @@ model ArtistClaim {
   @@unique([userId, artistId])
 }
 
+model ReleaseSubmission {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  artistId  String
+  trackCount Int
+  status    String   @default("submitted")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model Artist {
   id        String   @id @default(uuid())
-  name      String
+  name      String   @unique
   createdAt DateTime @default(now())
   albums    Album[]
   tracks    Track[]
