@@ -24,6 +24,9 @@ dependencies:
   # Audio engine (native ExoPlayer / AVFoundation wrappers)
   just_audio: ^0.9.39
 
+  # Background audio: lock-screen controls, notification, audio focus
+  audio_service: ^0.18.15
+
   # HTTP for backend connections
   http: ^1.2.1
 
