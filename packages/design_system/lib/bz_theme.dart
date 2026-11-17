@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'tokens.dart';
+import 'src/tokens.dart';
 
-export 'tokens.dart';
+export 'src/tokens.dart';
 
 /// Breezze theme — builds light/dark [ThemeData] purely from semantic
 /// tokens (§21.1). Components consume [BzThemeExt] for material classes.
@@ -25,64 +25,52 @@ extension BzThemeExt on ThemeData {
 }
 
 /// Builds the Breezze light theme from tokens.
-ThemeData bzLightTheme() {
-  final scheme = ColorScheme.light(
-    primary: BzColorsLight.textPrimary,
-    onPrimary: BzColorsLight.background,
-    secondary: BzColorsLight.accent,
-    onSecondary: BzColorsLight.background,
-    surface: BzColorsLight.surfacePrimary,
-    onSurface: BzColorsLight.textPrimary,
-    surfaceContainerHighest: BzColorsLight.surfaceSecondary,
-    error: BzColorsLight.error,
-    onError: BzColorsLight.background,
-    outline: BzColorsLight.separator,
-  );
-  return _bzTheme(scheme, Brightness.light);
-}
+ThemeData bzLightTheme() => _bzTheme(Brightness.light);
 
 /// Builds the Breezze dark theme from tokens.
-ThemeData bzDarkTheme() {
-  final scheme = ColorScheme.dark(
-    primary: BzColorsDark.textPrimary,
-    onPrimary: BzColorsDark.background,
-    secondary: BzColorsDark.accent,
-    onSecondary: BzColorsDark.background,
-    surface: BzColorsDark.surfacePrimary,
-    onSurface: BzColorsDark.textPrimary,
-    surfaceContainerHighest: BzColorsDark.surfaceSecondary,
-    error: BzColorsDark.error,
-    onError: BzColorsDark.background,
-    outline: BzColorsDark.separator,
-  );
-  return _bzTheme(scheme, Brightness.dark);
-}
+ThemeData bzDarkTheme() => _bzTheme(Brightness.dark);
 
-ThemeData _bzTheme(ColorScheme scheme, Brightness brightness) {
+ThemeData _bzTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
-  final base = isDark ? bzDarkTheme() : bzLightTheme();
+  final text1 = isDark ? BzColorsDark.textPrimary : BzColorsLight.textPrimary;
+
+  final scheme = ColorScheme(
+    brightness: brightness,
+    primary: text1,
+    onPrimary: isDark ? BzColorsDark.background : BzColorsLight.background,
+    secondary: isDark ? BzColorsDark.accent : BzColorsLight.accent,
+    onSecondary: isDark ? BzColorsDark.background : BzColorsLight.background,
+    surface: isDark ? BzColorsDark.surfacePrimary : BzColorsLight.surfacePrimary,
+    onSurface: text1,
+    surfaceContainerHighest:
+        isDark ? BzColorsDark.surfaceSecondary : BzColorsLight.surfaceSecondary,
+    error: isDark ? BzColorsDark.error : BzColorsLight.error,
+    onError: isDark ? BzColorsDark.background : BzColorsLight.background,
+    outline: isDark ? BzColorsDark.separator : BzColorsLight.separator,
+  );
+
   return ThemeData(
     useMaterial3: true,
+    brightness: brightness,
     colorScheme: scheme,
-    scaffoldBackgroundColor: isDark ? BzColorsDark.background : BzColorsLight.background,
-    textTheme: _bzTextTheme(brightness),
+    scaffoldBackgroundColor:
+        isDark ? BzColorsDark.background : BzColorsLight.background,
+    textTheme: _bzTextTheme(text1),
     splashFactory: InkSparkle.splashFactory,
   );
 }
 
-TextTheme _bzTextTheme(Brightness brightness) {
-  final color = brightness == Brightness.dark ? BzColorsDark.textPrimary : BzColorsLight.textPrimary;
-  const font = 'System';
+TextTheme _bzTextTheme(Color color) {
   return TextTheme(
-    displayLarge: TextStyle(fontSize: BzType.display, fontWeight: FontWeight.w700, color: color, fontFamily: font),
-    displayMedium: TextStyle(fontSize: BzType.largeTitle, fontWeight: FontWeight.w700, color: color, fontFamily: font),
-    headlineMedium: TextStyle(fontSize: BzType.title1, fontWeight: FontWeight.w700, color: color, fontFamily: font),
-    headlineSmall: TextStyle(fontSize: BzType.title2, fontWeight:.w600, color: color, fontFamily: font),
-    titleLarge: TextStyle(fontSize: BzType.title3, fontWeight: FontWeight.w600, color: color, fontFamily: font),
-    titleMedium: TextStyle(fontSize: BzType.headline, fontWeight: FontWeight.w600, color: color, fontFamily: font),
-    bodyLarge: TextStyle(fontSize: BzType.body, color: color, fontFamily: font),
-    bodyMedium: TextStyle(fontSize: BzType.subheadline, color: color, fontFamily: font),
-    bodySmall: TextStyle(fontSize: BzType.footnote, color: color, fontFamily: font),
-    labelSmall: TextStyle(fontSize: BzType.caption, color: color, fontFamily: font),
+    displayLarge: TextStyle(fontSize: BzType.display, fontWeight: FontWeight.w700, color: color),
+    displayMedium: TextStyle(fontSize: BzType.largeTitle, fontWeight: FontWeight.w700, color: color),
+    headlineMedium: TextStyle(fontSize: BzType.title1, fontWeight: FontWeight.w700, color: color),
+    headlineSmall: TextStyle(fontSize: BzType.title2, fontWeight: FontWeight.w600, color: color),
+    titleLarge: TextStyle(fontSize: BzType.title3, fontWeight: FontWeight.w600, color: color),
+    titleMedium: TextStyle(fontSize: BzType.headline, fontWeight: FontWeight.w600, color: color),
+    bodyLarge: TextStyle(fontSize: BzType.body, color: color),
+    bodyMedium: TextStyle(fontSize: BzType.subheadline, color: color),
+    bodySmall: TextStyle(fontSize: BzType.footnote, color: color),
+    labelSmall: TextStyle(fontSize: BzType.caption, color: color),
   );
 }
