@@ -1,37 +1,57 @@
-import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+} from '@nestjs/common';
+import { IsInt, IsString, Min, MinLength } from 'class-validator';
+import { CatalogService } from './catalog.service';
+
+export class ResolveTrackDto {
+  @IsString()
+  @MinLength(1)
+  externalId!: string;
+
+  @IsString()
+  @MinLength(1)
+  source!: string;
+
+  @IsString()
+  @MinLength(1)
+  title!: string;
+
+  @IsString()
+  @MinLength(1)
+  artistName!: string;
+
+  @IsInt()
+  @Min(1)
+  durationSec!: number;
+}
 
 @Controller('catalog')
 export class CatalogController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly catalog: CatalogService) {}
+
+  // ID convergence: external track → one canonical catalog row.
+  @Post('resolve')
+  resolve(@Body() dto: ResolveTrackDto) {
+    return this.catalog.resolve(dto);
+  }
 
   @Get('songs/:id')
-  async song(@Param('id') id: string) {
-    const track = await this.prisma.track.findUnique({
-      where: { id },
-      include: { artist: true, album: true },
-    });
-    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
-    return track;
+  song(@Param('id') id: string) {
+    return this.catalog.song(id);
   }
 
   @Get('albums/:id')
-  async album(@Param('id') id: string) {
-    const album = await this.prisma.album.findUnique({
-      where: { id },
-      include: { tracks: true, artist: true },
-    });
-    if (!album) throw new NotFoundException('ALBUM_NOT_FOUND');
-    return album;
+  album(@Param('id') id: string) {
+    return this.catalog.album(id);
   }
 
   @Get('artists/:id')
-  async artist(@Param('id') id: string) {
-    const artist = await this.prisma.artist.findUnique({
-      where: { id },
-      include: { albums: true, tracks: true },
-    });
-    if (!artist) throw new NotFoundException('ARTIST_NOT_FOUND');
-    return artist;
+  artist(@Param('id') id: string) {
+    return this.catalog.artist(id);
   }
 }
