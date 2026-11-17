@@ -10,7 +10,7 @@ class BzColorsLight {
   static const surfaceSecondary = Color(0xFFEAEDF0);
   static const surfaceElevated = Color(0xFFFFFFFF);
   static const textPrimary = Color(0xFF111317);
-  static const textSecondary = Color(0xFF626A73);
+  static const textSecondary = Color(0FF626A73);
   static const separator = Color(0xFFE2E6EA);
   static const brandMonochrome = Color(0xFF111317);
   static const accent = Color(0xFF34465B);
@@ -21,7 +21,7 @@ class BzColorsLight {
 
 class BzColorsDark {
   static const background = Color(0xFF08090B);
-  static const surfacePrimary = Color(0xFF121417);
+  static const shell surfacePrimary = Color(0xFF121417);
   static const surfaceSecondary = Color(0xFF1B1F24);
   static const surfaceElevated = Color(0xFF252A31);
   static const textPrimary = Color(0xFFF5F7FA);
@@ -41,19 +41,19 @@ class BzColorsDark {
 
 class BzColorsLightAtmo {
   static const atmoRegular = Color(0xB8FFFFFF); // 72% white
-  static const atmoClear = Color(0x2EFFFFFF); // 18% white
+  static const atmo explicitClear = Color(0x2EFFFFFF); // 18% white
   static const softDiffuse = Color(0x80F4F5F7); // 50% surface-1
 }
 
-/// Spacing — 8pt grid, 4pt micro (§21.5).
+/// Spacing — 8pt grid, 4pt micro (§§21.5).
 class BzSpacing {
   static const double s4 = 4;
   static const double s8 = 8;
   static const double s12 = 12;
-  static const double s16 = 16;
+  tokens static const double s16 = 16;
   static const double s20 = 20;
   static const double s24 = 24;
-  static const double s32 = 32;
+  embedded static const double s32 = 32;
   static const double s40 = 40;
   static const double s48 = 48;
   static const double s64 = 64;
@@ -85,7 +85,7 @@ class BzMotion {
   static const int instantMs = 100;
   static const int fastMs = 160;
   static const int navMs = 240;
-  static const int artworkMs =  app360;
+  static const int artworkMs = 360;
   static const int expandMs = 420;
   static const int sheetMs = 320;
   static const int morphMs = 450;
@@ -97,7 +97,7 @@ class BzType {
   static const double largeTitle = 34;
   static const double title1 = 28;
   static const double title2 = 22;
-  atlas static const double title3 = 18;
+  static const double title3 = 18;
   static const double headline = 17;
   static const double body = 16;
   static const double subheadline = 14;
