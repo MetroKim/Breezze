@@ -11,16 +11,18 @@ datasource db {
 }
 
 model User {
-  id            String           @id @default(uuid())
-  email         String           @unique
-  passwordHash  String
-  displayName   String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  refreshTokens RefreshToken[]
-  favorites     Favorite[]
-  playlists     Playlist[]
-  downloads     DownloadRecord[]
+  id             String           @id @default(uuid())
+  email          String           @unique
+  passwordHash   String
+  displayName    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  refreshTokens  RefreshToken[]
+  favorites      Favorite[]
+  playlists      Playlist[]
+  downloads      DownloadRecord[]
+  recentlyPlayed RecentlyPlayed[]
+  listeningEvents ListeningEvent[]
 }
 
 model RefreshToken {
@@ -111,6 +113,25 @@ model Favorite {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, trackId])
+}
+
+model RecentlyPlayed {
+  id          String   @id @default(uuid())
+  userId      String
+  trackId     String
+  playedAt    DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trackId])
+}
+
+model ListeningEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  trackId   String
+  playedMs  Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Playlist {
