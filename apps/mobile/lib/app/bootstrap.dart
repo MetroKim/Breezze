@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/audio/just_audio_engine_adapter.dart';
+import '../core/database/db_instance.dart';
+import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
 
 /// Composition root — the real, working wiring at startup.
@@ -86,10 +88,11 @@ Future<Directory> downloadsDirectory() async {
 }
 
 // ---------------------------------------------------------------------------
-// Favorites store — JSON persistence
+// Favorites — drift-backed store, JSON kept only as the legacy import
+// source for the one-shot migration.
 // ---------------------------------------------------------------------------
 
-/// A favorited track with its display info, persisted to JSON.
+/// A favorited track with its display info.
 class FavoriteTrack {
   final String id;
   final String title;
@@ -130,8 +133,8 @@ class FavoriteTrack {
       );
 }
 
-/// Favorites persistence: JSON file in app documents.
-class FavoritesStore {
+/// Legacy JSON favorites reader — used ONLY by the one-shot migration.
+class LegacyFavoritesJson {
   static const _fileName = 'breezze_favorites.json';
 
   Future<File> _file() async {
@@ -153,25 +156,44 @@ class FavoritesStore {
       return [];
     }
   }
+}
 
-  Future<void> save(List<FavoriteTrack> tracks) async {
-    final file = await _file();
-    await file.writeAsString(jsonEncode([for (final t in tracks) t.toJson()]));
+/// Favorites store — drift-backed (SQLite). Same public API as the
+/// JSON version (load / toggle / isFavorite), so screens are unchanged.
+class FavoritesStore {
+  final FavoritesDao _dao = FavoritesDao(breezzeDb);
+
+  Future<List<FavoriteTrack>> load() async {
+    final rows = await _dao.list();
+    return [
+      for (final r in rows)
+        FavoriteTrack(
+          id: r.id.value,
+          title: r.title.value,
+          artist: r.artist.value,
+          artworkUrl: r.artworkUrl.value,
+          durationMs: r.durationMs.value,
+        )
+    ];
   }
 
   /// Returns true when the track was added, false when removed.
   Future<bool> toggle(FavoriteTrack track) async {
-    final tracks = await load();
-    if (tracks.any((t) => t.id == track.id)) {
-      await save(tracks.where((t) => t.id != track.id).toList());
+    if (await _dao.contains(track.id)) {
+      await _dao.remove(track.id);
       return false;
     }
-    await save([...tracks, track]);
+    await _dao.add(
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      artworkUrl: track.artworkUrl,
+      durationMs: track.durationMs,
+    );
     return true;
   }
 
-  Future<bool> isFavorite(String id) async =>
-      (await load()).any((t) => t.id == id);
+  Future<bool> isFavorite(String id) => _dao.contains(id);
 }
 
 /// App-wide favorites store provider.
