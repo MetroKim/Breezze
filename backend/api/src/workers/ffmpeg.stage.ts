@@ -1,13 +1,9 @@
 import { spawn } from 'child_process';
-import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Plan §10.2 — one stage per function. FFmpeg/FFprobe are the real
-// tools; nothing is faked. Output layout:
-//   media/<jobId>/master.m3u8 + segment .ts files + audio-only variants
-
-const exec = promisify(spawn as never) as never; // unused; kept for parity
+// Plan §10.2 — pipeline stages. FFmpeg/FFprobe are the real tools.
+// Per-variant HLS renditions under media/<jobId>/.
 
 export interface ProbeResult {
   durationSec: number;
@@ -16,11 +12,25 @@ export interface ProbeResult {
   bitrateKbps: number;
 }
 
+function run(cmd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`${cmd} exited with code ${code}`));
+    });
+  });
+}
+
 export async function probe(inputPath: string): Promise<ProbeResult> {
   const out = await run('ffprobe', [
     '-v', 'error',
     '-print_format', 'json',
     '-show_format',
+    '-show_streams',
     inputPath,
   ]);
   const parsed = JSON.parse(out) as {
@@ -36,48 +46,61 @@ export async function probe(inputPath: string): Promise<ProbeResult> {
   };
 }
 
-export async function validate(jobId: string, inputPath: string): Promise<ProbeResult> {
+export async function validate(inputPath: string): Promise<ProbeResult> {
   const result = await probe(inputPath).catch(() => null);
-  if (!result || !Number.isFinite(result.durationSec) || result.durationSec <= 0) {
+  if (
+    !result ||
+    !Number.isFinite(result.durationSec) ||
+    result.durationSec <= 0
+  ) {
     throw new Error('PROBE_FAILED_NOT_PLAYABLE');
   }
   return result;
 }
 
-export async function transcodeToHls(
-  jobId: string,
+// Transcodes each variant with its own ffmpeg invocation — clear,
+// debuggable, one variant per process.
+export async function transcodeVariant(
   inputPath: string,
   outDir: string,
-  variants: { label: string; kbps: number }[] = [
-    { label: 'aac_128', kbps: 128 },
-    { label: 'aac_256', kbps: 256 },
-  ],
+  label: string,
+  kbps: number,
 ): Promise<string> {
   await fs.mkdir(outDir, { recursive: true });
-  const master = path.join(outDir, 'master.m3u8');
+  const playlist = path.join(outDir, `${label}.m3u8`);
   await run('ffmpeg', [
     '-y',
     '-i', inputPath,
-    ...variants.flatMap((v) => [
-      '-c:a', 'aac', '-b:a', `${v.kbps}k`,
-      '-hls_time', '6',
-      '-hls_playlist_type', 'vbr',
-      '-hls_segment_filename', path.join(outDir, `${v.label}_%03d.ts`),
-      path.join(outDir, `${v.label}.m3u8`),
-    ]),
+    '-c:a', 'aac',
+    '-b:a', `${kbps}k`,
+    '-hls_time', '6',
+    '-hls_playlist_type', 'vod',
+    '-hls_segment_filename', path.join(outDir, `${label}_%03d.ts`),
+    playlist,
   ]);
+  return playlist;
+}
+
+export async function writeMasterPlaylist(
+  outDir: string,
+  variants: string[],
+): Promise<string> {
+  const lines = ['#EXTM3U'];
+  for (const v of variants) {
+    lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=256000,CODECS="mp4a.40.2"`);
+    lines.push(v);
+  }
+  const master = path.join(outDir, 'master.m3u8');
+  await fs.writeFile(master, lines.join('\n'), 'utf8');
   return master;
 }
 
-function run(cmd: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(`${cmd} exited with code ${code}`));
-    });
-  });
+export async function transcodeAll(
+  inputPath: string,
+  outDir: string,
+): Promise<string> {
+  const playlists: string[] = [];
+  playlists.push(await transcodeVariant(inputPath, outDir, 'aac_128', 128));
+  playlists.push(await transcodeVariant(inputPath, outDir, 'aac_256', 256));
+  return writeMasterPlaylist(outDir, playlists.map((p) => path.basename(p)));
 }
