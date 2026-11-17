@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'widgets/bz_shell.dart';
+import 'widgets/breezze_app_root.dart';
 
 void main() {
-  runApp(const BreezzeShell());
+  runApp(const BreezzeAppRoot());
 }
