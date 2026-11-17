@@ -1,3 +1,4 @@
+import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,21 +33,32 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     });
   }
 
+  List<TrackInfo> _queue() => [
+        for (final f in _favorites)
+          TrackInfo(
+            id: f.id,
+            title: f.title,
+            artist: f.artist,
+            artworkUrl: f.artworkUrl,
+            duration: Duration(milliseconds: f.durationMs),
+          )
+      ];
+
   void _playAll() {
     if (_favorites.isEmpty) return;
-    final queue = [
-      for (final f in _favorites)
-        TrackInfo(
-          id: f.id,
-          title: f.title,
-          artist: f.artist,
-          artworkUrl: f.artworkUrl,
-          duration: Duration(milliseconds: f.durationMs),
-        )
-    ];
     ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: queue.first.id,
-          queue: queue,
+          trackId: _favorites.first.id,
+          queue: _queue(),
+          origin: 'library',
+          sourceContext: 'Favorites',
+        );
+  }
+
+  void _playOne(int index) {
+    ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: _favorites[index].id,
+          queue: _queue(),
+          startIndex: index,
           origin: 'library',
           sourceContext: 'Favorites',
         );
@@ -123,28 +135,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
                             subtitle: Text(fav.artist,
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
-                            onTap: () {
-                              final queue = [
-                                for (final f in _favorites)
-                                  TrackInfo(
-                                    id: f.id,
-                                    title: f.title,
-                                    artist: f.artist,
-                                    artworkUrl: f.artworkUrl,
-                                    duration: Duration(
-                                        milliseconds: f.durationMs),
-                                  )
-                              ];
-                              ref
-                                  .read(playerControllerProvider.notifier)
-                                  .playTrack(
-                                    trackId: fav.id,
-                                    queue: queue,
-                                    startIndex: i,
-                                    origin: 'library',
-                                    sourceContext: 'Favorites',
-                                  );
-                            },
+                            onTap: () => _playOne(i),
                             trailing: IconButton(
                               icon: const Icon(Icons.favorite,
                                   color: Colors.redAccent),
