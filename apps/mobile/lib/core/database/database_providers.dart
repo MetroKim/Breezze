@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Count;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'breezze_database.dart';
+import 'catalog_id_map_dao.dart';
 import 'favorites_dao.dart';
 import 'recently_played_dao.dart';
 import 'sync_outbox_dao.dart';
@@ -22,4 +23,8 @@ final recentlyPlayedDaoProvider = Provider<RecentlyPlayedDao>(
 
 final syncOutboxDaoProvider = Provider<SyncOutboxDao>(
   (ref) => SyncOutboxDao(ref.watch(breezzeDatabaseProvider)),
+);
+
+final catalogIdMapDaoProvider = Provider<CatalogIdMapDao>(
+  (ref) => CatalogIdMapDao(ref.watch(breezzeDatabaseProvider)),
 );
