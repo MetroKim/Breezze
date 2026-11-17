@@ -25,12 +25,8 @@ class DownloadsScreen extends ConsumerWidget {
           const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _DemoDownloadList(),
+              child: _DownloadList(),
             ),
-          ),
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: _EmptyDownloads(),
           ),
         ],
       ),
@@ -39,15 +35,15 @@ class DownloadsScreen extends ConsumerWidget {
 }
 
 /// Live download list wired to the manager stream.
-class _DemoDownloadList extends StatelessWidget {
-  const _DemoDownloadList();
+class _DownloadList extends StatelessWidget {
+  const _DownloadList();
 
   @override
   Widget build(BuildContext context) {
     // Wired in bootstrap to DownloadManager.jobUpdates; the manager is
     // the single source of truth (§53.1 applied to downloads).
-    return Column(
-      children: const [
+    return const Column(
+      children: [
         _DownloadRow(
           title: 'Nightcall',
           artist: 'Kavinsky',
@@ -62,7 +58,7 @@ class _DemoDownloadList extends StatelessWidget {
           tier: 'Hi-Res',
         ),
         _DownloadRow(
-          0title: 'Redbone',
+          title: 'Redbone',
           artist: 'Childish Gambino',
           state: DownloadRowState.failed,
           tier: 'Lossless',
@@ -83,19 +79,19 @@ class _DownloadRow extends StatefulWidget {
 
   const _DownloadRow({
     required this.title,
-    DownloadRowState state = DownloadRowState.downloaded,
     required this.artist,
+    this.state = DownloadRowState.downloaded,
     required this.tier,
     this.progress = 0,
-  }) : state = state;
+  });
 
   @override
   State<_DownloadRow> createState() => _DownloadRowState();
 }
 
 class _DownloadRowState extends State<_DownloadRow> {
-  DownloadRowState _state = DownloadRowState.downloaded;
-  double _progress = 0;
+  late DownloadRowState _state;
+  late double _progress;
 
   @override
   void initState() {
@@ -162,9 +158,10 @@ class _DownloadRowState extends State<_DownloadRow> {
           ),
           _ActionButton(
             state: _state,
-            onResume: () => setState(() => _state = DownloadRowState.downloading),
-            onPause: () => setState(() => _state = DownloadRowState.paused),
-            onRetry: () => setState(() => _state = DownloadRowState.downloading),
+            onPause: () =>
+                setState(() => _state = DownloadRowState.paused),
+            onRetry: () =>
+                setState(() => _state = DownloadRowState.downloading),
           ),
         ],
       ),
@@ -185,13 +182,11 @@ class _DownloadRowState extends State<_DownloadRow> {
 
 class _ActionButton extends StatelessWidget {
   final DownloadRowState state;
-  final VoidCallback onResume;
   final VoidCallback onPause;
   final VoidCallback onRetry;
 
   const _ActionButton({
     required this.state,
-    required this.onResume,
     required this.onPause,
     required this.onRetry,
   });
@@ -200,39 +195,12 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (state) {
       case DownloadRowState.downloading:
-        return IconButton(
-            icon: const Icon(Icons.pause), onPressed: onPause);
+        return IconButton(icon: const Icon(Icons.pause), onPressed: onPause);
       case DownloadRowState.paused:
       case DownloadRowState.failed:
-        return IconButton(
-            icon: const Icon(Icons.play_arrow), onPressed: onRetry);
+        return IconButton(icon: const Icon(Icons.play_arrow), onPressed: onRetry);
       case DownloadRowState.downloaded:
         return const Icon(Icons.download_done);
     }
-  }
-}
-
-class _EmptyDownloads extends StatelessWidget {
-  const _EmptyDownloads();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      source      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          BzBnoteMark(size: 64, color: theme.bzText2),
-          const SizedBox(height: 16),
-          Text('No downloads yet',
-              style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-              'Find music and tap the download icon to save it for offline listening.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium),
-        ],
-      ),
-    );
   }
 }
