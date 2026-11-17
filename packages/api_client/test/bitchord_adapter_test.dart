@@ -17,6 +17,7 @@ void main() {
       expect(tracks.first.title, 'Nightcall');
       expect(tracks.first.artist, 'Kavinsky');
       expect(tracks.first.providerTrackId, 'abc123');
+      expect(tracks.first.duration, const Duration(seconds: 254));
     });
 
     test('search errors map to ProviderError, never a fake result', () async {
@@ -50,6 +51,8 @@ void main() {
   });
 }
 
+/// Fixture mirrors the real backend search response shape: flexColumns
+/// hold maps whose values are the renderer payloads the parser walks.
 class _FakeBackend implements BackendHttp {
   @override
   Future<Object?> postJson(
@@ -65,28 +68,34 @@ class _FakeBackend implements BackendHttp {
               {
                 'musicResponsiveListItemRenderer': {
                   'playlistItemData': {'videoId': 'abc123'},
-                  'musicResponsiveListItemFlexColumnRenderer': [
+                  'flexColumns': [
                     {
-                      'text': {
-                        'runs': [
-                          {'text': 'Nightcall'}
-                        ]
+                      'musicResponsiveListItemFlexColumnRenderer': {
+                        'text': {
+                          'runs': [
+                            {'text': 'Nightcall'}
+                          ]
+                        }
                       }
                     },
                     {
-                      'text': {
-                        'runs': [
-                          {'text': 'Kavinsky'}
-                        ]
+                      'musicResponsiveListItemFlexColumnRenderer': {
+                        'text': {
+                          'runs': [
+                            {'text': 'Kavinsky'}
+                          ]
+                        }
                       }
                     },
                   ],
-                  'musicResponsiveListItemFixedColumnRenderer': [
+                  'fixedColumns': [
                     {
-                      'text': {
-                        'runs': [
-                          {'text': '4:14'}
-                        ]
+                      'musicResponsiveListItemFixedColumnRenderer': {
+                        'text': {
+                          'runs': [
+                            {'text': '4:14'}
+                          ]
+                        }
                       }
                     }
                   ],
