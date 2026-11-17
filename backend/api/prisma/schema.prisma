@@ -23,6 +23,7 @@ model User {
   downloads      DownloadRecord[]
   recentlyPlayed RecentlyPlayed[]
   listeningEvents ListeningEvent[]
+  preference     UserPreference?
 }
 
 model RefreshToken {
@@ -34,6 +35,18 @@ model RefreshToken {
   revokedAt DateTime?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserPreference {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  country     String?
+  language    String?
+  genres       String[]
+  favoriteArtists String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Artist {
@@ -184,18 +197,18 @@ model LyricTranslation {
 }
 
 model RadioStation {
-  id         String   @id @default(uuid())
-  name       String   @unique
+  id          String       @id @default(uuid())
+  name        String       @unique
   description String?
-  genre      String?
-  streamUrl  String
-  isLive     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  programs   RadioProgram[]
+  genre       String?
+  streamUrl   String
+  isLive      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  programs     RadioProgram[]
 }
 
 model RadioProgram {
-  id          String   @id @default(uuid())
+  id          String       @id @default(uuid())
   stationId   String
   title       String
   presenter   String?
