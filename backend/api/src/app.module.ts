@@ -19,6 +19,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module'
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ReplayModule } from './replay/replay.module';
 import { SocialModule } from './social/social.module';
+import { ClassicalModule } from './classical/classical.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { SocialModule } from './social/social.module';
     OnboardingModule,
     ReplayModule,
     SocialModule,
+    ClassicalModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
