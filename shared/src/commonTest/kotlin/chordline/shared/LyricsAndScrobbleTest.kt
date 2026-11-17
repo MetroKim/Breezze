@@ -9,9 +9,10 @@ import chordline.shared.scrobble.Scrobbler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LyricsAndScrobbleTest {
@@ -70,7 +71,7 @@ class LyricsAndScrobbleTest {
     // ---- LyricsPipeline ---------------------------------------------------
 
     @Test
-    fun pipeline_tries_providers_by_priority() {
+    fun pipeline_tries_providers_by_priority() = runTest {
         val calls = mutableListOf<String>()
         val p = LyricsPipeline(
             listOf(
@@ -86,8 +87,10 @@ class LyricsAndScrobbleTest {
                 },
             ),
         )
-        val result = kotlinx.coroutines.test.runTest { p.lyricsFor(track("t1")) } as Any
+        val lyrics = p.lyricsFor(track("t1"))
         assertTrue(calls == listOf("first", "second"))
+        assertTrue(lyrics != null)
+        assertEquals(3, lyrics!!.lines.size)
     }
 
     // ---- ScrobbleBus -------------------------------------------------------
