@@ -27,10 +27,8 @@ export class DownloadsService {
     }
 
     const record = await this.prisma.downloadRecord.upsert({
-      where: {
-        userId_trackId: { userId, trackId: dto.trackId },
-      },
-      create: { userId, trackId: dto.territory },
+      where: { userId_trackId: { userId, trackId: dto.trackId } },
+      create: { userId, trackId: dto.trackId },
       update: {},
     });
 
