@@ -1,5 +1,5 @@
 name: breezze_api_client
-description: Breezze typed API client, DTOs, and provider adapter contracts.
+description: Breezze typed API client, source chain, downloads, membership.
 publish_to: 'none'
 
 environment:
@@ -8,6 +8,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  breezze_audio_contracts:
+    path: ../audio_contracts
 
 dev_dependencies:
   flutter_test:
