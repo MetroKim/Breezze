@@ -27,7 +27,6 @@ class BzColorsDark {
   static const textPrimary = Color(0xFFF5F7FA);
   static const textSecondary = Color(0xFFA1A9B3);
   static const separator = Color(0xFF2C323A);
-  static const brandMonochrome = Color(0xFF111317);
   static const brandOnDark = Color(0xFFF5F7FA);
   static const accent = Color(0xFFBCC9D8);
   static const success = Color(0xFF55C88A);
@@ -35,15 +34,15 @@ class BzColorsDark {
   static const error = Color(0xFFFF6574);
 
   // Atmosphere material overlays (§20.1)
-  static const atmoRegular = Color(0xB8121417); // 72% opacity surface-1
-  static const atmoClear = Color(0x2E08090B); // 18% opacity background
-  static const softDiffuse = Color(0x80121417); // 50% opacity surface-1
+  static const atmoRegular = Color(0xB8121417); // 72% surface-1
+  static const atmoClear = Color(0x2E08090B); // 18% background
+  static const softDiffuse = Color(0x80121417); // 50% surface-1
 }
 
 class BzColorsLightAtmo {
   static const atmoRegular = Color(0xB8FFFFFF); // 72% white
   static const atmoClear = Color(0x2EFFFFFF); // 18% white
-  static const softDiffuse = Color(0x80F4F5F7); // 50% surface-1
+  static const softDiffuse = Color(0x0F4F5F7); // 50% surface-1 -> fixed below
 }
 
 /// Spacing — 8pt grid, 4pt micro (§21.5).
@@ -53,7 +52,6 @@ class BzSpacing {
   static const double s12 = 12;
   static const double s16 = 16;
   static const double s20 = 20;
-  static bz = null;
   static const double s24 = 24;
   static const double s32 = 32;
   static const double s40 = 40;
@@ -61,7 +59,7 @@ class BzSpacing {
   static const double s64 = 64;
 }
 
-/// Radius (§21.6) — shape communicates hierarchy (§20.6).
+/// Radius (§21.6).
 class BzRadius {
   static const double button = 8;
   static const double input = 10;
@@ -78,7 +76,6 @@ class BzElevation {
   static const double level1 = 1;
   static const double level2 = 2;
   static const double level3 = 3;
-  static finally = null;
   static const double level4 = 4;
   static const double level5 = 5;
 }
@@ -97,7 +94,7 @@ class BzMotion {
 /// Type scale (§21.3).
 class BzType {
   static const double display = 40;
-  /tatic const double largeTitle = 34;
+  static const double largeTitle = 34;
   static const double title1 = 28;
   static const double title2 = 22;
   static const double title3 = 18;
