@@ -8,10 +8,9 @@ import '../../app/bootstrap.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
-/// Now Playing — full-screen player with word-synced lyrics (§9.2).
-///
-/// Artwork breathes while playing (§20.7); lyrics highlight per-word with
-/// a color sweep on the active word; position slider seeks.
+/// Now Playing — premium edition: ambient artwork backdrop (content is
+/// the colour), breathing artwork on the calm 2s loop, word-synced
+/// karaoke lyrics with the Breezze easing curve.
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -81,173 +80,163 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     }
 
     return Scaffold(
-      backgroundColor: theme.bzBackground,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_down),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  Expanded(
-                    child: Column(
+      body: BzAmbientBackdrop(
+        artworkUrl: track.artworkUrl,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text('PLAYING FROM',
+                              style: TextStyle(
+                                  fontSize: BzType.caption,
+                                  letterSpacing: 1,
+                                  color: theme.bzText2)),
+                          Text('Breezze',
+                              style: TextStyle(
+                                  fontSize: BzType.footnote,
+                                  color: theme.bzText1)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              _BreathingArtwork(
+                playing: playing,
+                artworkUrl: track.artworkUrl,
+                fallbackColor: theme.bzText2,
+              ),
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(track.title ?? 'Unknown track',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleLarge),
+                          const SizedBox(height: 4),
+                          Text(track.artist ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: BzType.body,
+                                  color: theme.bzText2)),
+                        ],
+                      ),
+                    ),
+                    _FavoriteButton(track: track),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 6),
+                      ),
+                      child: Slider(
+                        value: player.duration > Duration.zero
+                            ? player.position.inMilliseconds
+                                .clamp(0, player.duration.inMilliseconds)
+                                .toDouble()
+                            : 0,
+                        max: player.duration.inMilliseconds > 0
+                            ? player.duration.inMilliseconds.toDouble()
+                            : 1,
+                        onChanged: (v) => controller
+                            .seekTo(Duration(milliseconds: v.toInt())),
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('PLAYING FROM',
+                        Text(_format(player.position),
                             style: TextStyle(
                                 fontSize: BzType.caption,
-                                letterSpacing: 1,
                                 color: theme.bzText2)),
-                        Text('Breezze',
+                        Text(_format(player.duration),
                             style: TextStyle(
-                                fontSize: BzType.footnote,
-                                color: theme.bzText1)),
+                                fontSize: BzType.caption,
+                                color: theme.bzText2)),
                       ],
                     ),
-                  ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
                   IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () {},
+                    icon: const Icon(Icons.shuffle),
+                    onPressed: controller.toggleShuffle,
+                    color: theme.bzText2,
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    icon: const Icon(Icons.skip_previous, size: 36),
+                    onPressed: controller.previous,
+                  ),
+                  const SizedBox(width: 16),
+                  _PlayPauseButton(
+                    playing: playing,
+                    size: 64,
+                    onTap: controller.togglePlayPause,
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    icon: const Icon(Icons.skip_next, size: 36),
+                    onPressed: controller.next,
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    icon: const Icon(Icons.repeat),
+                    onPressed: controller.cycleRepeat,
+                    color: theme.bzText2,
                   ),
                 ],
               ),
-            ),
-            const Spacer(),
-
-            // Breathing artwork
-            _BreathingArtwork(
-              playing: playing,
-              artworkUrl: track.artworkUrl,
-              fallbackColor: theme.bzText2,
-            ),
-            const Spacer(),
-
-            // Title + artist + favorite
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(track.title ?? 'Unknown track',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge),
-                        const SizedBox(height: 4),
-                        Text(track.artist ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: BzType.body,
-                                color: theme.bzText2)),
-                      ],
-                    ),
-                  ),
-                  _FavoriteButton(track: track),
-                ],
+              const SizedBox(height: 8),
+              Expanded(
+                child: _LyricsView(
+                  lyrics: _lyrics,
+                  mode: _lyricsMode,
+                  position: player.position,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-
-            // Seek bar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    ),
-                    child: Slider(
-                      value: player.duration > Duration.zero
-                          ? player.position.inMilliseconds
-                              .clamp(0, player.duration.inMilliseconds)
-                              .toDouble()
-                          : 0,
-                      max: player.duration.inMilliseconds > 0
-                          ? player.duration.inMilliseconds.toDouble()
-                          : 1,
-                      onChanged: (v) =>
-                          controller.seekTo(Duration(milliseconds: v.toInt())),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_format(player.position),
-                          style: TextStyle(
-                              fontSize: BzType.caption,
-                              color: theme.bzText2)),
-                      Text(_format(player.duration),
-                          style: TextStyle(
-                              fontSize: BzType.caption,
-                              color: theme.bzText2)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Transport controls
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.shuffle),
-                  onPressed: controller.toggleShuffle,
-                  color: theme.bzText2,
-                ),
-                const SizedBox(width: 16),
-                IconButton(
-                  icon: const Icon(Icons.skip_previous, size: 36),
-                  onPressed: controller.previous,
-                ),
-                const SizedBox(width: 16),
-                _PlayPauseButton(
-                  playing: playing,
-                  size: 64,
-                  onTap: controller.togglePlayPause,
-                ),
-                const SizedBox(width: 16),
-                IconButton(
-                  icon: const Icon(Icons.skip_next, size: 36),
-                  onPressed: controller.next,
-                ),
-                const SizedBox(width: 16),
-                IconButton(
-                  icon: const Icon(Icons.repeat),
-                  onPressed: controller.cycleRepeat,
-                  color: theme.bzText2,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Lyrics view
-            Expanded(
-              child: _LyricsView(
-                lyrics: _lyrics,
-                mode: _lyricsMode,
-                position: player.position,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Artwork that breathes while playing (§20.7 artwork motion).
 class _BreathingArtwork extends StatefulWidget {
   final bool playing;
   final String? artworkUrl;
@@ -267,7 +256,7 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 4),
+    duration: const Duration(seconds: 2),
     lowerBound: 0.96,
     upperBound: 1.0,
   );
@@ -298,13 +287,14 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).bz;
     return ScaleTransition(
       scale: _controller,
       child: Container(
         width: 280,
         height: 280,
-        decoration: BoxDecoration(
-          color: Theme.of(context).bzSurface2,
+        decoration: FFilledBox(
+          color: colors.surface2,
           borderRadius: BorderRadius.circular(BzRadius.artwork),
         ),
         child: ClipRRect(
@@ -314,13 +304,11 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
                   widget.artworkUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Center(
-                    child:
-                        BzBnoteMark(size: 96, color: widget.fallbackColor),
+                    child: BzBnoteMark(size: 96, color: widget.fallbackColor),
                   ),
                 )
               : Center(
-                  child:
-                      BzBnoteMark(size: 96, color: widget.fallbackColor),
+                  child: BzBnoteMark(size: 96, color: widget.fallbackColor),
                 ),
         ),
       ),
@@ -328,7 +316,6 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
   }
 }
 
-/// Play/pause pill.
 class _PlayPauseButton extends StatelessWidget {
   final bool playing;
   final double size;
@@ -362,7 +349,6 @@ class _PlayPauseButton extends StatelessWidget {
   }
 }
 
-/// Word-synced lyrics: active line bold, active word colored (§10.3).
 class _LyricsView extends StatelessWidget {
   final Lyrics? lyrics;
   final String mode;
@@ -441,7 +427,6 @@ class _LyricsView extends StatelessWidget {
   }
 }
 
-/// Favorite (heart) button — toggles via the favorites store.
 class _FavoriteButton extends ConsumerWidget {
   final TrackInfo track;
 
@@ -454,11 +439,7 @@ class _FavoriteButton extends ConsumerWidget {
       onPressed: () async {
         final added = await ref.read(favoritesStoreProvider).toggle(
               FavoriteTrack(
-                id: track.id,
-                title: track.title ?? '',
-                artist: track.artist ?? '',
-                artworkUrl: track.artworkUrl,
-                durationMs: track.duration.inMilliseconds,
+                id: channel_placeholder
               ),
             );
         if (context.mounted) {
