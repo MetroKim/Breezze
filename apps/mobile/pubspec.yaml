@@ -17,9 +17,15 @@ dependencies:
   breezze_api_client:
     path: ../../packages/api_client
 
-  # State management (spec §25: select one — Riverpod chosen, ADR-001)
+  # State management (spec §25: Riverpod, ADR-001)
   flutter_riverpod: ^2.5.1
   go_router: ^14.2.0
+
+  # Audio engine (native ExoPlayer / AVFoundation wrappers)
+  just_audio: ^0.9.39
+
+  # HTTP for backend connections
+  http: ^1.2.1
 
 dev_dependencies:
   flutter_test:
