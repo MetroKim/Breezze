@@ -45,7 +45,20 @@ class SyncOutbox extends Table {
       dateTime().withDefault(currentDateAndTime)();
 }
 
-@DriftDatabase(tables: [FavoriteTracks, RecentlyPlayed, SyncOutbox])
+/// Catalog ID map — external track ID (e.g. bz:<videoId>) to the
+/// backend's canonical catalog track ID. Filled by /catalog/resolve
+/// during outbox drain; one row per external track, forever.
+class CatalogIdMap extends Table {
+  TextColumn get externalId => text()();
+  TextColumn get catalogId => text()();
+  DateTimeColumn get createdAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {externalId};
+}
+
+@DriftDatabase(tables: [FavoriteTracks, RecentlyPlayed, SyncOutbox, CatalogIdMap])
 class BreezzeDatabase extends _$BreezzeDatabase {
   BreezzeDatabase(super.e);
 
@@ -60,5 +73,16 @@ class BreezzeDatabase extends _$BreezzeDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            // catalog_id_map table added — existing data untouched.
+            await m.createTable(catalogIdMap);
+          }
+        },
+      );
 }
