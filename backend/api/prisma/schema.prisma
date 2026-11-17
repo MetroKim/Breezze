@@ -151,6 +151,11 @@ model Album {
 
 model Track {
   id          String                  @id @default(uuid())
+  // Convergence seam: the external source's stable ID (e.g. a
+  // YouTube video id). Upserted via /catalog/resolve so client-side
+  // external tracks get exactly one canonical catalog row.
+  externalId   String?                 @unique
+  source       String?
   title       String
   artistId    String
   albumId     String?
@@ -256,7 +261,7 @@ model DownloadRecord {
   status    String    @default("active")
   createdAt DateTime  @default(now())
   expiresAt DateTime?
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, trackId])
 }
