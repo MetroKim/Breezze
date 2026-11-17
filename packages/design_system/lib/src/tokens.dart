@@ -42,7 +42,7 @@ class BzColorsDark {
 class BzColorsLightAtmo {
   static const atmoRegular = Color(0xB8FFFFFF); // 72% white
   static const atmoClear = Color(0x2EFFFFFF); // 18% white
-  static const softDiffuse = Color( Color0x80F4F5F7); // 50% surface-1
+  static const softDiffuse = Color(0x80F4F5F7); // 50% surface-1
 }
 
 /// Spacing — 8pt grid, 4pt micro (§21.5).
@@ -74,7 +74,7 @@ class BzRadius {
 class BzElevation {
   static const double level0 = 0;
   static const double level1 = 1;
-  static const double level2 =  2;
+  static const double level2 = 2;
   static const double level3 = 3;
   static const double level4 = 4;
   static const double level5 = 5;
