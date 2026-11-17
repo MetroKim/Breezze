@@ -21,6 +21,7 @@ import { ReplayModule } from './replay/replay.module';
 import { SocialModule } from './social/social.module';
 import { ClassicalModule } from './classical/classical.module';
 import { AdminModule } from './admin/admin.module';
+import { ProvidersModule } from './providers/providers.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { AdminModule } from './admin/admin.module';
     SocialModule,
     ClassicalModule,
     AdminModule,
+    ProvidersModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
