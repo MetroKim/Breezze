@@ -2,10 +2,13 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'bz_theme.dart';
+
 /// BzGlassContainer — the one glass surface every floating widget uses.
 ///
-/// Translucent fill + backdrop blur + hairline border. When reduced
-/// transparency is enabled it degrades to a solid surface automatically.
+/// Translucent fill + backdrop blur + hairline border. Degrades to a
+/// solid surface automatically when platform reduced-transparency /
+/// accessibility settings ask for it.
 class BzGlassContainer extends StatelessWidget {
   final Widget child;
   final double radius;
@@ -25,40 +28,33 @@ class BzGlassContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.bz;
     final media = MediaQuery.of(context);
-    final reduceTransparency =
-        media.disableAnimations || media.boldText;
+    final reduce = media.disableAnimations || media.boldText;
 
-    final fill = fillColor ?? theme.extension<Never>() == null
-        ? null
-        : null;
-    // resolved in BzThemeColors-aware wrapper below
-    return _build(theme, reduceTransparency, fill);
-  }
+    final fill = fillColor ?? colors.atmoRegular;
+    final border = borderColor ?? colors.separator;
 
-  Widget _build(ThemeData theme, bool reduce, Color? _) {
     if (reduce) {
       return Container(
         decoration: BoxDecoration(
-          color: theme.scaffoldBackgroundColor,
+          color: colors.surface1,
           borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: theme.dividerColor),
+          border: Border.all(color: border),
         ),
         child: child,
       );
     }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: Container(
           decoration: BoxDecoration(
-            color: fillColor,
+            color: fill,
             borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: borderColor ?? theme.dividerColor,
-              width: 0.5,
-            ),
+            border: Border.all(color: border, width: 0.5),
           ),
           child: child,
         ),
