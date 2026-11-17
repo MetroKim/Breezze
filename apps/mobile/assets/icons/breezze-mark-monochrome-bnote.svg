@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Breezze monochrome system mark — flat B + music note, single color -->
+  <g fill="none" stroke="currentColor" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M176 132 L176 380"/>
+    <path d="M176 132 L300 132 A54 54 0 0 1 300 240 L176 240"/>
+    <path d="M176 240 L316 240 A56 56 0 0 1 316 352 L176 352"/>
+    <path d="M316 352 L336 352 L336 258"/>
+    <path d="M336 258 A26 26 0 1 0 336 306"/>
+  </g>
+</svg>
