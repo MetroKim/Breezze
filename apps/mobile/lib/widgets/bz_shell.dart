@@ -37,8 +37,6 @@ class BreezzeShell extends StatelessWidget {
   }
 }
 
-/// Starts background audio after the first binding frame, so the OS
-/// session exists before playback can begin.
 class _BreezzeRoot extends ConsumerStatefulWidget {
   const _BreezzeRoot();
 
@@ -57,12 +55,10 @@ class _BreezzeRootState extends ConsumerState<_BreezzeRoot> {
     final container = ProviderScope.containerOf(context, listen: false);
     try {
       final bridge = await startBackgroundAudio(container);
-      // Swap the no-op bridge for the real one and start syncing.
       container.read(backgroundBridgeProvider.notifier).state = bridge;
       container.read(backgroundSyncProvider);
     } catch (_) {
-      // Background audio is optional — playback still works without it
-      // (desktop/web). The no-op bridge stays active.
+      // Background audio is optional — playback still works without it.
     }
   }
 
@@ -93,7 +89,6 @@ class _BzHomeState extends ConsumerState<BzHome> {
   @override
   void initState() {
     super.initState();
-    // The home tab listens to the first-run hint (Search nudge).
     ref.listenManual(homeTabHintProvider, (prev, next) {
       if (next > 0) setState(() => _index = next);
     });
@@ -130,7 +125,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
   void _openNowPlaying() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const NowPlayingScreen(),
+        builder: (_) => NowPlayingScreen(),
         fullscreenDialog: true,
       ),
     );
@@ -152,63 +147,61 @@ class _MiniPlayer extends ConsumerWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: theme.bzAtmoRegular,
-          borderRadius: BorderRadius.circular(BzRadius.capsule),
-          border: Border.all(color: theme.bzSeparator),
-        ),
-        child: Row(
-          children: [
-            track?.artworkUrl != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.network(
-                      track!.artworkUrl!,
-                      width: 36,
-                      height: 36,
-                      errorBuilder: (_, __, ___) =>
-                          BzBnoteMark(size: 36, color: theme.bzText1),
-                    ),
-                  )
-                : BzBnoteMark(size: 36, color: theme.bzText1),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(track?.title ?? 'Now Playing',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium),
-                  if (player.duration > Duration.zero)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: player.position.inMilliseconds /
-                            player.duration.inMilliseconds,
-                        minHeight: 2,
-                        backgroundColor: theme.bzSeparator,
-                        color: theme.bzText1,
+      child: BzGlassContainer(
+        radius: BzRadius.capsule,
+        blur: 24,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              track?.artworkUrl != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.network(
+                        track!.artworkUrl!,
+                        width: 36,
+                        height: 36,
+                        errorBuilder: (_, __, ___) =>
+                            BzBnoteMark(size: 36, color: theme.bzText1),
                       ),
-                    ),
-                ],
+                    )
+                  : BzBnoteMark(size: 36, color: theme.bzText1),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(track?.title ?? 'Now Playing',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium),
+                    if (player.duration > Duration.zero)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: player.position.inMilliseconds /
+                              player.duration.inMilliseconds,
+                          minHeight: 2,
+                          backgroundColor: theme.bzSeparator,
+                          color: theme.bzText1,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-              onPressed: controller.togglePlayPause,
-              color: theme.bzText1,
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_next),
-              onPressed: controller.next,
-              color: theme.bzText1,
-            ),
-          ],
+              IconButton(
+                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                onPressed: controller.togglePlayPause,
+                color: theme.bzText1,
+              ),
+              IconButton(
+                icon: const Icon(Icons.skip_next),
+                onPressed: controller.next,
+                color: theme.bzText1,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -223,28 +216,25 @@ class _TabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: theme.bzAtmoRegular,
-        borderRadius: BorderRadius.circular(BzRadius.capsule),
-        border: Border.all(color: theme.bzSeparator),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < _BzHomeState._tabs.length; i++)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: _Tab(
-                label: _BzHomeState._tabs[i],
-                active: i == index,
-                onTap: () => onChanged(i),
+    return BzGlassContainer(
+      radius: BzRadius.capsule,
+      blur: 16,
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < _BzHomeState._tabs.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: _Tab(
+                  label: _BzHomeState._tabs[i],
+                  active: i == index,
+                  onTap: () => onChanged(i),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -266,7 +256,7 @@ class _Tab extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: BzMotion.fastMs),
-        curve: Curves.easeOut,
+        curve: const Cubic(0.22, 1, 0.36, 1),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: active ? theme.bzText1 : Colors.transparent,
