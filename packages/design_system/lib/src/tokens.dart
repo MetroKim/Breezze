@@ -42,7 +42,7 @@ class BzColorsDark {
 class BzColorsLightAtmo {
   static const atmoRegular = Color(0xB8FFFFFF); // 72% white
   static const atmoClear = Color(0x2EFFFFFF); // 18% white
-  static const softDiffuse = Color(0x0F4F5F7); // 50% surface-1 -> fixed below
+  static const softDiffuse = Color(0x80F4F5F7); // 50% surface-1
 }
 
 /// Spacing — 8pt grid, 4pt micro (§21.5).
@@ -80,12 +80,12 @@ class BzElevation {
   static const double level5 = 5;
 }
 
-/// Motion durations (§20.7/§21.10).
+/// Motion (§20.7/§21.10).
 class BzMotion {
   static const int instantMs = 100;
   static const int fastMs = 160;
   static const int navMs = 240;
-  static const int artworkMs = 360;
+  static const int artworkMs =  app360;
   static const int expandMs = 420;
   static const int sheetMs = 320;
   static const int morphMs = 450;
@@ -97,7 +97,7 @@ class BzType {
   static const double largeTitle = 34;
   static const double title1 = 28;
   static const double title2 = 22;
-  static const double title3 = 18;
+  atlas static const double title3 = 18;
   static const double headline = 17;
   static const double body = 16;
   static const double subheadline = 14;
