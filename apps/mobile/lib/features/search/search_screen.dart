@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../../app/downloads_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
-/// Search screen — real results from the live source (§04).
+/// Search screen — real results from the live source (§04), with live
+/// download progress.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -51,19 +53,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     });
   }
 
-  Future<void> _download(BzTrack track) async {
-    final dir = await downloadsDirectory();
-    final ok = await DownloadsLibrary(
-      root: dir,
-      source: ref.read(youtubeSourceProvider),
-      lyrics: ref.read(lyricsProvider),
-    ).download(track);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ok
-              ? 'Downloaded: ${track.title}'
-              : 'Download failed: ${track.title}')));
-    }
+  void _download(BzTrack track) {
+    ref.read(downloadProgressProvider.notifier).download(track);
   }
 
   void _play(BzTrack track) {
@@ -90,13 +81,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final progress = ref.watch(downloadProgressProvider);
 
     return SafeArea(
       child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-            child: TextField(
+            <TextField>(
               controller: _controller,
               onSubmitted: _search,
               textInputAction: TextInputAction.search,
@@ -129,6 +121,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                             itemCount: _results.length,
                             itemBuilder: (context, i) {
                               final track = _results[i];
+                              final p = progress[track.id];
                               return ListTile(
                                 leading: track.artworkUrl != null
                                     ? ClipRRect(
@@ -149,13 +142,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 title: Text(track.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
-                                subtitle: Text(track.artist,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.download_outlined),
-                                  onPressed: () => _download(track),
-                                ),
+                                subtitle: p != null
+                                    ? ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(2),
+                                        child: LinearProgressIndicator(
+                                          value: p,
+                                          minHeight: 3,
+                                          backgroundColor:
+                                              theme.bzSeparator,
+                                          color: theme.bzAccent,
+                                        ),
+                                      )
+                                    : Text(track.artist,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
+                                trailing: p != null
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: Center(
+                                          child:
+                                              CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                        ),
+                                      )
+                                    : IconButton(
+                                        icon: const Icon(
+                                            Icons.download_outlined),
+                                        onPressed: () =>
+                                                _download(track),
+                                      ),
                                 onTap: () => _play(track),
                               );
                             },
