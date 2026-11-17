@@ -1,5 +1,5 @@
 name: breezze_api_client
-description: Breezze typed API client, source chain, downloads, membership.
+description: Breezze typed API client — BitChord backend, source chain, downloads, membership.
 publish_to: 'none'
 
 environment:
