@@ -1,0 +1,22 @@
+model RadioStation {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  genre       String?
+  streamUrl   String
+  isLive      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([name])
+}
+
+model RadioProgram {
+  id         String   @id @default(uuid())
+  stationId  String
+  title      String
+  presenter  String?
+  airsAt     DateTime
+  durationMin Int
+
+  @@unique([stationId, title])
+}
