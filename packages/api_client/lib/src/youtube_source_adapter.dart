@@ -15,7 +15,7 @@ class YoutubeSourceAdapter implements ProviderAdapter {
   String get providerId => 'bitchord';
 
   @override
-  String get adapterVersion => '3.0.0';
+  String get adapterVersion => '3.1.0';
 
   @override
   bool get supportsPlayback => true;
@@ -40,6 +40,17 @@ class YoutubeSourceAdapter implements ProviderAdapter {
         duration: t.duration,
       );
 
+  static yt.AudioOnlyStreamInfo? _bestAudio(
+      yt.StreamManifest manifest) {
+    yt.AudioOnlyStreamInfo? best;
+    for (final stream in manifest.audioOnly) {
+      if (best == null || stream.bitrate > best.bitrate) {
+        best = stream;
+      }
+    }
+    return best;
+  }
+
   // ---- API ---------------------------------------------------------------
 
   @override
@@ -54,43 +65,44 @@ class YoutubeSourceAdapter implements ProviderAdapter {
     }
   }
 
-  /// Resolves the highest-bitrate audio-only stream URL for playback.
+  /// Resolves the highest-bitrate audio-only stream for playback.
   Future<ResolvedStream?> resolveStream(String videoId) async {
     try {
       final manifest =
           await _client.videos.streamsClient.getManifest(videoId);
-      yt.AudioOnlyStreamInfo? best;
-      for (final stream in manifest.audioOnly) {
-        if (best == null || stream.bitrate > best.bitrate) {
-          best = stream;
-        }
-      }
+      final best = _bestAudio(manifest);
       if (best == null) return null;
       return ResolvedStream(
         streamUrl: best.url.toString(),
         codec: best.codec.label,
         bitrate: best.bitrate,
+        totalBytes: best.size.totalBytes,
       );
     } catch (_) {
       return null;
     }
   }
 
-  /// Raw audio byte stream for offline downloads.
-  Stream<List<int>> audioBytes(String videoId) async* {
+  /// Raw audio bytes for offline downloads, with byte-accurate progress:
+  /// [onProgress] receives 0.0–1.0 as chunks arrive.
+  Stream<List<int>> audioBytes(
+    String videoId, {
+    void Function(double progress)? onProgress,
+  }) async* {
     final manifest =
         await _client.videos.streamsClient.getManifest(videoId);
-    yt.AudioOnlyStreamInfo? best;
-    for (final stream in manifest.audioOnly) {
-      if (best == null || stream.bitrate > best.bitrate) {
-        best = stream;
-      }
-    }
+    final best = _bestAudio(manifest);
     if (best == null) {
       throw StateError('stream_unavailable');
     }
+    final total = best.size.totalBytes;
+    var received = 0;
     final byteStream = await _client.videos.streamsClient.getStream(best);
-    yield* byteStream;
+    await for (final chunk in byteStream) {
+      received += chunk.length;
+      onProgress?.call(total > 0 ? (received / total).clamp(0.0, 1.0) : 0.0);
+      yield chunk;
+    }
   }
 
   @override
@@ -125,15 +137,19 @@ class YoutubeSourceAdapter implements ProviderAdapter {
   void dispose() => _client.close();
 }
 
-/// One resolved stream: URL + codec + bitrate.
+/// One resolved stream: URL + codec + bitrate + size.
 class ResolvedStream {
   final String streamUrl;
   final String codec;
   final int bitrate;
 
+  /// Total size in bytes, for download progress.
+  final int totalBytes;
+
   const ResolvedStream({
     required this.streamUrl,
     required this.codec,
     required this.bitrate,
+    required this.totalBytes,
   });
 }
