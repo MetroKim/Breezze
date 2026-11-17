@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/recent_store.dart';
+
 /// Global PlayerController — spec §51.3, §53.1.
 ///
 /// THE one application-wide playback authority. All screens dispatch
@@ -24,6 +26,9 @@ class PlayerController extends Notifier<PlayerState> {
   );
 
   late final ScrobbleBus _scrobbles = ScrobbleBus();
+
+  /// Recently-played history, persisted by RecentStore.
+  final RecentStore _recent = RecentStore();
 
   AudioEngineAdapter? _engine;
   StreamSubscription<Duration>? _positionSub;
@@ -58,8 +63,7 @@ class PlayerController extends Notifier<PlayerState> {
   // Commands (every command goes through the state machine, §53.2)
   // ----------------------------------------------------------------
 
-  /// Plays one track, with optional full queue context so Now Playing and
-  /// the queue sheet work like a real player.
+  /// Plays one track, with optional full queue context.
   Future<void> playTrack({
     required String trackId,
     String? title,
@@ -97,11 +101,14 @@ class PlayerController extends Notifier<PlayerState> {
     }
 
     final info = queue.isEmpty
-        ? TrackInfo(id: trackId, title: title, artist: artist,
-            artworkUrl: artworkUrl, duration: duration)
-        : (startIndex < queue.length
-            ? queue[startIndex]
-            : queue.first);
+        ? TrackInfo(
+            id: trackId,
+            title: title,
+            artist: artist,
+            artworkUrl: artworkUrl,
+            duration: duration,
+          )
+        : (startIndex < queue.length ? queue[startIndex] : queue.first);
 
     await _resolveAndPlay(info);
     _scrobbles.onPlay(info.id, DateTime.now().toUtc());
@@ -126,16 +133,16 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> next() async {
     final entry = _queue.advance();
     if (entry == null) return;
-    final info = _trackInfoFor(entry.trackId) ??
-        TrackInfo(id: entry.trackId);
+    final info =
+        _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
     await _resolveAndPlay(info);
   }
 
   Future<void> previous() async {
     final entry = _queue.previous();
     if (entry == null) return;
-    final info = _trackInfoFor(entry.trackId) ??
-        TrackInfo(id: entry.trackId);
+    final info =
+        _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
     await _resolveAndPlay(info);
   }
 
@@ -152,6 +159,14 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> _resolveAndPlay(TrackInfo info) async {
     _trackInfos[info.id] = info;
     state = state.copyWith(currentTrack: info);
+
+    // Record to recently played (fire-and-forget; never block playback).
+    if (info.title != null) {
+      _recent
+          .record(info.id, info.title!, info.artist ?? '', info.artworkUrl,
+              info.duration)
+          .catchError((_) {});
+    }
 
     _machine.dispatch(StartRequested(info.id));
     final source =
