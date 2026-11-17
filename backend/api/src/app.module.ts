@@ -26,6 +26,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ModerationModule } from './moderation/moderation.module';
 import { ArtistPortalModule } from './artist_portal/artist-portal.module';
 import { DistributorModule } from './distributor/distributor.module';
+import { MediaModule } from './media/media.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { DistributorModule } from './distributor/distributor.module';
     ModerationModule,
     ArtistPortalModule,
     DistributorModule,
+    MediaModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
