@@ -8,6 +8,12 @@ const fakeHomepage = '<html><body>'
     '"INNERTUBE_CLIENT_VERSION":"1.20261110.01.00"'
     '</body></html>';
 
+/// Homepage carrying a key but no version string — exercises the
+/// version fallback without tripping the missing-key error.
+const noVersionHomepage = '<html><body>'
+    '"INNERTUBE_API_KEY":"AIza_fake_key_for_tests"'
+    '</body></html>';
+
 void main() {
   group('InnertubeConfig scrape (BitChord model)', () {
     test('parses the public homepage config', () {
@@ -17,7 +23,7 @@ void main() {
     });
 
     test('falls back to default version when missing', () {
-      final config = InnertubeConfig.parse('<html>no config here</html>');
+      final config = InnertubeConfig.parse(noVersionHomepage);
       expect(config.clientVersion, '1.20240101.01.00');
     });
 
@@ -31,7 +37,6 @@ void main() {
     test('search works with no credentials, anonymous path', () async {
       final adapter = BitChordAdapter(http: _FakeBackend());
 
-      // No API key, no poToken provider — search still works.
       final result = await adapter.search('kavinsky nightcall');
 
       expect(result, isA<ProviderOk<List<ProviderTrack>>>());
