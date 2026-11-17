@@ -88,7 +88,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-            <TextField>(
+            child: TextField(
               controller: _controller,
               onSubmitted: _search,
               textInputAction: TextInputAction.search,
