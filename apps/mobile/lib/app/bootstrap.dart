@@ -11,12 +11,8 @@ import '../features/player/player_controller.dart';
 
 /// Composition root — constructs the real backend wiring at startup.
 ///
-/// API key comes from the environment (--dart-define=BITCHORD_API_KEY=...),
-/// never from source or assets.
-const String _apiKey =
-    String.fromEnvironment('BITCHORD_API_KEY', defaultValue: '');
-
-/// package:http implementation of the backend HTTP seam.
+/// BitChord's model: no user API key. Client config is scraped from the
+/// public music.youtube.com homepage at runtime (InnertubeConfig.fetch).
 class HttpBackend implements BackendHttp {
   final http.Client _client = http.Client();
 
@@ -36,12 +32,26 @@ class HttpBackend implements BackendHttp {
     }
     return jsonDecode(response.body);
   }
+
+  @override
+  Future<String> getText(String url) async {
+    final response = await _client.get(
+      Uri.parse(url),
+      headers: const {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      },
+    );
+    if (response.statusCode != 200) {
+      throw HttpException('scrape_${response.statusCode}');
+    }
+    return response.body;
+  }
 }
 
-/// Builds the BitChord-primary source chain.
-SourceChain buildSourceChain() => SourceChain([
-      BitChordAdapter(http: HttpBackend(), apiKey: _apiKey, signer: null),
-    ]);
+/// Builds the BitChord-primary source chain — zero user credentials.
+SourceChain buildSourceChain() => SourceChain([BitChordAdapter(http: HttpBackend())]);
 
 /// App-wide providers.
 final sourceChainProvider =
