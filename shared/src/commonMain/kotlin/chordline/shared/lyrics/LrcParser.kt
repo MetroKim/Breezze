@@ -88,24 +88,13 @@ object LrcParser {
         val content = raw.replace(lineRegex, "").trim()
         if (content.isEmpty()) return null
 
-        val words = wordRegex.findAll(content).map { match ->
-            LyricWord(
-                text = "", // filled below with the segment after the tag
-                startMs = toMs(match),
-            )
-        }.toList()
-
-        val wordSegments = if (words.isEmpty()) {
-            emptyList()
-        } else {
-            // Each <tag> starts a word: text runs until the next tag.
-            val tags = wordRegex.findAll(content).toList()
-            tags.mapIndexed { i, m ->
-                val from = m.range.last + 1
-                val to = tags.getOrNull(i + 1)?.range?.first ?: content.length
-                LyricWord(content.substring(from, to).trim(), toMs(m))
-            }.filter { it.text.isNotEmpty() }
-        }
+        // Each <tag> starts a word: the text runs until the next tag.
+        val tags = wordRegex.findAll(content).toList()
+        val wordSegments = tags.mapIndexed { i, m ->
+            val from = m.range.last + 1
+            val to = tags.getOrNull(i + 1)?.range?.first ?: content.length
+            LyricWord(content.substring(from, to).trim(), toMs(m))
+        }.filter { it.text.isNotEmpty() }
 
         return LyricLine(
             text = content.replace(wordRegex, "").trim(),
@@ -117,21 +106,15 @@ object LrcParser {
 
     private fun toMs(match: MatchResult): Long {
         val (m, s, frac) = match.destructured
-        val millis = when (frac.length) {
-            0 -> 0L
-            1 -> frac[0] - '0' to 0
-            2 -> 0 // handled below
-            else -> 0
-        }
-        // frac handling: 1 digit = tenths, 2 = centiseconds, 3 = millis
+        // frac: 1 digit = tenths, 2 = centiseconds, 3 = milliseconds.
         val fracMs = when (frac.length) {
             0 -> 0L
-            1 -> (frac[0] - '0') * 100
-            2 -> (frac[0] - '0') * 1000 / 10 + (frac[1] - '0') * 10
-            3 -> (frac[0] - '0') * 100 + (frac[1] - '0') * 10 + (frac[2] - '0')
+            1 -> (frac[0] - '0') * 100L
+            2 -> (frac[0] - '0') * 100L + (frac[1] - '0') * 10L
+            3 -> (frac[0] - '0') * 100L + (frac[1] - '0') * 10L + (frac[2] - '0')
             else -> 0L
         }
-        return m.toLong() * 60_000 + s.toLong() * 1_000 + fracMs
+        return m.toLong() * 60_000L + s.toLong() * 1_000L + fracMs
     }
 
     private const val DEFAULT_LINE_MS = 5_000L
