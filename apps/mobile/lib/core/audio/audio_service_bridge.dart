@@ -3,19 +3,21 @@ import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/player/player_controller.dart';
+import 'background_audio.dart';
 
 /// Native background-audio bridge over audio_service.
 ///
 /// Lock-screen/notification media controls dispatch commands straight to
 /// the global PlayerController — the controller stays the single
 /// playback authority (§53.1); this handler is only the OS surface.
-class AudioServiceBridge extends BaseAudioHandler implements Bridge {
-  final Ref ref;
+class AudioServiceBridge extends BaseAudioHandler
+    implements BackgroundAudioBridge {
+  final ProviderContainer container;
 
-  AudioServiceBridge(this.ref);
+  AudioServiceBridge(this.container);
 
   PlayerController get _player =>
-      ref.read(playerControllerProvider.notifier);
+      container.read(playerControllerProvider.notifier);
 
   // ---- Lock-screen commands → PlayerController ---------------------
 
@@ -31,31 +33,62 @@ class AudioServiceBridge extends BaseAudioHandler implements Bridge {
   @override
   Future<void> skipToPrevious() => _player.previous();
 
-  @override
-  Future<void> seek(Duration position) => _player.seekTo(position);
+  // ---- BackgroundAudioBridge (OS sync) ----------------------------
 
   @override
-  Future<void> stop() async {
-    await super.stop();
-    await super.onStop();
+  Future<void> start() async {
+    // Already initialized by the time this instance exists; nothing to do.
   }
-}
 
-/// The small interface background_audio.dart's sync expects.
-abstract interface class Bridge {
-  Future<void> play();
-  Future<void> pause();
-  Future<void> skipToNext();
-  Future<void> skipToPrevious();
-  Future<void> seek(Duration position);
-  Future<void> stop();
+  @override
+  Future<void> update({
+    required String title,
+    required String artist,
+    String? artworkUrl,
+    required bool playing,
+  }) async {
+    final state = container.read(playerControllerProvider);
+
+    playbackState.add(PlaybackState(
+      controls: [
+        MediaControl.skipToPrevious,
+        playing ? MediaControl.pause : MediaControl.play,
+        MediaControl.skipToNext,
+      ],
+      systemActions: const {
+        MediaAction.seek,
+        MediaAction.seekForward,
+        MediaAction.seekBackward,
+      },
+      androidCompactActionIndices: const [0, 1, 2],
+      processingState: playing
+          ? AudioProcessingState.ready
+          : AudioProcessingState.idle,
+      playing: playing,
+      updatePosition: state.position,
+      bufferedPosition: state.position,
+      speed: 1.0,
+    ));
+
+    mediaItem.add(MediaItem(
+      id: state.currentTrack?.id ?? 'current',
+      title: title,
+      artist: artist,
+      duration: state.duration,
+      artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
+    ));
+  }
+
+  @override
+  Future<void> stop() => super.stop();
 }
 
 /// Starts audio_service with our handler; call once from bootstrap
-/// before the first frame (needs a WidgetsBinding provider container).
-Future<void> startBackgroundAudio(ProviderContainer container) async {
-  await AudioService.init(
-    builder: () => AudioServiceBridge(container as dynamic),
+/// before the first frame.
+Future<AudioServiceBridge> startBackgroundAudio(
+    ProviderContainer container) async {
+  final bridge = await AudioService.init(
+    builder: () => AudioServiceBridge(container),
     config: const AudioServiceConfig(
       androidNotificationChannelName: 'Breezze playback',
       androidNotificationChannelDescription:
@@ -64,45 +97,5 @@ Future<void> startBackgroundAudio(ProviderContainer container) async {
       androidStopForegroundOnPause: true,
     ),
   );
-}
-
-/// Pushes player state to the OS media session.
-void syncMediaSession(
-  BaseAudioHandler handler, {
-  required String title,
-  required String artist,
-  String? artworkUrl,
-  required bool playing,
-  required Duration position,
-  required Duration duration,
-}) {
-  handler.playbackState.add(PlaybackState(
-    controls: [
-      MediaControl.skipToPrevious,
-      playing ? MediaControl.pause : MediaControl.play,
-      MediaControl.skipToNext,
-    ],
-    systemActions: const {
-      MediaAction.seek,
-      MediaAction.seekForward,
-      MediaAction.seekBackward,
-    },
-    androidCompactActionIndices: const [0, 1, 2],
-    processingState: playing
-        ? AudioProcessingState.ready
-        : AudioProcessingState.idle,
-    playing: playing,
-    updatePosition: position,
-    bufferedPosition: position,
-    speed: 1.0,
-  ));
-
-  final item = MediaItem(
-    id: 'current',
-    title: title,
-    artist: artist,
-    duration: duration,
-    artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
-  );
-  handler.mediaItem.add(item);
+  return bridge as AudioServiceBridge;
 }
