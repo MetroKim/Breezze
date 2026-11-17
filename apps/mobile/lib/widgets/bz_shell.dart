@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/bootstrap.dart';
+import '../app/downloads_controller.dart';
+import '../core/audio/background_audio.dart';
 import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
@@ -13,7 +15,8 @@ import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import 'bz_brand_icons.dart';
 
-/// App root: ProviderScope with the live resolver override + engine.
+/// App root: ProviderScope with the live resolver override + engine +
+/// background audio.
 class BreezzeShell extends StatelessWidget {
   const BreezzeShell({super.key});
 
@@ -26,15 +29,28 @@ class BreezzeShell extends StatelessWidget {
 
     attachPlaybackEngine(container);
 
+    // Initialize the background-audio sync (noop bridge until native
+    // audio_service lands; the seam is live).
+    container.read(backgroundSyncProvider);
+
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(
-        title: 'Breezze',
-        debugShowCheckedModeBanner: false,
-        theme: bzLightTheme(),
-        darkTheme: bzDarkTheme(),
-        home: const BzHome(),
-      ),
+      child: const BreezzeApp(),
+    );
+  }
+}
+
+class BreezzeApp extends StatelessWidget {
+  const BreezzeApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Breezze',
+      debugShowCheckedModeBanner: false,
+      theme: bzLightTheme(),
+      darkTheme: bzDarkTheme(),
+      home: const BzHome(),
     );
   }
 }
@@ -50,6 +66,15 @@ class _BzHomeState extends ConsumerState<BzHome> {
   int _index = 0;
 
   static const _tabs = ['Home', 'Search', 'Library', 'Downloads', 'Settings'];
+
+  @override
+  void initState() {
+    super.initState();
+    // The home tab listens to the first-run hint (Search nudge).
+    ref.listenManual(homeTabHintProvider, (prev, next) {
+      if (next > 0) setState(() => _index = next);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
