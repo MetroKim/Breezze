@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,9 +19,7 @@ class PlayerController extends Notifier<PlayerState> {
   late final QueueManager _queue = QueueManager(
     onQueueChanged: () {
       final s = state;
-      state = s.copyWith(
-        queueVersion: s.queueVersion + 1,
-      );
+      state = s.copyWith(queueVersion: s.queueVersion + 1);
     },
   );
 
@@ -40,9 +40,9 @@ class PlayerController extends Notifier<PlayerState> {
     _engineStateSub?.cancel();
     _positionSub = engine.positionStream.listen((pos) {
       final s = state;
-      // Isolate high-frequency updates (§51.6): position lives in its own
-      // field; screens select only what they need.
-      state = s.copyWith(position: pos, queueVersion: 0);
+      // Isolate high-frequency updates (§51.6): screens select only what
+      // they need from this state.
+      state = s.copyWith(position: pos);
     });
     _engineStateSub = engine.engineStateStream.listen((st) {
       final s = state;
@@ -121,7 +121,8 @@ class PlayerController extends Notifier<PlayerState> {
     _machine.dispatch(StartRequested(entry.trackId));
     // The PlaybackResolver (backend) supplies the authorized source; the
     // client never constructs stream URLs itself (§29.9, §52.4).
-    final source = await ref.read(playbackResolverProvider).resolve(entry.trackId);
+    final source =
+        await ref.read(playbackResolverProvider).resolve(entry.trackId);
     if (source == null) {
       _machine.dispatch(SourceResolutionFailed('NOT_AVAILABLE'));
       return;
