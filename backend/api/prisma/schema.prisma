@@ -31,6 +31,7 @@ model User {
   pushTokens     PushToken[]
   artistClaims   ArtistClaim[]
   releases       ReleaseSubmission[]
+  mediaJobs      MediaJob[]
 }
 
 model RefreshToken {
@@ -110,14 +111,25 @@ model ArtistClaim {
 }
 
 model ReleaseSubmission {
-  id        String   @id @default(uuid())
-  userId    String
-  title     String
-  artistId  String
+  id         String   @id @default(uuid())
+  userId     String
+  title      String
+  artistId   String
   trackCount Int
-  status    String   @default("submitted")
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     String   @default("submitted")
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MediaJob {
+  id               String   @id @default(uuid())
+  userId           String
+  submissionId     String
+  originalFilename String
+  bytes            Int
+  status           String   @default("quarantined")
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Artist {
