@@ -2,12 +2,28 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'app/bootstrap.dart';
 import 'features/home/home_screen.dart';
 import 'features/player/player_controller.dart';
 import 'widgets/bz_shell.dart';
 
 void main() {
-  runApp(const ProviderScope(child: BreezzeApp()));
+  final container = ProviderContainer(
+    overrides: [
+      playbackResolverProvider.overrideWith(
+        (ref) => ref.watch(liveResolverProvider),
+      ),
+    ],
+  );
+
+  attachPlaybackEngine(container);
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const BreezzeApp(),
+    ),
+  );
 }
 
 class BreezzeApp extends StatelessWidget {
@@ -20,7 +36,7 @@ class BreezzeApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: bzLightTheme(),
       darkTheme: bzDarkTheme(),
-      home: const BzShell(child: HomeScreen()),
+      home: const BreezzeShell(),
     );
   }
 }
