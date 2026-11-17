@@ -7,6 +7,10 @@ import '../app/bootstrap.dart';
 import '../app/downloads_controller.dart';
 import '../core/audio/audio_service_bridge.dart';
 import '../core/audio/background_audio.dart';
+import '../core/database/database_providers.dart';
+import '../core/database/favorites_store_drift.dart';
+import '../core/database/migrate_to_drift.dart';
+import '../core/database/recent_store_drift.dart';
 import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
@@ -17,18 +21,30 @@ import '../features/settings/settings_screen.dart';
 import 'bz_brand_icons.dart';
 
 /// App root: ProviderScope with the live resolver override + engine +
-/// background audio.
+/// background audio + the drift-backed stores.
 class BreezzeShell extends StatelessWidget {
   const BreezzeShell({super.key});
 
   @override
   Widget build(BuildContext context) {
     final container = ProviderContainer(overrides: [
+      // The drift-backed stores replace the JSON stores app-wide.
+      // Same FavoriteTrack/RecentEntry types, so every screen keeps
+      // compiling unchanged.
+      favoritesStoreProvider.overrideWith(
+        (ref) => _FavoritesDriftShim(ref.watch(favoritesStoreDriftProvider)),
+      ),
+      recentStoreProvider.overrideWith(
+        (ref) => _RecentDriftShim(ref.watch(recentStoreDriftProvider)),
+      ),
       playbackResolverProvider.overrideWith(
           (ref) => ref.watch(liveResolverProvider)),
     ]);
 
     attachPlaybackEngine(container);
+
+    // One-shot JSON → SQLite migration against this container.
+    migrateJsonStoresToDrift(container);
 
     return UncontrolledProviderScope(
       container: container,
@@ -36,6 +52,57 @@ class BreezzeShell extends StatelessWidget {
     );
   }
 }
+
+/// Shim exposing the drift facade with the JSON store's interface.
+class _FavoritesDriftShim extends FavoritesStore {
+  final FavoritesStoreDrift _inner;
+  _FavoritesDriftShim(this._inner);
+
+  @override
+  Future<List<FavoriteTrack>> load() => _inner.load();
+
+  @override
+  Future<bool> toggle(FavoriteTrack track) => _inner.toggle(track);
+
+  @override
+  Future<bool> isFavorite(String id) => _inner.isFavorite(id);
+}
+
+/// RecentStore's provider lives in recent_store.dart's consumers via
+/// a local provider; the shim keeps the class contract.
+class _RecentDriftShim implements RecentStoreLike {
+  final RecentStoreDrift _inner;
+  _RecentDriftShim(this._inner);
+
+  @override
+  Future<List<RecentEntry>> load() => _inner.load();
+
+  @override
+  Future<void> record(
+    String id,
+    String title,
+    String artist,
+    String? artworkUrl,
+    Duration duration,
+  ) =>
+      _inner.record(id, title, artist, artworkUrl, duration);
+}
+
+/// The RecentStore-like contract the app depends on.
+abstract class RecentStoreLike {
+  Future<List<RecentEntry>> load();
+  Future<void> record(
+    String id,
+    String title,
+    String artist,
+    String? artworkUrl,
+    Duration duration,
+  );
+}
+
+final recentStoreProvider = Provider<RecentStoreLike>(
+  (ref) => throw UnimplementedError('overridden in BreezzeShell'),
+);
 
 class _BreezzeRoot extends ConsumerStatefulWidget {
   const _BreezzeRoot();
@@ -125,7 +192,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
   void _openNowPlaying() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => NowPlayingScreen(),
+        builder: (_) => const NowPlayingScreen(),
         fullscreenDialog: true,
       ),
     );
