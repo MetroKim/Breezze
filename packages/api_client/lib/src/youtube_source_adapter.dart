@@ -1,31 +1,13 @@
-/// Breezze real playback source — youtube_explode_dart.
-///
-/// This is the working fetch/search engine: a maintained Dart library
-/// (3.1.0, active, keyless) that resolves YouTube stream URLs and search
-/// internally, the same role BitChord's innerTube stack plays on Android.
-/// No user key, no poToken wiring needed at this layer — the library
-/// handles request signing and stream extraction.
-library;
-
 import 'bz_track.dart';
 import 'provider_adapter.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 
-/// One resolved stream: URL + codec + bitrate + cover art.
-class ResolvedStream {
-  final String streamUrl;
-  final String codec;
-  final int bitrate;
-  final String? artworkUrl;
-
-  const ResolvedStream({
-    required this.streamUrl,
-    required this.codec,
-    required this.bitrate,
-    this.artworkUrl,
-  });
-}
-
+/// Breezze real playback source — youtube_explode_dart 3.1.0.
+///
+/// The working fetch/search engine: a maintained Dart library (active,
+/// keyless) that resolves YouTube stream URLs and search internally — the
+/// same role BitChord's innerTube stack plays on Android. No user key
+/// needed at any layer.
 class YoutubeSourceAdapter implements ProviderAdapter {
   final yt.YoutubeExplode _client = yt.YoutubeExplode();
 
@@ -40,19 +22,14 @@ class YoutubeSourceAdapter implements ProviderAdapter {
 
   // ---- helpers -----------------------------------------------------------
 
-  static BzTrack _toTrack(yt.Video video) {
-    final audio = video.duration;
-    return BzTrack(
-      id: 'bz:${video.id.value}',
-      title: video.title,
-      artist: video.author,
-      artworkUrl: video.thumbnails.isNotEmpty
-          ? video.thumbnails.last.url
-          : null,
-      duration: audio,
-      explicit: false,
-    );
-  }
+  static BzTrack _toTrack(yt.Video video) => BzTrack(
+        id: 'bz:${video.id.value}',
+        title: video.title,
+        artist: video.author,
+        artworkUrl:
+            video.thumbnails.isNotEmpty ? video.thumbnails.last.url : null,
+        duration: video.duration,
+      );
 
   static ProviderTrack _toProviderTrack(BzTrack t) => ProviderTrack(
         breezzeTrackId: t.id,
@@ -77,24 +54,11 @@ class YoutubeSourceAdapter implements ProviderAdapter {
     }
   }
 
-  /// Artwork for a track, at the requested pixel size (BitChord's ladder:
-  /// row 160, card 480, header 720, notification 544, player 1200).
-  Future<String?> artworkAt(String videoId, {int px = 480}) async {
-    try {
-      final video = await _client.videos.get(videoId);
-      if (video.thumbnails.isEmpty) return null;
-      final url = video.thumbnails.last.url;
-      // yt thumbnails support the =s<px> param for sizing.
-      return url.endsWith('=s88') ? '${url}0'.replaceFirst('=s88', '=$px') : url;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Resolves the best audio-only stream for playback.
+  /// Resolves the highest-bitrate audio-only stream URL for playback.
   Future<ResolvedStream?> resolveStream(String videoId) async {
     try {
-      final manifest = await _client.videos.streamsClient.getManifest(videoId);
+      final manifest =
+          await _client.videos.streamsClient.getManifest(videoId);
       yt.AudioOnlyStreamInfo? best;
       for (final stream in manifest.audioOnly) {
         if (best == null || stream.bitrate > best.bitrate) {
@@ -112,17 +76,21 @@ class YoutubeSourceAdapter implements ProviderAdapter {
     }
   }
 
-  /// Downloads the audio bytes for offline storage (used by the download
-  /// manager's fetcher seam).
-  Stream<List<int>> downloadStream(String videoId) async* {
-    final stream = await resolveStream(videoId);
-    if (stream == null) throw StateError('stream_unavailable');
-    yield* _client.videos.streamsClient.getStream(streamToInfo(videoId));
-  }
-
-  yt.AudioOnlyStreamInfo streamToInfo(String videoId) {
-    // Placeholder helper; unused path
-    throw UnimplementedError();
+  /// Raw audio byte stream for offline downloads.
+  Stream<List<int>> audioBytes(String videoId) async* {
+    final manifest =
+        await _client.videos.streamsClient.getManifest(videoId);
+    yt.AudioOnlyStreamInfo? best;
+    for (final stream in manifest.audioOnly) {
+      if (best == null || stream.bitrate > best.bitrate) {
+        best = stream;
+      }
+    }
+    if (best == null) {
+      throw StateError('stream_unavailable');
+    }
+    final byteStream = await _client.videos.streamsClient.getStream(best);
+    yield* byteStream;
   }
 
   @override
@@ -138,7 +106,10 @@ class YoutubeSourceAdapter implements ProviderAdapter {
   @override
   Future<ProviderOp<String>> resolvePlayback(
       String providerTrackId, ProviderUserContext userContext) async {
-    final stream = await resolveStream(providerTrackId);
+    final videoId = providerTrackId.startsWith('bz:')
+        ? providerTrackId.substring(3)
+        : providerTrackId;
+    final stream = await resolveStream(videoId);
     if (stream == null) {
       return ProviderUnsupported('stream_unavailable');
     }
@@ -151,11 +122,18 @@ class YoutubeSourceAdapter implements ProviderAdapter {
     return ProviderOk('Music via Breezze source');
   }
 
-  void dispose() {
-    _client.close();
-  }
+  void dispose() => _client.close();
 }
 
-extension on yt.AudioOnlyStreamInfo {
-  // bitrate is already exposed by the library; no extension needed.
+/// One resolved stream: URL + codec + bitrate.
+class ResolvedStream {
+  final String streamUrl;
+  final String codec;
+  final int bitrate;
+
+  const ResolvedStream({
+    required this.streamUrl,
+    required this.codec,
+    required this.bitrate,
+  });
 }
