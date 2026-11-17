@@ -1,27 +1,75 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
-import '../app/bootstrap.dart' show FavoritesStore;
-import '../app/recent_store.dart' show RecentStore;
 import 'database_providers.dart';
-import 'favorites_store_drift.dart';
-import 'recent_store_drift.dart';
+import 'favorites_dao.dart';
+import 'recently_played_dao.dart';
+import '../../app/bootstrap.dart' show FavoriteTrack;
+import '../../app/recent_store.dart' show RecentEntry;
 
-/// One-shot legacy migration: JSON stores → SQLite (Drift).
-/// Runs once per app launch; idempotent (safe if it runs again).
-/// After migration, the drift facades are the app's stores.
+/// One-shot legacy migration: JSON files → SQLite (Drift).
+/// Safe on every launch — insertOnConflictUpdate makes it idempotent.
+/// A corrupt or missing legacy file never blocks startup.
 Future<void> migrateJsonStoresToDrift(ProviderContainer container) async {
   try {
-    final legacyFavorites = await FavoritesStore().load();
-    await container
-        .read(favoritesStoreDriftProvider)
-        .migrateFromJson(legacyFavorites);
+    final base = await getApplicationDocumentsDirectory();
 
-    final legacyRecent = await RecentStore().load();
-    await container
-        .read(recentStoreDriftProvider)
-        .migrateFromJson(legacyRecent);
+    // --- favorites ---
+    final favFile = File('${base.path}/breezze_favorites.json');
+    if (await favFile.exists()) {
+      final raw = jsonDecode(await favFile.readAsString());
+      if (raw is List) {
+        final favoritesDao = container.read(favoritesDaoProvider);
+        for (final item in raw) {
+          if (item is! Map) continue;
+          final t = FavoriteTrack.fromJson(
+              Map<String, Object?>.from(item));
+          await favoritesDao.add(
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            artworkUrl: t.artworkUrl,
+            durationMs: t.durationMs,
+          );
+        }
+      }
+    }
+
+    // --- recently played (import oldest-first so the cap trims the
+    //     oldest, preserving the 12 newest as the JSON store had) ---
+    final recentFile = File('${base.path}/breezze_recent.json');
+    if (await recentFile.exists()) {
+      final raw = jsonDecode(await recentFile.readAsString());
+      if (raw is List) {
+        final recentDao = container.read(recentlyPlayedDaoProvider);
+        final entries = <RecentEntry>[];
+        for (final item in raw) {
+          if (item is! Map) continue;
+          entries.add(RecentEntry(
+            id: item['id'] as String,
+            title: item['title'] as String? ?? '',
+            artist: item['artist'] as String? ?? '',
+            artworkUrl: item['artworkUrl'] as String?,
+            durationMs: item['durationMs'] as int? ?? 0,
+            playedAtMs: item['playedAtMs'] as int? ?? 0,
+          ));
+        }
+        entries.sort((a, b) => a.playedAtMs.compareTo(b.playedAtMs));
+        for (final e in entries) {
+          await recentDao.record(
+            id: e.id,
+            title: e.title,
+            artist: e.artist,
+            artworkUrl: e.artworkUrl,
+            durationMs: e.durationMs,
+          );
+        }
+      }
+    }
   } catch (_) {
-    // Migration is best-effort: a corrupt legacy JSON must never
-    // block app startup. The DB simply starts empty.
+    // Migration is best-effort. DB simply starts empty on failure.
   }
 }
