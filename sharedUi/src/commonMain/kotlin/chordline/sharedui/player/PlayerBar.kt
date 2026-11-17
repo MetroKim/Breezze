@@ -71,11 +71,8 @@ fun PlayerBar(
             LinearProgressIndicator(
                 progress = { progress },
                 modifier = Modifier.fillMaxWidth().height(3.dp),
-                color = ChordlineColors.AcccentSafe(),
+                color = ChordlineColors.Accent,
             )
         }
     }
 }
-
-// Safe accessor to keep a single source of truth for the accent color.
-private fun ChordlineColors.AcccentSafe() = ChordlineColors.Acccent ?: error("accent missing")
