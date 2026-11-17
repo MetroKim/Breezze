@@ -1,0 +1,33 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { PrismaModule } from './prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { CatalogModule } from './catalog/catalog.module';
+import { RightsModule } from './rights/rights.module';
+import { PlaybackModule } from './playback/playback.module';
+import { LibraryModule } from './library/library.module';
+import { SearchModule } from './search/search.module';
+import { PlaylistsModule } from './playlists/playlists.module';
+
+// Only modules that exist — every import resolves. Add modules here
+// only after their files land.
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    CatalogModule,
+    RightsModule,
+    PlaybackModule,
+    LibraryModule,
+    SearchModule,
+    PlaylistsModule,
+  ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+})
+export class AppModule {}
