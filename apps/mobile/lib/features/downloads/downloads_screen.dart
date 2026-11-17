@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
 import '../../widgets/bz_brand_icons.dart';
-import '../search/search_screen.dart' show downloadsDirectory;
+import '../player/player_controller.dart';
 
-/// Downloads library — real offline tracks with cover art (§6.1).
+/// Downloads library — real offline tracks with cover art + lyrics (§6.1).
 class DownloadsScreen extends ConsumerStatefulWidget {
   const DownloadsScreen({super.key});
 
@@ -34,10 +34,31 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       lyrics: ref.read(lyricsProvider),
     );
     final tracks = await library.list();
+    if (!mounted) return;
     setState(() {
       _tracks = tracks;
       _loading = false;
     });
+  }
+
+  void _play(DownloadedTrack track) {
+    ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: track.trackId,
+          title: track.title,
+          artist: track.artist,
+          origin: 'downloads',
+          sourceContext: 'Downloads',
+        );
+  }
+
+  Future<void> _remove(DownloadedTrack track) async {
+    final dir = await downloadsDirectory();
+    await DownloadsLibrary(
+      root: dir,
+      source: ref.read(youtubeSourceProvider),
+      lyrics: ref.read(lyricsProvider),
+    ).remove(track.trackId);
+    _refresh();
   }
 
   @override
@@ -76,74 +97,55 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                             Text('No downloads yet',
                                 style: theme.textTheme.titleMedium),
                             const SizedBox(height: 8),
-                            Text(
-                                'Search a song and tap the download icon.',
+                            Text('Search a song and tap the download icon.',
                                 style: theme.textTheme.bodyMedium),
                           ],
                         ),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 220),
+                        padding: const EdgeInsets.fromLTRB(0, 8, 0, 220),
                         itemCount: _tracks.length,
                         itemBuilder: (context, i) {
                           final track = _tracks[i];
-                          return _DownloadRow(track: track);
+                          return ListTile(
+                            leading: track.coverPath != null
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(
+                                        BzRadius.artwork),
+                                    child: Image.file(
+                                      File(track.coverPath!),
+                                      width: 48,
+                                      height: 48,
+                                      errorBuilder: (_, __, ___) =>
+                                          BzBnoteMark(
+                                              size: 48, color: theme.bzText2),
+                                    ),
+                                  )
+                                : BzBnoteMark(size: 48, color: theme.bzText2),
+                            title: Text(track.title,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              '${track.artist}'
+                              '${track.lyricsPath != null ? ' · lyrics saved' : ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () => _remove(track),
+                                ),
+                                const Icon(Icons.download_done,
+                                    color: Colors.green),
+                              ],
+                            ),
+                            onTap: () => _play(track),
+                          );
                         },
                       ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DownloadRow extends StatelessWidget {
-  final DownloadedTrack track;
-
-  const _DownloadRow({required this.track});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.bzSurface1,
-        borderRadius: BorderRadius.circular(BzRadius.card),
-        border: Border.all(color: theme.bzSeparator),
-      ),
-      child: Row(
-        children: [
-          track.coverPath != null
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(BzRadius.artwork),
-                  child: Image.file(
-                    File(track.coverPath!),
-                    width: 48,
-                    height: 48,
-                    errorBuilder: (_, __, ___) =>
-                        BzBnoteMark(size: 48, color: theme.bzText2),
-                  ),
-                )
-              : BzBnoteMark(size: 48, color: theme.bzText2),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(track.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium),
-                Text(
-                    '${track.artist}${track.lyricsPath != null ? ' · lyrics saved' : ''}',
-                    style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ),
-          const Icon(Icons.download_done, color: Colors.green),
         ],
       ),
     );
