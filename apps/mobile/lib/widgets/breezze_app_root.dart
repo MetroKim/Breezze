@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/api/breezze_api.dart';
 import '../../core/auth/auth_session.dart';
@@ -31,50 +34,43 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
       if (next is AuthSignedIn && prev is! AuthSignedIn) {
         // Replay offline ops now that a session exists.
         ref.read(outboxSyncProvider).drainIfSignedIn();
+
         // First-time check: has the backend saved preferences yet?
-        _checkOnboardingNeeded(apiOf(next));
+        _checkOnboardingNeeded();
       }
     });
   }
 
-  BreezzeApi apiOf(AuthSignedIn auth) =>
-      ref.read(authSessionProvider.notifier).api;
-
-  Future<void> _checkOnboardingNeeded(BreezzeApi api) async {
+  Future<void> _checkOnboardingNeeded() async {
+    final api = ref.read(authSessionProvider.notifier).api;
     try {
-      final preferences = await api.me(); // /auth/me exists; a
-      // dedicated GET /onboarding/preferences read goes through the
-      // same client. Use the raw get below instead.
-      // (kept simple: one HTTP call)
-      // ignore: avoid_print
-      print(preferences);
-    } catch (_) {}
-    // Real check implemented via the onboarding client below.
-    _checkOnboardingNeeded2(api);
-  }
+      final res = await http.get(
+        Uri.parse('${api.baseUrl}/api/v1/onboarding/preferences'),
+        headers: {
+          if (api.accessToken != null)
+            'Authorization': 'Bearer ${api.accessToken}',
+        },
+      );
 
-  Future<void> _checkOnboardingNeeded2(BreezzeApi api) async {
-    // GET /onboarding/preferences — 200 with data means onboarded;
-    // empty/404 means first-time → show onboarding.
-    try {
-      final res = await httpGetOnboarding(api);
-      if (res == null) {
-        // 404 or null result: first-time user.
+      if (res.statusCode == 404 || res.statusCode == 204) {
+        // No saved preferences: first-time user.
         _shellKey = GlobalKey();
         setState(() => _showOnboarding = true);
         return;
       }
+      if (res.statusCode >= 400) return;
+
       // Onboarded: set territory from the saved country.
+      final body = jsonDecode(res.body);
+      final data =
+          body is Map && body['data'] is Map ? body['data'] : body;
+      final country =
+          data is Map ? data['country'] as String? : null;
       ref.read(outboxTerritoryProvider.notifier).state =
-          (res['country'] as String?) ?? 'WW';
+          country ?? 'WW';
     } catch (_) {
       // Network issue: don't block the app on the check.
     }
-  }
-
-  @override
-  UserWidget builder(BuildContext context, WidgetRef ref) {
-    throw UnimplementedError();
   }
 
   @override
@@ -99,7 +95,12 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
                     Positioned(
                       top: 4,
                       right: 4,
-                      pseudo_placeholder
+                      child: SafeArea(
+                        child: TextButton(
+                          onPressed: _dismissOnboarding,
+                          child: const Text('Skip'),
+                        ),
+                      ),
                     ),
                   ],
                 ),
