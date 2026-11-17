@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/bootstrap.dart';
 import '../app/downloads_controller.dart';
+import '../core/audio/audio_service_bridge.dart';
 import '../core/audio/background_audio.dart';
 import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
@@ -29,19 +30,41 @@ class BreezzeShell extends StatelessWidget {
 
     attachPlaybackEngine(container);
 
-    // Initialize the background-audio sync (noop bridge until native
-    // audio_service lands; the seam is live).
-    container.read(backgroundSyncProvider);
-
     return UncontrolledProviderScope(
       container: container,
-      child: const BreezzeApp(),
+      child: const _BreezzeRoot(),
     );
   }
 }
 
-class BreezzeApp extends StatelessWidget {
-  const BreezzeApp({super.key});
+/// Starts background audio after the first binding frame, so the OS
+/// session exists before playback can begin.
+class _BreezzeRoot extends ConsumerStatefulWidget {
+  const _BreezzeRoot();
+
+  @override
+  ConsumerState<_BreezzeRoot> createState() => _BreezzeRootState();
+}
+
+class _BreezzeRootState extends ConsumerState<_BreezzeRoot> {
+  @override
+  void initState() {
+    super.initState();
+    _startBackgroundAudio();
+  }
+
+  Future<void> _startBackgroundAudio() async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    try {
+      final bridge = await startBackgroundAudio(container);
+      // Swap the no-op bridge for the real one and start syncing.
+      container.read(backgroundBridgeProvider.notifier).state = bridge;
+      container.read(backgroundSyncProvider);
+    } catch (_) {
+      // Background audio is optional — playback still works without it
+      // (desktop/web). The no-op bridge stays active.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
