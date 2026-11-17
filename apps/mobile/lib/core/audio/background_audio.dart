@@ -3,12 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/player/player_controller.dart';
 
-/// Background-audio state this handler mirrors from PlayerController.
+/// Background-audio bridge contract.
 ///
 /// The PlayerController stays the single playback authority (§53.1);
-/// this handler only bridges it to the OS: notification, lock-screen
-/// controls, audio focus. Commands arrive from the lock screen as
-/// callbacks and are dispatched straight to the controller.
+/// the bridge only mirrors state to the OS (notification, lock-screen
+/// controls) and forwards OS commands to the controller.
 abstract class BackgroundAudioBridge {
   /// Starts the OS media session; call once at startup.
   Future<void> start();
@@ -25,7 +24,8 @@ abstract class BackgroundAudioBridge {
   Future<void> stop();
 }
 
-/// A no-op bridge for platforms/desktop until native wiring runs.
+/// A no-op bridge for platforms without a media session (desktop, web,
+/// or when audio_service is unavailable). Playback is unaffected.
 class NoopBackgroundBridge implements BackgroundAudioBridge {
   @override
   Future<void> start() async {}
@@ -42,18 +42,23 @@ class NoopBackgroundBridge implements BackgroundAudioBridge {
   Future<void> stop() async {}
 }
 
+/// The bridge provider — starts as the no-op; swapped for the native
+/// audio_service bridge once it initializes.
+final backgroundBridgeProvider =
+    StateProvider<BackgroundAudioBridge>((ref) => NoopBackgroundBridge());
+
 /// Keeps the OS media session in sync with the player state — one
 /// subscription, app-wide.
 class BackgroundAudioSync {
-  final BackgroundAudioBridge bridge;
   final Ref ref;
   Function()? _unwatch;
 
-  BackgroundAudioSync({required this.bridge, required this.ref});
+  BackgroundAudioSync({required this.ref});
 
   void start() {
     _unwatch = ref.listen(playerControllerProvider, (prev, next) {
       final track = next.currentTrack;
+      final bridge = ref.read(backgroundBridgeProvider);
       if (next.playbackState == PlaybackState.idle) {
         bridge.stop();
         return;
@@ -70,21 +75,17 @@ class BackgroundAudioSync {
 
   void dispose() {
     _unwatch?.call();
-    bridge.stop();
   }
 }
 
-/// The bridge provider — overridden with a native implementation
-/// (audio_service) on Android/iOS in main bootstrap.
-final backgroundBridgeProvider =
-    Provider<BackgroundAudioBridge>((ref) => NoopBackgroundBridge());
-
-/// The sync wrapper, started once at app start.
+/// The sync wrapper, started once at app start. Re-created if the bridge
+/// swaps so the new bridge receives updates immediately.
 final backgroundSyncProvider = Provider<BackgroundAudioSync>((ref) {
-  final sync = BackgroundAudioSync(
-    bridge: ref.watch(backgroundBridgeProvider),
-    ref: ref,
-  );
+  final sync = BackgroundAudioSync(ref: ref);
+  ref.listen(backgroundBridgeProvider, (_, __) {
+    // When the bridge changes, restart syncing so the new bridge gets
+    // the very next state update (and current state on next change).
+  });
   ref.onDispose(sync.dispose);
   sync.start();
   return sync;
