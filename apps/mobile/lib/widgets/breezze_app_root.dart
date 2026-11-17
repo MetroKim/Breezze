@@ -9,7 +9,8 @@ import 'bz_shell.dart';
 
 /// Auth gate: auth screen until signed in, then the shell. On
 /// sign-in, queued offline ops drain to the backend. First-time
-/// users go through onboarding; the result sets the sync territory.
+/// users see onboarding over the live shell; finishing or skipping
+/// dismisses it and sets the sync territory.
 class BreezzeAppRoot extends ConsumerStatefulWidget {
   const BreezzeAppRoot({super.key});
 
@@ -18,7 +19,7 @@ class BreezzeAppRoot extends ConsumerStatefulWidget {
 }
 
 class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
-  bool _onboarded = false;
+  bool _showOnboarding = false;
   GlobalKey? _shellKey;
 
   @override
@@ -28,9 +29,9 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
       if (next is AuthSignedIn && prev is! AuthSignedIn) {
         // Replay offline ops now that a session exists.
         ref.read(outboxSyncProvider).drainIfSignedIn();
-        // First sign-in: run onboarding over the live shell.
+        // First sign-in this session: onboarding over the live shell.
         _shellKey = GlobalKey();
-        setState(() => _onboarded = false);
+        setState(() => _showOnboarding = true);
       }
     });
   }
@@ -44,11 +45,30 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
         key: _shellKey,
         child: const BreezzeShell(),
       );
-      if (!_onboarded) {
+      if (_showOnboarding) {
         return Stack(
           children: [
             shell,
-            Positioned.fill(child: _OnboardingOverlay(onDone: _finishOnboarding)),
+            Positioned.fill(
+              child: Scaffold(
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                body: Stack(
+                  children: [
+                    OnboardingFlow(onComplete: _dismissOnboarding),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: SafeArea(
+                        child: TextButton(
+                          onPressed: _dismissOnboarding,
+                          child: const Text('Skip'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         );
       }
@@ -58,32 +78,5 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
     return const AuthScreen();
   }
 
-  void _finishOnboarding() => setState(() => _onboarded = true);
-}
-
-/// Full-screen onboarding over the shell — dismissed on completion.
-class _OnboardingOverlay extends StatelessWidget {
-  final VoidCallback onDone;
-
-  const _OnboardingOverlay({required this.onDone});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // Dismissable flow; pops itself via Navigator.of(context).
-          const OnboardingFlow(),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: SafeArea(
-              child: TextButton(onPressed: onDone, child: const Text('Skip')),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  void _dismissOnboarding() => setState(() => _showOnboarding = false);
 }
