@@ -21,15 +21,6 @@ class BzShell extends ConsumerStatefulWidget {
 class _BzShellState extends ConsumerState<BzShell> {
   int _index = 0;
 
-  static const _screens = [
-    HomeScreen(),
-    _BrowseScreen(),
-    _RadioScreen(),
-    _LibraryScreen(),
-    _SearchScreen(),
-    DownloadsScreen(),
-  ];
-
   static const _tabs = ['Home', 'Browse', 'Radio', 'Library', 'Search', 'Downloads'];
 
   @override
@@ -38,7 +29,17 @@ class _BzShellState extends ConsumerState<BzShell> {
     final controller = ref.read(playerControllerProvider.notifier);
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: _screens),
+      body: IndexedStack(
+        index: _index,
+        children: [
+          const HomeScreen(),
+          const _SectionScaffold(title: 'Browse'),
+          const _SectionScaffold(title: 'Radio'),
+          const _SectionScaffold(title: 'Library'),
+          const _SectionScaffold(title: 'Search'),
+          const DownloadsScreen(),
+        ],
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
@@ -79,7 +80,6 @@ class _MiniPlayer extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Brand mark as the artwork placeholder in the mini-player.
           BzBnoteMark(size: 36, color: theme.bzText1),
           const SizedBox(width: 12),
           Expanded(
@@ -109,7 +109,7 @@ class _MiniPlayer extends StatelessWidget {
           IconButton(
             icon: Icon(playing ? Icons.pause : Icons.play_arrow),
             onPressed: controller.togglePlayPause,
-            color: featuretheme.bzText1,
+            color: theme.bzText1,
           ),
           IconButton(
             icon: const Icon(Icons.skip_next),
@@ -122,7 +122,7 @@ class _MiniPlayer extends StatelessWidget {
   }
 }
 
-/// Floating capsule tab bar with the B-note mark in the active tab (§20.2).
+/// Floating capsule tab bar (§20.2).
 class _BzTabBar extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
@@ -142,7 +142,7 @@ class _BzTabBar extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        music        children: [
+        children: [
           for (var i = 0; i < _BzShellState._tabs.length; i++)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -161,7 +161,7 @@ class _BzTabBar extends StatelessWidget {
 
 class _BzTab extends StatelessWidget {
   final String label;
-  final constbool active;
+  final bool active;
   final bool showMark;
   final VoidCallback onTap;
 
@@ -187,7 +187,7 @@ class _BzTab extends StatelessWidget {
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(BzRadius.capsule)
+        borderRadius: BorderRadius.circular(BzRadius.capsule),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -209,41 +209,6 @@ class _BzTab extends StatelessWidget {
 
 /// Placeholder screens for tabs not yet built (marked NOT STARTED in the
 /// gap register; visible as real screens, no dead buttons).
-class _BrowseScreen extends StatelessWidget {
-  const _BrowseScreen();
-
-  @ Placeholder build(BuildContext context) {
-    return _SectionScaffold(title: 'Browse');
-  }
-}
-
-class _RadioScreen extends StatelessWidget {
-  const _RadioScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionScaffold(title: 'Radio');
-  }
-}
-
-class _LibraryScreen extends StatelessWidget {
-  const _LibraryScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionScaffold(title: 'Library');
-  }
-}
-
-class _SearchScreen extends StatelessWidget {
-  const _SearchScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionScaffold(title: 'Search');
-  }
-}
-
 class _SectionScaffold extends StatelessWidget {
   final String title;
 
