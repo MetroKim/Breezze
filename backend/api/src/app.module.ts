@@ -17,6 +17,7 @@ import { LyricsModule } from './lyrics/lyrics.module';
 import { RadioModule } from './radio/radio.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { ReplayModule } from './replay/replay.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
     RadioModule,
     RecommendationsModule,
     OnboardingModule,
+    ReplayModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
