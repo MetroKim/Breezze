@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
-
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
+import '../core/audio/just_audio_engine_adapter.dart';
 import '../features/player/player_controller.dart';
 
 /// Composition root — the real, working wiring at startup.
@@ -84,7 +86,7 @@ Future<Directory> downloadsDirectory() async {
 }
 
 // ---------------------------------------------------------------------------
-// Favorites store — simple JSON persistence, no Drift yet
+// Favorites store — JSON persistence
 // ---------------------------------------------------------------------------
 
 /// A favorited track with its display info, persisted to JSON.
@@ -154,19 +156,18 @@ class FavoritesStore {
 
   Future<void> save(List<FavoriteTrack> tracks) async {
     final file = await _file();
-    await file.writeAsString(
-        jsonEncode([for (final t in tracks) t.toJson()]));
+    await file.writeAsString(jsonEncode([for (final t in tracks) t.toJson()]));
   }
 
+  /// Returns true when the track was added, false when removed.
   Future<bool> toggle(FavoriteTrack track) async {
     final tracks = await load();
-    final exists = tracks.any((t) => t.id == track.id);
-    if (exists) {
+    if (tracks.any((t) => t.id == track.id)) {
       await save(tracks.where((t) => t.id != track.id).toList());
-      return false; // removed
+      return false;
     }
     await save([...tracks, track]);
-    return true; // added
+    return true;
   }
 
   Future<bool> isFavorite(String id) async =>
@@ -174,4 +175,5 @@ class FavoritesStore {
 }
 
 /// App-wide favorites store provider.
-final favoritesStoreProvider = Provider<FavoritesStore>((ref) => FavoritesStore());
+final favoritesStoreProvider =
+    Provider<FavoritesStore>((ref) => FavoritesStore());
