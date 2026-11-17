@@ -44,7 +44,7 @@ export class HomeService {
         sectionType: 'favorites',
         title: 'Your Favorites',
         layout: 'rail',
-        itemIds_placeholder
+        trackIds: favorites.map((f) => f.trackId),
       });
     }
 
