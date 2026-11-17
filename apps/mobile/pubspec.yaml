@@ -1,0 +1,32 @@
+name: breezze
+description: Breezze — music discovery, streaming, library and listening platform.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  breezze_design_system:
+    path: ../../packages/design_system
+  breezze_audio_contracts:
+    path: ../../packages/audio_contracts
+  breezze_api_client:
+    path: ../../packages/api_client
+
+  # State management (spec §25: select one — Riverpod chosen, ADR-001)
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
