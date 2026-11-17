@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter/material.dart';
@@ -54,21 +52,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   Future<void> _download(BzTrack track) async {
     final dir = await downloadsDirectory();
-    await DownloadsLibrary(
+    final ok = await DownloadsLibrary(
       root: dir,
       source: ref.read(youtubeSourceProvider),
-      lyrics: LyricsProvider(HttpLyrics()),
+      lyrics: ref.read(lyricsProvider),
     ).download(track);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Downloaded: ${track.title}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok
+              ? 'Downloaded: ${track.title}'
+              : 'Download failed: ${track.title}')));
     }
   }
 
   void _play(BzTrack track) {
-    ref
-        .read(playerControllerProvider.notifier)
-        .playTrack(trackId: track.id, origin: 'search');
+    final queue = [
+      for (final t in _results)
+        TrackInfo(
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          artworkUrl: t.artworkUrl,
+          duration: t.duration,
+        )
+    ];
+    final index = _results.indexOf(track);
+    ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: track.id,
+          queue: queue,
+          startIndex: index.clamp(0, queue.length - 1),
+          origin: 'search',
+          sourceContext: 'Search',
+        );
   }
 
   @override
@@ -109,8 +124,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 style: theme.textTheme.titleMedium),
                           )
                         : ListView.builder(
-                            padding:
-                                const EdgeInsets.fromLTRB(0, 8, 0, 220),
+                            padding: const EdgeInsets.fromLTRB(0, 8, 0, 220),
                             itemCount: _results.length,
                             itemBuilder: (context, i) {
                               final track = _results[i];
@@ -150,12 +164,4 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
     );
   }
-}
-
-/// App-private downloads directory (per platform, bootstrap-provided).
-Future<Directory> downloadsDirectory() async {
-  final base = Directory.systemTemp;
-  final dir = Directory('${base.path}/breezze_downloads');
-  await dir.create(recursive: true);
-  return dir;
 }
