@@ -1,3 +1,4 @@
+import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -102,7 +103,7 @@ class _StubSource implements ProviderAdapter {
   @override
   bool get supportsPlayback => canPlay;
 
-  @adapter
+  @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
     return ProviderOk([
       ProviderTrack(
