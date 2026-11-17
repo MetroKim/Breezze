@@ -20,6 +20,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { ReplayModule } from './replay/replay.module';
 import { SocialModule } from './social/social.module';
 import { ClassicalModule } from './classical/classical.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ClassicalModule } from './classical/classical.module';
     ReplayModule,
     SocialModule,
     ClassicalModule,
+    AdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
