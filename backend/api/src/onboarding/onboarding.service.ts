@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -33,8 +33,13 @@ export class OnboardingService {
   }
 
   async getPreferences(userId: string) {
-    return this.prisma.userPreference.findUnique({
+    const preferences = await this.prisma.userPreference.findUnique({
       where: { userId },
     });
+    // No saved preferences = first-time user. 404 is the explicit
+    // signal the app's auth gate uses to decide whether to show
+    // onboarding — a 200-null would be ambiguous.
+    if (!preferences) throw new NotFoundException('PREFERENCES_NOT_FOUND');
+    return preferences;
   }
 }
