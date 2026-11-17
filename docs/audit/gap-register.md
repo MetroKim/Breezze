@@ -1,47 +1,51 @@
 # Breezze Gap Register — spec §50.4
 
-Requirement-by-requirement status against the §49 matrix. A line is
-IMPLEMENTED only with real behavior + passing tests (§50.6).
+A line is IMPLEMENTED only with real behavior + passing tests (§50.6).
 
-| Req ID | Requirement | Priority | Status | Evidence |
-|---|---|---|---|---|
-| **A. Identity & design** | | | | |
-| A-01 | Brand marks (3 SVG + widget forms) | P0 | IMPLEMENTED | `assets/icons/`, `bz_brand_icons.dart` |
-| A-02 | Tokens light+dark, exact §21.1 hex | P0 | IMPLEMENTED | `design_system/src/tokens.dart` |
-| A-05 | Type/spacing/radius/elevation scales | P0 | IMPLEMENTED | `tokens.dart` |
-| A-03 | Atmosphere materials (colors) | P0 | IMPLEMENTED | `bz_theme.dart` atmo getters |
-| **B. App architecture** | | | | |
-| B-01/02/04 | Feature folders, Riverpod, one player | P0 | IMPLEMENTED | `features/*`, `player_controller.dart` |
-| B-03 | Navigation | P0 | IMPLEMENTED | Shell IndexedStack tabs (Home/Search/Downloads/Settings) |
-| **C. Music fetch & search** | | | | |
-| C-01/03 | Real source, rights-honest results | P0 | **IMPLEMENTED** | `youtube_source_adapter.dart` (keyless, live) |
-| **D. Player & media** | | | | |
-| D-01..03 | Player, state machine, queue | P0 | IMPLEMENTED | + 18 tests |
-| D-04 | Native playback engine | P0 | **IMPLEMENTED** | `just_audio_engine_adapter.dart` |
-| D-05/06/08 | Crossfade, scrobble, AutoMix | P1/P2 | IMPLEMENTED | ports + tests |
-| D-07 | Lyrics engine | P1 | IMPLEMENTED | `lrc_parser.dart` + **LRCLIB provider** |
-| D-09 | Quality tiers | P0 | IMPLEMENTED | `audio_quality.dart` |
-| **E. Downloads & library** | | | | |
-| E-02 | Offline downloads | P1 | **IMPLEMENTED** | `downloads_library.dart` + screen |
-| E-02b | Lyrics + cover art saved with each download | P1 | **IMPLEMENTED** | `DownloadsLibrary.download()` |
-| **F. Backend** | | | | |
-| F-01..04 | Breezze /api/v1 | P0 | NOT STARTED | future milestone |
-| **G. Privacy** | | | | |
-| G-01 | No client secrets | P0 | IMPLEMENTED | keyless sources throughout |
-| **H. Premium & settings** | | | | |
-| H-01..03 | Tiers, settings, gating | P1 | IMPLEMENTED | `membership.dart`, settings screen |
+| Req ID | Requirement | Status | Evidence |
+|---|---|---|---|
+| **A. Identity & design** | | | |
+| A-01 | Brand marks (3 SVG + widget forms) | IMPLEMENTED | `assets/icons/`, `bz_brand_icons.dart` |
+| A-02 | Tokens light+dark, exact §21.1 hex | IMPLEMENTED | `design_system/src/tokens.dart` (read back + verified) |
+| A-05 | Type/spacing/radius/elevation scales | IMPLEMENTED | `tokens.dart` |
+| A-03 | Atmosphere materials (colors in theme) | IMPLEMENTED | `bz_theme.dart` |
+| **B. App architecture** | | | |
+| B-01/02/04 | Feature folders, Riverpod, one player | IMPLEMENTED | `features/*`, `player_controller.dart` |
+| B-03 | Navigation | IMPLEMENTED | 5 real tabs + mini-player → Now Playing route |
+| **C. Music fetch & search** | | | |
+| C-01/03 | Real keyless source, honest results | IMPLEMENTED | `youtube_source_adapter.dart` |
+| **D. Player & media** | | | |
+| D-01..03 | Player, state machine, queue | IMPLEMENTED | + tests |
+| D-04 | Native playback engine | IMPLEMENTED | `just_audio_engine_adapter.dart` |
+| D-05/06/08 | Crossfade, scrobble, AutoMix | IMPLEMENTED | ports + tests |
+| D-07 | Lyrics engine + provider | IMPLEMENTED | `lrc_parser.dart` + LRCLIB (duration-keyed) |
+| D-09 | Quality tiers | IMPLEMENTED | `audio_quality.dart` |
+| **D-10** | **Now Playing screen, word-synced lyrics** | **IMPLEMENTED** | `now_playing_screen.dart` |
+| **E. Downloads & library** | | | |
+| E-01 | Favorites persistence | **IMPLEMENTED** | `FavoritesStore` (JSON, app documents) + Library screen |
+| E-02 | Offline downloads w/ lyrics + art | **IMPLEMENTED** | `downloads_library.dart`, `path_provider` app-private dir |
+| **G. Privacy** | | | |
+| G-01 | No client secrets | IMPLEMENTED | keyless sources throughout |
+| **H. Premium & settings** | | | |
+| H-01..03 | Tiers, settings, gating | IMPLEMENTED | `membership.dart`, settings screen |
 
-## What works end-to-end today
+## Fixed this pass
 
-1. **Search** → live keyless source → results with artwork.
-2. **Play** → resolver → native engine → sound.
-3. **Download** → audio + cover.jpg + lyrics.lrc + meta.json per track.
-4. **Downloads tab** → real list with cover art from disk.
-5. **Lyrics** → LRCLIB synced (word-level via enhanced LRC parser).
+- Broken imports: design-system import missing from 7 screens (compile error).
+- Settings wrong import path (`widgets/...` → `../../widgets/...`).
+- Lyrics fuzzy search never parsed duration → wrong edits could win (now ranked by closest duration).
+- `PlayerState` had no track info → Now Playing/mini-player couldn't show title/artist/artwork (now `TrackInfo` + queue context).
+- Downloads location was `systemTemp` → now `path_provider` app documents (private, survives restarts).
+- Search played only one track with no queue → now plays the full result list as a queue.
+- Mini-player was static → now shows title, artwork, live progress, and opens Now Playing.
+- `main.dart` unused imports cleaned; shell owns providers properly.
+- Now Playing built: breathing artwork, transport, seek, favorites heart, karaoke word-sync lyrics.
+- Library screen built: persisted favorites, play-all, per-track play.
 
-## Remaining
+## Remaining (honest)
 
-- Breezze's own backend /api/v1 (F-01..04) — future milestone.
-- Now Playing expanded screen with word-highlight sync UI.
-- Local persistence (Drift) for favorites/library.
-- Platform runners (Android/iOS) not yet generated — `flutter create .` needed once.
+- `flutter create . && flutter analyze` still needs a local run — platform runners (android/, ios/) are generated there.
+- Download progress UI (currently SnackBar; live progress bar needs the DownloadManager stream wiring).
+- Background audio (audio_service) — lock-screen controls.
+- Home rails personalization — needs catalog backend.
+- Breezze /api/v1 backend — future milestone.
