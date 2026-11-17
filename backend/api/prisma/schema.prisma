@@ -1,0 +1,143 @@
+// Breezze Prisma schema — Plan §12 (P0 subset).
+// Free app: no subscription/billing models — Breezze has no paywall.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  displayName   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  favorites     Favorite[]
+  playlists     Playlist[]
+  downloads     DownloadRecord[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  familyId  String
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Artist {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  albums    Album[]
+  tracks    Track[]
+}
+
+model Album {
+  id          String    @id @default(uuid())
+  title       String
+  artistId    String
+  releaseDate DateTime?
+  artist      Artist    @relation(fields: [artistId], references: [id])
+  tracks      Track[]
+}
+
+model Track {
+  id          String                  @id @default(uuid())
+  title       String
+  artistId    String
+  albumId     String?
+  duration    Int
+  explicit    Boolean                 @default(false)
+  artist      Artist                  @relation(fields: [artistId], references: [id])
+  album       Album?                  @relation(fields: [albumId], references: [id])
+  territories TerritoryAvailability[]
+  rights      RightsUsagePermission[]
+  takedowns   ContentTakedownCase[]
+  attribution ProviderAttribution?
+}
+
+model TerritoryAvailability {
+  id        String   @id @default(uuid())
+  trackId   String
+  territory String
+  track     Track    @relation(fields: [trackId], references: [id])
+
+  @@unique([trackId, territory])
+}
+
+model RightsUsagePermission {
+  id      String    @id @default(uuid())
+  trackId String
+  action  String
+  startAt DateTime?
+  endAt   DateTime?
+  track   Track     @relation(fields: [trackId], references: [id])
+
+  @@unique([trackId, action])
+}
+
+model ContentTakedownCase {
+  id        String   @id @default(uuid())
+  trackId   String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  track     Track    @relation(fields: [trackId], references: [id])
+}
+
+model ProviderAttribution {
+  id      String @id @default(uuid())
+  trackId String
+  text    String
+  track   Track  @relation(fields: [trackId], references: [id])
+
+  @@unique([trackId])
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  trackId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trackId])
+}
+
+model Playlist {
+  id        String         @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime       @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     PlaylistItem[]
+}
+
+model PlaylistItem {
+  id         String   @id @default(uuid())
+  playlistId String
+  trackId    String
+  position   Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, trackId])
+}
+
+model DownloadRecord {
+  id        String    @id @default(uuid())
+  userId    String
+  trackId   String
+  status    String    @default("active")
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
