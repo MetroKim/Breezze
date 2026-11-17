@@ -2,15 +2,18 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import 'bz_onboarding_scaffold.dart';
 import 'onboarding_controller.dart';
 
 /// Onboarding flow — Welcome → Country → Genres (min 3) → Done.
-/// On finish, preferences POST to the backend and the flow pops;
-/// the shell is already mounted underneath, playback untouched.
+/// Completes via [onComplete] (no Navigator.pop — the flow runs in
+/// an overlay above the live shell, so popping would kill the page).
 class OnboardingFlow extends ConsumerStatefulWidget {
-  const OnboardingFlow({super.key});
+  final VoidCallback onComplete;
+
+  const OnboardingFlow({super.key, required this.onComplete});
 
   @override
   ConsumerState<OnboardingFlow> createState() => _OnboardingFlowState();
@@ -27,9 +30,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final ok = await controller.save(authenticatedApi(ref));
     if (!mounted) return;
     if (ok) {
-      // Set the outbox territory from the chosen country so plays
-      // sync with the right availability region.
-      Navigator.of(context).pop();
+      // Plays/favorites sync with the right availability region.
+      final country = ref.read(onboardingProvider).country;
+      ref.read(outboxTerritoryProvider.notifier).state = country;
+      widget.onComplete();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not save preferences. Try again.')),
