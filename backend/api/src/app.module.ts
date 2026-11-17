@@ -12,6 +12,7 @@ import { LibraryModule } from './library/library.module';
 import { SearchModule } from './search/search.module';
 import { PlaylistsModule } from './playlists/playlists.module';
 import { DownloadsModule } from './downloads/downloads.module';
+import { HomeModule } from './home/home.module';
 
 // Only modules that exist — every import resolves. Add modules here
 // only after their files land.
@@ -29,6 +30,7 @@ import { DownloadsModule } from './downloads/downloads.module';
     SearchModule,
     PlaylistsModule,
     DownloadsModule,
+    HomeModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
