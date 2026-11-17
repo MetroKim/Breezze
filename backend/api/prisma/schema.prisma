@@ -14,7 +14,7 @@ model User {
   id             String           @id @default(uuid())
   email          String           @unique
   passwordHash   String
-  displayName   String?
+  displayName    String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   refreshTokens  RefreshToken[]
@@ -160,7 +160,7 @@ model DownloadRecord {
   status    String    @default("active")
   createdAt DateTime  @default(now())
   expiresAt DateTime?
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, trackId])
 }
@@ -181,4 +181,27 @@ model LyricTranslation {
   text     String
 
   @@unique([lyricsId, language])
+}
+
+model RadioStation {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  description String?
+  genre      String?
+  streamUrl  String
+  isLive     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  programs   RadioProgram[]
+}
+
+model RadioProgram {
+  id          String   @id @default(uuid())
+  stationId   String
+  title       String
+  presenter   String?
+  airsAt      DateTime
+  durationMin Int
+  station     RadioStation @relation(fields: [stationId], references: [id])
+
+  @@unique([stationId, title])
 }
