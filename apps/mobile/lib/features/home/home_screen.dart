@@ -1,3 +1,4 @@
+import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,9 +6,8 @@ import '../../widgets/bz_brand_icons.dart';
 
 /// Listen Now home — greeting + content rails (§03).
 ///
-/// P0 scaffold: real personalization data arrives when the API client
-/// is wired; rails are driven by a typed HomeRepository contract, not
-/// hard-coded demo data presented as real (§50.1 audit rule).
+/// P0 scaffold: personalization rails fill when the catalog backend
+/// lands; cards play through the global player when tapped.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -117,7 +117,6 @@ class _AlbumCardState extends State<_AlbumCard> {
                 borderRadius: BorderRadius.circular(BzRadius.artwork),
                 border: Border.all(color: theme.bzSeparator),
               ),
-              // Artwork placeholder: brand mark centered, per token rules.
               child: Center(
                 child: BzBnoteMark(size: 48, color: theme.bzText2),
               ),
@@ -129,7 +128,8 @@ class _AlbumCardState extends State<_AlbumCard> {
                     fontWeight: FontWeight.w600,
                     color: theme.bzText1)),
             Text('Artist · Album',
-                style: TextStyle(fontSize: BzType.footnote, color: theme.bzText2)),
+                style:
+                    TextStyle(fontSize: BzType.footnote, color: theme.bzText2)),
           ],
         ),
       ),
