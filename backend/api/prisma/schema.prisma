@@ -26,6 +26,9 @@ model User {
   preference     UserPreference?
   following      Follow[]          @relation("follower")
   followers      Follow[]          @relation("following")
+  reportsFiled   ContentReport[]  @relation("reporter")
+  notifications  Notification[]
+  pushTokens     PushToken[]
 }
 
 model RefreshToken {
@@ -60,6 +63,37 @@ model Follow {
   following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  kind      String    @default("general")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ContentReport {
+  id          String   @id @default(uuid())
+  reporterId  String
+  targetType  String
+  targetId    String
+  reason      String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  reporter    User     @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
 }
 
 model Artist {
@@ -217,7 +251,7 @@ model RadioStation {
   streamUrl   String
   isLive      Boolean      @default(true)
   createdAt   DateTime     @default(now())
-  programs     RadioProgram[]
+  programs    RadioProgram[]
 }
 
 model RadioProgram {
@@ -252,9 +286,9 @@ model ClassicalWork {
 }
 
 model ClassicalMovement {
-  id      String @id @default(uuid())
-  workId  String
-  title   String
+  id       String @id @default(uuid())
+  workId   String
+  title    String
   position Int
 
   @@unique([workId, position])
