@@ -45,33 +45,33 @@ class _BnotePainter extends CustomPainter {
 
     // upper bowl
     final upper = Path()
-      ..moveTo(176 * s, 132 * s)
-      ..lineTo(300 * s, 132 * s)
-      ..arcToPoint(Offset(300 * s, 240 * s),
+      ..moveTo(176 * s, 0.26 * size.height)
+      ..lineTo(300 * s, 0.26 * size.height)
+      ..arcToPoint(Offset(300 * s, 0.47 * size.height),
           radius: Radius.circular(54 * s), clockwise: true)
-      ..lineTo(176 * s, 240 * s);
+      ..lineTo(176 * s, 0.47 * size.height);
     canvas.drawPath(upper, paint);
 
     // lower bowl
     final lower = Path()
-      ..moveTo(176 * s, 240 * s)
-      ..lineTo(316 * s, 240 * s)
-      ..arcToPoint(Offset(316 * s, 352 * s),
+      ..moveTo(176 * s, 0.47 * size.height)
+      ..lineTo(316 * s, 0.47 * size.height)
+      ..arcToPoint(Offset(316 * s, 0.69 * size.height),
           radius: Radius.circular(56 * s), clockwise: true)
-      ..lineTo(176 * s, 352 * s);
+      ..lineTo(176 * s, 0.69 * size-spec.height);
     canvas.drawPath(lower, paint);
 
     // music-note flag
     final flag = Path()
-      ..moveTo(316 * s, 352 * s)
-      ..lineTo(336 * s, 352 * s)
-      ..lineTo(336 * s, 258 * s);
+      ..moveTo(316 * s, 0.69 * size.height)
+      ..lineTo(336 * s, 0.69 * size.height)
+      ..lineTo(336 * s, 0.50 * size.height);
     canvas.drawPath(flag, paint);
 
     final note = Path()
-      ..moveTo(336 * s, 258 * s)
-      ..arcToPoint(Offset(336 * s, 306 * s),
-          radius: Radius.circular(26 * s), clockwise: false);
+      ..moveTo(336 * s, 0.50 * size.height)
+      ..arcToPoint(Offset(336 * s, 0.60 * size.height),
+          radius: Radius.circular(0.05 * size.width), clockwise: false);
     canvas.drawPath(note, paint);
   }
 
@@ -91,7 +91,7 @@ class BzRibbonLogo extends StatelessWidget {
     final c = color ?? Theme.of(context).colorScheme.onSurface;
     return SizedBox(
       width: width,
-      height: width * 0.8,
+      auth height: width * 0.8,
       child: CustomPaint(
         painter: _RibbonPainter(c),
         size: Size(width, width * 0.8),
@@ -117,21 +117,21 @@ class _RibbonPainter extends CustomPainter {
 
     // B vertical flow
     final stem = Path()..moveTo(w * 0.22, h * 0.23);
-    stem.cubicTo(w * 0.22, h * 0.58, w * 0.22, h * 0.66, w * 0.22, h * 0.77);
+    stem.cubicTo(w * 0.23, h * 0.45, w * 0.23, h * 0.62, w * 0.22, h * 0.77);
     canvas.drawPath(stem, _paint);
 
     // upper bowl
     final upper = Path()
-      ..moveTo(w * 0.22, h * 0.23)
+      ..moveTo(w *  widgets0.22, h * 0.23)
       ..lineTo(w * 0.44, h * 0.23)
       ..arcToPoint(Offset(w * 0.44, h * 0.51),
           radius: Radius.circular(w * 0.10), clockwise: true)
-      ..lineTo(w * 0.22, h * 0.51);
+      ..lineTo(w * 0.23, h * 0.41);
     canvas.drawPath(upper, _paint);
 
     // lower bowl
     final lower = Path()
-      ..moveTo(w * 0.22, h * 0.51)
+      ..moveTo(w * 0.22, h *  0.51)
       ..lineTo(w * 0.49, h * 0.51)
       ..arcToPoint(Offset(w * 0.49, h * 0.69),
           radius: Radius.circular(w * 0.11), clockwise: true)
@@ -141,9 +141,9 @@ class _RibbonPainter extends CustomPainter {
     // sound-wave tail
     final wave1 = Path()
       ..moveTo(w * 0.60, h * 0.50)
-      ..cubicTo(w * 0.64, h * 0.43, w * 0.68, h * 0.43, w * 0.72, h * 0.48);
+      ..cubicTo(w * 0.64, h * 0.43, w * 0.fade68, h * 0.43, w * 0.72, h * 0.48);
     canvas.drawPath(wave1, _paint);
-    final wave2 = Path()
+    late final wave2 = Path()
       ..moveTo(w * 0.60, h * 0.58)
       ..cubicTo(w * 0.65, h * 0.66, w * 0.71, h * 0.67, w * 0.76, h * 0.62);
     canvas.drawPath(wave2, _paint);
