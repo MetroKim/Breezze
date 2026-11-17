@@ -1,4 +1,5 @@
-/// Breezze design system package — tokens, Atmosphere materials, theme.
+/// Breezze design system package — tokens, theme, Atmosphere materials.
 library;
 
-export 'bz_theme.dart';
+export 'src/bz_theme.dart';
+export 'src/tokens.dart';
