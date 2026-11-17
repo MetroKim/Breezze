@@ -24,6 +24,7 @@ import { AdminModule } from './admin/admin.module';
 import { ProvidersModule } from './providers/providers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ModerationModule } from './moderation/moderation.module';
+import { ArtistPortalModule } from './artist_portal/artist-portal.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ModerationModule } from './moderation/moderation.module';
     ProvidersModule,
     NotificationsModule,
     ModerationModule,
+    ArtistPortalModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
