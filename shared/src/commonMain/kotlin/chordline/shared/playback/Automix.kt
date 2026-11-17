@@ -50,7 +50,6 @@ class Automix(
         return Transition(
             beatMatched = matched,
             tempoFactor = if (matched) 1.0 / bestRatio else 1.0,
-            tempoFactorSetExplicitly = false, // placeholder removed below
             transitionMs = transitionMs,
             doubleTimeFold = matched && bestFold != 1.0,
         )
