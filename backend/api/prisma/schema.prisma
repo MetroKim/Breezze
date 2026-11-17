@@ -231,3 +231,31 @@ model RadioProgram {
 
   @@unique([stationId, title])
 }
+
+model Composer {
+  id        String   @id @default(uuid())
+  name      String
+  era       String?
+  createdAt DateTime @default(now())
+  works     ClassicalWork[]
+}
+
+model ClassicalWork {
+  id          String   @id @default(uuid())
+  composerId  String
+  title       String
+  catalogCode String?
+  movements   ClassicalMovement[]
+  composer    Composer @relation(fields: [composerId], references: [id])
+
+  @@unique([composerId, title])
+}
+
+model ClassicalMovement {
+  id      String @id @default(uuid())
+  workId  String
+  title   String
+  position Int
+
+  @@unique([workId, position])
+}
