@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'widgets/bz_brand_icons.dart';
+import '../../widgets/bz_brand_icons.dart';
 
 /// Settings — audio quality, playback, downloads, membership (§19, §18).
 /// Premium-gated toggles are hints; the server is the entitlement
@@ -80,8 +80,7 @@ class SettingsScreen extends ConsumerWidget {
     return ListTile(
       leading: BzBnoteMark(size: 28, color: theme.bzAccent),
       title: const Text('Upgrade to Premium'),
-      subtitle: Text(
-          'Unlock lossless audio, Hi-Res, downloads and AutoMix',
+      subtitle: Text('Unlock lossless audio, Hi-Res, downloads and AutoMix',
           style: theme.textTheme.bodySmall),
       trailing: ElevatedButton(
         onPressed: () {},
