@@ -1,0 +1,16 @@
+name: breezze_api_client
+description: Breezze typed API client — BitChord backend, source chain, downloads, membership.
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  breezze_audio_contracts:
+    path: ../audio_contracts
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
