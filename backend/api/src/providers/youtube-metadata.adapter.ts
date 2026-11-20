@@ -15,8 +15,8 @@ import { ProviderResult, providerOk, providerError } from './provider-result';
 //   - search / metadata / videoSearch: YES (keyless public metadata)
 //   - playback / download: NO. Stream extraction stays disabled in the
 //     production path; video playback happens through the provider's
-//     OFFICIAL embed player (see VideoModule), which is the sanctioned
-//     free method for third-party apps.
+//     OFFICIAL embed player (see VideoModule), the sanctioned free
+//     method for third-party apps.
 //   - embedPlayback: YES — the embed player is the provider's own
 //     sanctioned surface; Breezze only passes the video id through.
 
@@ -64,7 +64,7 @@ export class YoutubeMetadataAdapter implements ProviderAdapter {
 
   async search(query: string): Promise<ProviderResult<ProviderTrack[]>> {
     const hits = await this.innertubeSearch(query);
-    if (hits.kind === 'error') return hits;
+    if (hits.kind !== 'ok') return hits;
     return providerOk(
       hits.value
         .filter((h) => h.videoId)
@@ -73,12 +73,10 @@ export class YoutubeMetadataAdapter implements ProviderAdapter {
     );
   }
 
-  async searchVideos(
-    query: string,
-  ): Promise<ProviderResult<ProviderVideo[]>> {
+  async searchVideos(query: string): Promise<ProviderResult<ProviderVideo[]>> {
     // Video search reuses the same keyless metadata path; results are
     // filtered to embeddable videos because playback is embed-only.
-    const hits = await this.innertubeSearch(`${query} official music video`);
+    const hits = await this.innertubeSearch(`${query} music video`);
     if (hits.kind !== 'ok') return hits;
     return providerOk(
       hits.value
@@ -88,7 +86,7 @@ export class YoutubeMetadataAdapter implements ProviderAdapter {
           title: h.title ?? 'Unknown',
           artist: h.artist ?? 'Unknown',
           artworkUrl: h.thumbnail,
-          durationSec: this.parseIsoDuration(h.duration),
+          durationSec: this.parseClockDuration(h.duration),
           viewCount: this.parseViewCount(h.viewCount),
           embeddable: true,
         })),
@@ -110,13 +108,13 @@ export class YoutubeMetadataAdapter implements ProviderAdapter {
 
   async getAvailability(
     providerTrackId: string,
-    _territory: string,
+    territory: string,
   ): Promise<ProviderResult<{ available: boolean }>> {
     // Keyless metadata has no per-territory gate; the embed player
     // enforces the provider's own regional rules at play time.
     void providerTrackId;
+    void territory;
     return providerOk({ available: true });
-    _territory;
   }
 
   // ---------------- internal ----------------
@@ -127,17 +125,18 @@ export class YoutubeMetadataAdapter implements ProviderAdapter {
       title: h.title ?? 'Unknown',
       artist: h.artist ?? 'Unknown',
       artworkUrl: h.thumbnail,
-      durationSec: this.parseIsoDuration(h.duration),
+      durationSec: this.parseClockDuration(h.duration),
     };
   }
 
-  /// Keyless innertube search — the same engineering the repo used in
-  /// Dart, now server-side. No credentials, no quota.
+  /** Keyless innertube search — the same engineering the repo used in
+   *  Dart, now server-side. No credentials, no quota. */
   private async innertubeSearch(
     query: string,
   ): Promise<ProviderResult<InnertubeSearchHit[]>> {
     try {
-      const apiKey = this.config.get<string>('YOUTUBE_INNERTUBE_API_KEY') ?? '';
+      const apiKey =
+        this.config.get<string>('YOUTUBE_INNERTUBE_API_KEY') ?? '';
       const res = await fetch(
         `${this.innertube}?key=${apiKey}&prettyPrint=false`,
         {
@@ -163,65 +162,89 @@ export class YoutubeMetadataAdapter implements ProviderAdapter {
           res.status >= 500,
         );
       }
-      const body = (await res.json()) as any;
-      const hits = this.extractVideoResults(body);
-      return providerOk(hits);
+      const body = (await res.json()) as unknown;
+      return providerOk(this.extractVideoResults(body));
     } catch (e) {
+      this.logger.warn(`innertube search failed: ${String(e)}`);
       return providerError('PROVIDER_NETWORK_ERROR', String(e), true);
     }
   }
 
-  private extractVideoResults(body: any): InnertubeSearchHit[] {
+  /** Defensive recursive walk: find renderer objects holding a videoId
+   *  and a title, without depending on innertube layout details. */
+  private extractVideoResults(body: unknown): InnertubeSearchHit[] {
     const hits: InnertubeSearchHit[] = [];
-    const stack: any[] = [body];
-    // Defensive walk: find renderer objects holding videoId + title.
+    const seen = new Set<unknown>();
+    const stack: unknown[] = [body];
+
     while (stack.length > 0 && hits.length < 40) {
       const node = stack.pop();
       if (!node || typeof node !== 'object') continue;
-      if (Array.isArray(node)) {
-        stack.push(...node);
-        continue;
-      }
-      const videoRenderer = node.videoRenderer ?? node.compactVideoRenderer;
-      if (videoRenderer?.videoId) {
-        const title =
-          videoRenderer.title?.runs?.[0]?.text ??
-          videoRenderer.title?.simpleText;
+      if (seen.has(node)) continue;
+      seen.add(node);
+
+      const record = node as Record<string, unknown>;
+      const renderer =
+        (record['videoRenderer'] ?? record['compactVideoRenderer']) as
+          | Record<string, unknown>
+          | undefined;
+
+      if (renderer && typeof renderer['videoId'] === 'string') {
+        const title = this.readText(renderer['title']);
         const owner =
-          videoRenderer.ownerText?.runs?.[0]?.text ??
-          videoRenderer.shortBylineText?.runs?.[0]?.text;
-        const thumbnail =
-          videoRenderer.thumbnail?.thumbnails?.slice(-1)?.[0]?.url;
-        const duration = videoRenderer.lengthText?.simpleText;
-        const viewCount = videoRenderer.shortViewCountText?.simpleText;
+          this.readText(renderer['ownerText']) ??
+          this.readText(renderer['shortBylineText']);
+        const thumbnails = (renderer['thumbnail'] as
+          | Record<string, unknown>
+          | undefined)?.['thumbnails'] as unknown[] | undefined;
+        const artwork = thumbnails?.length
+          ? ((thumbnails[thumbnails.length - 1] as Record<string, unknown>)['url'] as string)
+          : undefined;
         hits.push({
-          videoId: videoRenderer.videoId,
+          videoId: renderer['videoId'],
           title,
           artist: owner,
-          thumbnail,
-          duration,
-          viewCount,
+          thumbnail: artwork,
+          duration: this.readText(renderer['lengthText']),
+          viewCount: this.readText(renderer['shortViewCountText']),
         });
         continue;
       }
-      for (const key of Object.keys(node)) {
-        stack.push(node[key]);
+
+      for (const key of Object.keys(record)) {
+        stack.push(record[key]);
       }
     }
     return hits;
-    return hits;
   }
 
-  private parseIsoDuration(s?: string): number | undefined {
+  private readText(node: unknown): string | undefined {
+    if (!node || typeof node !== 'object') return undefined;
+    const record = node as Record<string, unknown>;
+    const runs = record['runs'] as unknown[] | undefined;
+    if (Array.isArray(runs) && runs.length > 0) {
+      const first = runs[0] as Record<string, unknown>;
+      if (typeof first['text'] === 'string') return first['text'];
+    }
+    if (typeof record['simpleText'] === 'string') {
+      return record['simpleText'];
+    }
+    return undefined;
+  }
+
+  /** Parse "3:41" or "1:02:15" clock strings into seconds. */
+  private parseClockDuration(s?: string): number | undefined {
     if (!s) return undefined;
     const parts = s.split(':').map((p) => parseInt(p, 10));
-    if (parts.some(isNaN)) return undefined;
+    if (parts.some((n) => isNaN(n))) return undefined;
     return parts.reduce((acc, p) => acc * 60 + p, 0);
   }
 
   private parseViewCount(s?: string): number | undefined {
     if (!s) return undefined;
-    const n = parseInt(s.replace(/[^0.9]/g, ''), 10);
+    const digits = s.replace(/[^0-9]/g, '');
+    if (!digits) return undefined;
+    const n = parseInt(digits, 10);
     return isNaN(n) ? undefined : n;
   }
 }
