@@ -27,6 +27,7 @@ import { ModerationModule } from './moderation/moderation.module';
 import { ArtistPortalModule } from './artist_portal/artist-portal.module';
 import { DistributorModule } from './distributor/distributor.module';
 import { MediaModule } from './media/media.module';
+import { VideoModule } from './video/video.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { MediaModule } from './media/media.module';
     ArtistPortalModule,
     DistributorModule,
     MediaModule,
+    VideoModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
