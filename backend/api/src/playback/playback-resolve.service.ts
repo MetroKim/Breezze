@@ -2,6 +2,8 @@ import { Injectable, NotAcceptableException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from './media-signer.service';
+import { ProviderRegistry } from '../providers/provider-registry.service';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 
 @Injectable()
 export class PlaybackResolveService {
@@ -9,6 +11,7 @@ export class PlaybackResolveService {
     private readonly prisma: PrismaService,
     private readonly rights: RightsDecisionService,
     private readonly signer: MediaSigner,
+    private readonly providers: ProviderRegistry,
   ) {}
 
   async resolve(
@@ -44,4 +47,26 @@ export class PlaybackResolveService {
       previewOnly: decision.previewOnly,
     };
   }
+  async resolveProvider(userId: string, dto: { providerId: string; providerTrackId: string; territory: string }) {
+    const provider = this.providers.get(dto.providerId);
+    if (!provider || !provider.capabilities.playback) throw new NotFoundException('PLAYBACK_PROVIDER_UNAVAILABLE');
+    const result = await provider.resolvePlayback({
+      canonicalTrackId: '',
+      providerTrackId: dto.providerTrackId,
+      territory: dto.territory,
+      authorization: { action: 'stream.full', expiresAt: null, attribution: 'Breezze listener ' + userId },
+    });
+    if (result.kind === 'unsupported') throw new NotAcceptableException(result.reason);
+    if (result.kind === 'error') throw new ServiceUnavailableException(result.code);
+    return {
+      providerId: dto.providerId,
+      providerTrackId: dto.providerTrackId,
+      streamUrl: result.value.url,
+      expiresAt: result.value.expiresAt,
+      mimeType: result.value.mimeType,
+      codec: result.value.codec,
+      attribution: result.attribution,
+    };
+  }
+
 }
