@@ -51,6 +51,27 @@ describe('MediaSigner', () => {
     ).toThrow('MEDIA_URL_EXPIRY_INVALID');
   });
 
+  it('creates short-lived R2 quarantine upload URLs with an exact object key', () => {
+    const signer = new MediaSigner('test-signing-key', 'https://media.breezze.app');
+    const upload = signer.createUploadUrl('user-1', 'job-1', 'mix final.wav', 1024);
+    const url = new URL(upload.url);
+
+    expect(url.pathname).toBe('/upload/user-1/job-1/mix_final.wav');
+    expect(url.searchParams.get('b')).toBe('1024');
+    expect(upload.objectKey).toBe('quarantine/user-1/job-1/mix_final.wav');
+    expect(upload.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(upload.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 15 * 60 * 1000);
+    expect(url.searchParams.get('s')).toBeTruthy();
+  });
+
+  it('rejects invalid upload size metadata', () => {
+    const signer = new MediaSigner('test-signing-key', 'https://media.breezze.app');
+    expect(() => signer.createUploadUrl('user-1', 'job-1', 'track.wav', 0))
+      .toThrow('MEDIA_UPLOAD_METADATA_INVALID');
+    expect(() => signer.createUploadUrl('user-1', 'job-1', 'track.wav', 101 * 1024 * 1024))
+      .toThrow('MEDIA_UPLOAD_METADATA_INVALID');
+  });
+
   it('rejects expired signatures and malformed signature lengths', () => {
     const signer = new MediaSigner('test-signing-key', 'https://cdn.example');
 
