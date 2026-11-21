@@ -49,7 +49,8 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   }
 
   List<TrackInfo> _queue(UserPlaylist playlist) => [
-        for (final item in playlist.tracks) item.toTrackInfo(),
+        for (final item in playlist.tracks)
+          if (!item.id.startsWith('bz:')) item.toTrackInfo(),
       ];
 
   Future<void> _playAll(UserPlaylist playlist) async {
@@ -79,10 +80,13 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       }
       return;
     }
+    final queue = _queue(playlist);
+    final queueIndex = queue.indexWhere((item) => item.id == track.id);
+    if (queueIndex < 0) return;
     await ref.read(playerControllerProvider.notifier).playTrack(
           trackId: track.id,
-          queue: _queue(playlist),
-          startIndex: index,
+          queue: queue,
+          startIndex: queueIndex,
           origin: 'playlist',
           sourceContext: playlist.name,
         );
