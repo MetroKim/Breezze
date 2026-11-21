@@ -119,104 +119,92 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
     }
   }
 
+  Future<List<_RadioProgram>> _loadPrograms(
+    String baseUrl,
+    String stationId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/radio/stations/$stationId'),
+    );
+    if (response.statusCode >= 400) {
+      throw Exception('Station detail unavailable');
+    }
+    final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    final payload = decoded is Map<String, dynamic>
+        ? decoded['data'] ?? decoded
+        : decoded;
+    final rawPrograms =
+        payload is Map<String, dynamic> ? payload['programs'] : null;
+    if (rawPrograms is! List) return const [];
+    return rawPrograms
+        .whereType<Map>()
+        .map((item) => _RadioProgram.fromJson(
+              Map<String, dynamic>.from(item),
+            ))
+        .toList();
+  }
+
   Future<void> _showStation(_RadioStation station) async {
     final api = ref.read(authSessionProvider.notifier).api;
-    List<_RadioProgram> programs = [];
-    var loading = true;
+    final programs = _loadPrograms(api.baseUrl, station.id);
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            if (loading) {
-              http
-                  .get(Uri.parse(
-                      '${api.baseUrl}/api/v1/radio/stations/${station.id}'))
-                  .then((response) {
-                if (response.statusCode >= 400) {
-                  throw Exception('Station detail unavailable');
-                }
-                final decoded =
-                    response.body.isEmpty ? null : jsonDecode(response.body);
-                final payload = decoded is Map<String, dynamic>
-                    ? decoded['data'] ?? decoded
-                    : decoded;
-                final rawPrograms = payload is Map<String, dynamic>
-                    ? payload['programs']
-                    : null;
-                final loaded = rawPrograms is List
-                    ? rawPrograms
-                        .whereType<Map>()
-                        .map((item) => _RadioProgram.fromJson(
-                              Map<String, dynamic>.from(item),
-                            ))
-                        .toList()
-                    : <_RadioProgram>[];
-                setSheetState(() {
-                  programs = loaded;
-                  loading = false;
-                });
-              }).catchError((_) {
-                setSheetState(() => loading = false);
-              });
-              loading = false;
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(station.name,
-                        style: Theme.of(context).textTheme.headlineSmall),
-                    if (station.genre != null) ...[
-                      const SizedBox(height: 4),
-                      Text(station.genre!,
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                    if (station.description != null) ...[
-                      const SizedBox(height: 12),
-                      Text(station.description!),
-                    ],
-                    const SizedBox(height: 20),
-                    Text('PROGRAM SCHEDULE',
-                        style: Theme.of(context).textTheme.labelLarge),
-                    const SizedBox(height: 8),
-                    if (loading)
-                      const Center(child: CircularProgressIndicator())
-                    else if (programs.isEmpty)
-                      const Text('No program schedule is available yet.')
-                    else
-                      ...programs.map((program) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(program.title),
-                            subtitle: Text([
-                              if (program.presenter != null)
-                                program.presenter!,
-                              if (program.airsAt != null)
-                                program.airsAt!.toLocal().toString(),
-                              if (program.durationMin > 0)
-                                '${program.durationMin} min',
-                            ].join(' · ')),
-                          )),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Station playback will be enabled when the radio '
-                      'stream is integrated with the playback engine.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          child: FutureBuilder<List<_RadioProgram>>(
+            future: programs,
+            builder: (context, snapshot) {
+              final theme = Theme.of(context);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(station.name, style: theme.textTheme.headlineSmall),
+                  if (station.genre != null) ...[
+                    const SizedBox(height: 4),
+                    Text(station.genre!, style: theme.textTheme.bodyMedium),
                   ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+                  if (station.description != null) ...[
+                    const SizedBox(height: 12),
+                    Text(station.description!),
+                  ],
+                  const SizedBox(height: 20),
+                  Text('PROGRAM SCHEDULE', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const Center(child: CircularProgressIndicator())
+                  else if (snapshot.hasError)
+                    const Text('The station schedule could not be loaded.')
+                  else if (snapshot.data == null || snapshot.data!.isEmpty)
+                    const Text('No program schedule is available yet.')
+                  else
+                    ...snapshot.data!.map((program) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(program.title),
+                          subtitle: Text([
+                            if (program.presenter != null) program.presenter!,
+                            if (program.airsAt != null)
+                              program.airsAt!.toLocal().toString(),
+                            if (program.durationMin > 0)
+                              '${program.durationMin} min',
+                          ].join(' · ')),
+                        )),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Station playback will be enabled when the radio stream '
+                    'is integrated with the playback engine.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 
