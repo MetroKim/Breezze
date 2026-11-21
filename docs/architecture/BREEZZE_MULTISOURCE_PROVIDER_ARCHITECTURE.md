@@ -8,6 +8,8 @@
 
 Breezze adopts a multi-source architecture. It is not a YouTube Music wrapper and it is not tied to one catalogue or playback vendor.
 
+Audius integration scope: Breezze uses the official Audius REST API for catalogue search and the official `/tracks/{track_id}/stream` endpoint for public, ungated tracks. The adapter rejects gated releases and tracks whose API access is explicitly restricted. It does not implement gated-release signatures, downloads, uploads or redistribution. Configure `AUDIUS_ENABLED=false` to disable it; `AUDIUS_API_URL` defaults to `https://api.audius.co/v1`; `AUDIUS_API_KEY` is optional for read-only use and raises the documented free-tier quota when configured. A free developer key can be obtained from the Audius developer portal.
+
 Breezze owns:
 - The listener-facing product, navigation, library, playlists, favorites and history.
 - Canonical track, artist, album and playlist identity.
@@ -87,7 +89,8 @@ Retry only transient failures, with bounded exponential backoff and jitter. Neve
 
 | Provider | Catalogue | Native playback | Download | Role |
 |---|---:|---:|---:|---|
-| YouTube Music via ytmusicapi | Yes, best-effort | No | No | Initial metadata/discovery |
+| YouTube Music via ytmusicapi | Yes, best-effort | No | No | Metadata/discovery only |
+| Audius official API | Yes | Public, ungated tracks only | No | First third-party native audio provider; gated/API-restricted tracks are denied |
 | Breezze licensed media/CDN | Internal catalogue | Yes, only with explicit rights record | Only with download rights | First-party authorized media |
 | User-owned local files | Local metadata | Yes, on supported platforms | Already local | User-controlled playback |
 | Additional licensed providers | When integrated | Only after rights/terms approval | Only if explicitly licensed | Future pluggable sources |
@@ -160,7 +163,7 @@ Breezze has no subscriptions, tiers, payment flows or artist portal in this rele
 - [ ] Add server-controlled registry and provider enable/priority configuration.
 - [ ] Add contract tests for every capability and unsupported operation.
 - [ ] Add provider-specific recording mappings and source provenance.
-- [ ] Keep actual playback provider roster empty until a rights-cleared provider is configured.
+- [x] Register Audius as the first official API playback adapter; only public, ungated tracks are eligible.
 
 ### Phase 2 — Catalogue
 - [ ] Complete typed search across songs, artists, albums, playlists and videos.
@@ -169,7 +172,8 @@ Breezze has no subscriptions, tiers, payment flows or artist portal in this rele
 - [ ] Build a normalized merged search response with de-duplication and source attribution.
 
 ### Phase 3 — Playback
-- [ ] Add one backend playback resolver over approved provider adapters and Breezze licensed CDN.
+- [x] Add a backend provider playback resolver; Audius uses its official stream endpoint and rejects gated/API-restricted tracks.
+- [ ] Complete canonical recording mappings, territory policy and same-recording failover before enabling additional providers.
 - [ ] Return short-lived, typed playback grants, never provider-specific secrets.
 - [ ] Resolve queue entries when they reach the front.
 - [ ] Implement bounded failover only for the same recording and same rights scope.
