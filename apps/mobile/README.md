@@ -1,80 +1,91 @@
 # Breezze
 
-Music discovery, streaming, downloads and word-synced lyrics in one Flutter codebase.
+Breezze is a free, listener-first music app built with one Flutter/Dart application codebase. It has five primary destinations: Home, Browse, Radio, Library and Search. Downloads live inside Library. There is no artist portal, artist upload workflow, subscription, membership, billing or paywall.
 
-## Features
+## Current client capabilities
 
-- Search: live results, keyless, with artwork
-- Stream: highest-bitrate audio via native engine (ExoPlayer / AVFoundation)
-- Now Playing: breathing artwork, transport controls, seek, word-synced karaoke lyrics
-- Background audio: lock-screen controls and notification (Android/iOS via audio_service, no-op elsewhere)
-- Download: offline library (audio.m4a + cover.jpg + lyrics.lrc per track) with live byte-accurate progress
-- Favorites and history: persisted locally; Home rails show real Recently Played + Favorites
-- Design: monochrome token system, light and dark, Atmosphere materials
+- Search track metadata through Breezze's backend-connected discovery adapter.
+- Play tracks only after the Breezze backend resolves a canonical catalog track and authorizes playback for the account and territory.
+- Persistent mini-player, Now Playing, queue controls, favorites and local listening history.
+- Local playlists with account-scoped storage and optional backend synchronization.
+- Offline downloads through backend authorization and signed media URLs.
+- LRCLIB lyrics lookup with track-change-safe loading.
+- Radio station and schedule information; live station playback remains disabled until station streams are connected to the shared audio engine.
+- Responsive layouts for compact phones through expanded desktop windows.
+- Original Breezze SVG interface icons, light/dark themes and reduced-motion-aware loading states.
 
-## Run it
+Discovery metadata is not a playback license. The app never treats a YouTube Music metadata result as a directly playable or downloadable stream.
 
-Requires Flutter 3.22+.
+## Requirements
 
-Steps:
+- Flutter stable (Dart 3.4 or newer).
+- Breezze API running and reachable from the target device.
+- A configured catalog/discovery sidecar and authorized playback provider for live music playback.
 
-1. `git clone -b breezze https://github.com/MetroKim/MetroMusic.git`
-2. `cd MetroMusic/apps/mobile`
-3. `flutter create .` (generates android/, ios/, web/ runners)
-4. `flutter pub get`
-5. `flutter analyze` (should be clean)
-6. `flutter test` (runs the package test suites)
-7. `flutter run` (no keys, no defines; works out of the box)
+## Generate native platform runners
 
-### Background audio on Android
+From the repository root:
 
-After `flutter create .`, add this service block inside the application element of `android/app/src/main/AndroidManifest.xml`:
-
-```xml
-<service
-    android:name="com.ryanheise.audioservice.AudioService"
-    android:foregroundServiceType="mediaPlayback"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.media.browse.MediaBrowserService" />
-    </intent-filter>
-</service>
-<receiver
-    android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.intent.action.MEDIA_BUTTON" />
-    </intent-filter>
-</receiver>
+```bash
+cd apps/mobile
+bash tool/generate_platform_targets.sh
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
 ```
 
-And these permissions before the application element:
+The runner bootstrap creates Android, iOS, Web, Linux, macOS and Windows platform folders around the shared `lib/` code. It does not install platform SDKs, configure signing, guarantee plugin support or replace native platform validation.
 
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+## Configure the API
+
+The default API URL is `http://localhost:3000`. Override it at build/run time with a Dart define:
+
+```bash
+flutter run --dart-define=BREEZZE_API_URL=http://localhost:3000
 ```
+
+For a physical phone, use the development machine's LAN address instead of `localhost`, and make sure the API is reachable over the local network. Production builds must use the deployed HTTPS API origin.
+
+## Analyze and test
+
+From `apps/mobile/`:
+
+```bash
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+flutter analyze
+flutter test --reporter expanded
+```
+
+Example platform builds (after runner generation and platform prerequisites):
+
+```bash
+flutter build apk
+flutter build web
+flutter build linux
+flutter build macos
+flutter build windows
+flutter build ios --no-codesign
+```
+
+Linux builds require the Flutter Linux desktop dependencies (including GTK development headers, CMake, Ninja and Clang). macOS and iOS builds require macOS with Xcode; Windows builds require Windows desktop build tools. Each target must be built and tested on its supported host.
 
 ## Architecture
 
 ```
-apps/mobile                  Flutter app
-packages/
-  design_system/             tokens, Atmosphere materials, theme
-  audio_contracts/           player state machine, queue, lyrics, crossfade,
-                             AutoMix, scrobbling, quality tiers (+ tests)
-  api_client/                playback source, LRCLIB lyrics, downloads
-                             library with progress, provider contracts
-docs/
-  architecture/              ADR-001
-  audit/                     gap register (honest per-requirement status)
+apps/mobile/                 Flutter application and platform adapters
+packages/design_system/      Breezze design tokens, glass surfaces, SVG UI
+packages/audio_contracts/    Playback state, queue, lyrics and audio contracts
+packages/api_client/         Typed Breezze API transport and client contracts
+backend/api/                 Auth, catalog, rights, playback and library APIs
+infra/cloudflare/            Edge API and media delivery workers
+docs/design/                 Interface contract and responsive visual spec
 ```
 
-Keyless by design: search and playback run through youtube_explode_dart (no API key, no quota); lyrics through LRCLIB (free, community). No credentials to configure.
+## Product and rights boundaries
 
-## Notes
-
-- Breezze is an independent product, not affiliated with any streaming platform.
-- Streams are resolved per-play; downloads store the highest-bitrate audio rendition available at download time.
-- `flutter create .` generates the platform runners; they are build output, not committed.
+- Breezze is an independent product and is not affiliated with other music services.
+- Artist records are listener-facing catalog metadata only; there is no artist portal or artist account workflow.
+- Search metadata does not grant playback or download rights.
+- Playback and downloads are backend-authorized and territory-aware.
+- Editorial charts, regional rankings, music videos, concerts, album credits and artist catalog pages require verified provider data. Empty states are intentional until those sources are connected.
+- The app is free to use; no subscription or payment UI is part of the product.
