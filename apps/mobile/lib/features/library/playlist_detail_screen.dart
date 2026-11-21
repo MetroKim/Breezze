@@ -71,22 +71,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
     final track = playlist.tracks[index];
     if (track.id.startsWith('bz:')) {
-      try {
-        final opened = await YoutubePlayerHandoff.openFromApi(
-          ref.read(authSessionProvider.notifier).api,
-          track.id,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This playlist item has metadata only; native playback is unavailable.')),
         );
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open the official YouTube player.')),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
-          );
-        }
       }
       return;
     }
