@@ -57,7 +57,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final dir = await downloadsDirectory();
     await DownloadsLibrary(
       root: dir,
-      source: ref.read(youtubeSourceProvider),
       lyrics: ref.read(lyricsProvider),
     ).remove(track.trackId);
     _refresh();
