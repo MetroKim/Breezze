@@ -21,7 +21,7 @@ export interface ProviderCapabilities {
 }
 
 export interface ProviderPlaybackRequest {
-  canonicalTrackId: string;
+  canonicalTrackId?: string;
   providerTrackId: string;
   territory: string;
   requestedQuality?: string;
