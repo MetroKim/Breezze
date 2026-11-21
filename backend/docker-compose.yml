@@ -42,6 +42,7 @@ services:
       DATABASE_URL: postgresql://breezze:breezze_dev@postgres:5432/breezze
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
+      EDGE_SHARED_SECRET: ${EDGE_SHARED_SECRET:-}
       CDN_BASE_URL: ${CDN_BASE_URL:-http://localhost:3000/media}
       MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-dev-only-signing-key}
       PORT: "3000"
