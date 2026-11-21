@@ -26,7 +26,23 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
 
   app.setGlobalPrefix('api/v1');
-  app.enableCors({ origin: true, credentials: true });
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS
+    ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000,http://localhost:5173'))
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  // Never reflect arbitrary browser origins while allowing credentials.
+  // Native clients normally omit Origin and are unaffected by browser CORS.
+  app.enableCors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+  });
 
   const swagger = new DocumentBuilder()
     .setTitle('Breezze API')
