@@ -89,13 +89,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
           _section(theme, 'Audio Quality', [
-            _qualityPicker(theme, 'Streaming Quality'),
-            _qualityPicker(theme, 'Download Quality'),
-          ]),
-          _section(theme, 'Playback', [
-            _switchTile(theme, 'Gapless Playback', true),
-            _switchTile(theme, 'AutoMix', false),
-            _switchTile(theme, 'Sound Check', false),
+            if (!_preferencesLoaded)
+              const ListTile(title: Text('Loading audio preferences…'))
+            else ...[
+              ListTile(
+                title: const Text('Streaming quality'),
+                trailing: DropdownButton<String>(
+                  value: _downloads.streamingQuality,
+                  items: const [
+                    DropdownMenuItem(value: 'AAC_128', child: Text('Standard')),
+                    DropdownMenuItem(value: 'AAC_256', child: Text('High')),
+                    DropdownMenuItem(value: 'LOSSLESS', child: Text('Lossless')),
+                    DropdownMenuItem(value: 'HI_RES', child: Text('Hi-Res')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      _saveDownloadPreferences(_downloads.copyWith(streamingQuality: value));
+                    }
+                  },
+                ),
+              ),
+              ListTile(
+                title: const Text('Offline download quality'),
+                trailing: DropdownButton<String>(
+                  value: _downloads.quality,
+                  items: const [
+                    DropdownMenuItem(value: 'standard', child: Text('Standard')),
+                    DropdownMenuItem(value: 'lossless', child: Text('Lossless')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      _saveDownloadPreferences(_downloads.copyWith(quality: value));
+                    }
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Text(
+                  'The backend selects only a format your territory and provider rights allow. Offline quality is a preference, not a guarantee of an available lossless file.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                ),
+              ),
+            ],
           ]),
           _section(theme, 'Downloads', [
             if (!_preferencesLoaded)
@@ -222,39 +258,5 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _qualityPicker(ThemeData theme, String title) {
-    return ListTile(
-      title: Text(title),
-      trailing: const Text('High'),
-      onTap: () {},
-    );
-  }
 
-  Widget _switchTile(ThemeData theme, String title, bool initial) {
-    return _SwitchRow(title: title, initial: initial);
-  }
-}
 
-class _SwitchRow extends StatefulWidget {
-  final String title;
-  final bool initial;
-
-  const _SwitchRow({required this.title, required this.initial});
-
-  @override
-  State<_SwitchRow> createState() => _SwitchRowState();
-}
-
-class _SwitchRowState extends State<_SwitchRow> {
-  late bool _value = widget.initial;
-
-  @override
-  Widget build(BuildContext context) {
-    return SwitchListTile(
-      value: _value,
-      onChanged: (v) => setState(() => _value = v),
-      title: Text(widget.title),
-      dense: true,
-    );
-  }
-}
