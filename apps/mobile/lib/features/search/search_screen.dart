@@ -394,8 +394,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
 
+    final playableTracks = _results
+        .where((item) => !_isMetadataOnlySourceTrack(item.id))
+        .toList();
     final queue = [
-      for (final item in _results)
+      for (final item in playableTracks)
         TrackInfo(
           id: item.id,
           title: item.title,
@@ -404,8 +407,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           duration: item.duration,
         )
     ];
-    final index = _results.indexOf(track);
-    if (queue.isEmpty) return;
+    final index = playableTracks.indexOf(track);
+    if (queue.isEmpty || index < 0) return;
     ref.read(playerControllerProvider.notifier).playTrack(
           trackId: track.id,
           queue: queue,
