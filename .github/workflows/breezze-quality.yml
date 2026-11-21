@@ -94,6 +94,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Report dependency advisory summary
+        run: |
+          npm audit --json > /tmp/breezze-npm-audit.json || true
+          node -e "const a=require('/tmp/breezze-npm-audit.json'); console.log('AUDIT_TOTALS', JSON.stringify(a.metadata?.vulnerabilities)); for (const [name, v] of Object.entries(a.vulnerabilities || {})) console.log('AUDIT_PACKAGE', name, JSON.stringify({severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,range:x.range,url:x.url})}));"
+
       - name: Generate Prisma client
         run: npx prisma generate
 
