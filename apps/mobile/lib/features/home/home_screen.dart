@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/recent_store.dart';
+import '../../app/playlist_store.dart';
+import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_screen.dart';
@@ -48,6 +50,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
+  Future<void> _createPlaylist() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Playlist'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Playlist name'),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.trim().isEmpty) return;
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    await PlaylistStore().create(ownerId, name);
+    if (!mounted) return;
+    ref.read(homeTabHintProvider.notifier).state = 3;
+    ref.read(playlistRefreshSignalProvider.notifier).state++;
+  }
+
   void _play(TrackInfo track, List<TrackInfo> queue, int index) {
     ref.read(playerControllerProvider.notifier).playTrack(
           trackId: track.id,
@@ -70,6 +107,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             children: [
               BzRibbonLogo(width: 96, color: theme.bzText1),
               const Spacer(),
+              IconButton(
+                tooltip: 'Share Breezze',
+                onPressed: null,
+                icon: BzSvgIcon(name: 'share', color: theme.bzText2),
+              ),
+              IconButton(
+                tooltip: 'Create playlist',
+                onPressed: _createPlaylist,
+                icon: SvgPicture.asset(
+                  'assets/icons/plus.svg',
+                  width: 21,
+                  height: 21,
+                  colorFilter: ColorFilter.mode(
+                    theme.bzAccent,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'More options',
+                icon: BzSvgIcon(name: 'more-vertical', color: theme.bzText1),
+                onSelected: (value) {
+                  if (value == 'settings') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsScreen(),
+                      ),
+                    );
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'settings',
+                    child: Text('Settings'),
+                  ),
+                ],
+              ),
               Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -80,8 +154,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                   child: Container(
-                    width: 42,
-                    height: 42,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: theme.bzSurface1,
                       shape: BoxShape.circle,
@@ -90,8 +164,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     alignment: Alignment.center,
                     child: SvgPicture.asset(
                       'assets/icons/profile.svg',
-                      width: 21,
-                      height: 21,
+                      width: 20,
+                      height: 20,
                       colorFilter: ColorFilter.mode(
                         theme.bzText1,
                         BlendMode.srcIn,
