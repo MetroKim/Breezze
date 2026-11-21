@@ -1,14 +1,10 @@
 name: Breezze Quality
 
 on:
+  # The wrapper workflow (ci.yml) owns push and pull_request triggers.
+  # Keeping this workflow reusable-only avoids duplicate runs cancelling
+  # one another through the shared concurrency group.
   workflow_call:
-  push:
-    branches:
-      - feature/breezze-product-experience
-      - breezze
-  pull_request:
-    branches:
-      - breezze
   workflow_dispatch:
 
 permissions:
