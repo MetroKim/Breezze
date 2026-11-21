@@ -43,6 +43,25 @@ describe('DownloadsService', () => {
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 
+  it('bounds offline authorization to 72 hours when rights have no end date', async () => {
+    rights.decide.mockResolvedValue({
+      allowed: true, previewOnly: false, reason: 'OK',
+      qualityRestriction: null, expiresAt: null, attribution: null,
+    });
+    prisma.downloadRecord.upsert.mockResolvedValue({ id: 'download-lease' });
+    signer.createPlaybackUrl.mockReturnValue({
+      url: 'https://cdn.example/download', expiresAt: new Date(Date.now() + 60_000),
+    });
+    const before = Date.now();
+    const result = await service.authorizeAndRecord('user-1', {
+      trackId: 'track-1', territory: 'TZ',
+    });
+    const saved = prisma.downloadRecord.upsert.mock.calls[0][0];
+    expect(saved.create.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 72 * 60 * 60 * 1000 - 1000);
+    expect(saved.create.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 72 * 60 * 60 * 1000);
+    expect(result.offlineLeaseExpiresAt).toEqual(saved.create.expiresAt);
+  });
+
   it('records and signs a download only after explicit authorization', async () => {
     rights.decide.mockResolvedValue({
       allowed: true,
