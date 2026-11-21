@@ -13,7 +13,7 @@ export class MediaSigner {
   }
 
   private edgeUrl(path: string): string {
-    return \`\${this.cdnBaseUrl.replace(/\/$/, '')}\${path}\`;
+    return this.cdnBaseUrl.replace(/\/$/, '') + path;
   }
 
   createPlaybackUrl(
