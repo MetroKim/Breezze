@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
-import '../../core/api/breezze_api.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
 import '../../core/database/migrate_to_drift.dart';
