@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 // Plan §15.16 — artist claim, analytics, release management seams.
@@ -12,20 +12,37 @@ export class ArtistPortalService {
     });
     if (!artist) throw new NotFoundException('ARTIST_NOT_FOUND');
 
+    const ownClaim = await this.prisma.artistClaim.findFirst({
+      where: { artistId, userId },
+    });
+    if (ownClaim) return ownClaim;
+
     const existing = await this.prisma.artistClaim.findFirst({
       where: { artistId, status: 'approved' },
     });
     if (existing) {
-      throw new NotFoundException('ARTIST_ALREADY_CLAIMED');
+      throw new ConflictException('ARTIST_ALREADY_CLAIMED');
     }
 
-    return this.prisma.artistClaim.create({
-      data: {
-        userId,
-        artistId,
-        status: 'pending',
-      },
-    });
+    try {
+      return await this.prisma.artistClaim.create({
+        data: {
+          userId,
+          artistId,
+          status: 'pending',
+        },
+      });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('ARTIST_CLAIM_ALREADY_EXISTS');
+      }
+      throw error;
+    }
   }
 
   async myClaims(userId: string) {
