@@ -122,6 +122,11 @@ jobs:
       - name: Validate Prisma schema
         run: npx prisma validate
 
+      - name: Generate baseline SQL for migration recovery
+        run: |
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/breezze-baseline.sql
+          cat /tmp/breezze-baseline.sql
+
       - name: Apply migrations to CI PostgreSQL
         run: npx prisma migrate deploy
 
