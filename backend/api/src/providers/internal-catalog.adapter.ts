@@ -4,8 +4,10 @@ import {
   ProviderAdapter,
   ProviderCapabilities,
   ProviderTrack,
+  ProviderPlaybackRequest,
+  ProviderPlaybackSource,
 } from './provider-adapter.interface';
-import { ProviderResult, providerOk, providerError } from './provider-result';
+import { ProviderResult, providerOk, providerError, providerUnsupported } from './provider-result';
 
 // Plan §7.4 — the internal catalog adapter serves Breezze's own
 // canonical catalog. Full streaming rights still flow through the
@@ -13,6 +15,10 @@ import { ProviderResult, providerOk, providerError } from './provider-result';
 @Injectable()
 export class InternalCatalogAdapter implements ProviderAdapter {
   readonly providerId = 'breezze_internal';
+  readonly displayName = 'Breezze Internal Catalog';
+  readonly adapterVersion = '1.0.0';
+  readonly priority = 50;
+  readonly enabled = true;
   readonly capabilities: ProviderCapabilities = {
     search: true,
     metadata: true,
@@ -71,5 +77,13 @@ export class InternalCatalogAdapter implements ProviderAdapter {
       },
     });
     return providerOk({ available: row !== null });
+  }
+
+  async resolvePlayback(
+    _request: ProviderPlaybackRequest,
+  ): Promise<ProviderResult<ProviderPlaybackSource>> {
+    return providerUnsupported(
+      'Internal catalog records do not expose a provider stream; use the licensed media resolver',
+    );
   }
 }
