@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
+import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -30,12 +31,21 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   Future<void> _refresh() async {
-    final dir = await downloadsDirectory();
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) {
+      if (!mounted) return;
+      setState(() {
+        _tracks = [];
+        _loading = false;
+      });
+      return;
+    }
+    final dir = await downloadsDirectory(userId: auth.userId);
     final library = DownloadsLibrary(
       root: dir,
       lyrics: ref.read(lyricsProvider),
     );
-    final tracks = await library.list();
+    final tracks = await library.list(ownerId: auth.userId);
     if (!mounted) return;
     setState(() {
       _tracks = tracks;
@@ -44,17 +54,31 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   void _play(DownloadedTrack track) {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || auth.userId != track.ownerId) return;
+    final expiry = track.rightsExpiresAtUtc;
+    if (expiry != null && !expiry.isAfter(DateTime.now().toUtc())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This download has expired. Connect to the internet and download it again.'),
+        ),
+      );
+      return;
+    }
     ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: track.trackId,
+          trackId: track.catalogTrackId,
           title: track.title,
           artist: track.artist,
+          localFilePath: track.audioPath,
           origin: 'downloads',
           sourceContext: 'Downloads',
         );
   }
 
   Future<void> _remove(DownloadedTrack track) async {
-    final dir = await downloadsDirectory();
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || auth.userId != track.ownerId) return;
+    final dir = await downloadsDirectory(userId: auth.userId);
     await DownloadsLibrary(
       root: dir,
       lyrics: ref.read(lyricsProvider),
