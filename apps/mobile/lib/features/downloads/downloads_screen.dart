@@ -23,6 +23,7 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   List<DownloadedTrack> _tracks = [];
+  int _storageBytes = 0;
   var _loading = true;
 
   @override
@@ -72,6 +73,18 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       }
       tracks = await library.list(ownerId: auth.userId);
     }
+    var storageBytes = 0;
+    for (final track in tracks) {
+      for (final filePath in [track.audioPath, track.coverPath, track.lyricsPath]) {
+        if (filePath == null) continue;
+        try {
+          final file = File(filePath);
+          if (await file.exists()) storageBytes += await file.length();
+        } catch (_) {
+          // A file can disappear while the OS is reclaiming storage.
+        }
+      }
+    }
     if (!mounted) return;
     final latestAuth = ref.read(authSessionProvider);
     if (latestAuth is! AuthSignedIn || latestAuth.userId != auth.userId) {
@@ -83,6 +96,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     }
     setState(() {
       _tracks = tracks;
+      _storageBytes = storageBytes;
       _loading = false;
     });
   }
@@ -107,6 +121,49 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           origin: 'downloads',
           sourceContext: 'Downloads',
         );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  Future<void> _freeUpSpace() async {
+    if (_tracks.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove all downloads?'),
+        content: Text(
+          'This removes ${_tracks.length} downloaded ${_tracks.length == 1 ? 'track' : 'tracks'} '
+          'and frees approximately ${_formatBytes(_storageBytes)} on this device. '
+          'Your playlists and library will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove downloads'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return;
+    final dir = await downloadsDirectory(userId: auth.userId);
+    final library = DownloadsLibrary(root: dir, lyrics: ref.read(lyricsProvider));
+    for (final track in List<DownloadedTrack>.of(_tracks)) {
+      if (track.ownerId == auth.userId) await library.remove(track.trackId);
+    }
+    await _refresh();
   }
 
   Future<void> _remove(DownloadedTrack track) async {
@@ -153,6 +210,41 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
               ],
             ),
           ),
+          if (!_loading)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: theme.bzSurface1,
+                  borderRadius: BorderRadius.circular(BzRadius.card),
+                  border: Border.all(color: theme.bzSeparator),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('DEVICE STORAGE', style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.bzText2, letterSpacing: 0.8,
+                            fontWeight: FontWeight.w700,
+                          )),
+                          const SizedBox(height: 4),
+                          Text(_formatBytes(_storageBytes), style: theme.textTheme.titleLarge),
+                          Text('${_tracks.length} downloaded ${_tracks.length == 1 ? 'track' : 'tracks'}',
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _tracks.isEmpty ? null : _freeUpSpace,
+                      child: const Text('Free Up Space'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
