@@ -14,6 +14,7 @@ class BreezzeApi {
   final http.Client _client;
 
   String? accessToken;
+  Future<bool> Function()? onUnauthorized;
 
   Uri _uri(String path) => Uri.parse('$baseUrl/api/v1$path');
 
@@ -26,16 +27,32 @@ class BreezzeApi {
     String path,
     Map<String, dynamic> body,
   ) async {
-    final response = await _client.post(
-      _uri(path),
-      headers: _headers,
-      body: jsonEncode(body),
-    );
+    Future<http.Response> send() => _client.post(
+          _uri(path),
+          headers: _headers,
+          body: jsonEncode(body),
+        );
+    var response = await send();
+    if (response.statusCode == 401 &&
+        path != '/auth/refresh' &&
+        path != '/auth/login' &&
+        path != '/auth/register' &&
+        onUnauthorized != null &&
+        await onUnauthorized!()) {
+      response = await send();
+    }
     return _decode(response);
   }
 
   Future<Map<String, dynamic>> _get(String path) async {
-    final response = await _client.get(_uri(path), headers: _headers);
+    Future<http.Response> send() =>
+        _client.get(_uri(path), headers: _headers);
+    var response = await send();
+    if (response.statusCode == 401 &&
+        onUnauthorized != null &&
+        await onUnauthorized!()) {
+      response = await send();
+    }
     return _decode(response);
   }
 
