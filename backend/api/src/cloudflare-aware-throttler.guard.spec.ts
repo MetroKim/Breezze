@@ -88,6 +88,21 @@ describe('CloudflareAwareThrottlerGuard', () => {
     expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '899');
   });
 
+  it('applies the strict MFA quota to recovery code regeneration', async () => {
+    process.env.API_RATE_LIMIT = '100';
+    (guard as any).mfaAttemptLimit = 1;
+    redis.eval.mockResolvedValueOnce([1, 60000]).mockResolvedValueOnce([2, 899000]);
+
+    await expect(guard.canActivate(context(
+      '127.0.0.1',
+      { password: 'not-logged', code: '123456' },
+      '/api/v1/auth/mfa/recovery-codes/regenerate',
+    ))).rejects.toBeInstanceOf(HttpException);
+
+    expect(redis.eval).toHaveBeenCalledTimes(2);
+    expect(String(redis.eval.mock.calls[1][2])).toContain(':mfa:');
+  });
+
   it('fails closed in production when Redis is unavailable', async () => {
     process.env.NODE_ENV = 'production';
     redis.eval.mockRejectedValue(new Error('redis unavailable'));
