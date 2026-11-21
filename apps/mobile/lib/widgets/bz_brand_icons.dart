@@ -37,6 +37,7 @@ class BzSvgIcon extends StatelessWidget {
     'trash': '<path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     'download-done': '<path d="M12 3.5v10m-4-4 4 4 4-4M5 17v2.5h14V17M8.5 17l2 2 5-5"/>',
     'logout': '<path d="M10 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H10M15 16l4-4-4-4m4 4H9"/>',
+    'share': '<path d="M12 15V3m-4 4 4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
     'queue': '<path d="M4 5h16M4 10h16M4 15h10M4 20h7m5-5 4 4 3-4"/>',
     'star': '<path d="m12 3.25 2.7 5.48 6.05.88-4.38 4.27 1.03 6.03L12 17.06l-5.4 2.85 1.03-6.03L3.25 9.61l6.05-.88L12 3.25Z"/>',
   };
