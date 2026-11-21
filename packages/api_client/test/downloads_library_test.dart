@@ -49,7 +49,9 @@ void main() {
       request.response.add(utf8.encode('def'));
       await request.response.close();
     });
-    addTearDown(server.close);
+    addTearDown(() async {
+      await server.close(force: true);
+    });
 
     final ok = await library.download(
       track,
