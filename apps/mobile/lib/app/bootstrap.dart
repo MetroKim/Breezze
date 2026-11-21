@@ -18,8 +18,9 @@ import '../features/player/player_controller.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// YouTube is used for metadata discovery only. Full playback and downloads
-/// are resolved through backend rights checks and signed CDN URLs. Lyrics
+/// YouTube Music is metadata-only. Audius public streams and Breezze-owned
+/// licensed media are resolved by the backend; gated Audius tracks are denied.
+/// Downloads remain rights-gated. Lyrics
 /// lookup remains keyless through LRCLIB.
 
 /// package:http impl of the lyrics HTTP seam.
