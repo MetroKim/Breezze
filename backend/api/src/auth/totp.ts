@@ -41,8 +41,26 @@ export function decryptTotpSecret(encrypted: string): string {
   ]).toString('utf8');
 }
 
+function decodeBase32(secret: string): Buffer {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  const output: number[] = [];
+  for (const character of secret.replace(/=+$/g, '').toUpperCase()) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) throw new Error('MFA_SECRET_INVALID');
+    value = (value << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(output);
+}
+
 function codeForCounter(secret: string, counter: number): string {
-  const key = Buffer.from(secret, 'base32');
+  const key = decodeBase32(secret);
   const message = Buffer.alloc(8);
   message.writeBigUInt64BE(BigInt(counter));
   const digest = createHmac('sha1', key).update(message).digest();
