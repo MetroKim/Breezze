@@ -476,7 +476,10 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     });
     try {
       final api = ref.read(authSessionProvider.notifier).api;
-      final territory = ref.read(outboxTerritoryProvider).toLowerCase();
+      final configuredTerritory = ref.read(outboxTerritoryProvider).toLowerCase();
+      final territory = configuredTerritory.length == 2 && configuredTerritory != 'ww'
+          ? configuredTerritory
+          : 'us';
       final data = _appleReleases
           ? await api.discoveryNewReleases(country: territory)
           : _dailyChart
@@ -503,7 +506,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     } catch (_) {
       if (!mounted || generation != _generation) return;
       setState(() {
-        _catalogError = 'The Apple catalog feed could not be reached. Try again in a moment.';
+        _catalogError = 'The ${widget.destination.title.toLowerCase()} provider could not be reached. Try again in a moment.';
         _loading = false;
       });
     }
