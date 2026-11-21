@@ -31,6 +31,12 @@ export class RightsDecisionService {
     }
 
     if (!permission) {
+      // A preview grant can never authorize downloads, caching or other
+      // full-content actions. It is only a limited fallback for stream.full.
+      if (req.action !== 'stream.full') {
+        return denyDecision('NO_EXPLICIT_AUTHORIZATION');
+      }
+
       const preview = await this.prisma.rightsUsagePermission.findFirst({
         where: { trackId: req.trackId, action: 'preview' },
       });
