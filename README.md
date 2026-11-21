@@ -54,6 +54,7 @@ The API serves `http://localhost:3000/api/v1` (Swagger at `/api/docs`).
 
 - [Integrated Design Engineering Architecture](docs/architecture/BREEZZE_INTEGRATED_DESIGN_ENGINEERING_ARCHITECTURE.md) — Flutter layers, Riverpod state, domain/data boundaries, screen-by-screen engineering, API contracts, playback, rights, testing and rollout order.
 - [Cloudflare-first infrastructure](infra/cloudflare/README.md) — Cloudflare API edge, WAF/rate limits, public metadata caching, provider resilience and one-million-active-listener load-test plan.
-- [One-million scaling plan](docs/architecture/BREEZZE_ONE_MILLION_SCALING_PLAN.md) — provider resilience, cache keys/TTLs, Cloudflare edge policy, backend capacity and staged load tests.\n- [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md) — required screen hierarchy, section order, positions and interaction rules.
+- [One-million scaling plan](docs/architecture/BREEZZE_ONE_MILLION_SCALING_PLAN.md) — provider resilience, cache keys/TTLs, Cloudflare edge policy, backend capacity and staged load tests.
+- [Provider integration decision](docs/architecture/BREEZZE_PROVIDER_INTEGRATION_DECISION.md) — MusicAPI credentials/UUIDs, `ytmusicapi` boundary, Liner licence restriction, provider failover and one-million-listener traffic design.\n- [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md) — required screen hierarchy, section order, positions and interaction rules.
 
 See `docs/audit/gap-register.md` for what is implemented and what is not.
