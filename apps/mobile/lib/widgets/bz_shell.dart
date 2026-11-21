@@ -50,15 +50,7 @@ class _BreezzeRootState extends ConsumerState<_BreezzeRoot> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Breezze',
-      debugShowCheckedModeBanner: false,
-      theme: bzLightTheme(),
-      darkTheme: bzDarkTheme(),
-      home: const BzHome(),
-    );
-  }
+  Widget build(BuildContext context) => const BzHome();
 }
 
 class BzHome extends ConsumerStatefulWidget {
