@@ -334,6 +334,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _download(BzTrack track) {
+    // Metadata providers do not grant offline-download rights.
+    if (track.id.startsWith('bz:')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Offline downloads are not available for this catalogue source.')),
+      );
+      return;
+    }
     ref.read(downloadProgressProvider.notifier).download(track);
   }
 
@@ -613,20 +620,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               );
                                             }
                                           },
-                                          itemBuilder: (context) => const [
-                                            PopupMenuItem(
-                                              value: 'play_next',
-                                              child: Text('Play Next'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: 'play_last',
-                                              child: Text('Add to Queue'),
-                                            ),
-                                            PopupMenuItem(
+                                          itemBuilder: (context) => [
+                                            if (!track.id.startsWith('bz:')) ...[
+                                              const PopupMenuItem(
+                                                value: 'play_next',
+                                                child: Text('Play Next'),
+                                              ),
+                                              const PopupMenuItem(
+                                                value: 'play_last',
+                                                child: Text('Add to Queue'),
+                                              ),
+                                            ],
+                                            const PopupMenuItem(
                                               value: 'playlist',
                                               child: Text('Add to Playlist'),
                                             ),
-                                            PopupMenuItem(
+                                            const PopupMenuItem(
                                               value: 'favorite',
                                               child: Text('Add to Library'),
                                             ),
@@ -648,7 +657,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                   name: 'download',
                                                   color: theme.bzText1,
                                                 ),
-                                                onPressed: () => _download(track),
+                                                onPressed: track.id.startsWith('bz:')
+                                                    ? null
+                                                    : () => _download(track),
                                               ),
                                       ],
                                     ),
