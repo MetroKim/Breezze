@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
-import 'package:breezze_audio_contracts/audio_contracts.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Browse uses live source search for genre discovery. It does not label
