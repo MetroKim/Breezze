@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
-import '../../app/downloads_controller.dart';
 import '../../app/recent_store.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
