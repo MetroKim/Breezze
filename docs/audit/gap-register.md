@@ -154,8 +154,8 @@ release acceptance criteria.
 This section supersedes older "verification pending" and "suite not run"
 statements above for the exact commit tested below.
 
-**Verified commit:** `e3a6f0f9d638a6e3a2e1a9ff79e5a441d4e30234`  
-**CI run:** [44910820541 — all jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/44910820541)
+**Verified commit:** `f919323173156b0494fe49c5dc23d2c4f8f3f12d`  
+**CI run:** [44911197349 — all jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/44911197349)
 
 | Requirement | Current status | Evidence | Remaining work |
 |---|---|---|---|
@@ -163,8 +163,8 @@ statements above for the exact commit tested below.
 | Browse and Radio directories | IMPLEMENTED + app analysis/tests passed | Browse genre search and Radio API integration | Widget tests; curated editorial feeds; radio playback remains separate |
 | Playback request races and serialized prepare | IMPLEMENTED + tests passed | `player_controller_test.dart` | Device-level Android/iOS validation and detach lifecycle tests |
 | Native seek failure handling | IMPLEMENTED + regression test passed | PlayerController dispatches `SEEK_FAILED` | Verify on real devices |
-| Scrobble listening-time ticks and session cleanup | IMPLEMENTED IN CODE | Position stream ticks only while player is playing; stop/track-change/end/detach/dispose remove pending sessions | Add deterministic controller integration tests for 30-second threshold and pause behavior |
-| Download account isolation | IMPLEMENTED + API-client tests passed | Per-user storage directories; owner ID persisted; owner-filtered library; legacy ownerless records hidden | Device-level account-switch tests |
+| Scrobble listening-time ticks and session cleanup | IMPLEMENTED IN CODE | Position stream ticks only while player is playing; stop/track-change/end/detach/dispose and playback failures remove pending sessions | Add deterministic controller integration tests for 30-second threshold and pause behavior |
+| Download account isolation | IMPLEMENTED + API-client tests passed | Per-user storage directories; owner ID persisted; owner-filtered library; legacy ownerless records hidden; library refreshes on auth changes and stale account results are discarded | Device-level account-switch-during-download tests |
 | Offline local-file playback | IMPLEMENTED IN CODE + mobile tests passed | Local `PlayableSource`, `setFilePath`, resolver bypass test | Real-device codec/container validation and corrupted-file recovery |
 | Offline licence expiry | IMPLEMENTED IN CODE + metadata tests passed | Rights end time persisted and checked before local playback | Define bounded offline licence leases and online takedown/revocation revalidation |
 | Download storage path safety | IMPLEMENTED IN CODE | User IDs and track storage keys sanitized | Add adversarial path test cases |
