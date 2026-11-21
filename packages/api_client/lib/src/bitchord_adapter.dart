@@ -130,13 +130,17 @@ class BitChordAdapter implements ProviderAdapter {
   static String? _flexColumnText(Object? item, int index) {
     final cols = _walk(item, 'musicResponsiveListItemFlexColumnRenderer');
     if (index >= cols.length) return null;
-    return _runsText(cols[index]);
+    final renderer = cols[index];
+    if (renderer is! Map) return null;
+    return _runsText(renderer['text']);
   }
 
   static Duration _durationOf(Object? item) {
     final fixed = _walk(item, 'musicResponsiveListItemFixedColumnRenderer');
     if (fixed.isEmpty) return Duration.zero;
-    final text = _runsText(fixed.first);
+    final renderer = fixed.first;
+    if (renderer is! Map) return Duration.zero;
+    final text = _runsText(renderer['text']);
     if (text == null) return Duration.zero;
     final parts = text.split(':');
     try {
