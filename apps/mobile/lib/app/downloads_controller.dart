@@ -45,9 +45,17 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
 
       final downloadUrl = authorization['url'] as String?;
       if (downloadUrl == null || downloadUrl.isEmpty) return;
+      final rightsExpiryRaw = authorization['rightsExpiresAt'] as String?;
+      final rightsExpiry = rightsExpiryRaw == null
+          ? null
+          : DateTime.tryParse(rightsExpiryRaw)?.toUtc();
+      if (rightsExpiryRaw != null && rightsExpiry == null) return;
+      if (rightsExpiry != null && !rightsExpiry.isAfter(DateTime.now().toUtc())) {
+        return;
+      }
 
       state = {...state, track.id: 0.0};
-      final dir = await downloadsDirectory();
+      final dir = await downloadsDirectory(userId: auth.userId);
       final library = DownloadsLibrary(
         root: dir,
         lyrics: ref.read(lyricsProvider),
@@ -55,6 +63,9 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       final ok = await library.download(
         track,
         downloadUrl: downloadUrl,
+        ownerId: auth.userId,
+        catalogTrackId: catalogId,
+        rightsExpiresAtUtc: rightsExpiry,
         onProgress: (progress) {
           if (mounted) state = {...state, track.id: progress};
         },
