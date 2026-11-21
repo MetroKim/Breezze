@@ -31,7 +31,7 @@ describe('ProviderRegistry', () => {
 
   const audius = {
     providerId: 'audius', displayName: 'Audius', adapterVersion: '1.0.0',
-    priority: 80, enabled: true,
+    priority: 120, enabled: true,
     capabilities: { search: true, metadata: true, availability: true, playback: true, download: false },
     search: jest.fn(), getTrack: jest.fn(), getAvailability: jest.fn(), resolvePlayback: jest.fn(),
   };
@@ -44,8 +44,8 @@ describe('ProviderRegistry', () => {
 
   it('lists enabled providers in priority order with their declared capabilities', () => {
     expect(registry().list().map((provider) => provider.providerId))
-      .toEqual(['youtube_music', 'audius', 'breezze_internal']);
-    expect(registry().list()[0].capabilities.playback).toBe(false);
+      .toEqual(['audius', 'youtube_music', 'breezze_internal']);
+    expect(registry().list()[0].capabilities.playback).toBe(true);
   });
 
   it('selects Audius but excludes the metadata-only YouTube adapter', () => {
