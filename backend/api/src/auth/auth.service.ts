@@ -160,13 +160,15 @@ export class AuthService {
     return this.issueTokens(token.user, rotated, token.familyId, token.mfaVerified);
   }
 
-  async beginMfaSetup(userId: string) {
+  async beginMfaSetup(userId: string, password: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, role: true, mfaEnabled: true },
+      select: { id: true, email: true, passwordHash: true, role: true, mfaEnabled: true },
     });
     if (!user) throw new NotFoundException('USER_NOT_FOUND');
     if (user.role !== 'admin') throw new ForbiddenException('ADMIN_MFA_ONLY');
+    const passwordValid = await argon2.verify(user.passwordHash, password).catch(() => false);
+    if (!passwordValid) throw new UnauthorizedException('INVALID_CREDENTIALS');
     if (user.mfaEnabled) throw new ConflictException('MFA_ALREADY_ENABLED');
 
     const secret = generateTotpSecret();
