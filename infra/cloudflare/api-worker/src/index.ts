@@ -83,6 +83,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if (cached) {
       const hit = new Response(cached.body, cached);
       hit.headers.set('X-Breezze-Edge-Cache', 'HIT');
+      hit.headers.set('X-Request-Id', crypto.randomUUID());
       return hit;
     }
 
@@ -108,7 +109,6 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
     const headers = new Headers(upstream.headers);
     headers.delete('set-cookie');
-    headers.delete('x-request-id');
     headers.delete('x-breezze-edge-secret');
     headers.set(
       'Cache-Control',
@@ -120,7 +120,15 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       statusText: upstream.statusText,
       headers,
     });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    const cacheHeaders = new Headers(response.headers);
+    cacheHeaders.delete('x-request-id');
+    const cacheBody = response.clone();
+    const cacheResponse = new Response(cacheBody.body, {
+      status: cacheBody.status,
+      statusText: cacheBody.statusText,
+      headers: cacheHeaders,
+    });
+    ctx.waitUntil(cache.put(cacheKey, cacheResponse));
     return response;
   }
 
