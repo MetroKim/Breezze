@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
+import * as crypto from 'node:crypto';
+import { isIP } from 'node:net';
 
 /**
  * Cloudflare terminates public traffic before it reaches NestJS. Express'
@@ -13,14 +15,13 @@ export class CloudflareAwareThrottlerGuard extends ThrottlerGuard {
     const suppliedSecret = req.headers?.['x-breezze-edge-secret'];
     const clientIp = req.headers?.['cf-connecting-ip'];
 
-    if (
-      configuredSecret
-      && typeof suppliedSecret === 'string'
-      && suppliedSecret === configuredSecret
-      && typeof clientIp === 'string'
-      && clientIp.length > 0
-      && clientIp.length <= 64
-    ) {
+    const expected = Buffer.from(configuredSecret ?? '');
+    const supplied = Buffer.from(typeof suppliedSecret === 'string' ? suppliedSecret : '');
+    const authenticatedEdge = expected.length >= 32
+      && supplied.length === expected.length
+      && crypto.timingSafeEqual(supplied, expected);
+
+    if (authenticatedEdge && typeof clientIp === 'string' && isIP(clientIp) !== 0) {
       return clientIp;
     }
 
