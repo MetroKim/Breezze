@@ -22,6 +22,8 @@ describe('CloudflareAwareThrottlerGuard', () => {
     process.env.NODE_ENV = 'test';
     process.env.API_RATE_LIMIT = '1';
     process.env.API_RATE_WINDOW_MS = '60000';
+    process.env.LOGIN_ACCOUNT_RATE_LIMIT = '1';
+    process.env.LOGIN_ACCOUNT_RATE_WINDOW_MS = '900000';
     guard = new CloudflareAwareThrottlerGuard();
     redis = {
       status: 'ready',
