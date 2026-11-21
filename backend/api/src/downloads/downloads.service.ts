@@ -30,6 +30,13 @@ export class DownloadsService {
       };
     }
 
+    // Offline downloads receive a bounded lease even when the underlying
+    // catalogue grant has no explicit end date. Rights expiry always wins.
+    const offlineLeaseExpiresAt = new Date(Math.min(
+      Date.now() + 72 * 60 * 60 * 1000,
+      decision.expiresAt?.getTime() ?? Number.POSITIVE_INFINITY,
+    ));
+
     const signed = this.signer.createPlaybackUrl(
       dto.trackId,
       'download',
@@ -40,9 +47,9 @@ export class DownloadsService {
       create: {
         userId,
         trackId: dto.trackId,
-        expiresAt: decision.expiresAt,
+        expiresAt: offlineLeaseExpiresAt,
       },
-      update: { expiresAt: decision.expiresAt },
+      update: { expiresAt: offlineLeaseExpiresAt },
     });
 
     return {
@@ -52,6 +59,7 @@ export class DownloadsService {
       recordId: record.id,
       expiresAt: signed.expiresAt,
       rightsExpiresAt: decision.expiresAt,
+      offlineLeaseExpiresAt,
       attribution: decision.attribution,
     };
   }
