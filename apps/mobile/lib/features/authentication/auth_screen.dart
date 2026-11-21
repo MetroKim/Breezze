@@ -18,13 +18,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _displayName = TextEditingController();
+  final _mfaCode = TextEditingController();
   bool _registerMode = false;
+  bool _mfaBusy = false;
+  String? _mfaError;
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
     _displayName.dispose();
+    _mfaCode.dispose();
     super.dispose();
   }
 
@@ -49,6 +53,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final auth = ref.watch(authSessionProvider);
     final busy = auth is AuthSigningIn;
     final error = auth is AuthError ? auth.code : null;
+
+    if (auth is AuthMfaRequired) return _buildMfaRequired(context, auth);
+    if (auth is AuthMfaRecoveryCodes) return _buildRecoveryCodes(context, auth);
 
     return Scaffold(
       body: SafeArea(
@@ -132,6 +139,202 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           : 'New here? Create an account',
                       style: TextStyle(color: theme.bzText2),
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Future<void> _runMfa(Future<void> Function() action) async {
+    setState(() {
+      _mfaBusy = true;
+      _mfaError = null;
+    });
+    try {
+      await action();
+    } on BreezzeApiException catch (error) {
+      if (mounted) setState(() => _mfaError = error.code);
+    } catch (_) {
+      if (mounted) setState(() => _mfaError = 'NETWORK_ERROR');
+    } finally {
+      if (mounted) setState(() => _mfaBusy = false);
+    }
+  }
+
+  Widget _buildMfaRequired(BuildContext context, AuthMfaRequired auth) {
+    final theme = Theme.of(context);
+    final controller = ref.read(authSessionProvider.notifier);
+    final setupStarted = auth.provisioningUri != null && auth.secret != null;
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  BzRibbonLogo(width: 104, color: theme.bzText1),
+                  const SizedBox(height: 20),
+                  Text(
+                    auth.setupRequired ? 'Secure your administrator account' : 'Two-factor verification',
+                    style: theme.textTheme.headlineMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    auth.setupRequired
+                        ? 'Set up an authenticator before accessing administrator tools.'
+                        : 'Enter the current code from your authenticator app, or use a recovery code.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.bzText2),
+                  ),
+                  const SizedBox(height: 24),
+                  BzGlassContainer(
+                    radius: BzRadius.card,
+                    blur: 24,
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (auth.setupRequired && !setupStarted) ...[
+                            Text('Confirm your password to begin MFA enrollment.',
+                                style: TextStyle(color: theme.bzText2)),
+                            const SizedBox(height: 12),
+                            _field(
+                              controller: _password,
+                              hint: 'Current password',
+                              icon: Icons.lock_outline,
+                              obscure: true,
+                            ),
+                            const SizedBox(height: 16),
+                            _SubmitButton(
+                              label: 'Set up authenticator',
+                              busy: _mfaBusy,
+                              onPressed: () => _runMfa(
+                                () => controller.beginMfaSetup(_password.text),
+                              ),
+                            ),
+                          ] else ...[
+                            if (setupStarted) ...[
+                              Text('Add this account to your authenticator app.',
+                                  style: TextStyle(color: theme.bzText2)),
+                              const SizedBox(height: 10),
+                              SelectableText(auth.secret!,
+                                  style: TextStyle(
+                                    color: theme.bzText1,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.2,
+                                  )),
+                              const SizedBox(height: 8),
+                              SelectableText(auth.provisioningUri!,
+                                  style: TextStyle(fontSize: 11, color: theme.bzText2)),
+                              const SizedBox(height: 16),
+                            ],
+                            _field(
+                              controller: _mfaCode,
+                              hint: '6-digit code or recovery code',
+                              icon: Icons.verified_user_outlined,
+                              keyboard: TextInputType.text,
+                            ),
+                            const SizedBox(height: 16),
+                            _SubmitButton(
+                              label: auth.setupRequired ? 'Verify and enable MFA' : 'Verify and continue',
+                              busy: _mfaBusy,
+                              onPressed: () => _runMfa(
+                                () => auth.setupRequired
+                                    ? controller.verifyMfaSetup(_mfaCode.text.trim())
+                                    : controller.verifyMfa(_mfaCode.text.trim()),
+                              ),
+                            ),
+                          ],
+                          if (_mfaError != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _mfaError == 'MFA_CODE_REPLAYED'
+                                  ? 'That code has already been used. Wait for the next code.'
+                                  : _mfaError == 'INVALID_CREDENTIALS'
+                                      ? 'Password confirmation failed.'
+                                      : 'Verification failed. Check the code and try again.',
+                              style: TextStyle(color: theme.bzError),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _mfaBusy
+                        ? null
+                        : () => controller.signOut(),
+                    child: Text('Sign out', style: TextStyle(color: theme.bzText2)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecoveryCodes(BuildContext context, AuthMfaRecoveryCodes auth) {
+    final theme = Theme.of(context);
+    final controller = ref.read(authSessionProvider.notifier);
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  BzRibbonLogo(width: 104, color: theme.bzText1),
+                  const SizedBox(height: 20),
+                  Text('Save your recovery codes',
+                      style: theme.textTheme.headlineMedium,
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Each code works once if you lose access to your authenticator. They will not be shown again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.bzText2),
+                  ),
+                  const SizedBox(height: 20),
+                  BzGlassContainer(
+                    radius: BzRadius.card,
+                    blur: 24,
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: SelectableText(
+                        auth.codes.join('\n'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: theme.bzText1,
+                          fontWeight: FontWeight.w700,
+                          height: 1.8,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _SubmitButton(
+                    label: 'I have saved my codes',
+                    busy: false,
+                    onPressed: controller.completeMfaEnrollment,
                   ),
                 ],
               ),
