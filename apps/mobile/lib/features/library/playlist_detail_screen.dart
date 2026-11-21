@@ -48,7 +48,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   List<TrackInfo> _queue(UserPlaylist playlist) => [
         for (final item in playlist.tracks)
-          if ((!(item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:')) || item.id.startsWith('bz:audius:'))) item.toTrackInfo(),
+          if ((!item.id.startsWith('bz:') || item.id.startsWith('bz:audius:'))) item.toTrackInfo(),
       ];
 
   Future<void> _playAll(UserPlaylist playlist) async {
