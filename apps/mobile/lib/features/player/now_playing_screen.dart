@@ -21,6 +21,7 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   Lyrics? _lyrics;
   String _lyricsMode = 'none';
+  int _lyricsRequestGeneration = 0;
 
   @override
   void initState() {
@@ -29,24 +30,47 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 
   Future<void> _loadLyrics() async {
+    final request = ++_lyricsRequestGeneration;
     final track = ref.read(playerControllerProvider).currentTrack;
-    if (track == null || track.title == null) return;
-    final result = await ref.read(lyricsProvider).bestFor(BzTrack(
-          id: track.id,
-          title: track.title!,
-          artist: track.artist ?? '',
-          duration: track.duration,
-        ));
-    if (!mounted) return;
-    if (result == null) {
-      setState(() => _lyricsMode = 'none');
+    if (track == null || track.title == null) {
+      if (mounted) {
+        setState(() {
+          _lyrics = null;
+          _lyricsMode = 'none';
+        });
+      }
       return;
     }
-    final synced = result.syncedLrc != null;
+
     setState(() {
-      _lyrics = LrcParser.parse(track.id, result.bestLrc);
-      _lyricsMode = synced ? 'synced' : 'plain';
+      _lyrics = null;
+      _lyricsMode = 'loading';
     });
+
+    try {
+      final result = await ref.read(lyricsProvider).bestFor(BzTrack(
+            id: track.id,
+            title: track.title!,
+            artist: track.artist ?? '',
+            duration: track.duration,
+          ));
+      if (!mounted || request != _lyricsRequestGeneration) return;
+      if (result == null) {
+        setState(() => _lyricsMode = 'none');
+        return;
+      }
+      final synced = result.syncedLrc != null;
+      setState(() {
+        _lyrics = LrcParser.parse(track.id, result.bestLrc);
+        _lyricsMode = synced ? 'synced' : 'plain';
+      });
+    } catch (_) {
+      if (!mounted || request != _lyricsRequestGeneration) return;
+      setState(() {
+        _lyrics = null;
+        _lyricsMode = 'none';
+      });
+    }
   }
 
   void _openPlayingNext() {
@@ -67,6 +91,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(
+      playerControllerProvider.select((state) => state.currentTrack?.id),
+      (previous, next) {
+        if (previous != next) _loadLyrics();
+      },
+    );
     final player = ref.watch(playerControllerProvider);
     final controller = ref.read(playerControllerProvider.notifier);
     final theme = Theme.of(context);
@@ -382,6 +412,10 @@ class _LyricsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    if (mode == 'loading') {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     if (mode == 'none' || lyrics == null || lyrics!.lines.isEmpty) {
       return Center(
