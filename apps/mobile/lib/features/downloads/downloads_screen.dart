@@ -96,6 +96,9 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      _refresh();
+    });
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
     final inProgress = progress.entries.toList();
