@@ -2,8 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bootstrap.dart';
+
+/// Signal used by surfaces outside Library after creating or changing a playlist.
+final playlistRefreshSignalProvider = StateProvider<int>((ref) => 0);
 
 /// A device-local playlist. Playlist data is isolated by account ID and is
 /// never shared between signed-in users on the same device.
