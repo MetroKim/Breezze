@@ -186,7 +186,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final progress = ref.watch(downloadProgressProvider);
     final jobStatuses = ref.watch(downloadJobStatusProvider);
     final downloadController = ref.read(downloadProgressProvider.notifier);
-    final inProgress = progress.entries.toList();
+    final inProgress = jobStatuses.entries.where((entry) => ['downloading', 'paused', 'failed'].contains(entry.value)).map((entry) => MapEntry(entry.key, progress[entry.key] ?? 0.0)).toList();
 
     // Refresh the completed list when the last in-flight download ends.
     if (inProgress.isEmpty && _tracks.isNotEmpty) {
@@ -265,7 +265,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                             ),
                           ),
                           title: Text(
-                              'Downloading… ${(entry.value * 100).round()}%',
+                              jobStatuses[entry.key] == 'failed' ? 'Download failed' : jobStatuses[entry.key] == 'paused' ? 'Paused · ${(entry.value * 100).round()}%' : 'Downloading… ${(entry.value * 100).round()}%',
                               style: theme.textTheme.titleMedium),
                           subtitle: ClipRRect(
                             borderRadius: BorderRadius.circular(2),
@@ -281,13 +281,15 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                             children: [
                               TextButton(
                                 onPressed: () {
-                                  if (jobStatuses[entry.key] == 'paused') {
+                                  if (jobStatuses[entry.key] == 'failed') {
+                                    downloadController.retry(entry.key);
+                                  } else if (jobStatuses[entry.key] == 'paused') {
                                     downloadController.resume(entry.key);
                                   } else {
                                     downloadController.pause(entry.key);
                                   }
                                 },
-                                child: Text(jobStatuses[entry.key] == 'paused' ? 'Resume' : 'Pause'),
+                                child: Text(jobStatuses[entry.key] == 'failed' ? 'Retry' : jobStatuses[entry.key] == 'paused' ? 'Resume' : 'Pause'),
                               ),
                               IconButton(
                                 tooltip: 'Cancel download',
