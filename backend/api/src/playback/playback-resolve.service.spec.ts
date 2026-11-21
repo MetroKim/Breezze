@@ -120,4 +120,42 @@ describe('PlaybackResolveService', () => {
     expect(adapter.resolvePlayback).toHaveBeenCalled();
   });
 
+  it('rejects provider playback when an active takedown exists', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'takedown-1' });
+    providers.get.mockReturnValue({
+      capabilities: { playback: true },
+      resolvePlayback: jest.fn(),
+    });
+
+    await expect(service.resolveProvider({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      canonicalTrackId: 'canonical-1',
+      territory: 'TZ',
+    })).rejects.toBeInstanceOf(NotAcceptableException);
+    expect(providers.get).not.toHaveBeenCalled();
+  });
+
+  it('rejects a provider ID that does not match the canonical source mapping', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1',
+      source: 'youtube_music',
+      externalId: 'bz:youtube_music:track123',
+    });
+
+    await expect(service.resolveProvider({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      canonicalTrackId: 'canonical-1',
+      territory: 'TZ',
+    })).rejects.toBeInstanceOf(NotAcceptableException);
+    expect(prisma.contentTakedownCase.findFirst).not.toHaveBeenCalled();
+    expect(providers.get).not.toHaveBeenCalled();
+  });
+
 });
