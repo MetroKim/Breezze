@@ -9,8 +9,8 @@ import '../../widgets/bz_brand_icons.dart';
 /// Track details use only metadata returned by the active search source.
 /// The album relationship remains unavailable until a canonical album catalog is connected.
 class TrackDetailScreen extends ConsumerWidget {
-  final BzTrack track;
-  final List<BzTrack> relatedTracks;
+  final TrackInfo track;
+  final List<TrackInfo> relatedTracks;
   final String origin;
 
   const TrackDetailScreen({
@@ -23,8 +23,10 @@ class TrackDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final artistName = track.artist ?? 'Unknown artist';
+    final trackTitle = track.title ?? 'Unknown track';
     final artistTracks = relatedTracks
-        .where((item) => item.artist.trim().toLowerCase() == track.artist.trim().toLowerCase())
+        .where((item) => (item.artist ?? '').trim().toLowerCase() == artistName.trim().toLowerCase())
         .toList();
     final queueTracks = relatedTracks.isEmpty ? [track] : relatedTracks;
     final queue = [
@@ -80,9 +82,9 @@ class TrackDetailScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 22),
-                Text(track.title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                Text(trackTitle, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
                 const SizedBox(height: 8),
-                Text(track.artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                Text(artistName, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
                 const SizedBox(height: 6),
                 Text(
                   track.id.startsWith('bz:')
@@ -138,7 +140,7 @@ class TrackDetailScreen extends ConsumerWidget {
                       alignment: Alignment.center,
                       child: BzSvgIcon(name: 'mic', color: theme.bzText2, size: 22),
                     ),
-                    title: Text(track.artist),
+                    title: Text(artistName),
                     subtitle: const Text('Open artist page'),
                     trailing: const BzSvgIcon(name: 'chevron-right', size: 18),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
@@ -149,8 +151,8 @@ class TrackDetailScreen extends ConsumerWidget {
                           for (final item in artistTracks)
                             FavoriteTrack(
                               id: item.id,
-                              title: item.title,
-                              artist: item.artist,
+                              title: item.title ?? 'Unknown track',
+                              artist: item.artist ?? artistName,
                               artworkUrl: item.artworkUrl,
                               durationMs: item.duration.inMilliseconds,
                             ),
