@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_session.dart';
+import '../../core/api/breezze_api.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Auth screen — login + register in one premium glass card, wired to
