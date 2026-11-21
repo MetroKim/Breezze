@@ -5,28 +5,39 @@
 This status snapshot supersedes older validation caveats and checkboxes below where they conflict.
 
 ### Implemented on this branch
-- [x] Root-owned Riverpod container and app-owned audio engine; shell rebuilds no longer create a second container.
-- [x] Playback request generations reject stale resolver completions; stop, detach and sign-out invalidate pending requests.
-- [x] Playback state machine accepts new selections from active states and ignores stale source events.
-- [x] Resolver, prepare and play failures enter a visible failed state instead of silently hanging.
-- [x] Mobile tests cover stale resolver responses, serialized prepare, stop invalidation and resolver/engine failures.
-- [x] Persistent search history and stale search response protection.
-- [x] Flutter + NestJS/Prisma CI workflow runs on PRs targeting `breezze`.
-- [x] Backend Prisma generation/validation, TypeScript typecheck, Jest suite and Nest build have passed in CI.
-- [x] Mobile analyzer and mobile tests have passed in a completed CI attempt.
-- [x] Queue shuffle traversal now retains the current entry in its shuffled snapshot; repeat-one and shuffle traversal tests corrected/added.
-- [x] Scrobble duplicate-submission test now respects the implementation's two-second per-tick cap.
-- [x] Radio controller now delegates to RadioService; public station/program DTO selections omit raw `streamUrl`.
-- [x] Radio station list and detail requests have a 10-second timeout; stale station-list responses are ignored.
+- [x] Root-owned Riverpod container and app-owned audio engine; shell rebuilds do not create duplicate containers.
+- [x] Playback request generations, serialized engine operations, stale resolver protection, stop/sign-out invalidation and visible resolver/engine failures.
+- [x] Persistent search history with deduplication, remove/clear, serialized concurrent writes and stale-response protection.
+- [x] Browse metadata discovery and Radio station/program directory; radio playback is not fabricated.
+- [x] Queue shuffle traversal retains the current item; repeat-one and shuffle regression tests added.
+- [x] BitChord search parser correctly extracts nested title, artist and duration metadata.
+- [x] YouTube Explode 3.1 API drift fixed; API-client provider result types are generic and the API client is now analyzed/tested in CI.
+- [x] Mobile playback resolves canonical catalog IDs and uses authenticated backend rights authorization; YouTube and BitChord adapters are metadata-only.
+- [x] Preview-only rights cannot issue full-stream URLs; preview grant windows are validated.
+- [x] Downloads require backend authorization; preview grants cannot authorize downloads.
+- [x] Catalog write/convergence endpoint requires JWT; external ID convergence uses an upsert to avoid duplicate-create races.
+- [x] Production media signing requires a strong key and HTTPS CDN; signature verification uses constant-time comparison.
+- [x] Signed playback/download URL lifetime is capped by the rights end time; download records retain the rights expiry.
+- [x] Radio controller delegates through RadioService; public station/program DTOs omit raw `streamUrl`; mobile station requests have timeouts and stale-response protection.
+- [x] CI runs mobile, API client, design system, audio-contracts and NestJS/Prisma quality gates. Duplicate workflow triggers were removed.
 
-### Verification still open
-- [ ] The complete latest CI run must pass after the queue/scrobble/radio changes. Earlier audio-contracts CI failed on an incorrect repeat-one expectation and a scrobble test that skipped the documented per-tick cap; both have now been corrected.
-- [ ] Add missing PlayerController tests for pause/resume during resolution, next/previous during a pending load, and engine detach/disposal.
-- [ ] Add mobile radio request/widget tests and timezone contract. The current station schema does not define a station timezone, so the UI must not imply that device-local time is the station's timezone.
+### Verification status
+- [x] Backend Prisma generation/validation, TypeScript typecheck, Jest suite and Nest build passed on the latest completed backend job.
+- [x] Mobile analyzer and mobile tests passed on a completed run before the latest rights/download integration changes.
+- [x] API-client analyzer passed after the youtube_explode_dart 3.1 API fixes; a BitChord nested-field parsing test exposed a real bug, now corrected with a regression assertion.
+- [ ] A complete post-fix CI run must pass after the latest catalog, rights-expiry and API-client parser changes. The current run is not a pass until both jobs complete successfully.
+
+### Remaining release blockers
+- [ ] The signed URL points at a configured CDN origin, but this repository has no media-delivery implementation. Verify the real CDN origin, object authorization and signature validation end-to-end.
+- [ ] Offline playback is not wired to local files. Downloads can be authorized and fetched, but tapping a downloaded track still goes through the network playback resolver. Add local-file playback plus account ownership and rights-expiry enforcement.
+- [ ] Persist local download owner/rights expiry metadata and enforce expiry/takedown policy when offline playback is implemented.
+- [ ] Complete PlayerController lifecycle tests for engine detach/disposal, next/previous during pending loads, and scrobble tick integration. The controller must flush scrobbles on stop/track change and count actual listening time.
+- [ ] Add mobile radio request/widget tests and a station timezone contract. The current schema has no station timezone.
 - [ ] Add a real radio playback session contract only after stream rights, secure URL resolution, buffering/reconnect behavior and engine integration are designed.
-- [ ] No Prisma migration directory is present. Do not deploy the current schema change until a baseline/deployment migration strategy is established.
-- [ ] Inspect and remediate npm dependency audit findings; do not run `npm audit fix --force` blindly.
+- [ ] No Prisma migration directory/history is present. Establish a safe baseline/migration strategy against the actual deployed database before deployment.
+- [ ] Audit and remediate npm dependency vulnerabilities (previous install reported 26: 3 low, 12 moderate, 11 high); do not run `npm audit fix --force` blindly.
 - [ ] Verify repeated-play semantics for `RecentlyPlayed` against deployed data before changing its current `@@unique([userId, trackId])` constraint.
+- [ ] Finish full artist/album/playlist detail routes, catalog-backed editorial feeds, account-isolation integration tests, accessibility/responsive checks and real-device audio validation.
 
 **Working branch:** `feature/breezze-product-experience`  
 **Target base:** `breezze`  
