@@ -2,7 +2,7 @@
 
 This Worker is the private R2 media gateway for Breezze. It supports:
 
-- HMAC-signed, expiring playback URLs at `/audio/{trackId}/{variant}`.
+- HMAC-signed, expiring playback URLs for Breezze-owned or properly licensed media at `/audio/{trackId}/{variant}`.
 - Short-lived, size-bound upload URLs at `/upload/{userId}/{jobId}/{filename}`.
 - Private quarantine uploads into R2 and byte-range playback for seeking.
 - No public R2 bucket or public object URLs.
@@ -31,6 +31,9 @@ The R2 bucket must remain private. Do not enable public bucket access or expose 
 
 ## Operational notes
 
-Playback GET responses are cacheable for at most 60 seconds; byte-range responses are not cached. The signature expiry is checked on every Worker request. Uploads are limited to 100 MiB and the exact registered Content-Length. Configure Cloudflare WAF/rate limits on the custom domain and monitor R2 request/egress costs.
+Playback GET and byte-range responses use `Cache-Control: private, no-store`; signed URLs are bearer capabilities and must not enter shared caches. The signature expiry is checked on every Worker request. Uploads are limited to 100 MiB and the exact registered Content-Length. Configure Cloudflare WAF/rate limits on the custom domain and monitor R2 request/egress costs.
 
 This Worker is an edge gateway, not a media transcoder or rights-management system. Production release still requires a real ingestion/transcoding pipeline, malware/content validation, a retention policy for quarantine objects, and an operational licence-revocation policy. Deploying the Worker and provisioning the bucket/domain are account-side steps and cannot be completed from this repository alone.
+
+
+This R2 Worker is not the general music-provider fallback and must not be used to ingest or re-host third-party catalog tracks without explicit rights. Provider-hosted audio should be delivered directly from the approved provider to the client. Use this bucket only for Breezze-owned, artist-delivered, or separately rights-cleared media.
