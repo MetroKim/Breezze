@@ -21,7 +21,7 @@ describe('RightsDecisionService', () => {
     prisma.rightsUsagePermission.findFirst.mockImplementation(
       ({ where }: { where: { action: string } }) =>
         Promise.resolve(
-          where.action === 'stream.full' ? fullPermission : previewPermission,
+          where.action === 'preview' ? previewPermission : fullPermission,
         ),
     );
     prisma.providerAttribution.findFirst.mockResolvedValue({ text: 'Licensed via label' });
