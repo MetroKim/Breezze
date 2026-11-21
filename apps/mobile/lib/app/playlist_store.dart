@@ -168,6 +168,35 @@ class PlaylistStore {
         await _save(ownerId, playlists);
       });
 
+  Future<void> reorderTracks(
+    String ownerId,
+    String playlistId,
+    int oldIndex,
+    int newIndex,
+  ) =>
+      _serialize(() async {
+        final playlists = await load(ownerId);
+        final index = playlists.indexWhere((p) => p.id == playlistId);
+        if (index < 0) return;
+        final old = playlists[index];
+        if (oldIndex < 0 ||
+            oldIndex >= old.tracks.length ||
+            newIndex < 0 ||
+            newIndex >= old.tracks.length) {
+          return;
+        }
+        final tracks = List<FavoriteTrack>.from(old.tracks);
+        final moved = tracks.removeAt(oldIndex);
+        tracks.insert(newIndex, moved);
+        playlists[index] = UserPlaylist(
+          id: old.id,
+          name: old.name,
+          createdAt: old.createdAt,
+          tracks: tracks,
+        );
+        await _save(ownerId, playlists);
+      });
+
   Future<void> removeTrack(
     String ownerId,
     String playlistId,

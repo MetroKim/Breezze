@@ -84,6 +84,14 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     }
   }
 
+  void _openCollection(_BrowseDestination destination) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _BrowseCollectionScreen(destination: destination),
+      ),
+    );
+  }
+
   void _play(int index) {
     if (_tracks.isEmpty) return;
     final queue = [
@@ -147,6 +155,27 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                       );
                     },
                   ),
+                ),
+                const SizedBox(height: 18),
+                Text('Discover', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final destination in _browseDestinations)
+                      ActionChip(
+                        avatar: BzSvgIcon(
+                          name: destination.icon,
+                          size: 16,
+                          color: theme.bzText2,
+                        ),
+                        label: Text(destination.title),
+                        onPressed: () => _openCollection(destination),
+                        backgroundColor: theme.bzSurface1,
+                        side: BorderSide(color: theme.bzSeparator),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -262,6 +291,126 @@ class _MessageState extends StatelessWidget {
             const SizedBox(height: 16),
             OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _BrowseDestination {
+  final String title;
+  final String description;
+  final String icon;
+
+  const _BrowseDestination(this.title, this.description, this.icon);
+}
+
+const _browseDestinations = <_BrowseDestination>[
+  _BrowseDestination('Latest Songs', 'Recently added tracks from verified catalog sources.', 'music-note'),
+  _BrowseDestination('New Releases', 'New albums and singles with confirmed release dates.', 'disc-3'),
+  _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
+  _BrowseDestination('Daily Top 100', 'A verified daily chart with an explicit territory.', 'star'),
+  _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
+  _BrowseDestination('Music Videos', 'Official music videos from authorized video sources.', 'video'),
+  _BrowseDestination('Charts', 'Global, regional and genre charts with source attribution.', 'grid'),
+  _BrowseDestination('Browse by Genre', 'Explore catalog music by genre and subgenre.', 'compass'),
+  _BrowseDestination('Moods & Activities', 'Curated listening collections for moods and activities.', 'favorite'),
+  _BrowseDestination('City Charts', 'City-level charts backed by verified regional data.', 'globe'),
+  _BrowseDestination('Upcoming Concerts', 'Artist events with confirmed venue and ticket details.', 'calendar'),
+  _BrowseDestination('Seasonal Collections', 'Time-limited music collections and seasonal features.', 'disc-3'),
+  _BrowseDestination('Artist Spotlight', 'Editorial artist features backed by catalog metadata.', 'user-round'),
+];
+
+class _BrowseCollectionScreen extends StatelessWidget {
+  final _BrowseDestination destination;
+
+  const _BrowseCollectionScreen({required this.destination});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: Text(destination.title),
+        leading: IconButton(
+          tooltip: 'Back to Browse',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    color: theme.bzSurface1,
+                    borderRadius: BorderRadius.circular(BzRadius.card),
+                    border: Border.all(color: theme.bzSeparator),
+                  ),
+                  alignment: Alignment.center,
+                  child: BzSvgIcon(
+                    name: destination.icon,
+                    size: 32,
+                    color: theme.bzAccent,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  destination.title,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  destination.description,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.bzText2,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.bzSurface1,
+                    borderRadius: BorderRadius.circular(BzRadius.card),
+                    border: Border.all(color: theme.bzSeparator),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Catalog source required',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Breezze will show this collection when a verified source is connected. We will not fill it with generic search results or invented rankings.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.bzText2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Back to Browse'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -368,7 +368,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Widget _buildArtists(ThemeData theme) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+    );
     final grouped = <String, List<FavoriteTrack>>{};
     for (final track in _favorites) {
       grouped.putIfAbsent(track.artist.trim().isEmpty ? 'Unknown artist' : track.artist, () => []).add(track);
@@ -384,11 +389,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           leading: CircleAvatar(backgroundColor: theme.bzSurface2, child: BzSvgIcon(name: 'mic', color: theme.bzText1)),
           title: Text(entry.key),
           subtitle: Text('${entry.value.length} saved songs'),
-          onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
-            trackId: entry.value.first.id,
-            queue: [for (final track in entry.value) track.toTrackInfo()],
-            origin: 'library',
-            sourceContext: entry.key,
+          trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => _SavedArtistScreen(
+                artist: entry.key,
+                tracks: entry.value,
+              ),
+            ),
           ),
         );
       },
@@ -396,7 +404,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Widget _buildSongs(ThemeData theme) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+    );
     if (_favorites.isEmpty) {
       return _emptyState(
         theme,
@@ -514,6 +527,99 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+class _SavedArtistScreen extends ConsumerWidget {
+  final String artist;
+  final List<FavoriteTrack> tracks;
+
+  const _SavedArtistScreen({
+    required this.artist,
+    required this.tracks,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final queue = [for (final track in tracks) track.toTrackInfo()];
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(title: Text(artist)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        children: [
+          Center(
+            child: Container(
+              width: 132,
+              height: 132,
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                shape: BoxShape.circle,
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              alignment: Alignment.center,
+              child: BzBnoteMark(size: 56, color: theme.bzText2),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(artist, textAlign: TextAlign.center,
+              style: theme.textTheme.headlineMedium),
+          const SizedBox(height: 6),
+          Text(
+            '${tracks.length} saved ${tracks.length == 1 ? 'song' : 'songs'} in your Library',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.bzText2),
+          ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.center,
+            child: FilledButton.icon(
+              onPressed: tracks.isEmpty
+                  ? null
+                  : () => ref.read(playerControllerProvider.notifier).playTrack(
+                        trackId: tracks.first.id,
+                        queue: queue,
+                        origin: 'library',
+                        sourceContext: artist,
+                      ),
+              icon: BzSvgIcon(name: 'play', color: theme.bzBackground),
+              label: const Text('Play saved songs'),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text('SAVED SONGS', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 8),
+          for (final track in tracks)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: track.artworkUrl == null
+                  ? BzBnoteMark(size: 46, color: theme.bzText2)
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(BzRadius.artwork),
+                      child: Image.network(
+                        track.artworkUrl!,
+                        width: 46,
+                        height: 46,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            BzBnoteMark(size: 46, color: theme.bzText2),
+                      ),
+                    ),
+              title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
+                    trackId: track.id,
+                    queue: queue,
+                    startIndex: tracks.indexOf(track),
+                    origin: 'library',
+                    sourceContext: artist,
+                  ),
+            ),
+        ],
       ),
     );
   }

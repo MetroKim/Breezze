@@ -300,9 +300,24 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                 ),
               )
             else
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
+              SliverToBoxAdapter(
+                child: ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  itemCount: playlist.tracks.length,
+                  onReorder: (oldIndex, newIndex) async {
+                    final target = newIndex > oldIndex ? newIndex - 1 : newIndex;
+                    await _store.reorderTracks(
+                      widget.ownerId,
+                      playlist.id,
+                      oldIndex,
+                      target,
+                    );
+                    await _load();
+                    widget.onChanged?.call();
+                  },
+                  itemBuilder: (context, index) {
                     final track = playlist.tracks[index];
                     return Dismissible(
                       key: ValueKey(track.id),
@@ -322,7 +337,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                           playlist.id,
                           track.id,
                         );
-                        _load();
+                        await _load();
                         widget.onChanged?.call();
                       },
                       child: ListTile(
@@ -345,11 +360,14 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                             maxLines: 1, overflow: TextOverflow.ellipsis),
                         subtitle: Text(track.artist,
                             maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: ReorderableDragStartListener(
+                          index: index,
+                          child: const BzSvgIcon(name: 'drag-handle'),
+                        ),
                         onTap: () => _playTrack(playlist, index),
                       ),
                     );
                   },
-                  childCount: playlist.tracks.length,
                 ),
               ),
           ],

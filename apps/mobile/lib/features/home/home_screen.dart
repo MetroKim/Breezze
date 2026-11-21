@@ -27,6 +27,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<RecentEntry> _recentlyPlayed = [];
   List<FavoriteTrack> _favorites = [];
   Map<String, dynamic>? _replay;
+  bool _loading = true;
 
   @override
   void initState() {
@@ -50,6 +51,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _recentlyPlayed = recent;
       _favorites = favorites;
       _replay = replay;
+      _loading = false;
     });
   }
 
@@ -199,7 +201,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Text('Your music. Every platform. One line.',
               style: theme.textTheme.bodyMedium),
           const SizedBox(height: 24),
-          if (_recentlyPlayed.isNotEmpty) ...[
+          if (_loading) ...[
+            const BzSkeleton(width: 172, height: 16, radius: 5),
+            const SizedBox(height: 16),
+            for (var i = 0; i < 3; i++) ...[
+              const BzSkeletonTrackRow(),
+              const SizedBox(height: 14),
+            ],
+            const SizedBox(height: 18),
+            const BzSkeletonArtworkGrid(itemCount: 4),
+          ],
+          if (!_loading && _recentlyPlayed.isNotEmpty) ...[
             _Rail(
               title: 'Recently Played',
               tracks: [
@@ -216,7 +228,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
-          if (_recentlyPlayed.isNotEmpty || _favorites.isNotEmpty) ...[
+          if (!_loading && (_recentlyPlayed.isNotEmpty || _favorites.isNotEmpty)) ...[
             _Rail(
               title: 'Your Mix',
               tracks: [
@@ -227,7 +239,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
-          if (_favorites.isNotEmpty) ...[
+          if (!_loading && _favorites.isNotEmpty) ...[
             _Rail(
               title: 'Your Favorites',
               tracks: [
@@ -238,7 +250,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
-          if (_recentlyPlayed.isEmpty && _favorites.isEmpty)
+          if (!_loading && _recentlyPlayed.isEmpty && _favorites.isEmpty)
             _FirstRunCard(
               onSearch: () => ref.read(homeTabHintProvider.notifier).state = 4,
             ),
