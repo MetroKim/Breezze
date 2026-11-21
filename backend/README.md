@@ -10,7 +10,7 @@ cd MetroMusic/backend
 docker compose up -d          # postgres, redis, api, ytmusicapi metadata service, worker
 ```
 
-The API is then at `http://localhost:3000/api/v1` (Swagger at `/api/docs`). The provider registry exposes `GET /api/v1/providers` and YouTube Music metadata search at `GET /api/v1/providers/youtube_music/search?q=...`. The sidecar is internal to the Compose network and is not published as a public port.
+The API is then at `http://localhost:3000/api/v1` (Swagger at `/api/docs`). The provider registry exposes `GET /api/v1/providers` and YouTube Music metadata search at `GET /api/v1/providers/youtube_music/search?q=...` and track metadata at `GET /api/v1/providers/youtube_music/tracks/{videoId}`. The sidecar is internal to the Compose network and is not published as a public port.
 
 ## First-time setup (migrations + client)
 
