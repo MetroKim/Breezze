@@ -123,6 +123,12 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Breezze',
   }) async {
+    // YouTube Music search results are catalogue metadata, not native
+    // playback grants. Never put them into Breezze's native queue.
+    if ((trackId.startsWith('bz:') && localFilePath == null) ||
+        queue.any((item) => item.id.startsWith('bz:') && item.localFilePath == null)) {
+      return;
+    }
     if (queue.isNotEmpty) {
       final entries = [
         for (var i = 0; i < queue.length; i++)
@@ -275,6 +281,7 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Queue',
   }) {
+    if (track.id.startsWith('bz:') && track.localFilePath == null) return;
     _trackInfos[track.id] = track;
     if (state.currentTrack == null) {
       unawaited(playTrack(
@@ -303,6 +310,7 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Queue',
   }) {
+    if (track.id.startsWith('bz:') && track.localFilePath == null) return;
     _trackInfos[track.id] = track;
     if (state.currentTrack == null) {
       unawaited(playTrack(
@@ -353,6 +361,9 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> _resolveAndPlay(TrackInfo info) async {
+    // Defensive check for restored or stale queue entries created before the
+    // metadata-only provider capability was enforced.
+    if (info.id.startsWith('bz:') && info.localFilePath == null) return;
     final previousTrackId = state.currentTrack?.id;
     if (previousTrackId != null && previousTrackId != info.id) {
       _scrobbles.onStop(previousTrackId);
