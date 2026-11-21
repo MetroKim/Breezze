@@ -51,3 +51,45 @@ Fixes applied:
   flutter analyze`. The design-system cascade is fixed at the source; any
   remaining output should now be a short, copyable list.
 - Android manifest entries for background audio (documented in README).
+
+## Product experience rollout — 2026-11-21
+
+The full target information architecture and UX behavior are documented in
+`docs/PRODUCT_EXPERIENCE.md`. This rollout deliberately builds on the
+existing `breezze` branch implementation rather than duplicating the
+screens that already exist there.
+
+| Requirement | Status | Evidence | Remaining work |
+|---|---|---|---|
+| Local recent-search history | IMPLEMENTATION ADDED — tests pending | `app/search_history_store.dart`, `features/search/search_screen.dart` | Run Flutter tests/analyze; then mark implemented |
+| Search history deduplication and cap | IMPLEMENTATION ADDED — tests pending | Store caps at 10 and deduplicates case-insensitively | Verify tests |
+| Remove one recent search / clear all | IMPLEMENTATION ADDED — tests pending | Search screen actions + store methods | Verify UI and persistence tests |
+| Stale search response protection | IMPLEMENTED IN CODE — tests pending | Search generation token in SearchScreen | Add widget test for out-of-order results |
+| Search failure vs no-results state | IMPLEMENTED IN CODE — tests pending | Provider/network error state separated from empty results | Add provider failure widget tests |
+| Catalog result groups | PARTIAL | Existing keyless source returns track results; backend has catalog/search modules | Add canonical catalog-backed album/artist/playlist/video/station results |
+| Browse editorial/charts/genres/moods | BACKEND/UI INTEGRATION PENDING | Backend Catalog and Recommendations modules exist | Connect typed client repositories and real feeds |
+| Radio stations and programs | BACKEND/UI INTEGRATION PENDING | Radio backend module exists | Connect client repository, station detail, and playback rights |
+| Album/artist/playlist detail | PARTIAL | Catalog models and backend read endpoints exist | Add detail routes and complete track/entity UI |
+| Responsive desktop/tablet shell | NOT VERIFIED | Existing Flutter shell is phone-first | Implement and test responsive layouts |
+| Accessibility/reduced motion | NOT AUDITED | Existing design-system motion/tokens and semantic controls | Run accessibility and reduced-motion audit |
+
+### Verification gate
+
+Do not promote the new search-history rows to IMPLEMENTED until these pass
+from `apps/mobile`:
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+```
+
+Backend verification remains separate:
+
+```bash
+cd backend/api
+npm install
+npx prisma generate
+npm run typecheck
+npm test -- --runInBand
+```
