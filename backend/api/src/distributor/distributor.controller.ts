@@ -42,7 +42,7 @@ export class DistributorController {
 
   @UseGuards(AdminGuard)
   @Post('releases/:id/validate')
-  validate(@Param('id') id: string) {
-    return this.distributor.validate(id);
+  validate(@CurrentUser() actorId: string, @Param('id') id: string) {
+    return this.distributor.validate(actorId, id);
   }
 }
