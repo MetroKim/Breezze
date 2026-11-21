@@ -175,9 +175,11 @@ class PlayerController extends Notifier<PlayerState> {
     if (engine == null || state.playbackState != PlaybackState.paused) return;
     _machine.dispatch(PlayPressed());
     try {
-      unawaited(engine.play().catchError((Object error, StackTrace stackTrace) {
-        _machine.dispatch(SourceResolutionFailed('RESUME_FAILED', requestId: _machine.activeRequestId));
-      }));
+      await _serializeEngineOperation(() async {
+        unawaited(engine.play().catchError((Object error, StackTrace stackTrace) {
+          _machine.dispatch(SourceResolutionFailed('RESUME_FAILED', requestId: _machine.activeRequestId));
+        }));
+      });
     } catch (_) {
       _machine.dispatch(SourceResolutionFailed('RESUME_FAILED', requestId: _machine.activeRequestId));
     }
