@@ -160,12 +160,16 @@ class _MiniPlayer extends ConsumerWidget {
             .clamp(0.0, 1.0)
         : 0.0;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(BzRadius.card),
-        onTap: onTap,
-        child: BzGlassContainer(
+    return GestureDetector(
+      onVerticalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) < -150) onTap();
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(BzRadius.card),
+          onTap: onTap,
+          child: BzGlassContainer(
           radius: BzRadius.card,
           blur: 18,
           child: Padding(
@@ -242,6 +246,7 @@ class _MiniPlayer extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
