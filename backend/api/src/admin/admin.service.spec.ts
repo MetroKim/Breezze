@@ -7,6 +7,13 @@ describe('AdminService privileged audit trail', () => {
     adminAuditEvent: { create: jest.fn(), findMany: jest.fn() },
   };
   const prisma = {
+    user: { count: jest.fn() },
+    track: { count: jest.fn() },
+    album: { count: jest.fn() },
+    artist: { count: jest.fn() },
+    playlist: { count: jest.fn() },
+    contentTakedownCase: { count: jest.fn(), findMany: jest.fn() },
+    adminAuditEvent: { findMany: jest.fn() },
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
   };
   const service = new AdminService(prisma as any);
@@ -25,7 +32,11 @@ describe('AdminService privileged audit trail', () => {
       id: 'target-user',
       role: 'moderator',
     });
-
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 'target-user' },
+      data: { role: 'moderator' },
+      select: { id: true, role: true },
+    });
     expect(tx.adminAuditEvent.create).toHaveBeenCalledWith({
       data: {
         actorId: 'admin-user',
@@ -37,7 +48,7 @@ describe('AdminService privileged audit trail', () => {
     });
   });
 
-  it('does not write an audit event when the target user does not exist', async () => {
+  it('does not mutate or audit a missing target user', async () => {
     tx.user.findUnique.mockResolvedValue(null);
     await expect(service.createUserRole('admin-user', 'missing-user', 'admin')).rejects.toThrow('USER_NOT_FOUND');
     expect(tx.user.update).not.toHaveBeenCalled();
@@ -47,7 +58,6 @@ describe('AdminService privileged audit trail', () => {
   it('resolves a takedown and records the acting administrator transactionally', async () => {
     tx.contentTakedownCase.updateMany.mockResolvedValue({ count: 1 });
     tx.adminAuditEvent.create.mockResolvedValue({});
-
     await expect(service.resolveTakedown('admin-user', 'case-1')).resolves.toEqual({ resolved: true });
     expect(tx.contentTakedownCase.updateMany).toHaveBeenCalledWith({
       where: { id: 'case-1', status: 'active' },
