@@ -30,7 +30,7 @@ class SettingsScreen extends ConsumerWidget {
                   style: theme.textTheme.bodySmall),
             ),
             ListTile(
-              leading: const Icon(Icons.logout),
+              leading: BzSvgIcon(name: 'logout'),
               title: const Text('Sign out'),
               onTap: () {
                 ref.read(authSessionProvider.notifier).signOut();
