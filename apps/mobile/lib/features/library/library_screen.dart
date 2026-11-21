@@ -264,7 +264,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     width: 20,
                     height: 20,
                     colorFilter: const ColorFilter.mode(
-                      Color(0xFFE0A52B),
+                      theme.bzWarning,
                       BlendMode.srcIn,
                     ),
                   ),
