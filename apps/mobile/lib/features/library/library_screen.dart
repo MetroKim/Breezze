@@ -88,7 +88,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
     controller.dispose();
     if (name == null || name.trim().isEmpty) return;
-    await _playlistStore.create(_ownerId, name);
+    final auth = ref.read(authSessionProvider);
+    String? remoteId;
+    if (auth is AuthSignedIn) {
+      try {
+        final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name.trim());
+        remoteId = remote['id'] as String?;
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Playlist saved locally; account sync is unavailable.')),
+          );
+        }
+      }
+    }
+    await _playlistStore.create(_ownerId, name, id: remoteId);
     if (!mounted) return;
     setState(() => _selected = 'Playlists');
     await _refresh();
