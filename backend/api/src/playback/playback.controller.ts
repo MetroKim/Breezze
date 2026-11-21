@@ -18,6 +18,10 @@ export class ProviderResolveDto {
   @IsString()
   providerTrackId!: string;
 
+  @IsOptional()
+  @IsString()
+  canonicalTrackId?: string;
+
   @IsString()
   territory!: string;
 }
