@@ -75,6 +75,8 @@ void main() {
     expect(player.state.playbackState, PlaybackState.playing);
     expect(resolver.calls, 1);
     expect(engine.prepareCount, 1);
+    await player.seekTo(const Duration(seconds: 42));
+    expect(player.state.position, const Duration(seconds: 42));
 
     await player.pause();
     expect(player.state.playbackState, PlaybackState.paused);
@@ -82,6 +84,8 @@ void main() {
     await player.resume();
     expect(resolver.calls, 2);
     expect(engine.prepareCount, 2);
+    expect(engine.lastSeekPosition, const Duration(seconds: 42));
+    expect(player.state.position, const Duration(seconds: 42));
     expect(player.state.playbackState, PlaybackState.playing);
   });
 }
@@ -108,6 +112,7 @@ class _FakeAudioEngine implements AudioEngineAdapter {
   final _positions = StreamController<Duration>.broadcast();
   final _states = StreamController<PlaybackState>.broadcast();
   int prepareCount = 0;
+  Duration? lastSeekPosition;
   Duration _position = Duration.zero;
   Duration _duration = const Duration(minutes: 3);
 
@@ -137,6 +142,7 @@ class _FakeAudioEngine implements AudioEngineAdapter {
 
   @override
   Future<void> seek(Duration position) async {
+    lastSeekPosition = position;
     _position = position;
     _positions.add(position);
   }
