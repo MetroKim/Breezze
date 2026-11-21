@@ -2,36 +2,47 @@
 
 ## Current implementation status — 21 November 2026
 
-This status snapshot supersedes older validation caveats and checkboxes below where they conflict.
+This snapshot reflects branch head `e3a6f0f9d638` and GitHub Actions run
+[44910820541](https://github.com/MetroKim/MetroMusic/actions/runs/44910820541).
+The complete Breezze quality workflow passed on that commit.
 
 ### Implemented on this branch
-- [x] Root-owned Riverpod container and app-owned audio engine; shell rebuilds do not create duplicate containers.
-- [x] Playback request generations, serialized engine operations, stale resolver protection, stop/sign-out invalidation and visible resolver/engine failures.
+- [x] One root-owned Riverpod container and app-owned audio engine; shell rebuilds do not create duplicate containers.
+- [x] Playback request generations, serialized engine operations, stale resolver protection, stop/sign-out invalidation and surfaced resolver/engine failures.
+- [x] Native seek failures transition the player to a failed state; regression test added.
+- [x] Listening-time scrobble ticks are driven by actual position-stream events while playing; pending sessions close on stop, track change, detach, disposal and end-of-track.
 - [x] Persistent search history with deduplication, remove/clear, serialized concurrent writes and stale-response protection.
 - [x] Browse metadata discovery and Radio station/program directory; radio playback is not fabricated.
 - [x] Queue shuffle traversal retains the current item; repeat-one and shuffle regression tests added.
 - [x] BitChord search parser correctly extracts nested title, artist and duration metadata.
-- [x] YouTube Explode 3.1 API drift fixed; API-client provider result types are generic and the API client is now analyzed/tested in CI.
+- [x] YouTube Explode 3.1 API drift fixed; API-client provider result types are generic.
 - [x] Mobile playback resolves canonical catalog IDs and uses authenticated backend rights authorization; YouTube and BitChord adapters are metadata-only.
 - [x] Preview-only rights cannot issue full-stream URLs; preview grant windows are validated.
 - [x] Downloads require backend authorization; preview grants cannot authorize downloads.
+- [x] Downloaded files are stored in per-account app-private directories; metadata records owner, canonical catalog ID and rights end time.
+- [x] Downloads list filters by account owner; legacy ownerless files are hidden rather than exposed to another session.
+- [x] Offline playback uses a local-file source and bypasses the network resolver; expired download licences are blocked locally.
+- [x] Download storage keys are sanitized; incomplete assets and malformed metadata are excluded from the library.
 - [x] Catalog write/convergence endpoint requires JWT; external ID convergence uses an upsert to avoid duplicate-create races.
 - [x] Production media signing requires a strong key and HTTPS CDN; signature verification uses constant-time comparison.
 - [x] Signed playback/download URL lifetime is capped by the rights end time; download records retain the rights expiry.
 - [x] Radio controller delegates through RadioService; public station/program DTOs omit raw `streamUrl`; mobile station requests have timeouts and stale-response protection.
-- [x] CI runs mobile, API client, design system, audio-contracts and NestJS/Prisma quality gates. Duplicate workflow triggers were removed.
+- [x] CI runs Drift codegen, Flutter app analysis/tests, API-client analysis/tests, design-system analysis, audio-contract analysis/tests, Prisma generation/validation, backend typecheck/tests/build.
 
 ### Verification status
-- [x] Backend Prisma generation/validation, TypeScript typecheck, Jest suite and Nest build passed on the latest completed backend job.
-- [x] Mobile analyzer and mobile tests passed on a completed run before the latest rights/download integration changes.
-- [x] API-client analyzer passed after the youtube_explode_dart 3.1 API fixes; a BitChord nested-field parsing test exposed a real bug, now corrected with a regression assertion.
-- [ ] A complete post-fix CI run must pass after the latest catalog, rights-expiry and API-client parser changes. The current run is not a pass until both jobs complete successfully.
+- [x] Complete CI run `44910820541` passed on branch head `e3a6f0f9d638`.
+- [x] Mobile app: dependency resolution, Drift generation, analyzer and tests passed.
+- [x] API client: dependency resolution, analyzer and tests passed, including offline-download ownership/rights metadata tests.
+- [x] Design system: dependency resolution and analyzer passed.
+- [x] Audio contracts: dependency resolution, analyzer and tests passed.
+- [x] Backend: Prisma generation/validation, TypeScript typecheck, Jest tests and Nest production build passed.
+- [ ] Repeat full CI after any subsequent source change; a green run applies only to the commit it tested.
 
 ### Remaining release blockers
-- [ ] The signed URL points at a configured CDN origin, but this repository has no media-delivery implementation. Verify the real CDN origin, object authorization and signature validation end-to-end.
-- [ ] Offline playback is not wired to local files. Downloads can be authorized and fetched, but tapping a downloaded track still goes through the network playback resolver. Add local-file playback plus account ownership and rights-expiry enforcement.
-- [ ] Persist local download owner/rights expiry metadata and enforce expiry/takedown policy when offline playback is implemented.
-- [ ] Complete PlayerController lifecycle tests for engine detach/disposal, next/previous during pending loads, and scrobble tick integration. The controller must flush scrobbles on stop/track change and count actual listening time.
+- [ ] The signer creates CDN URLs, but this repository has no media-delivery implementation. Verify the actual CDN origin, object authorization and signature validation end-to-end.
+- [ ] Offline playback enforces stored owner and known rights expiry, but a device that remains fully offline cannot learn about a later takedown or rights revocation. Define a bounded offline licence lease and mandatory revalidation before the next online session.
+- [ ] Add device-level tests for local file playback, corrupted/missing assets, account switching during active downloads, and expired licence behavior.
+- [ ] Complete PlayerController lifecycle tests for engine detach/disposal, next/previous during pending loads, and scrobble tick/stop integration.
 - [ ] Add mobile radio request/widget tests and a station timezone contract. The current schema has no station timezone.
 - [ ] Add a real radio playback session contract only after stream rights, secure URL resolution, buffering/reconnect behavior and engine integration are designed.
 - [ ] No Prisma migration directory/history is present. Establish a safe baseline/migration strategy against the actual deployed database before deployment.
@@ -41,6 +52,7 @@ This status snapshot supersedes older validation caveats and checkboxes below wh
 
 **Working branch:** `feature/breezze-product-experience`  
 **Target base:** `breezze`  
+**PR:** [#6](https://github.com/MetroKim/MetroMusic/pull/6) (draft; not merged)  
 **Status:** Active engineering backlog. Items are not complete until implementation, automated tests, and runtime verification are recorded.  
 **Rule:** Do not mark a screen or capability as shipped merely because a UI exists.
 
