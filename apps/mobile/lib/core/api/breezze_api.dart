@@ -121,6 +121,23 @@ class BreezzeApi {
   ) =>
       _get('/providers/${Uri.encodeComponent(providerId)}/tracks/${Uri.encodeComponent(providerTrackId)}');
 
+
+  // ---- public catalog discovery (metadata only; never playback grants) ----
+  Future<Map<String, dynamic>> discoverySongsChart({String country = 'us'}) =>
+      _get('/discovery/charts/songs?country=${Uri.encodeQueryComponent(country)}');
+
+  Future<Map<String, dynamic>> discoveryNewReleases({String country = 'us'}) =>
+      _get('/discovery/releases/albums?country=${Uri.encodeQueryComponent(country)}');
+
+  Future<Map<String, dynamic>> discoveryArtistSearch(String query) =>
+      _get('/discovery/artists/search?q=${Uri.encodeQueryComponent(query)}');
+
+  Future<Map<String, dynamic>> discoveryArtistAlbums(String artistId) =>
+      _get('/discovery/artists/${Uri.encodeComponent(artistId)}/albums');
+
+  Future<Map<String, dynamic>> discoveryAlbumTracks(String albumId) =>
+      _get('/discovery/albums/${Uri.encodeComponent(albumId)}/tracks');
+
   // ---- auth ----
 
   Future<AuthResponse> register(
