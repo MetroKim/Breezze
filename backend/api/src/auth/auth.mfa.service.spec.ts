@@ -19,6 +19,7 @@ describe('AuthService TOTP enrollment and verification', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      adminAuditEvent: { create: jest.fn().mockResolvedValue({}) },
     };
     prisma = {
       user: {
@@ -79,6 +80,15 @@ describe('AuthService TOTP enrollment and verification', () => {
         mfaEnabled: true,
         mfaSecretCiphertext: expect.any(String),
         mfaPendingSecretCiphertext: null,
+      },
+    });
+    expect(prisma.tx.adminAuditEvent.create).toHaveBeenCalledWith({
+      data: {
+        actorId: 'admin-1',
+        action: 'admin.mfa.enabled',
+        targetType: 'user',
+        targetId: 'admin-1',
+        metadata: { method: 'totp' },
       },
     });
     expect(prisma.tx.refreshToken.updateMany).toHaveBeenCalledWith({
