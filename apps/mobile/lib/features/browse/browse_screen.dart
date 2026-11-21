@@ -748,7 +748,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                     Expanded(
                       child: Text(
                         isVideoFeed
-                            ? 'Results are filtered to YouTube Music's Original Music Video (OMV) classification, which identifies videos uploaded by the original artist. Links open on YouTube; Breezze does not rehost or relay them.'
+                            ? "Results are filtered to YouTube Music's Original Music Video (OMV) classification, which identifies videos uploaded by the original artist. Links open on YouTube; Breezze does not rehost or relay them."
                             : isConcertFeed
                                 ? 'Event listings are supplied by JamBase. Dates and ticket availability can change; verify details with the event and ticket provider before attending.'
                                 : 'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; open an item in Apple Music. Breezze playback remains subject to its own provider rights checks.',
