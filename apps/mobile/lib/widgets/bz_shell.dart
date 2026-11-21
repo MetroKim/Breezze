@@ -255,7 +255,7 @@ class _MiniArtwork extends StatelessWidget {
         width: 42,
         height: 42,
         child: Center(
-          child: Icon(Icons.music_note, color: color, size: 22),
+          child: SvgPicture.asset(\n            'assets/icons/music-note.svg',\n            width: 22,\n            height: 22,\n            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),\n          ),
         ),
       );
 }
@@ -343,7 +343,7 @@ class _TabBar extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width - 24;
     final localX = (globalX - 12).clamp(0.0, width - 1);
     final next = (localX / (width / tabs.length)).floor();
-    onChanged(next.clamp(0, tabs.length - 1));
+    onChanged(next.clamp(0, tabs.length - 1).toInt());
   }
 }
 
