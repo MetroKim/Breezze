@@ -5,7 +5,6 @@ from fastapi import FastAPI, HTTPException, Query
 from ytmusicapi import YTMusic
 
 app = FastAPI(title="Breezze YouTube Music Metadata Adapter", version="1.0.0")
-ytmusic = YTMusic()
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
 
 
@@ -30,8 +29,10 @@ def normalize_track(item: dict[str, Any]) -> dict[str, Any] | None:
         if isinstance(candidate, str) and candidate.startswith("https://"):
             artwork_url = candidate
 
-    duration = item.get("duration_seconds")
-    if not isinstance(duration, int):
+    raw_duration = item.get("duration_seconds")
+    try:
+        duration = int(raw_duration) if raw_duration is not None else None
+    except (TypeError, ValueError):
         duration = None
 
     return {
@@ -54,7 +55,7 @@ def search(
     limit: int = Query(default=20, ge=1, le=25),
 ) -> dict[str, Any]:
     try:
-        results = ytmusic.search(q.strip(), filter="songs", limit=limit)
+        results = YTMusic().search(q.strip(), filter="songs", limit=limit)
         tracks = [track for item in results if (track := normalize_track(item))]
         return {"tracks": tracks}
     except Exception as exc:
@@ -67,7 +68,7 @@ def get_track(video_id: str) -> dict[str, Any]:
     if not VIDEO_ID.fullmatch(video_id):
         raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_ID")
     try:
-        song = ytmusic.get_song(video_id)
+        song = YTMusic().get_song(video_id)
         details = song.get("videoDetails") or {}
         title = details.get("title")
         author = details.get("author")
