@@ -4,6 +4,14 @@ import 'dart:io';
 import 'bz_track.dart';
 import 'lyrics_provider.dart';
 
+class DownloadCancellation {
+  bool _cancelled = false;
+  bool get isCancelled => _cancelled;
+  void cancel() => _cancelled = true;
+}
+
+class DownloadCancelledException implements Exception {}
+
 /// Downloads library — offline tracks with lyrics and cover art stored
 /// alongside each track (§54.3).
 ///
@@ -40,6 +48,7 @@ class DownloadsLibrary {
     required String catalogTrackId,
     DateTime? rightsExpiresAtUtc,
     void Function(double progress)? onProgress,
+    DownloadCancellation? cancellation,
   }) async {
     final dir = _dirFor(track.id);
     try {
@@ -89,6 +98,7 @@ class DownloadsLibrary {
               : response.contentLength;
           try {
             await for (final chunk in response) {
+              if (cancellation?.isCancelled == true) throw DownloadCancelledException();
               sink.add(chunk);
               received += chunk.length;
               if (totalBytes > 0) {
@@ -221,6 +231,11 @@ class DownloadsLibrary {
       }
     }
     return tracks;
+  }
+
+  Future<void> removePartial(String trackId) async {
+    final partial = File('${_dirFor(trackId).path}/audio.part');
+    if (await partial.exists()) await partial.delete();
   }
 
   Future<void> remove(String trackId) async {
