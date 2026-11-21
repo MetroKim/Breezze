@@ -18,7 +18,7 @@ type AppleFeedResponse = {
 export class DiscoveryService {
   private country(value?: string): string {
     const normalized = (value ?? 'us').trim().toLowerCase();
-    return /^[a-z]{2}$/.test(normalized) ? normalized : 'us';
+    return /^[a-z]{2}$/.test(normalized) && normalized !== 'ww' ? normalized : 'us';
   }
 
   private async appleFeed(kind: 'songs' | 'albums', feed: 'most-played' | 'new-releases', country?: string) {
