@@ -1,4 +1,5 @@
 import 'package:breezze_api_client/breezze_api_client.dart';
+import '../core/api/breezze_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/auth_session.dart';
@@ -75,7 +76,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   }
 
   Future<String?> _resolveCatalogId(
-    dynamic api,
+    BreezzeApi api,
     BzTrack track,
   ) async {
     if (!track.id.startsWith('bz:')) return track.id;
