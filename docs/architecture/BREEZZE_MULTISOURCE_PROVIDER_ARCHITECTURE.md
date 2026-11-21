@@ -172,12 +172,16 @@ Breezze has no subscriptions, tiers, payment flows or artist portal in this rele
 - [ ] Build a normalized merged search response with de-duplication and source attribution.
 
 ### Phase 3 — Playback
+
+The shared Flutter engine uses `just_audio`; Linux and Windows use the `just_audio_media_kit` platform implementation with the corresponding native audio libraries. Platform build success is not a substitute for real-device playback certification.
 - [x] Add a backend provider playback resolver; Audius uses its official stream endpoint and rejects gated/API-restricted tracks.
 - [ ] Complete canonical recording mappings, territory policy and same-recording failover before enabling additional providers.
 - [ ] Return short-lived, typed playback grants, never provider-specific secrets.
 - [ ] Resolve queue entries when they reach the front.
 - [ ] Implement bounded failover only for the same recording and same rights scope.
 - [ ] Validate background, lock-screen, seek, queue, repeat, shuffle and interruptions on each OS.
+- [x] Refresh an expired provider playback grant when resuming a paused queue item.
+- [ ] Validate the just_audio MediaKit Linux/Windows backend and native media controls on real devices.
 
 ### Phase 4 — Optional capabilities
 - [ ] Radio, lyrics, offline downloads, casting, group sessions, recommendations and social integrations each require their own adapter/capability and acceptance tests.
