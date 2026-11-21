@@ -59,7 +59,6 @@ class AuthSessionController extends Notifier<AuthState> {
         return;
       }
       final response = await _api.refresh(refreshToken);
-      await _secureStorage.write(key: _refreshTokenKey, value: response.refreshToken);
       await _persistSession(response);
     } catch (_) {
       _api.accessToken = null;
@@ -83,8 +82,7 @@ class AuthSessionController extends Notifier<AuthState> {
     try {
       final response = await _api.register(email, password,
           displayName: displayName);
-      _api.accessToken = response.accessToken;
-      state = AuthSignedIn(userId: response.userId, email: response.email);
+      await _persistSession(response);
     } on BreezzeApiException catch (e) {
       state = AuthError(e.code);
     } catch (_) {
@@ -96,8 +94,7 @@ class AuthSessionController extends Notifier<AuthState> {
     state = const AuthSigningIn();
     try {
       final response = await _api.login(email, password);
-      _api.accessToken = response.accessToken;
-      state = AuthSignedIn(userId: response.userId, email: response.email);
+      await _persistSession(response);
     } on BreezzeApiException catch (e) {
       state = AuthError(e.code);
     } catch (_) {
