@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationsService push-token ownership', () => {
@@ -71,6 +71,28 @@ describe('NotificationsService push-token ownership', () => {
     expect(prisma.pushToken.updateMany).toHaveBeenCalledWith({
       where: { token: 'device-token', userId: 'owner-a' },
       data: { platform: 'android' },
+    });
+  });
+  it('does not acknowledge marking another account notification as read', async () => {
+    prisma.notification.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.markRead('user-a', 'notification-owned-by-user-b'))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.notification.updateMany).toHaveBeenCalledWith({
+      where: { id: 'notification-owned-by-user-b', userId: 'user-a' },
+      data: { readAt: expect.any(Date) },
+    });
+  });
+
+  it('marks only the authenticated account notification as read', async () => {
+    prisma.notification.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(service.markRead('user-a', 'notification-1')).resolves.toEqual({
+      read: true,
+    });
+    expect(prisma.notification.updateMany).toHaveBeenCalledWith({
+      where: { id: 'notification-1', userId: 'user-a' },
+      data: { readAt: expect.any(Date) },
     });
   });
 });
