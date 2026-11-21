@@ -33,9 +33,9 @@ export class DiscoveryController {
     try { return await this.discovery.musicVideos(query); }
     catch (error) {
       if (error instanceof Error && error.message.endsWith('_NOT_CONFIGURED')) {
-        throw new ServiceUnavailableException({ code: 'PROVIDER_NOT_CONFIGURED', provider: 'YouTube Data API' });
+        throw new ServiceUnavailableException({ code: 'PROVIDER_NOT_CONFIGURED', provider: 'YouTube Music via ytmusicapi' });
       }
-      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'YouTube Data API' });
+      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'YouTube Music via ytmusicapi' });
     }
   }
 
