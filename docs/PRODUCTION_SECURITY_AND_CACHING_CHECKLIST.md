@@ -40,16 +40,16 @@
 - [~] Long passphrases accepted up to 128 characters; verify UI does not trim or normalize passwords.
 - [ ] Breached-password checks using HIBP k-anonymity or equivalent.
 - [ ] Password change: current-password re-authentication, session-family revocation and notification.
-- [~] Server-side refresh-token rows, session listing and owner-scoped per-session revoke endpoint exist; access JWTs remain valid until their 15-minute expiry unless broader token-version/revocation checks are added.
+- [x] Access JWTs carry a session-family identifier; JWT validation requires an unrevoked, unexpired refresh-token family, so revoking that family invalidates its access JWTs on the next API request.
 - [ ] Browser cookies: HttpOnly, Secure, SameSite and __Host- prefix if a browser session frontend is added.
 - [ ] CSRF tokens for cookie-authenticated state-changing browser requests.
 - [x] Mobile access token is memory-only; refresh token is persisted through OS secure storage (Keychain/Keystore).
-- [~] Logout attempts server revocation and clears OS secure storage; logout-all-devices and revoke-all endpoint remain. Per-session refresh-token revocation does not immediately invalidate already-issued access JWTs.
+- [~] Logout attempts server revocation of the complete session family and clears OS secure storage; logout-all-devices and revoke-all endpoint remain. Access JWT revocation is enforced on the next authenticated API request.
 
 ## 3. Authorization
 - [~] Deny by default: guards exist on parts of API; audit every controller and route.
 - [~] Server-side permission checks exist in selected services; require a route-by-route authorization matrix and tests.
-- [~] Object-level/IDOR checks: playlist and favorites ownership regression tests cover cross-account query scoping; push-token registration now rejects cross-account token reassignment with regression tests; expand adversarial tests to every resource ID and role.
+- [~] Object-level/IDOR checks: playlist and favorites ownership regression tests cover cross-account query scoping; push-token registration rejects cross-account reassignment and handles unique-insert races; expand adversarial tests to every resource ID and role.
 - [~] Persisted admin RBAC now protects admin and moderation-review routes; full resource-level RBAC and ABAC for territory/rights/resource context remain.
 - [ ] PostgreSQL RLS or equivalent tenant isolation; current schema is user-scoped, not a complete tenant/RLS implementation.
 - [~] Admin routes require persisted admin role; separate hostname/network boundary, MFA, privileged audit trail and just-in-time access remain.
