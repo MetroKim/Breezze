@@ -23,11 +23,6 @@ export class RegisterUploadDto {
   bytes!: number;
 }
 
-export class MarkStatusDto {
-  @IsString()
-  status!: string;
-}
-
 @Controller('media')
 @UseGuards(JwtAuthGuard)
 export class MediaController {
@@ -38,9 +33,9 @@ export class MediaController {
     return this.media.registerUpload(userId, dto);
   }
 
-  @Post('jobs/:id/status')
-  mark(@Param('id') id: string, @Body() dto: MarkStatusDto) {
-    return this.media.markStatus(id, dto.status);
+  @Post('jobs/:id/complete')
+  complete(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.media.completeUpload(userId, id);
   }
 
   @Get('jobs')
