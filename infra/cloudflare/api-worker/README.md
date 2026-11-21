@@ -24,8 +24,8 @@ The Worker does not implement domain authorization, rights decisions, provider s
 5. Deploy this Worker with Wrangler.
 6. Attach the public API hostname/route to this Worker.
 7. Restrict the origin firewall/network to Cloudflare egress where practical. The API also rejects requests without the shared edge secret when `NODE_ENV=production`; use network restrictions as a second layer.
-5. Configure Cloudflare WAF managed rules and rate-limiting rules in the dashboard for auth, search, playback resolution and write endpoints. Use route-specific limits; do not rely on one global IP-only threshold because mobile carrier NAT can group many listeners behind one address.
-6. Verify with `curl -I` that private routes return `Cache-Control: private, no-store` and `X-Breezze-Edge-Cache: BYPASS`.
+8. Configure Cloudflare WAF managed rules and rate-limiting rules in the dashboard for auth, search, playback resolution and write endpoints. Use route-specific limits; do not rely on one global IP-only threshold because mobile carrier NAT can group many listeners behind one address.
+9. Verify with `curl -i` that private routes return `Cache-Control: private, no-store` and `X-Breezze-Edge-Cache: BYPASS`.
 
 ## Cache behavior
 
@@ -40,7 +40,7 @@ npm install
 npx wrangler deploy
 ```
 
-Set `API_ORIGIN` as a Wrangler variable in `wrangler.toml` or through the Cloudflare dashboard. Keep production origin details out of public source when required by your deployment policy.
+Set `API_ORIGIN` as a Wrangler variable in `wrangler.toml` or through the Cloudflare dashboard before deploying. It must point to the actual NestJS HTTPS origin. Keep production origin details out of public source when required by your deployment policy.
 
 The NestJS API requires the same `EDGE_SHARED_SECRET` in production, so direct requests to the origin are rejected. The Worker overwrites any client-supplied `x-breezze-edge-secret` header before forwarding and removes the header from responses.
 
