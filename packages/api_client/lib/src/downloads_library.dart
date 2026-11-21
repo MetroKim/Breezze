@@ -21,7 +21,13 @@ class DownloadsLibrary {
     required this.lyrics,
   });
 
-  Directory _dirFor(String trackId) => Directory('${root.path}/$trackId');
+  Directory _dirFor(String trackId) {
+    final safeTrackId = trackId.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    if (safeTrackId.isEmpty || safeTrackId == '.' || safeTrackId == '..') {
+      throw ArgumentError.value(trackId, 'trackId', 'invalid storage key');
+    }
+    return Directory('${root.path}/$safeTrackId');
+  }
 
   /// Downloads audio + cover art + lyrics for one track.
   ///
