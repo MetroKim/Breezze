@@ -19,6 +19,21 @@ export interface ProviderTrack {
   durationSec?: number;
 }
 
+/**
+ * A launch descriptor is not a stream URL or a playback entitlement.
+ * It points the client to the provider's own official player.
+ */
+export interface ProviderPlaybackLaunch {
+  mode: 'external_official_player';
+  providerId: string;
+  providerTrackId: string;
+  watchUrl: string;
+  embedUrl: string;
+  requiresUserGesture: true;
+  supportsBackgroundAudio: false;
+  supportsNativeQueueControls: false;
+}
+
 export interface ProviderAdapter {
   readonly providerId: string;
   readonly capabilities: ProviderCapabilities;
@@ -31,4 +46,9 @@ export interface ProviderAdapter {
     providerTrackId: string,
     territory: string,
   ): Promise<ProviderResult<{ available: boolean }>>;
+
+  /** Optional provider-owned player handoff; never returns extracted media URLs. */
+  getPlaybackLaunch?(
+    providerTrackId: string,
+  ): ProviderResult<ProviderPlaybackLaunch>;
 }
