@@ -86,6 +86,12 @@ export class YtMusicAdapter implements ProviderAdapter {
     return pending;
   }
 
+  /** Spread cache expirations so replicas do not stampede the metadata sidecar. */
+  private cacheTtl(baseSeconds: number): number {
+    const spread = Math.max(1, Math.floor(baseSeconds * 0.15));
+    return baseSeconds + crypto.randomInt(-spread, spread + 1);
+  }
+
   private get baseUrl(): string {
     return (process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
   }
@@ -111,7 +117,7 @@ export class YtMusicAdapter implements ProviderAdapter {
           return providerError('YTMUSIC_INVALID_RESPONSE', 'Metadata provider returned an invalid search payload', false);
         }
         const result = providerOk(payload.tracks, 'YouTube Music metadata via ytmusicapi');
-        await this.cache.set(cacheKey, result, 60);
+        await this.cache.set(cacheKey, result, this.cacheTtl(60));
         return result;
       } catch {
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
@@ -141,7 +147,7 @@ export class YtMusicAdapter implements ProviderAdapter {
           return providerError('YTMUSIC_INVALID_RESPONSE', 'Metadata provider returned an invalid track payload', false);
         }
         const result = providerOk(payload.track, 'YouTube Music metadata via ytmusicapi');
-        await this.cache.set(cacheKey, result, 900);
+        await this.cache.set(cacheKey, result, this.cacheTtl(900));
         return result;
       } catch {
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
