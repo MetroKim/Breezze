@@ -20,6 +20,8 @@ interface AudiusTrack {
   duration?: number;
   is_stream_gated?: boolean;
   isStreamGated?: boolean;
+  is_streamable?: boolean;
+  isStreamable?: boolean;
   allowed_api_keys?: string[];
   allowedApiKeys?: string[];
   user?: { name?: string; handle?: string };
@@ -176,7 +178,10 @@ export class AudiusAdapter implements ProviderAdapter {
       // require creator-authorized signatures/conditions that Breezze does not
       // currently implement.
       const gated = track.is_stream_gated ?? track.isStreamGated ?? false;
-      if (gated) {
+      const streamable = track.is_streamable ?? track.isStreamable;
+      const allowedKeys = track.allowed_api_keys ?? track.allowedApiKeys ?? [];
+      const apiKey = process.env.AUDIUS_API_KEY;
+      if (gated || streamable === false || (allowedKeys.length > 0 && (!apiKey || !allowedKeys.includes(apiKey)))) {
         return providerUnsupported('AUDIUS_TRACK_GATED');
       }
 
