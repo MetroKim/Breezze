@@ -7,6 +7,8 @@ describe('PlaylistsService tenant isolation', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
     playlistItem: {
       count: jest.fn(),
@@ -54,5 +56,39 @@ describe('PlaylistsService tenant isolation', () => {
     await expect(service.removeTrack('user-a', 'playlist-owned-by-b', 'track-1'))
       .rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.playlistItem.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('renames only a playlist owned by the caller', async () => {
+    prisma.playlist.updateMany.mockResolvedValue({ count: 1 });
+    prisma.playlist.findFirst.mockResolvedValue({ id: 'playlist-a', name: 'Renamed' });
+
+    await expect(service.rename('user-a', 'playlist-a', 'Renamed'))
+      .resolves.toEqual({ id: 'playlist-a', name: 'Renamed' });
+    expect(prisma.playlist.updateMany).toHaveBeenCalledWith({
+      where: { id: 'playlist-a', userId: 'user-a' },
+      data: { name: 'Renamed' },
+    });
+  });
+
+  it('does not rename another account playlist', async () => {
+    prisma.playlist.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.rename('user-a', 'playlist-b', 'Stolen'))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.playlist.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('deletes only an owned playlist', async () => {
+    prisma.playlist.deleteMany.mockResolvedValue({ count: 1 });
+    await expect(service.delete('user-a', 'playlist-a'))
+      .resolves.toEqual({ deleted: true });
+    expect(prisma.playlist.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'playlist-a', userId: 'user-a' },
+    });
+  });
+
+  it('does not delete another account playlist', async () => {
+    prisma.playlist.deleteMany.mockResolvedValue({ count: 0 });
+    await expect(service.delete('user-a', 'playlist-b'))
+      .rejects.toBeInstanceOf(NotFoundException);
   });
 });
