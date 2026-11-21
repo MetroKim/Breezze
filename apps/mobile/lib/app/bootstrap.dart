@@ -94,7 +94,9 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
           ? rawLocal.whereType<Map>().map(_localTrackFromJson)
           : <ProviderTrack>[];
       final seen = <String>{};
-      final tracks = [...localTracks, ...externalTracks]
+      // YouTube Music is the primary discovery source; Breezze's own
+      // catalog entries remain available after provider results.
+      final tracks = [...externalTracks, ...localTracks]
           .where((track) => track.breezzeTrackId.isNotEmpty
               && track.title.isNotEmpty
               && seen.add(track.breezzeTrackId))
