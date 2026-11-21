@@ -11,6 +11,10 @@ This document is the implementation contract for the Breezze mobile listening ex
 - Keep the chrome neutral, content-led, compact, and calm. Artwork should carry visual emphasis; controls should remain clear and restrained.
 - Do not copy Liner source, assets, shaders, algorithms, or distinctive UI. Its source-available license prohibits extracting its interface design into another product. Breezze uses its own SVGs, tokens, components, and layouts.
 
+## Visual implementation direction
+
+BitChord is a reference for interaction patterns only: restrained translucent surfaces, floating playback controls, artwork-led atmosphere, fluid state transitions, expressive queue handling, and readable synchronized lyrics. Rebuild these patterns independently with Breezze components and tokens. Preserve Breezze's own five-destination information architecture, typography, spacing, red accent, neutral content-led surfaces, and original SVG iconography. Do not transplant BitChord layouts, source code, artwork, or distinctive assets; Breezze remains MIT-licensed.
+
 ## 1. Persistent bottom navigation
 
 | Destination | Position | Required behaviour |

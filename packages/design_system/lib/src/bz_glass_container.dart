@@ -15,6 +15,7 @@ class BzGlassContainer extends StatelessWidget {
   final double blur;
   final Color? fillColor;
   final Color? borderColor;
+  final bool reduceTransparency;
 
   const BzGlassContainer({
     super.key,
@@ -23,19 +24,18 @@ class BzGlassContainer extends StatelessWidget {
     this.blur = 24,
     this.fillColor,
     this.borderColor,
+    this.reduceTransparency = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.bz;
-    final media = MediaQuery.of(context);
-    final reduce = media.disableAnimations;
 
     final fill = fillColor ?? colors.atmoRegular;
     final border = borderColor ?? colors.separator;
 
-    if (reduce) {
+    if (reduceTransparency) {
       return Container(
         decoration: BoxDecoration(
           color: colors.surface1,
