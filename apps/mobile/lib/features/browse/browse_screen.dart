@@ -370,6 +370,62 @@ class _BrowseDestination {
   final String icon;
 
   const _BrowseDestination(this.title, this.description, this.icon);
+
+  String get availabilityMessage {
+    switch (title) {
+      case 'Latest Songs':
+        return 'A verified catalog feed with addition timestamps and territory data is not connected.';
+      case 'New Releases':
+        return 'Verified album and single records with confirmed release dates are required.';
+      case 'Trending Songs':
+      case 'Daily Top 100':
+      case 'Charts':
+        return 'Rankings require a named chart source, territory, reporting window and update timestamp. Search results cannot be used as rankings.';
+      case 'Coming Soon':
+        return 'Upcoming release announcements need verified artist, release-date and territory metadata.';
+      case 'Music Videos':
+        return 'An authorized video catalog and playback permissions are not connected.';
+      case 'City Charts':
+        return 'City-level rankings require a verified local chart provider and a documented methodology.';
+      case 'Upcoming Concerts':
+        return 'A verified event feed must supply artist, venue, date, location and ticket-source details.';
+      case 'Seasonal Collections':
+        return 'Seasonal collections require a maintained editorial feed and licensed track references.';
+      case 'Artist Spotlight':
+        return 'Artist spotlights require editorial selection and canonical artist records.';
+      default:
+        return 'A verified catalog provider is required for this section.';
+    }
+  }
+
+  List<String> get previewSections {
+    switch (title) {
+      case 'Latest Songs':
+        return ['Recently added tracks', 'Verified addition dates', 'Catalog source'];
+      case 'New Releases':
+        return ['Albums and EPs', 'Singles', 'Release calendar'];
+      case 'Trending Songs':
+        return ['Fast risers', 'Most played', 'Territory and reporting window'];
+      case 'Daily Top 100':
+        return ['Rank and movement', 'Track and artist', 'Chart date and territory'];
+      case 'Coming Soon':
+        return ['Upcoming albums', 'Upcoming singles', 'Confirmed release dates'];
+      case 'Music Videos':
+        return ['Official videos', 'Video details', 'Authorized playback'];
+      case 'Charts':
+        return ['Global charts', 'Regional charts', 'Genre charts'];
+      case 'City Charts':
+        return ['City rankings', 'Local reporting window', 'Source attribution'];
+      case 'Upcoming Concerts':
+        return ['Nearby events', 'Artist tour dates', 'Venue and ticket details'];
+      case 'Seasonal Collections':
+        return ['Seasonal features', 'Holiday collections', 'Year in review'];
+      case 'Artist Spotlight':
+        return ['Featured artist', 'Essential albums', 'Verified discography'];
+      default:
+        return [];
+    }
+  }
 }
 
 const _browseDestinations = <_BrowseDestination>[
@@ -627,12 +683,12 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                 Text('Not available yet', style: theme.textTheme.titleMedium),
               ]),
               const SizedBox(height: 10),
-              Text(
-                'A verified catalog or editorial provider is required for this section. Breezze will not substitute generic search results or invented rankings.',
-                style: theme.textTheme.bodyMedium,
-              ),
+              Text(destination.availabilityMessage, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 8),
-              Text(destination.description, style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+              Text(
+                'Breezze will publish this section only after its source, territory, metadata and usage permissions can be verified.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+              ),
             ],
           ),
         ),
@@ -648,6 +704,20 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
               Expanded(child: Text(item, style: theme.textTheme.bodyMedium)),
             ]),
           ),
+        if (destination.previewSections.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text('What belongs in this section', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 10),
+          for (final item in destination.previewSections)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(children: [
+                BzSvgIcon(name: 'info', size: 17, color: theme.bzText2),
+                const SizedBox(width: 10),
+                Expanded(child: Text(item, style: theme.textTheme.bodyMedium)),
+              ]),
+            ),
+        ],
         const SizedBox(height: 24),
         OutlinedButton(
           onPressed: () => Navigator.of(context).maybePop(),
