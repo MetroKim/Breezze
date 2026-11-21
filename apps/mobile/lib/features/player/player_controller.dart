@@ -63,7 +63,8 @@ class PlayerController extends Notifier<PlayerState> {
 
       // Ignore events emitted by the previous media item while the new
       // source is being resolved/prepared.
-      if (state.playbackState == PlaybackState.resolving ||
+      if (state.playbackState == PlaybackState.idle ||
+          state.playbackState == PlaybackState.resolving ||
           state.playbackState == PlaybackState.loading ||
           state.playbackState == PlaybackState.transitioning) {
         return;
