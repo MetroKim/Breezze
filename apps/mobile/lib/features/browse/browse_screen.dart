@@ -156,14 +156,14 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
                     ? _MessageState(
-                        icon: Icons.wifi_off,
+                        icon: 'wifi-off',
                         title: 'Music is unavailable',
                         message: _error!,
                         onRetry: () => _loadGenre(_selectedGenre),
                       )
                     : _tracks.isEmpty
                         ? _MessageState(
-                            icon: Icons.music_note_outlined,
+                            icon: 'music-note',
                             title: 'No tracks found',
                             message: 'Try another genre or search for an artist.',
                             onRetry: () => _loadGenre(_selectedGenre),
@@ -208,8 +208,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                                       )
                                     : IconButton(
                                         tooltip: 'Download',
-                                        icon: const Icon(
-                                            Icons.download_outlined),
+                                        icon: BzSvgIcon(name: 'download', size: 20),
                                         onPressed: () => ref
                                             .read(downloadProgressProvider
                                                 .notifier)
@@ -227,7 +226,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 }
 
 class _MessageState extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String title;
   final String message;
   final VoidCallback onRetry;
@@ -248,7 +247,7 @@ class _MessageState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 36, color: theme.bzText2),
+            BzSvgIcon(name: icon, size: 36, color: theme.bzText2),
             const SizedBox(height: 14),
             Text(title, style: theme.textTheme.titleLarge),
             const SizedBox(height: 8),
