@@ -140,6 +140,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _FirstRunCard(
               onSearch: () => ref.read(homeTabHintProvider.notifier).state = 4,
             ),
+          const SizedBox(height: 28),
+          const _FeedPlaceholder(
+            title: 'Shared With You',
+            description:
+                'Music shared by friends will appear here when Breezze sharing is connected.',
+            status: 'SHARED MUSIC',
+          ),
+          const SizedBox(height: 24),
+          const _FeedPlaceholder(
+            title: 'Your Mixes',
+            description:
+                'Personalized mixes will appear here as your listening profile and recommendation service become available.',
+            status: 'MADE FOR YOU',
+          ),
+          const SizedBox(height: 24),
+          const _FeedPlaceholder(
+            title: 'Replay 2026',
+            description:
+                'Your year-end listening summary is being built from your listening history. It will appear when enough history is available.',
+            status: 'YEAR IN MUSIC',
+          ),
         ],
       ),
     );
@@ -301,6 +322,61 @@ class _FirstRunCard extends StatelessWidget {
               style: theme.textTheme.bodyMedium),
         ],
       ),
+    );
+  }
+}
+
+
+class _FeedPlaceholder extends StatelessWidget {
+  final String title;
+  final String description;
+  final String status;
+
+  const _FeedPlaceholder({
+    required this.title,
+    required this.description,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: theme.textTheme.titleLarge),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: theme.bzSurface1,
+            borderRadius: BorderRadius.circular(BzRadius.card),
+            border: Border.all(color: theme.bzSeparator),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                status,
+                style: TextStyle(
+                  color: theme.bzText2,
+                  fontSize: BzType.caption,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.9,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.bzText2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
