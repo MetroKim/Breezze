@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
