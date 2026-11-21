@@ -27,8 +27,8 @@ class YoutubeSourceAdapter implements ProviderAdapter {
         title: video.title,
         artist: video.author,
         artworkUrl:
-            video.thumbnails.isNotEmpty ? video.thumbnails.last.url : null,
-        duration: video.duration,
+            video.thumbnails.highResUrl,
+        duration: video.duration ?? Duration.zero,
       );
 
   static ProviderTrack _toProviderTrack(BzTrack t) => ProviderTrack(
@@ -44,7 +44,7 @@ class YoutubeSourceAdapter implements ProviderAdapter {
       yt.StreamManifest manifest) {
     yt.AudioOnlyStreamInfo? best;
     for (final stream in manifest.audioOnly) {
-      if (best == null || stream.bitrate > best.bitrate) {
+      if (best == null || stream.bitrate.compareTo(best.bitrate) > 0) {
         best = stream;
       }
     }
@@ -56,7 +56,7 @@ class YoutubeSourceAdapter implements ProviderAdapter {
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
     try {
-      final videos = await _client.search(query).take(20).toList();
+      final videos = await (await _client.search(query)).take(20).toList();
       final tracks = videos.map(_toTrack).map(_toProviderTrack).toList();
       if (tracks.isEmpty) return ProviderError('empty_result');
       return ProviderOk(tracks);
@@ -74,8 +74,8 @@ class YoutubeSourceAdapter implements ProviderAdapter {
       if (best == null) return null;
       return ResolvedStream(
         streamUrl: best.url.toString(),
-        codec: best.codec.label,
-        bitrate: best.bitrate,
+        codec: best.audioCodec,
+        bitrate: best.bitrate.bitsPerSecond,
         totalBytes: best.size.totalBytes,
       );
     } catch (_) {
@@ -97,7 +97,7 @@ class YoutubeSourceAdapter implements ProviderAdapter {
     }
     final total = best.size.totalBytes;
     var received = 0;
-    final byteStream = await _client.videos.streamsClient.getStream(best);
+    final byteStream = await _client.videos.streamsClient.get(best);
     await for (final chunk in byteStream) {
       received += chunk.length;
       onProgress?.call(total > 0 ? (received / total).clamp(0.0, 1.0) : 0.0);
