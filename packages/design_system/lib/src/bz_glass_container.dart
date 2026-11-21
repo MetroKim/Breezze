@@ -30,7 +30,7 @@ class BzGlassContainer extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.bz;
     final media = MediaQuery.of(context);
-    final reduce = media.disableAnimations || media.boldText;
+    final reduce = media.disableAnimations;
 
     final fill = fillColor ?? colors.atmoRegular;
     final border = borderColor ?? colors.separator;
