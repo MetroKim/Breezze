@@ -3,6 +3,8 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/youtube_player_handoff.dart';
+
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../app/search_history_store.dart';
@@ -333,7 +335,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ));
   }
 
-  void _play(BzTrack track) {
+  Future<void> _play(BzTrack track) async {
+    // Metadata IDs are not playable media URLs. Use YouTube's official player.
+    if (track.id.startsWith('bz:')) {
+      try {
+        final opened = await YoutubePlayerHandoff.openBreezzeTrackId(track.id);
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open the official YouTube player.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('This YouTube track could not be opened.')),
+          );
+        }
+      }
+      return;
+    }
+
     final queue = [
       for (final item in _results)
         TrackInfo(
