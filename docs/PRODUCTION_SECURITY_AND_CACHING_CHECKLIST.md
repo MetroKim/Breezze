@@ -141,7 +141,7 @@
 ## 11. Logging, audit and detection
 - [~] API generates request IDs and returns X-Request-Id.
 - [~] pino-http dependency exists; verify JSON output and redaction of sensitive headers/body.
-- [~] Admin role changes and takedown resolutions now write actor/action/target/time/metadata audit events in the same database transaction; authenticated admins can inspect the newest 100 events. Login/MFA changes, moderation report decisions, exports and deletions still need coverage.
+- [~] Admin role changes, takedown resolutions and moderation report decisions now write actor/action/target/time/metadata audit events in the same database transaction; authenticated admins can inspect the newest 100 events. Login/MFA changes, exports and deletions still need coverage.
 - [~] PostgreSQL migration installs a trigger that rejects UPDATE/DELETE on audit rows for ordinary runtime credentials; database owners/superusers can still disable triggers. Keep schema-owner credentials out of the API runtime and ship events to centralized tamper-resistant write-once storage.
 - [ ] Alerts for login spikes, 401/403 anomalies, unusual downloads, new admins, provider failures and cache-origin surges.
 - [ ] Legal retention/deletion schedule.
@@ -293,3 +293,9 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 - Audit insertion and the associated state change share a Prisma transaction: if audit insertion fails, the administrative mutation rolls back.
 - `GET /api/v1/admin/audit-events` is protected by the controller's JWT and persisted-admin guards and returns at most 100 newest events.
 - A PostgreSQL trigger rejects UPDATE/DELETE against audit rows. This raises the bar for the runtime role but is not cryptographic immutability: DB owners/superusers can disable triggers. Use a separate schema-owner credential, tightly scoped API DB role, and external WORM retention.
+
+
+### Moderation audit coverage (2026-11-21)
+- Resolving a report records the authenticated moderator, report ID and `dismissed`/`actioned` decision in the same transaction as the status update.
+- Missing/already-resolved reports do not produce audit events.
+- Regression tests cover successful and unsuccessful resolution paths.
