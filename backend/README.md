@@ -7,10 +7,13 @@ Branch `breezze` · 24 modules · 31 schema models · media pipeline workers
 ```bash
 git clone -b breezze https://github.com/MetroKim/MetroMusic.git
 cd MetroMusic/backend
+cp .env.example .env       # configure secrets before production
 docker compose up -d          # postgres, redis, api, ytmusicapi metadata service, worker
 ```
 
 The API is then at `http://localhost:3000/api/v1` (Swagger at `/api/docs`). The provider registry exposes `GET /api/v1/providers` and YouTube Music metadata search at `GET /api/v1/providers/youtube_music/search?q=...` and track metadata at `GET /api/v1/providers/youtube_music/tracks/{videoId}`. The sidecar is internal to the Compose network and is not published as a public port.
+
+For production, set `NODE_ENV=production`, generate `EDGE_SHARED_SECRET` and `MEDIA_SIGNING_KEY` with `openssl rand -hex 32`, and keep the values in your deployment secret manager. `EDGE_SHARED_SECRET` must match the API Worker secret. Do not use the development defaults.
 
 ## First-time setup (migrations + client)
 
