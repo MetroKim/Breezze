@@ -34,7 +34,7 @@ class BzAmbientBackdrop extends StatelessWidget {
         BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 60, sigmaY: 60),
           child: Container(
-            color: colors.background.withOpacity(0.55),
+            color: colors.background.withValues(alpha: 0.55),
           ),
         ),
         child,
