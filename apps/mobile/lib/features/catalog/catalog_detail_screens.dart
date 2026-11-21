@@ -1,6 +1,7 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../features/player/player_controller.dart';
@@ -189,7 +190,7 @@ class TrackDetailScreen extends ConsumerWidget {
 /// Artist page for a saved artist. The page is useful immediately for a
 /// listener's saved tracks; catalog-only sections stay explicitly unavailable
 /// until a canonical artist provider supplies verified metadata.
-class ArtistDetailScreen extends ConsumerWidget {
+class ArtistDetailScreen extends ConsumerStatefulWidget {
   final String artist;
   final List<FavoriteTrack> savedTracks;
   final List<FavoriteTrack> searchTracks;
@@ -206,7 +207,79 @@ class ArtistDetailScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ArtistDetailScreen> createState() => _ArtistDetailScreenState();
+}
+
+class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
+  List<Map<String, dynamic>> _appleAlbums = [];
+  bool _discographyLoading = true;
+  String? _discographyError;
+  String? _appleArtistId;
+
+  String get artist => widget.artist;
+  List<FavoriteTrack> get savedTracks => widget.savedTracks;
+  List<FavoriteTrack> get searchTracks => widget.searchTracks;
+  String? get canonicalArtistId => widget.canonicalArtistId;
+  String? get portraitUrl => widget.portraitUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppleDiscography();
+  }
+
+  Future<void> _loadAppleDiscography() async {
+    try {
+      final api = ref.read(authSessionProvider.notifier).api;
+      final search = await api.discoveryArtistSearch(artist);
+      final rawArtists = search['items'];
+      if (rawArtists is! List) {
+        if (mounted) setState(() { _discographyLoading = false; });
+        return;
+      }
+      final normalized = artist.trim().toLowerCase();
+      Map? match;
+      for (final item in rawArtists.whereType<Map>()) {
+        final name = item['name'];
+        if (name is String && name.trim().toLowerCase() == normalized) {
+          match = item;
+          break;
+        }
+      }
+      final id = match?['id'];
+      if (id == null) {
+        if (mounted) setState(() { _discographyLoading = false; });
+        return;
+      }
+      final result = await api.discoveryArtistAlbums(id.toString());
+      final rawAlbums = result['items'];
+      if (!mounted) return;
+      setState(() {
+        _appleArtistId = id.toString();
+        _appleAlbums = rawAlbums is List
+            ? rawAlbums.whereType<Map>().map((item) =>
+                item.map((key, value) => MapEntry(key.toString(), value))).toList()
+            : [];
+        _discographyLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _discographyError = 'Apple artist catalog is temporarily unavailable.';
+        _discographyLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openAppleAlbum(Map<String, dynamic> album) async {
+    final rawUrl = album['url'];
+    final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
+    if (uri == null || uri.scheme != 'https') return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final queue = [for (final track in savedTracks) track.toTrackInfo()];
 
@@ -377,18 +450,66 @@ class ArtistDetailScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                if (_discographyLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_discographyError != null)
+                  _CatalogSection(
+                    title: 'Apple catalog discography',
+                    subtitle: _discographyError!,
+                    available: false,
+                  )
+                else
+                  _CatalogSection(
+                    title: 'Apple catalog discography',
+                    subtitle: _appleArtistId == null
+                        ? 'No exact artist match was returned by Apple for this name.'
+                        : 'Albums and singles linked to the exact Apple artist record. This is Apple catalog coverage, not a guarantee of every regional release.',
+                    available: _appleAlbums.isNotEmpty,
+                    child: Column(
+                      children: [
+                        for (final album in _appleAlbums)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: _TrackArtwork(
+                              url: album['artworkUrl'] as String?,
+                              size: 52,
+                            ),
+                            title: Text(
+                              album['title'] as String? ?? 'Untitled release',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              [
+                                if (album['releaseDate'] is String)
+                                  (album['releaseDate'] as String).split('T').first,
+                                if (album['trackCount'] is num)
+                                  '${(album['trackCount'] as num).toInt()} tracks',
+                              ].join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Open release in Apple Music',
+                              icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
+                              onPressed: () => _openAppleAlbum(album),
+                            ),
+                            onTap: () => _openAppleAlbum(album),
+                          ),
+                      ],
+                    ),
+                  ),
                 for (final section in const [
-                  'Essential Albums',
-                  'Essential Songs',
                   'Music Videos',
                   'Upcoming Concerts',
                   'Similar Artists',
-                  'Discography',
-                  'Singles & EPs',
                 ])
                   _CatalogSection(
                     title: section,
-                    subtitle: 'Verified artist catalog data is required for this section.',
+                    subtitle: 'A licensed provider feed is not configured for this section.',
                     available: false,
                   ),
               ],
