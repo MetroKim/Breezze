@@ -116,7 +116,10 @@ class HelpSupportScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(BzRadius.card),
                     border: Border.all(color: theme.bzSeparator),
                   ),
-                  child: Column(
+                  child: Material(
+                    color: theme.bzSurface1,
+                    borderRadius: BorderRadius.circular(BzRadius.card),
+                    child: Column(
                     children: [
                       for (var i = 0; i < _topics.length; i++) ...[
                         ExpansionTile(
@@ -137,6 +140,7 @@ class HelpSupportScreen extends StatelessWidget {
                           Divider(height: 1, color: theme.bzSeparator),
                       ],
                     ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
