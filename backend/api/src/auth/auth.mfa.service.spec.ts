@@ -14,7 +14,10 @@ describe('AuthService TOTP enrollment and verification', () => {
     jest.useFakeTimers().setSystemTime(new Date(59_000));
     process.env.MFA_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64');
     const tx = {
-      user: { update: jest.fn().mockResolvedValue({}) },
+      user: {
+        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
     prisma = {
@@ -66,6 +69,10 @@ describe('AuthService TOTP enrollment and verification', () => {
       verified: true,
       accessToken: 'mfa-verified-access-token',
     });
+    expect(prisma.tx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'admin-1', OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: BigInt(1) } }] },
+      data: { mfaLastUsedStep: BigInt(1) },
+    });
     expect(prisma.tx.user.update).toHaveBeenCalledWith({
       where: { id: 'admin-1' },
       data: {
@@ -102,6 +109,23 @@ describe('AuthService TOTP enrollment and verification', () => {
     await expect(service.verifyMfaSetup('admin-1', 'family-1', '000000'))
       .rejects.toBeInstanceOf(UnauthorizedException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects reuse of a previously accepted TOTP time step', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      email: 'admin@example.com',
+      displayName: 'Admin',
+      role: 'admin',
+      mfaEnabled: false,
+      mfaPendingSecretCiphertext: encryptTotpSecret(secret),
+    });
+    prisma.tx.user.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.verifyMfaSetup('admin-1', 'family-1', '287082'))
+      .rejects.toThrow('MFA_CODE_REPLAYED');
+    expect(prisma.tx.user.update).not.toHaveBeenCalled();
+    expect(prisma.tx.refreshToken.updateMany).not.toHaveBeenCalled();
   });
 
   it('requires an enrolled secret to verify a login session', async () => {
