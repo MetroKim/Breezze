@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/auth/auth_session.dart';
+import '../core/database/database_providers.dart';
+import '../core/database/outbox_sync_service.dart';
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
@@ -43,31 +46,79 @@ final sourceChainProvider = Provider<SourceChain>((ref) => SourceChain([
       ref.watch(youtubeSourceProvider),
     ]));
 
-/// The playback resolver: resolves through the live source.
+/// The playback resolver. Catalog metadata is converged to a canonical
+/// backend track ID, then full-stream playback is authorized by the backend.
+/// The mobile client never turns a YouTube metadata result directly into a
+/// playable stream URL.
 class LiveResolver implements PlaybackResolver {
-  final YoutubeSourceAdapter source;
+  final Ref _ref;
 
-  LiveResolver(this.source);
+  LiveResolver(this._ref);
 
   @override
-  Future<PlayableSource?> resolve(String trackId) async {
-    final videoId =
-        trackId.startsWith('bz:') ? trackId.substring(3) : trackId;
-    final stream = await source.resolveStream(videoId);
-    if (stream == null) return null;
-    return PlayableSource(
-      trackId: trackId,
-      streamUrl: stream.streamUrl,
-      expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 6)),
-      codec: stream.codec,
+  Future<PlayableSource?> resolve(TrackInfo track) async {
+    final auth = _ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return null;
+
+    final api = _ref.read(authSessionProvider.notifier).api;
+    if (api.accessToken == null) return null;
+
+    try {
+      final catalogId = await _resolveCatalogId(api, track);
+      if (catalogId == null) return null;
+
+      final result = await api.resolvePlayback(
+        trackId: catalogId,
+        territory: _ref.read(outboxTerritoryProvider),
+      );
+      final streamUrl = result['streamUrl'] as String?;
+      final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
+      if (streamUrl == null || expiresAt == null) return null;
+
+      return PlayableSource(
+        trackId: track.id,
+        streamUrl: streamUrl,
+        expiresAtUtc: expiresAt.toUtc(),
+        codec: result['codec'] as String?,
+      );
+    } catch (_) {
+      // Rights denials and backend/network failures are unavailable playback,
+      // not permission to fall back to an unlicensed provider URL.
+      return null;
+    }
+  }
+
+  Future<String?> _resolveCatalogId(dynamic api, TrackInfo track) async {
+    if (!track.id.startsWith('bz:')) return track.id;
+
+    final mapDao = _ref.read(catalogIdMapDaoProvider);
+    final cached = await mapDao.lookup(track.id);
+    if (cached != null) return cached;
+
+    final title = track.title;
+    final artist = track.artist;
+    if (title == null || title.trim().isEmpty ||
+        artist == null || artist.trim().isEmpty) {
+      return null;
+    }
+
+    final resolved = await api.resolveCatalogTrack(
+      externalId: track.id,
+      source: 'youtube',
+      title: title,
+      artistName: artist,
+      durationSec: track.duration.inSeconds.clamp(1, 86400).toInt(),
     );
+    final catalogId = resolved['id'] as String?;
+    if (catalogId == null || catalogId.isEmpty) return null;
+    await mapDao.save(track.id, catalogId);
+    return catalogId;
   }
 }
 
 /// Resolver override applied in main() via ProviderScope.
-final liveResolverProvider = Provider<PlaybackResolver>(
-    (ref) => LiveResolver(ref.watch(youtubeSourceProvider)));
-
+final liveResolverProvider =
+    Provider<PlaybackResolver>((ref) => LiveResolver(ref));
 
 // ---------------------------------------------------------------------------
 // Storage (path_provider): app-private, survives restarts
