@@ -157,11 +157,15 @@ class LiveResolver implements PlaybackResolver {
     if (api.accessToken == null) return null;
 
     try {
+      final catalogId = await _resolveCatalogId(api, track);
+      if (catalogId == null) return null;
+
       if (track.id.startsWith('bz:audius:')) {
         final providerTrackId = track.id.substring('bz:audius:'.length);
         final result = await api.resolveProviderPlayback(
           providerId: 'audius',
           providerTrackId: providerTrackId,
+          canonicalTrackId: catalogId,
           territory: _ref.read(outboxTerritoryProvider),
         );
         final streamUrl = result['streamUrl'] as String?;
@@ -174,8 +178,6 @@ class LiveResolver implements PlaybackResolver {
           codec: result['codec'] as String?,
         );
       }
-      final catalogId = await _resolveCatalogId(api, track);
-      if (catalogId == null) return null;
 
       final preferences = await DownloadPreferencesStore().load();
       final result = await api.resolvePlayback(
@@ -216,7 +218,7 @@ class LiveResolver implements PlaybackResolver {
 
     final resolved = await api.resolveCatalogTrack(
       externalId: track.id,
-      source: 'youtube_music',
+      source: track.id.startsWith('bz:audius:') ? 'audius' : 'youtube_music',
       title: title,
       artistName: artist,
       durationSec: track.duration.inSeconds.clamp(1, 86400).toInt(),
