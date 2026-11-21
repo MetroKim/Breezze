@@ -29,17 +29,17 @@ void main() {
 
     expect(find.text('Test Artist'), findsWidgets);
     expect(find.text('Saved Song'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Essential Albums'), 260);
-    expect(find.text('Essential Albums'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Apple catalog discography'), 260);
+    expect(find.text('Apple catalog discography'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Upcoming Concerts'), 260);
     expect(find.text('Upcoming Concerts'), findsOneWidget);
     expect(
-      find.textContaining('Verified artist catalog data is required'),
+      find.textContaining('licensed provider feed is not configured'),
       findsWidgets,
     );
   });
 
-  testWidgets('track detail shows song metadata and honest album limitation',
+  testWidgets('track detail shows song metadata without inventing an album',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -73,7 +73,8 @@ void main() {
     expect(find.text('Search Result Artist'), findsWidgets);
     expect(find.text('Add to Library'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Album'), 240);
-    expect(find.textContaining('does not provide a verified album relationship'), findsOneWidget);
+    expect(find.text('Album'), findsOneWidget);
+    expect(find.textContaining('Verified album relationship'), findsNothing);
   });
 
   testWidgets('album detail renders its canonical metadata and tracklist',
