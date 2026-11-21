@@ -52,6 +52,33 @@ export class ArtistPortalService {
     });
   }
 
+  async submitRelease(
+    userId: string,
+    input: { title: string; artistId: string; trackCount: number },
+  ) {
+    const claim = await this.prisma.artistClaim.findFirst({
+      where: { userId, artistId: input.artistId, status: 'approved' },
+      select: { id: true },
+    });
+    if (!claim) throw new ConflictException('APPROVED_ARTIST_CLAIM_REQUIRED');
+    return this.prisma.releaseSubmission.create({
+      data: {
+        userId,
+        title: input.title.trim(),
+        artistId: input.artistId,
+        trackCount: input.trackCount,
+        status: 'submitted',
+      },
+    });
+  }
+
+  async myReleases(userId: string) {
+    return this.prisma.releaseSubmission.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async analytics(userId: string) {
     const claims = await this.prisma.artistClaim.findMany({
       where: { userId, status: 'approved' },
