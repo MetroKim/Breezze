@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/audio/audio_service_bridge.dart';
+import 'bz_brand_icons.dart';
 import '../core/audio/background_audio.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/radio/radio_screen.dart';
@@ -269,7 +270,12 @@ class _MiniArtwork extends StatelessWidget {
         width: 42,
         height: 42,
         child: Center(
-          child: SvgPicture.asset(\n            'assets/icons/music-note.svg',\n            width: 22,\n            height: 22,\n            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),\n          ),
+          child: SvgPicture.asset(
+            'assets/icons/music-note.svg',
+            width: 22,
+            height: 22,
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+          ),
         ),
       );
 }
@@ -316,7 +322,6 @@ class _TabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
@@ -386,7 +391,7 @@ class _TabButton extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(BzRadius.control),
+            borderRadius: BorderRadius.circular(BzRadius.button),
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
