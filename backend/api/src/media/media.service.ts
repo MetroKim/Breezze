@@ -21,6 +21,12 @@ export class MediaService implements OnModuleInit {
     userId: string,
     dto: { submissionId: string; originalFilename: string; bytes: number },
   ) {
+    const submission = await this.prisma.releaseSubmission.findFirst({
+      where: { id: dto.submissionId, userId },
+      select: { id: true },
+    });
+    if (!submission) throw new NotFoundException('RELEASE_SUBMISSION_NOT_FOUND');
+
     const job = await this.prisma.mediaJob.create({
       data: {
         userId,
