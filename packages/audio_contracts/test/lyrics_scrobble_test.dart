@@ -40,7 +40,7 @@ void main() {
     test('active word within line', () {
       final lyrics = LrcParser.parse('t1', sample);
       final idx = lyrics.activeLineIndex(const Duration(milliseconds: 3700));
-      expect(lyrics.activeWordIndex(idx!, const Duration(milliseconds: 3700)), 0);
+      expect(lyrics.activeWordIndex(idx, const Duration(milliseconds: 3700)), 0);
     });
 
     test('ignores metadata and plain text', () {
