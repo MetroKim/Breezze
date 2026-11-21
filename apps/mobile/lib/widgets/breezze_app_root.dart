@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,9 @@ import 'package:http/http.dart' as http;
 
 import '../../core/api/breezze_api.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/audio/just_audio_engine_adapter.dart';
+import '../../core/database/migrate_to_drift.dart';
+import '../../features/player/player_controller.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/authentication/auth_screen.dart';
 import '../../features/onboarding/onboarding_flow.dart';
@@ -26,10 +30,16 @@ class BreezzeAppRoot extends ConsumerStatefulWidget {
 class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
   bool _showOnboarding = false;
   GlobalKey? _shellKey;
+  ProviderContainer? _container;
+  JustAudioEngineAdapter? _audioEngine;
 
   @override
   void initState() {
     super.initState();
+    _container = ProviderScope.containerOf(context, listen: false);
+    _audioEngine = JustAudioEngineAdapter();
+    _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
+    unawaited(migrateJsonStoresToDrift(_container!));
     ref.listenManual(authSessionProvider, (prev, next) {
       if (next is AuthSignedIn && prev is! AuthSignedIn) {
         // Replay offline ops now that a session exists.
@@ -39,6 +49,13 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
         _checkOnboardingNeeded();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _container?.read(playerControllerProvider.notifier).detachEngine();
+    _audioEngine?.dispose();
+    super.dispose();
   }
 
   Future<void> _checkOnboardingNeeded() async {
