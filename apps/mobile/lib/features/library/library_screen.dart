@@ -250,7 +250,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ? const DownloadsScreen()
                 : _selected == 'Songs'
                     ? _buildSongs(theme)
-                    : _buildEmptySection(theme, _selected),
+                    : _selected == 'Playlists'
+                        ? _buildPlaylists(theme)
+                        : _buildEmptySection(theme, _selected),
           ),
         ],
       ),
@@ -407,7 +409,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     'assets/icons/star.svg',
                     width: 20,
                     height: 20,
-                    colorFilter: const ColorFilter.mode(
+                    colorFilter: ColorFilter.mode(
                       theme.bzWarning,
                       BlendMode.srcIn,
                     ),
