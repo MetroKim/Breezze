@@ -1,9 +1,8 @@
-import { Injectable, NotAcceptableException } from '@nestjs/common';
+import { Injectable, NotAcceptableException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from './media-signer.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
-import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 
 @Injectable()
 export class PlaybackResolveService {
@@ -51,10 +50,9 @@ export class PlaybackResolveService {
     const provider = this.providers.get(dto.providerId);
     if (!provider || !provider.capabilities.playback) throw new NotFoundException('PLAYBACK_PROVIDER_UNAVAILABLE');
     const result = await provider.resolvePlayback({
-      canonicalTrackId: '',
       providerTrackId: dto.providerTrackId,
       territory: dto.territory,
-      authorization: { action: 'stream.full', expiresAt: null, attribution: 'Breezze listener ' + userId },
+      authorization: { action: 'stream.full', expiresAt: null, attribution: null },
     });
     if (result.kind === 'unsupported') throw new NotAcceptableException(result.reason);
     if (result.kind === 'error') throw new ServiceUnavailableException(result.code);
