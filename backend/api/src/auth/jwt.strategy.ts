@@ -12,7 +12,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; sid?: string }) {
+  async validate(payload: { sub: string; sid?: string; mfaVerified?: boolean }) {
     if (!payload.sid) {
       throw new UnauthorizedException('SESSION_INVALID');
     }
@@ -33,6 +33,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
     if (!user) throw new UnauthorizedException('SESSION_INVALID');
-    return user;
+    return { ...user, sessionId: payload.sid, mfaVerified: payload.mfaVerified === true };
   }
 }
