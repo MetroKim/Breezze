@@ -24,7 +24,9 @@ export class YtMusicAdapter implements ProviderAdapter {
   readonly displayName = 'YouTube Music';
   readonly adapterVersion = '1.0.0';
   readonly priority = 100;
-  readonly enabled = true;
+  get enabled(): boolean {
+    return process.env.YTMUSIC_ENABLED !== 'false';
+  }
   readonly capabilities: ProviderCapabilities = {
     search: true,
     metadata: true,
