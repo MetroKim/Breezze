@@ -46,3 +46,16 @@ Then `flutter create .` (first checkout only), `flutter run`.
 `SyncOutboxDao.drain` is ready; wiring it to the auth session happens
 in the onboarding-wiring round — ops replay against the backend when
 a valid JWT session exists, clearing as they succeed.
+
+## Platform database backends
+
+The generated Drift database uses a conditional connection factory:
+
+- Android, iOS, macOS, Windows and Linux: native SQLite via NativeDatabase.
+- Web: Drift WasmDatabase with browser-backed persistence.
+
+Before building Flutter Web locally, run `bash tool/prepare_web_database.sh`
+from `apps/mobile`. It downloads the pinned `sqlite3.wasm` and `drift_worker.js`
+runtime assets into `apps/mobile/web/`. The CI Web job runs this script before
+the release build. Keep the pinned release aligned with the resolved Drift and
+sqlite3 dependencies when upgrading them.
