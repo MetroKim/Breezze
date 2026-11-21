@@ -25,6 +25,45 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
+
+  test('resumes a partial authorized download using HTTP byte ranges', () async {
+    final track = BzTrack(
+      id: 'catalog-resume',
+      title: 'Resume track',
+      artist: 'Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final trackDir = Directory('\${root.path}/catalog-resume');
+    await trackDir.create();
+    final partial = File('\${trackDir.path}/audio.part');
+    await partial.writeAsBytes(utf8.encode('abc'));
+
+    var receivedRange = '';
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      receivedRange = request.headers.value(HttpHeaders.rangeHeader) ?? '';
+      request.response.statusCode = HttpStatus.partialContent;
+      request.response.headers
+        ..set(HttpHeaders.contentRangeHeader, 'bytes 3-5/6')
+        ..contentLength = 3;
+      request.response.add(utf8.encode('def'));
+      await request.response.close();
+    });
+    addTearDown(server.close);
+
+    final ok = await library.download(
+      track,
+      downloadUrl: 'http://\${server.address.address}:\${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: 'catalog-resume',
+    );
+
+    expect(ok, isTrue);
+    expect(receivedRange, 'bytes=3-');
+    expect(await File('\${trackDir.path}/audio.m4a').readAsString(), 'abcdef');
+    expect(await partial.exists(), isFalse);
+  });
+
   test('lists only assets owned by the requested account', () async {
     final alice = Directory('${root.path}/bz_alice-track');
     final bob = Directory('${root.path}/bz_bob-track');
