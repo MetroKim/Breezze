@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 export class MediaSigner {
   constructor(
@@ -20,6 +20,12 @@ export class MediaSigner {
 
   verify(trackId: string, variant: string, expires: number, sig: string): boolean {
     if (Date.now() > expires) return false;
-    return this.sign(`${trackId}:${variant}:${expires}`) === sig;
+    const expected = Buffer.from(
+      this.sign(`${trackId}:${variant}:${expires}`),
+      'utf8',
+    );
+    const actual = Buffer.from(sig, 'utf8');
+    if (actual.length !== expected.length) return false;
+    return timingSafeEqual(expected, actual);
   }
 }
