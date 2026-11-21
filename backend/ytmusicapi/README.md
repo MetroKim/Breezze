@@ -23,6 +23,6 @@ The backend Compose stack starts this service at `http://ytmusicapi:8000`. The A
 
 ## Operational and legal constraints
 
-`ytmusicapi` is an unofficial client that emulates YouTube Music web requests; it is not an official Google API or a guarantee of service availability. Review YouTube's applicable terms, regional requirements, and usage rights before public production use. Add provider-specific concurrency limits, request budgets, monitoring, and caching before increasing traffic. Never put browser cookies or account credentials in this service unless separately approved and secured.
+`ytmusicapi` is an unofficial client that emulates YouTube Music web requests; it is not an official Google API or a guarantee of service availability. Review YouTube's applicable terms, regional requirements, and usage rights before public production use. The sidecar admits at most eight concurrent upstream requests per container replica and returns HTTP 503 with `Retry-After: 2` when full. The NestJS adapter coalesces identical in-flight searches and metadata lookups per API process; Redis caches successful results across API replicas. Set replica counts and provider request budgets conservatively, and add provider-specific monitoring before increasing traffic. Never put browser cookies or account credentials in this service unless separately approved and secured.
 
 This adapter supplies discovery metadata only. It does not grant rights to stream, download, re-host, or redistribute any recording.
