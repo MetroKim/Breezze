@@ -17,10 +17,13 @@ The Worker does not implement domain authorization, rights decisions, provider s
 
 ## Configure
 
-1. Set `API_ORIGIN` to the HTTPS origin hosting NestJS (for example, `https://api-origin.example.com`). Do not point it back at the Worker hostname.
-2. Deploy this Worker with Wrangler.
-3. Attach the public API hostname/route to this Worker.
-4. Restrict the origin firewall/network to Cloudflare egress where practical. If the origin is publicly reachable, configure authenticated origin pulls or an equivalent origin-authentication mechanism before production.
+1. Set `API_ORIGIN` to the HTTPS origin hosting NestJS (for example, `https://api-origin.example.com`). It must be the origin only, with no path/query, and must not point back at the Worker hostname.
+2. Generate one shared secret of at least 32 random bytes: `openssl rand -hex 32`.
+3. Set that exact value in the API deployment as `EDGE_SHARED_SECRET`.
+4. From this directory, run `npx wrangler secret put EDGE_SHARED_SECRET` and enter the same value. Never commit it or put it in `wrangler.toml`.
+5. Deploy this Worker with Wrangler.
+6. Attach the public API hostname/route to this Worker.
+7. Restrict the origin firewall/network to Cloudflare egress where practical. The API also rejects requests without the shared edge secret when `NODE_ENV=production`; use network restrictions as a second layer.
 5. Configure Cloudflare WAF managed rules and rate-limiting rules in the dashboard for auth, search, playback resolution and write endpoints. Use route-specific limits; do not rely on one global IP-only threshold because mobile carrier NAT can group many listeners behind one address.
 6. Verify with `curl -I` that private routes return `Cache-Control: private, no-store` and `X-Breezze-Edge-Cache: BYPASS`.
 
@@ -38,5 +41,7 @@ npx wrangler deploy
 ```
 
 Set `API_ORIGIN` as a Wrangler variable in `wrangler.toml` or through the Cloudflare dashboard. Keep production origin details out of public source when required by your deployment policy.
+
+The NestJS API requires the same `EDGE_SHARED_SECRET` in production, so direct requests to the origin are rejected. The Worker overwrites any client-supplied `x-breezze-edge-secret` header before forwarding and removes the header from responses.
 
 This repository change does not deploy the Worker, create DNS records, provision WAF/rate-limit rules, or prove one-million-user capacity. Those require Cloudflare account access and staged load tests.
