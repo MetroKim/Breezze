@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/download_preferences.dart';
 import '../../core/auth/auth_session.dart';
 import 'account_screen.dart';
-import 'artist_portal_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -79,14 +78,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-              ),
-            ),
-            ListTile(
-              leading: BzSvgIcon(name: 'mic'),
-              title: const Text('Artist Portal'),
-              trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ArtistPortalScreen()),
               ),
             ),
             ListTile(
