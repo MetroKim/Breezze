@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/api/breezze_api.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
@@ -88,7 +89,7 @@ class LiveResolver implements PlaybackResolver {
     }
   }
 
-  Future<String?> _resolveCatalogId(dynamic api, TrackInfo track) async {
+  Future<String?> _resolveCatalogId(BreezzeApi api, TrackInfo track) async {
     if (!track.id.startsWith('bz:')) return track.id;
 
     final mapDao = _ref.read(catalogIdMapDaoProvider);
