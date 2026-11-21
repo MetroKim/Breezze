@@ -46,11 +46,12 @@ export class PlaybackResolveService {
       previewOnly: decision.previewOnly,
     };
   }
-  async resolveProvider(dto: { providerId: string; providerTrackId: string; territory: string }) {
+  async resolveProvider(dto: { providerId: string; providerTrackId: string; canonicalTrackId?: string; territory: string }) {
     const provider = this.providers.get(dto.providerId);
     if (!provider || !provider.capabilities.playback) throw new NotFoundException('PLAYBACK_PROVIDER_UNAVAILABLE');
     const result = await provider.resolvePlayback({
       providerTrackId: dto.providerTrackId,
+      canonicalTrackId: dto.canonicalTrackId,
       territory: dto.territory,
       authorization: { action: 'stream.full', expiresAt: null, attribution: null },
     });
