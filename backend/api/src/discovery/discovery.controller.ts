@@ -5,6 +5,17 @@ import { DiscoveryService } from './discovery.service';
 export class DiscoveryController {
   constructor(private readonly discovery: DiscoveryService) {}
 
+  @Get('charts/daily-top-100')
+  async dailyTop100(@Query('country') country?: string) {
+    try { return await this.discovery.dailyTop100(country); }
+    catch (error) {
+      if (error instanceof Error && error.message.endsWith('_NOT_CONFIGURED')) {
+        throw new ServiceUnavailableException({ code: 'PROVIDER_NOT_CONFIGURED', provider: 'Apple Music API' });
+      }
+      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music API' });
+    }
+  }
+
   @Get('charts/songs')
   async songsChart(@Query('country') country?: string) {
     try { return await this.discovery.songsChart(country); }
