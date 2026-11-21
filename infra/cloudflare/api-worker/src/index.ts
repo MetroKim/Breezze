@@ -103,6 +103,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       || /private|no-store|no-cache/i.test(upstream.headers.get('cache-control') ?? '')) {
       const passthrough = new Response(upstream.body, upstream);
       passthrough.headers.delete('x-breezze-edge-secret');
+      passthrough.headers.set('Cache-Control', 'private, no-store');
       passthrough.headers.set('X-Breezze-Edge-Cache', 'BYPASS');
       return passthrough;
     }
