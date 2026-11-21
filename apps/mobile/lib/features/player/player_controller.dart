@@ -13,57 +13,78 @@ import '../../app/recent_store.dart';
 class PlayerController extends Notifier<PlayerState> {
   late final PlaybackStateMachine _machine = PlaybackStateMachine(
     onTransition: (prev, next) {
-      final s = state;
-      state = s.copyWith(playbackState: next);
+      state = state.copyWith(playbackState: next);
     },
   );
 
   late final QueueManager _queue = QueueManager(
     onQueueChanged: () {
-      final s = state;
-      state = s.copyWith(queueVersion: s.queueVersion + 1);
+      state = state.copyWith(queueVersion: state.queueVersion + 1);
     },
   );
 
   late final ScrobbleBus _scrobbles = ScrobbleBus();
-
-  /// Recently-played history, persisted by RecentStore.
   final RecentStore _recent = RecentStore();
 
   AudioEngineAdapter? _engine;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlaybackState>? _engineStateSub;
+  int _requestGeneration = 0;
+  Future<void> _engineOperations = Future<void>.value();
+
+  /// Track info remembered for the current queue, keyed by track id.
+  final Map<String, TrackInfo> _trackInfos = {};
 
   @override
-  PlayerState build() => PlayerState.initial();
+  PlayerState build() {
+    ref.onDispose(() {
+      _requestGeneration++;
+      _positionSub?.cancel();
+      _engineStateSub?.cancel();
+      _engine = null;
+    });
+    return PlayerState.initial();
+  }
 
   QueueManager get queue => _queue;
 
   void attachEngine(AudioEngineAdapter engine) {
-    _engine = engine;
+    _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
+    _engine = engine;
+
     _positionSub = engine.positionStream.listen((pos) {
-      final s = state;
-      state = s.copyWith(position: pos, duration: engine.duration);
+      if (!identical(_engine, engine)) return;
+      state = state.copyWith(position: pos, duration: engine.duration);
     });
-    _engineStateSub = engine.engineStateStream.listen((st) {
-      final s = state;
-      state = s.copyWith(playbackState: st);
+    _engineStateSub = engine.engineStateStream.listen((engineState) {
+      if (!identical(_engine, engine)) return;
+
+      // Ignore events emitted by the previous media item while the new
+      // source is being resolved/prepared.
+      if (state.playbackState == PlaybackState.resolving ||
+          state.playbackState == PlaybackState.loading ||
+          state.playbackState == PlaybackState.transitioning) {
+        return;
+      }
+      state = state.copyWith(playbackState: engineState);
     });
   }
 
   void detachEngine() {
+    _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
+    _positionSub = null;
+    _engineStateSub = null;
     _engine = null;
   }
 
   // ----------------------------------------------------------------
-  // Commands (every command goes through the state machine, §53.2)
+  // Commands
   // ----------------------------------------------------------------
 
-  /// Plays one track, with optional full queue context.
   Future<void> playTrack({
     required String trackId,
     String? title,
@@ -88,6 +109,9 @@ class PlayerController extends Notifier<PlayerState> {
           ),
       ];
       _queue.replaceWith(entries, startIndex: startIndex);
+      for (final item in queue) {
+        _trackInfos[item.id] = item;
+      }
     } else {
       final entry = QueueEntry(
         entryId: 'qe-${DateTime.now().microsecondsSinceEpoch}',
@@ -108,78 +132,159 @@ class PlayerController extends Notifier<PlayerState> {
             artworkUrl: artworkUrl,
             duration: duration,
           )
-        : (startIndex < queue.length ? queue[startIndex] : queue.first);
+        : queue[startIndex.clamp(0, queue.length - 1)];
 
     await _resolveAndPlay(info);
-    _scrobbles.onPlay(info.id, DateTime.now().toUtc());
   }
 
   Future<void> togglePlayPause() async {
+    final engine = _engine;
+    if (engine == null) return;
+
     if (state.playbackState == PlaybackState.playing) {
       _machine.dispatch(PausePressed());
-      await _engine?.pause();
-    } else {
+      await _serializeEngineOperation(() => engine.pause());
+      return;
+    }
+
+    if (state.playbackState == PlaybackState.paused) {
       _machine.dispatch(PlayPressed());
-      await _engine?.play();
+      await _serializeEngineOperation(() => engine.play());
     }
   }
 
   Future<void> seekTo(Duration position) async {
+    final engine = _engine;
+    if (engine == null || state.playbackState != PlaybackState.playing) {
+      return;
+    }
     _machine.dispatch(SeekRequested(position));
-    await _engine?.seek(position);
+    await _serializeEngineOperation(() => engine.seek(position));
     _machine.dispatch(SeekCompleted());
   }
 
   Future<void> next() async {
     final entry = _queue.advance();
     if (entry == null) return;
-    final info =
-        _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
+    final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
     await _resolveAndPlay(info);
   }
 
   Future<void> previous() async {
     final entry = _queue.previous();
     if (entry == null) return;
-    final info =
-        _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
+    final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
     await _resolveAndPlay(info);
   }
 
   void toggleShuffle() => _queue.toggleShuffle();
-
   void cycleRepeat() => _queue.cycleRepeat();
-
-  /// Track info remembered for the current queue, keyed by track id, so
-  /// next/previous can show title/artist/artwork without re-fetching.
-  final Map<String, TrackInfo> _trackInfos = {};
 
   TrackInfo? _trackInfoFor(String trackId) => _trackInfos[trackId];
 
+  bool _isCurrentRequest(int requestId) =>
+      requestId == _requestGeneration && _engine != null;
+
+  /// Serializes native engine mutations. Resolution remains concurrent, but
+  /// prepare/play operations execute in order so an older prepare cannot
+  /// finish after and overwrite a newer selected track.
+  Future<void> _serializeEngineOperation(
+      Future<void> Function() operation) {
+    final result = _engineOperations.then((_) => operation());
+    _engineOperations = result.catchError((_) {});
+    return result;
+  }
+
   Future<void> _resolveAndPlay(TrackInfo info) async {
+    final requestId = ++_requestGeneration;
     _trackInfos[info.id] = info;
-    state = state.copyWith(currentTrack: info);
+    state = state.copyWith(
+      currentTrack: info,
+      position: Duration.zero,
+      duration: info.duration,
+    );
+    _machine.dispatch(StartRequested(info.id, requestId: requestId));
 
-    // Record to recently played (fire-and-forget; never block playback).
-    if (info.title != null) {
-      _recent
-          .record(info.id, info.title!, info.artist ?? '', info.artworkUrl,
-              info.duration)
-          .catchError((_) {});
-    }
+    try {
+      final source =
+          await ref.read(playbackResolverProvider).resolve(info.id);
+      if (!_isCurrentRequest(requestId)) return;
 
-    _machine.dispatch(StartRequested(info.id));
-    final source =
-        await ref.read(playbackResolverProvider).resolve(info.id);
-    if (source == null) {
-      _machine.dispatch(SourceResolutionFailed('NOT_AVAILABLE'));
-      return;
+      if (source == null) {
+        _machine.dispatch(SourceResolutionFailed(
+          'NOT_AVAILABLE',
+          requestId: requestId,
+        ));
+        return;
+      }
+
+      _machine.dispatch(SourceResolved(
+        info.id,
+        source.streamUrl,
+        requestId: requestId,
+      ));
+
+      final engine = _engine;
+      if (engine == null) {
+        _machine.dispatch(SourceResolutionFailed(
+          'AUDIO_ENGINE_UNAVAILABLE',
+          requestId: requestId,
+        ));
+        return;
+      }
+
+      await _serializeEngineOperation(() async {
+        if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
+          return;
+        }
+
+        await engine.prepare(source);
+        if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
+          return;
+        }
+
+        _machine.dispatch(MediaReady(requestId: requestId));
+        _machine.dispatch(PlayPressed());
+
+        // just_audio's play Future completes when playback stops, not when
+        // playback first starts. Do not await the whole song here.
+        unawaited(engine.play().catchError(
+          (Object error, StackTrace stackTrace) {
+            if (_isCurrentRequest(requestId)) {
+              _machine.dispatch(SourceResolutionFailed(
+                'PLAYBACK_FAILED',
+                requestId: requestId,
+              ));
+            }
+          },
+        ));
+      });
+
+      if (!_isCurrentRequest(requestId) ||
+          _machine.state != PlaybackState.playing) {
+        return;
+      }
+
+      if (info.title != null) {
+        unawaited(_recent
+            .record(
+              info.id,
+              info.title!,
+              info.artist ?? '',
+              info.artworkUrl,
+              info.duration,
+            )
+            .catchError((_) {}));
+      }
+      _scrobbles.onPlay(info.id, DateTime.now().toUtc());
+    } catch (_) {
+      if (_isCurrentRequest(requestId)) {
+        _machine.dispatch(SourceResolutionFailed(
+          'PLAYBACK_SETUP_FAILED',
+          requestId: requestId,
+        ));
+      }
     }
-    _machine.dispatch(SourceResolved(info.id, source.streamUrl));
-    await _engine?.prepare(source);
-    _machine.dispatch(MediaReady());
-    _machine.dispatch(PlayPressed());
-    await _engine?.play();
   }
 }
 
