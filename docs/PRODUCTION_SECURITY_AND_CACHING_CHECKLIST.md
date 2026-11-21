@@ -310,6 +310,7 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 - Refresh-token records persist the MFA-verified state; refresh preserves it. AdminGuard rejects admin requests unless the access token carries the verified claim.
 - MFA verification endpoints have a stricter Redis-backed per-source limit (default five attempts per 15 minutes); tune via `MFA_ATTEMPT_RATE_LIMIT` and `MFA_ATTEMPT_RATE_WINDOW_MS`.
 - Accepted TOTP counters are stored atomically per account to prevent replay of a previously accepted time-step.
+- Ten one-time recovery codes are issued once at enrollment; only SHA-256 hashes are persisted, and successful use atomically consumes the code. Admin audit events record whether TOTP or a recovery code was used.
 - Production API startup refuses to run without a valid 32-byte base64 MFA encryption key.
 - Configure `MFA_ENCRYPTION_KEY` before enabling MFA. Rotate it only through a planned re-encryption migration; changing it directly makes stored secrets undecryptable.
-- Administrator MFA enrollment and successful verification are added to the privileged audit trail. Recovery codes, secure MFA reset, backup factor enrollment, email/security notifications and admin recovery procedures remain mandatory before broad production rollout.
+- Administrator MFA enrollment and successful verification are added to the privileged audit trail. Ten one-time recovery codes are now generated at enrollment, stored only as SHA-256 hashes and returned once. Secure MFA reset, recovery-code regeneration, backup factor enrollment, email/security notifications and admin recovery procedures remain mandatory before broad production rollout.
