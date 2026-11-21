@@ -1,6 +1,7 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
@@ -204,6 +205,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     artworkUrl: r.artworkUrl,
                     duration: r.duration,
                   )
+              ],
+              onPlay: _play,
+            ),
+            const SizedBox(height: 24),
+          ],
+          if (_recentlyPlayed.isNotEmpty || _favorites.isNotEmpty) ...[
+            _Rail(
+              title: 'Your Mix',
+              tracks: [
+                ..._recentlyPlayed.map((r) => TrackInfo(id: r.id, title: r.title, artist: r.artist, artworkUrl: r.artworkUrl, duration: r.duration)),
+                ..._favorites.map((f) => f.toTrackInfo()).where((f) => !_recentlyPlayed.any((r) => r.id == f.id)),
               ],
               onPlay: _play,
             ),
