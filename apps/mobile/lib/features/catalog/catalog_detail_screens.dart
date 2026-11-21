@@ -19,6 +19,14 @@ final _appleTrackMatchesProvider =
       item.map((key, value) => MapEntry(key.toString(), value))).toList();
 });
 
+final _appleAlbumTracksProvider =
+    FutureProvider.family<Map<String, dynamic>, String>((ref, albumId) async {
+  return ref
+      .read(authSessionProvider.notifier)
+      .api
+      .discoveryAlbumTracks(albumId);
+});
+
 /// Track details use only metadata returned by the active search source.
 /// The album relationship remains unavailable until a canonical album catalog is connected.
 class TrackDetailScreen extends ConsumerWidget {
@@ -227,12 +235,18 @@ class TrackDetailScreen extends ConsumerWidget {
                           ].join(' · '),
                         ),
                         trailing: const BzSvgIcon(name: 'arrow-up-right', size: 19),
-                        onTap: () async {
-                          final rawUrl = album['albumUrl'];
-                          final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
-                          if (uri != null && uri.scheme == 'https') {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          }
+                        onTap: () {
+                          final albumId = album['albumId'];
+                          if (albumId == null) return;
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => AppleAlbumCatalogScreen(
+                              albumId: albumId.toString(),
+                              title: album['albumTitle'] as String? ?? 'Unknown album',
+                              artist: album['artist'] as String? ?? artistName,
+                              artworkUrl: album['artworkUrl'] as String?,
+                              appleUrl: album['albumUrl'] as String?,
+                            ),
+                          ));
                         },
                       ),
                     );
@@ -568,7 +582,19 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                               icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
                               onPressed: () => _openAppleAlbum(album),
                             ),
-                            onTap: () => _openAppleAlbum(album),
+                            onTap: () {
+                              final albumId = album['id'];
+                              if (albumId == null) return;
+                              Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => AppleAlbumCatalogScreen(
+                                  albumId: albumId.toString(),
+                                  title: album['title'] as String? ?? 'Unknown album',
+                                  artist: album['artist'] as String? ?? artist,
+                                  artworkUrl: album['artworkUrl'] as String?,
+                                  appleUrl: album['url'] as String?,
+                                ),
+                              ));
+                            },
                           ),
                       ],
                     ),
@@ -589,6 +615,169 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
         ),
       ),
     );
+  }
+}
+
+
+/// Metadata-only album detail from Apple's canonical collection and track records.
+/// It never turns a preview URL into a full-track playback source.
+class AppleAlbumCatalogScreen extends ConsumerWidget {
+  final String albumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? appleUrl;
+
+  const AppleAlbumCatalogScreen({
+    super.key,
+    required this.albumId,
+    required this.title,
+    required this.artist,
+    this.artworkUrl,
+    this.appleUrl,
+  });
+
+  Future<void> _open(String? rawUrl) async {
+    if (rawUrl == null) return;
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || uri.scheme != 'https') return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tracks = ref.watch(_appleAlbumTracksProvider(albumId));
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: tracks.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BzSvgIcon(name: 'wifi-off', size: 34),
+                      const SizedBox(height: 12),
+                      Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      Text('Apple could not return this album tracklist.', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => ref.invalidate(_appleAlbumTracksProvider(albumId)),
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (data) {
+                final rawItems = data['items'];
+                final items = rawItems is List
+                    ? rawItems.whereType<Map>().map((item) =>
+                        item.map((key, value) => MapEntry(key.toString(), value))).toList()
+                    : <Map<String, dynamic>>[];
+                return ListView(
+                  padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+                  children: [
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(BzRadius.artwork),
+                        child: artworkUrl == null
+                            ? Container(
+                                width: 220,
+                                height: 220,
+                                color: theme.bzSurface1,
+                                alignment: Alignment.center,
+                                child: const BzBnoteMark(size: 72),
+                              )
+                            : Image.network(
+                                artworkUrl!,
+                                width: 220,
+                                height: 220,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                    const SizedBox(height: 6),
+                    Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: appleUrl == null ? null : () => _open(appleUrl),
+                      icon: const BzSvgIcon(name: 'arrow-up-right'),
+                      label: const Text('Open album in Apple Music'),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.bzSurface1,
+                        borderRadius: BorderRadius.circular(BzRadius.card),
+                        border: Border.all(color: theme.bzSeparator),
+                      ),
+                      child: Text(
+                        'Verified Apple album tracklist. iTunes preview links, when supplied, are short previews only. Full-track playback inside Breezze requires a separate provider with approved streaming rights.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    if (items.isEmpty)
+                      Text('Apple did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                    else
+                      for (var i = 0; i < items.length; i++)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: SizedBox(
+                            width: 28,
+                            child: Text(
+                              (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
+                              style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                            ),
+                          ),
+                          title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(
+                            items[i]['durationMs'] is num
+                                ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
+                                : 'Duration not supplied',
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'Open preview',
+                            icon: const BzSvgIcon(name: 'arrow-up-right', size: 18),
+                            onPressed: () => _open(items[i]['previewUrl'] as String? ?? items[i]['url'] as String?),
+                          ),
+                        ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 }
 
