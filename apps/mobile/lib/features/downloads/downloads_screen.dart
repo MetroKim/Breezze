@@ -184,6 +184,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     });
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
+    final jobStatuses = ref.watch(downloadJobStatusProvider);
+    final downloadController = ref.read(downloadProgressProvider.notifier);
     final inProgress = progress.entries.toList();
 
     // Refresh the completed list when the last in-flight download ends.
@@ -273,6 +275,26 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                               backgroundColor: theme.bzSeparator,
                               color: theme.bzAccent,
                             ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextButton(
+                                onPressed: () {
+                                  if (jobStatuses[entry.key] == 'paused') {
+                                    downloadController.resume(entry.key);
+                                  } else {
+                                    downloadController.pause(entry.key);
+                                  }
+                                },
+                                child: Text(jobStatuses[entry.key] == 'paused' ? 'Resume' : 'Pause'),
+                              ),
+                              IconButton(
+                                tooltip: 'Cancel download',
+                                onPressed: () => downloadController.cancel(entry.key),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
                           ),
                         ),
                       // Completed downloads
