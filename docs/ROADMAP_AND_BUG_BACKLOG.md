@@ -2,15 +2,16 @@
 
 ## Current implementation status — 21 November 2026
 
-This snapshot reflects branch head `e3a6f0f9d638` and GitHub Actions run
-[44910820541](https://github.com/MetroKim/MetroMusic/actions/runs/44910820541).
+This snapshot reflects source commit `f91932317315` and GitHub Actions run
+[44911197349](https://github.com/MetroKim/MetroMusic/actions/runs/44911197349).
 The complete Breezze quality workflow passed on that commit.
 
 ### Implemented on this branch
 - [x] One root-owned Riverpod container and app-owned audio engine; shell rebuilds do not create duplicate containers.
 - [x] Playback request generations, serialized engine operations, stale resolver protection, stop/sign-out invalidation and surfaced resolver/engine failures.
 - [x] Native seek failures transition the player to a failed state; regression test added.
-- [x] Listening-time scrobble ticks are driven by actual position-stream events while playing; pending sessions close on stop, track change, detach, disposal and end-of-track.
+- [x] Listening-time scrobble ticks are driven by actual position-stream events while playing; pending sessions close on stop, track change, detach, disposal, end-of-track and playback failures.
+- [x] Downloads library refreshes when the authenticated account changes; stale account results are discarded.
 - [x] Persistent search history with deduplication, remove/clear, serialized concurrent writes and stale-response protection.
 - [x] Browse metadata discovery and Radio station/program directory; radio playback is not fabricated.
 - [x] Queue shuffle traversal retains the current item; repeat-one and shuffle regression tests added.
@@ -30,7 +31,7 @@ The complete Breezze quality workflow passed on that commit.
 - [x] CI runs Drift codegen, Flutter app analysis/tests, API-client analysis/tests, design-system analysis, audio-contract analysis/tests, Prisma generation/validation, backend typecheck/tests/build.
 
 ### Verification status
-- [x] Complete CI run `44910820541` passed on branch head `e3a6f0f9d638`.
+- [x] Complete CI run `44911197349` passed on source commit `f91932317315`.
 - [x] Mobile app: dependency resolution, Drift generation, analyzer and tests passed.
 - [x] API client: dependency resolution, analyzer and tests passed, including offline-download ownership/rights metadata tests.
 - [x] Design system: dependency resolution and analyzer passed.
