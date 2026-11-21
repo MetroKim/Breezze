@@ -41,6 +41,7 @@ services:
     environment:
       DATABASE_URL: postgresql://breezze:breezze_dev@postgres:5432/breezze
       REDIS_URL: redis://redis:6379
+      YTMUSIC_API_URL: http://ytmusicapi:8000
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
       EDGE_SHARED_SECRET: ${EDGE_SHARED_SECRET:-}
       CDN_BASE_URL: ${CDN_BASE_URL:-http://localhost:3000/media}
@@ -48,6 +49,16 @@ services:
       PORT: "3000"
     ports:
       - "3000:3000"
+
+  ytmusicapi:
+    build:
+      context: ./ytmusicapi
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   worker:
     build:
