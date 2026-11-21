@@ -26,9 +26,9 @@
 - [x] Access-token lifetime: 15 minutes.
 - [x] Refresh-token rotation: consumed token row is revoked and a new token is created in the same family.
 - [x] Refresh-token storage: SHA-256 hashes are stored; migration hashes existing values in place.
-- [~] Refresh-token reuse: replay of a revoked token can revoke its family; add concurrency/replay integration tests.
+- [~] Refresh-token reuse: replay of a revoked token can revoke its family; unit regression tests cover replay and concurrent rotation, but DB-backed integration tests remain.
 - [ ] MFA: TOTP and passkeys/WebAuthn; require MFA for administrators.
-- [~] Login protection: atomic Redis-backed global per-IP quota is shared across API replicas; per-account limits, progressive backoff and CAPTCHA escalation remain.
+- [~] Login protection: atomic Redis-backed per-IP quota plus hashed per-account login quota are shared across API replicas; progressive backoff and CAPTCHA escalation remain.
 - [ ] Account recovery: single-use expiring links and generic responses that do not reveal whether an email exists.
 - [ ] Email verification: signed one-time verification before sensitive actions.
 - [ ] Social login: Google/Apple/GitHub OIDC and verified-email claim validation.
@@ -49,7 +49,7 @@
 ## 3. Authorization
 - [~] Deny by default: guards exist on parts of API; audit every controller and route.
 - [~] Server-side permission checks exist in selected services; require a route-by-route authorization matrix and tests.
-- [~] Object-level/IDOR checks: user-scoped query patterns exist; add adversarial cross-account tests for every resource ID.
+- [~] Object-level/IDOR checks: playlist and favorites ownership regression tests cover cross-account query scoping; expand adversarial tests to every resource ID and role.
 - [ ] Formal RBAC; ABAC for territory/rights/resource context where needed.
 - [ ] PostgreSQL RLS or equivalent tenant isolation; current schema is user-scoped, not a complete tenant/RLS implementation.
 - [ ] Admin isolation: separate hostname/network boundary, MFA, privileged audit trail and just-in-time access.
@@ -105,7 +105,7 @@
 - [x] Breezze currently has no payment/card feature. If payments are added, use hosted checkout and never store card numbers.
 
 ## 8. API security
-- [~] Global IP quota uses atomic Redis counters shared across API replicas; trusted Cloudflare client-IP extraction is authenticated by the edge secret. Per-user/per-key quotas and endpoint-specific policies remain.
+- [~] Atomic Redis quotas are shared across API replicas: global per-IP plus a separate per-account login bucket; per-user/per-key quotas and endpoint-specific policies remain.
 - [~] Cloudflare WAF/rate rules are documented but production thresholds/rules must be configured and verified.
 - [~] Set explicit request body limits and request/upstream timeouts per route.
 - [~] Bounded pagination is a route-by-route task; cap every list endpoint.
@@ -235,8 +235,8 @@ Breezze currently has no user-facing LLM feature. These are mandatory gates befo
 - [ ] Latest CI green on exact release commit: Flutter, API typecheck/tests/build, Prisma validation and both Cloudflare Workers.
 - [ ] Refresh-token migration tested on fresh/existing DB; replay/concurrent-refresh tests pass.
 - [ ] Mobile refresh token stored only in OS secure storage; logout and revoke-all work.
-- [~] Shared Redis IP rate limit is implemented and unit-tested; per-account enumeration/credential-stuffing controls and production Redis failure drills remain.
-- [ ] Every protected endpoint has ownership/role tests, including cross-user IDOR.
+- [~] Shared Redis IP and per-account login rate limits are implemented and unit-tested; progressive backoff, CAPTCHA escalation and production Redis failure drills remain.
+- [~] Playlist and favorites ownership tests exist; complete ownership/role tests for every protected endpoint before release.
 - [ ] Secret scan passes current tree and Git history; exposed credentials rotated.
 - [ ] Production Cloudflare WAF/rate rules, TLS/HSTS/CSP/CORS and private-origin restrictions verified.
 - [ ] DB/Redis private, encrypted, least-privilege and backed up; restore drill passes.
