@@ -191,13 +191,13 @@ class BreezzeApi {
   Future<Map<String, dynamic>> resolveProviderPlayback({
     required String providerId,
     required String providerTrackId,
-    String? canonicalTrackId,
+    required String canonicalTrackId,
     required String territory,
   }) =>
       _post('/playback/provider/resolve', {
         'providerId': providerId,
         'providerTrackId': providerTrackId,
-        if (canonicalTrackId != null) 'canonicalTrackId': canonicalTrackId,
+        'canonicalTrackId': canonicalTrackId,
         'territory': territory,
       });
 
