@@ -218,9 +218,12 @@ class BreezzeApi {
     await _delete('/users/me', body: {'password': password});
   }
 
-  Future<List<Map<String, dynamic>>> sessions() async =>
-      _asMapList((await _get('/auth/sessions'))['sessions'] ??
-          (await _get('/auth/sessions'))['items']);
+  Future<List<Map<String, dynamic>>> sessions() async {
+    final data = await _get('/auth/sessions');
+    return _asMapList(
+      data['sessions'] ?? data['items'] ?? data['data'] ?? data,
+    );
+  }
 
   Future<void> revokeSession(String sessionId) async {
     await _delete('/auth/sessions/${Uri.encodeComponent(sessionId)}');
