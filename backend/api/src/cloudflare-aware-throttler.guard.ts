@@ -74,12 +74,14 @@ export class CloudflareAwareThrottlerGuard
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<Record<string, any>>();
+    const http = context.switchToHttp();
+    const req = http.getRequest<Record<string, any>>();
+    const res = http.getResponse<{ setHeader: (name: string, value: string) => void }>();
     const ipDigest = createHash('sha256')
       .update(this.getClientIp(req))
       .digest('hex');
-    const minuteBucket = Math.floor(Date.now() / this.windowMs);
-    const key = `breezze:ratelimit:v1:${ipDigest}:${minuteBucket}`;
+    const windowBucket = Math.floor(Date.now() / this.windowMs);
+    const key = `breezze:ratelimit:v1:${ipDigest}:${windowBucket}`;
 
     try {
       if (this.redis.status === 'wait') await this.redis.connect();
@@ -93,6 +95,7 @@ export class CloudflareAwareThrottlerGuard
       const count = Number(result[0]);
       const ttlMs = Math.max(1, Number(result[1]));
       if (count > this.limit) {
+        res.setHeader('Retry-After', String(Math.ceil(ttlMs / 1000)));
         throw new HttpException(
           {
             statusCode: 429,
@@ -100,7 +103,6 @@ export class CloudflareAwareThrottlerGuard
             message: 'Too many requests. Please retry after the window resets.',
           },
           429,
-          { cause: undefined },
         );
       }
       return true;
