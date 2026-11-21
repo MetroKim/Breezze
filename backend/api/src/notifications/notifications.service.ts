@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 // Plan §13.2 — templates, delivery (stub now, real push later),
@@ -8,10 +8,18 @@ export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async registerToken(userId: string, token: string, platform: string) {
+    const existing = await this.prisma.pushToken.findUnique({
+      where: { token },
+      select: { userId: true },
+    });
+    if (existing && existing.userId !== userId) {
+      throw new ConflictException('PUSH_TOKEN_ALREADY_REGISTERED');
+    }
+
     return this.prisma.pushToken.upsert({
       where: { token },
       create: { userId, token, platform },
-      update: { userId },
+      update: { platform },
     });
   }
 
