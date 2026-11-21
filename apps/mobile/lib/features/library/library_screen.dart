@@ -130,14 +130,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   List<TrackInfo> _queue() => [
         for (final f in _favorites)
-          if (!f.id.startsWith('bz:')) f.toTrackInfo(),
+          if ((!f.id.startsWith('bz:') || f.id.startsWith('bz:audius:'))) f.toTrackInfo(),
       ];
 
   Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
-    final nativeIndex = _favorites.indexWhere((item) => !item.id.startsWith('bz:'));
+    final nativeIndex = _favorites.indexWhere((item) => (!(item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:')) || item.id.startsWith('bz:audius:')));
     if (nativeIndex >= 0) {
-      if (_favorites.any((item) => item.id.startsWith('bz:')) && mounted) {
+      if (_favorites.any((item) => (item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:'))) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
@@ -150,7 +150,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
-    if (track.id.startsWith('bz:')) {
+    if ((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This saved item has metadata only; Breezze cannot play it from this source.')),
