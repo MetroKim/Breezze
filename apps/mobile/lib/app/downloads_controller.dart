@@ -1,4 +1,5 @@
 import 'package:breezze_api_client/breezze_api_client.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../core/api/breezze_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +7,7 @@ import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
 import 'bootstrap.dart';
+import 'download_preferences.dart';
 
 /// Live transfer progress and queue state, keyed by track ID.
 final downloadJobStatusProvider = StateProvider<Map<String, String>>((ref) => {});
@@ -66,15 +68,27 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   }
 
   Future<void> download(BzTrack track) async {
-    if (state.containsKey(track.id) || ref.read(downloadJobStatusProvider)[track.id] == 'downloading') return;
+    if (state.containsKey(track.id) || ['downloading', 'downloaded'].contains(ref.read(downloadJobStatusProvider)[track.id])) return;
     _tracks[track.id] = track;
     final cancellation = DownloadCancellation();
     _cancellations[track.id] = cancellation;
     _setStatus(track.id, 'downloading');
 
     try {
+      final preferences = await DownloadPreferencesStore().load();
+      final network = await Connectivity().checkConnectivity();
+      final onWifi = network.contains(ConnectivityResult.wifi);
+      final onMobile = network.contains(ConnectivityResult.mobile);
+      if (!onWifi && (!onMobile || preferences.wifiOnly || !preferences.allowCellular)) {
+        _setStatus(track.id, onMobile ? 'waiting_for_wifi' : 'waiting_for_network');
+        return;
+      }
+
       final auth = ref.read(authSessionProvider);
-      if (auth is! AuthSignedIn) return;
+      if (auth is! AuthSignedIn) {
+        _setStatus(track.id, 'failed');
+        return;
+      }
 
       final api = ref.read(authSessionProvider.notifier).api;
       if (api.accessToken == null) return;
