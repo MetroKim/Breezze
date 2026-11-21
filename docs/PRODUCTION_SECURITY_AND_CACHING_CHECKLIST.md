@@ -199,7 +199,7 @@ Breezze currently has no user-facing LLM feature. These are mandatory gates befo
 - [ ] Profile and fix N+1 queries.
 - [ ] PgBouncer/managed pooler and explicit global connection budget.
 - [x] Prisma schema defines unique constraints and relations; add domain CHECK constraints where required.
-- [~] Schema is versioned; migration baseline/history must be reconciled before production migrate deploy. Refresh-token migration must be tested on fresh and existing DBs.
+- [x] A generated initial schema baseline now provisions fresh PostgreSQL databases; later migrations are baseline-safe. CI applies the complete migration history to PostgreSQL 16. Existing pre-baseline databases must be schema-diffed and have the baseline marked applied only after equivalence is confirmed (see `backend/api/prisma/README.md`).
 - [ ] Daily backups + PITR + 3-2-1 offsite policy.
 - [ ] Monthly isolated restore drill with recorded result.
 - [ ] Define and test RPO/RTO.
