@@ -22,10 +22,11 @@ describe('AuthService TOTP enrollment and verification', () => {
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue({ id: 'active-session-token' }) },
       adminAuditEvent: { create: jest.fn().mockResolvedValue({}) },
       mfaRecoveryCode: {
         createMany: jest.fn().mockResolvedValue({ count: 10 }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 10 }),
         findFirst: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
@@ -193,6 +194,105 @@ describe('AuthService TOTP enrollment and verification', () => {
         metadata: { method: 'recovery_code' },
       },
     });
+  });
+
+
+  it('rotates recovery codes only after password, fresh TOTP, and active verified session', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      passwordHash: 'argon-hash',
+      role: 'admin',
+      mfaEnabled: true,
+      mfaSecretCiphertext: encryptTotpSecret(secret),
+    });
+
+    const result = await service.regenerateMfaRecoveryCodes(
+      'admin-1',
+      'family-1',
+      'fresh-password',
+      '287082',
+    );
+
+    expect(result.regenerated).toBe(true);
+    expect(result.recoveryCodes).toHaveLength(10);
+    expect(argon2.verify).toHaveBeenCalledWith('argon-hash', 'fresh-password');
+    expect(prisma.tx.refreshToken.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'admin-1',
+        familyId: 'family-1',
+        revokedAt: null,
+        expiresAt: { gt: expect.any(Date) },
+        mfaVerified: true,
+      },
+      select: { id: true },
+    });
+    expect(prisma.tx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'admin-1', OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: BigInt(1) } }] },
+      data: { mfaLastUsedStep: BigInt(1) },
+    });
+    expect(prisma.tx.mfaRecoveryCode.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'admin-1' },
+    });
+    const replacement = prisma.tx.mfaRecoveryCode.createMany.mock.calls.at(-1)[0].data;
+    expect(replacement).toHaveLength(10);
+    expect(replacement.every((entry: { codeHash: string }) => /^[a-f0-9]{64}$/.test(entry.codeHash))).toBe(true);
+    expect(prisma.tx.adminAuditEvent.create).toHaveBeenCalledWith({
+      data: {
+        actorId: 'admin-1',
+        action: 'admin.mfa.recovery_codes.regenerated',
+        targetType: 'user',
+        targetId: 'admin-1',
+        metadata: { method: 'totp', codeCount: 10 },
+      },
+    });
+  });
+
+  it('does not rotate recovery codes when password reauthentication fails', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      passwordHash: 'argon-hash',
+      role: 'admin',
+      mfaEnabled: true,
+      mfaSecretCiphertext: encryptTotpSecret(secret),
+    });
+    (argon2.verify as jest.Mock).mockResolvedValue(false);
+
+    await expect(service.regenerateMfaRecoveryCodes(
+      'admin-1',
+      'family-1',
+      'wrong-password',
+      '287082',
+    )).rejects.toThrow('INVALID_CREDENTIALS');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('consumes a recovery code before replacing the full set', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      passwordHash: 'argon-hash',
+      role: 'admin',
+      mfaEnabled: true,
+      mfaSecretCiphertext: encryptTotpSecret(secret),
+    });
+    prisma.tx.mfaRecoveryCode.findFirst.mockResolvedValue({ id: 'recovery-current' });
+
+    await service.regenerateMfaRecoveryCodes(
+      'admin-1',
+      'family-1',
+      'fresh-password',
+      'ABCD-EF01-2345-6789',
+    );
+
+    expect(prisma.tx.mfaRecoveryCode.updateMany).toHaveBeenCalledWith({
+      where: { id: 'recovery-current', userId: 'admin-1', consumedAt: null },
+      data: { consumedAt: expect.any(Date) },
+    });
+    expect(prisma.tx.mfaRecoveryCode.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'admin-1' },
+    });
+    expect(prisma.tx.adminAuditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ metadata: { method: 'recovery_code', codeCount: 10 } }),
+    }));
   });
 
   it('requires an enrolled secret to verify a login session', async () => {
