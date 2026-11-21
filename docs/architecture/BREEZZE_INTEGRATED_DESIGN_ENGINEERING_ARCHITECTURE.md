@@ -28,7 +28,7 @@ PLATFORM — NestJS API, Cloudflare edge, audio engine,
            secure storage, OS audio/session APIs
 ```
 
-Dependency direction points inward. Presentation does not call HTTP, Prisma, R2, or audio plugins directly. Domain types must not depend on Flutter widgets, NestJS DTOs, or provider-specific response shapes.
+Dependency direction points inward. Presentation does not call HTTP, Prisma, provider SDKs, or audio plugins directly. Domain types must not depend on Flutter widgets, NestJS DTOs, or provider-specific response shapes.
 
 ### 1.2 Repository boundaries
 
