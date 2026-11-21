@@ -131,6 +131,9 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   const rangeHeader = request.headers.get('range');
   let object: R2ObjectBody | R2Object | null;
   let status = 200;
+  let rangeStart: number | null = null;
+  let rangeLength: number | null = null;
+  let totalSize: number | null = null;
   if (rangeHeader) {
     const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
     if (!match) return error(416, 'INVALID_RANGE');
@@ -148,6 +151,9 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
         headers: { 'Content-Range': `bytes */${head.size}`, 'Cache-Control': 'no-store' },
       });
     }
+    rangeStart = offset;
+    rangeLength = length;
+    totalSize = head.size;
     object = await env.MEDIA_BUCKET.get(key, { range: { offset, length } });
     status = 206;
   } else {
@@ -167,10 +173,9 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
     'ETag': object.httpEtag,
     'X-Content-Type-Options': 'nosniff',
   });
-  if (rangeHeader && 'range' in object && object.range) {
-    const range = object.range;
-    headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${object.size}`);
-    headers.set('Content-Length', String(range.length));
+  if (rangeHeader && rangeStart !== null && rangeLength !== null && totalSize !== null) {
+    headers.set('Content-Range', `bytes ${rangeStart}-${rangeStart + rangeLength - 1}/${totalSize}`);
+    headers.set('Content-Length', String(rangeLength));
   } else {
     headers.set('Content-Length', String(object.size));
   }
