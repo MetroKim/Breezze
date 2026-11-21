@@ -17,6 +17,8 @@ This Worker is the private R2 media gateway for Breezze. It supports:
 4. Deploy: `npx wrangler deploy`.
 5. Attach a custom domain such as `media.breezze.app` to the Worker route in Cloudflare.
 6. Set the API `CDN_BASE_URL=https://media.breezze.app` and the same `MEDIA_SIGNING_KEY`.
+7. Configure the backend media worker with `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME=breezze-media`. Create an R2 API token scoped to this bucket only. Keep these credentials in the worker runtime secret store, never in Flutter or the Worker bundle.
+8. Copy `backend/api/.env.example` into the backend's private environment configuration and populate the values. The Worker signing secret and API signing key must match exactly.
 
 The R2 bucket must remain private. Do not enable public bucket access or expose R2 S3 credentials to mobile clients.
 
