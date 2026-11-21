@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import * as argon2 from 'argon2';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service';
 import { AuthService } from './auth.service';
@@ -12,6 +13,7 @@ describe('AuthService TOTP enrollment and verification', () => {
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date(59_000));
+    jest.spyOn(argon2, 'verify').mockResolvedValue(true);
     process.env.MFA_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64');
     const tx = {
       user: {
@@ -41,16 +43,21 @@ describe('AuthService TOTP enrollment and verification', () => {
     service = new AuthService(prisma as PrismaService, jwt as JwtService);
   });
 
-  afterEach(() => jest.useRealTimers());
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
 
   it('creates an encrypted pending secret and authenticator provisioning URI', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       email: 'admin@example.com',
+      passwordHash: 'argon-hash',
       role: 'admin',
       mfaEnabled: false,
     });
-    const result = await service.beginMfaSetup('admin-1');
+    const result = await service.beginMfaSetup('admin-1', 'fresh-password');
+    expect(argon2.verify).toHaveBeenCalledWith('argon-hash', 'fresh-password');
 
     expect(result.provisioningUri).toContain('otpauth://totp/Breezze%3Aadmin%40example.com');
     expect(result.secret).toMatch(/^[A-Z2-7]+$/);
