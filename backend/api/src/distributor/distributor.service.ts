@@ -39,21 +39,35 @@ export class DistributorService {
     });
   }
 
-  async validate(submissionId: string) {
-    const submission = await this.prisma.releaseSubmission.findUnique({
-      where: { id: submissionId },
-    });
-    if (!submission) throw new NotFoundException('SUBMISSION_NOT_FOUND');
+  async validate(actorId: string, submissionId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const submission = await tx.releaseSubmission.findUnique({
+        where: { id: submissionId },
+      });
+      if (!submission) throw new NotFoundException('SUBMISSION_NOT_FOUND');
 
-    const errors: string[] = [];
-    if (submission.title.trim().length === 0) errors.push('TITLE_EMPTY');
-    if (submission.trackCount < 1) errors.push('NO_TRACKS');
+      const errors: string[] = [];
+      if (submission.title.trim().length === 0) errors.push('TITLE_EMPTY');
+      if (submission.trackCount < 1) errors.push('NO_TRACKS');
 
-    const status = errors.length > 0 ? 'invalid' : 'validated';
-    await this.prisma.releaseSubmission.update({
-      where: { id: submissionId },
-      data: { status },
+      const status = errors.length > 0 ? 'invalid' : 'validated';
+      const updated = await tx.releaseSubmission.updateMany({
+        where: { id: submissionId, status: submission.status },
+        data: { status },
+      });
+      if (updated.count === 0) {
+        throw new NotFoundException('SUBMISSION_NOT_FOUND_OR_CHANGED');
+      }
+
+      await tx.adminAuditEvent.create({
+        data: {
+          actorId,
+          action: 'distributor.release.validated',
+          targetType: 'release_submission',
+          targetId: submissionId,
+          metadata: { previousStatus: submission.status, newStatus: status, errors },
+        },
+      });
+      return { status, errors };
     });
-    return { status, errors };
-  }
-}
+  }}
