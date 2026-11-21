@@ -28,14 +28,30 @@ export class ModerationService {
     });
   }
 
-  async resolve(reportId: string, resolution: 'dismissed' | 'actioned') {
-    const result = await this.prisma.contentReport.updateMany({
-      where: { id: reportId, status: 'open' },
-      data: { status: resolution },
+  async resolve(
+    actorId: string,
+    reportId: string,
+    resolution: 'dismissed' | 'actioned',
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.contentReport.updateMany({
+        where: { id: reportId, status: 'open' },
+        data: { status: resolution },
+      });
+      if (result.count === 0) {
+        throw new NotFoundException('REPORT_NOT_FOUND_OR_RESOLVED');
+      }
+
+      await tx.adminAuditEvent.create({
+        data: {
+          actorId,
+          action: 'moderation.report.resolved',
+          targetType: 'content_report',
+          targetId: reportId,
+          metadata: { resolution },
+        },
+      });
+      return { resolved: true, resolution };
     });
-    if (result.count === 0) {
-      throw new NotFoundException('REPORT_NOT_FOUND_OR_RESOLVED');
-    }
-    return { resolved: true, resolution };
   }
 }
