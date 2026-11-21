@@ -22,6 +22,12 @@ This is a curated implementation reference list for the existing Breezze Flutter
 - Useful patterns: Riverpod feature-first organization, go_router StatefulShellRoute, persistent tab state, library/history/favorites organization, and clear architecture documentation.
 - Breezze adaptation: compare shell/navigation behavior and library structure. Do not import its local-file-only assumptions into Breezze's streaming model.
 
+### 5. Lucide Icons Flutter — consistent icon language
+- Package: https://pub.dev/packages/lucide_icons_flutter
+- License: MIT.
+- Useful patterns: consistent outline icon family, predictable stroke weights, broad coverage for navigation, playback, library and item actions.
+- Breezze adaptation: introduce a small `BzIcon` wrapper and standardize size/stroke/color through Breezze tokens. Prefer authored SVG assets where an exact brand-specific vector is required; do not mix several unrelated icon families.
+
 ### 4. shad — reusable Flutter component API and theme discipline
 - Package: https://pub.dev/packages/shad
 - Source: https://github.com/Serverpod/shadcn_flutter
