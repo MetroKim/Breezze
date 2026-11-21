@@ -26,14 +26,25 @@ function isPublicCatalogRequest(request: Request, url: URL): boolean {
 
 function buildCacheKey(request: Request, url: URL): Request {
   const country = request.headers.get('cf-ipcountry') ?? 'XX';
-  const language = (request.headers.get('accept-language') ?? 'und')
-    .split(',')[0]
-    .trim()
-    .slice(0, 35);
+  const language = (request.headers.get('accept-language') ?? 'und').slice(0, 256);
   const key = new URL(url.toString());
   key.searchParams.set('__edge_country', country);
   key.searchParams.set('__edge_language', language);
   return new Request(key.toString(), { method: 'GET' });
+}
+
+function makeOriginRequest(url: string, request: Request): Request {
+  const headers = new Headers(request.headers);
+  headers.delete('host');
+  const init: RequestInit = {
+    method: request.method,
+    headers,
+    redirect: request.redirect,
+  };
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    init.body = request.body;
+  }
+  return new Request(url, init);
 }
 
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -59,11 +70,13 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return hit;
     }
 
-    const originRequest = new Request(target.toString(), request);
-    originRequest.headers.delete('host');
+    const originRequest = makeOriginRequest(target.toString(), request);
     const upstream = await fetch(originRequest);
+    const vary = (upstream.headers.get('vary') ?? '').toLowerCase();
     if (upstream.status !== 200
       || upstream.headers.has('set-cookie')
+      || vary === '*'
+      || /(?:^|,)\\s*(?:authorization|cookie)(?:\\s*,|$)/.test(vary)
       || /private|no-store|no-cache/i.test(upstream.headers.get('cache-control') ?? '')) {
       const passthrough = new Response(upstream.body, upstream);
       passthrough.headers.set('X-Breezze-Edge-Cache', 'BYPASS');
@@ -87,8 +100,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     return response;
   }
 
-  const upstreamRequest = new Request(target.toString(), request);
-  upstreamRequest.headers.delete('host');
+  const upstreamRequest = makeOriginRequest(target.toString(), request);
   const upstream = await fetch(upstreamRequest);
   const response = new Response(upstream.body, upstream);
   response.headers.set('X-Breezze-Edge-Cache', 'BYPASS');
