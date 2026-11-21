@@ -46,19 +46,19 @@ void main() {
         child: MaterialApp(
           theme: bzLightTheme(),
           home: TrackDetailScreen(
-            track: BzTrack(
+            track: TrackInfo(
               id: 'bz:track-1',
               title: 'Search Result Song',
               artist: 'Search Result Artist',
               duration: Duration(minutes: 3, seconds: 8),
             ),
             relatedTracks: [
-              BzTrack(
+              TrackInfo(
                 id: 'bz:track-1',
                 title: 'Search Result Song',
                 artist: 'Search Result Artist',
               ),
-              BzTrack(
+              TrackInfo(
                 id: 'bz:track-2',
                 title: 'Another Song',
                 artist: 'Search Result Artist',
