@@ -12,6 +12,10 @@ import '../../app/playlist_store.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+
+bool _isMetadataOnlySourceTrack(String id) =>
+    id.startsWith('bzv:') ||
+    (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
 import '../player/player_controller.dart';
 
 /// Search screen — real results from the live source, with local recent
@@ -381,7 +385,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
       return;
     }
-    if (track.id.startsWith('bz:')) {
+    if (_isMetadataOnlySourceTrack(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
@@ -564,9 +568,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            (track.id.startsWith('bz:') || track.id.startsWith('bzv:'))
-                                                ? '${track.artist} · YouTube Music · Catalogue only'
-                                                : track.artist,
+                                            track.id.startsWith('bz:audius:')
+                                                ? '${track.artist} · Audius'
+                                                : _isMetadataOnlySourceTrack(track.id)
+                                                    ? '${track.artist} · YouTube Music · Catalogue only'
+                                                    : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -576,7 +582,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         IconButton(
                                           tooltip: 'Play',
                                           icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
-                                          onPressed: track.id.startsWith('bz:')
+                                          onPressed: _isMetadataOnlySourceTrack(track.id)
                                               ? null
                                               : () => _play(track),
                                         ),
@@ -619,7 +625,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             }
                                           },
                                           itemBuilder: (context) => [
-                                            if (!track.id.startsWith('bz:') && !track.id.startsWith('bzv:')) ...[
+                                            if (!_isMetadataOnlySourceTrack(track.id)) ...[
                                               const PopupMenuItem(
                                                 value: 'play_next',
                                                 child: Text('Play Next'),
