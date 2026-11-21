@@ -41,8 +41,8 @@ export class PlaybackController {
   @Post('provider/resolve')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  resolveProvider(@CurrentUser() userId: string, @Body() dto: ProviderResolveDto) {
-    return this.resolver.resolveProvider(userId, dto);
+  resolveProvider(@Body() dto: ProviderResolveDto) {
+    return this.resolver.resolveProvider(dto);
   }
 
   @Post('resolve')
