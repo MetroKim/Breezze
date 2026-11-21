@@ -114,18 +114,20 @@ class ArtistDetailScreen extends ConsumerWidget {
                       ),
                       label: const Text('Play saved songs'),
                     ),
-                    OutlinedButton.icon(
-                      onPressed: null,
-                      icon: const BzSvgIcon(name: 'user-round-plus'),
-                      label: const Text('Follow'),
+                    Tooltip(
+                      message: 'Artist following is not available yet.',
+                      child: OutlinedButton.icon(
+                        onPressed: null,
+                        icon: const BzSvgIcon(name: 'user-round-plus'),
+                        label: const Text('Follow'),
+                      ),
                     ),
                   ],
                 ),
-                if (canonicalArtistId == null)
-                  Padding(
+                Padding(
                     padding: const EdgeInsets.only(top: 10),
                     child: Text(
-                      'Follow and artist-wide catalog actions become available when a verified artist profile is connected.',
+                      'Following and artist-wide catalog actions become available when the artist services are connected.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.bzText2,
