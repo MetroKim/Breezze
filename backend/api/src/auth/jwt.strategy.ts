@@ -12,11 +12,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string }) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+  async validate(payload: { sub: string; sid?: string }) {
+    if (!payload.sid) {
+      throw new UnauthorizedException('SESSION_INVALID');
+    }
+
+    // An access JWT is valid only while its refresh-token family has an
+    // unrevoked, unexpired member. Revoking one session therefore invalidates
+    // its access JWTs on the next API request, not merely after 15 minutes.
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: payload.sub,
+        refreshTokens: {
+          some: {
+            familyId: payload.sid,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+        },
+      },
     });
-    if (!user) throw new UnauthorizedException('USER_NOT_FOUND');
+    if (!user) throw new UnauthorizedException('SESSION_INVALID');
     return user;
   }
 }
