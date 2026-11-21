@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { IsArray, IsString, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { DistributorService } from './distributor.service';
 
@@ -39,6 +40,7 @@ export class DistributorController {
     return this.distributor.mySubmissions(userId);
   }
 
+  @UseGuards(AdminGuard)
   @Post('releases/:id/validate')
   validate(@Param('id') id: string) {
     return this.distributor.validate(id);
