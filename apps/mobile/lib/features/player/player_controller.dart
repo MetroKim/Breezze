@@ -159,19 +159,35 @@ class PlayerController extends Notifier<PlayerState> {
     }
   }
 
-  Future<void> togglePlayPause() async {
+  Future<void> pause() async {
     final engine = _engine;
-    if (engine == null) return;
-
-    if (state.playbackState == PlaybackState.playing) {
-      _machine.dispatch(PausePressed());
+    if (engine == null || state.playbackState != PlaybackState.playing) return;
+    _machine.dispatch(PausePressed());
+    try {
       await _serializeEngineOperation(() => engine.pause());
-      return;
+    } catch (_) {
+      _machine.dispatch(SourceResolutionFailed('PAUSE_FAILED', requestId: _machine.activeRequestId));
     }
+  }
 
-    if (state.playbackState == PlaybackState.paused) {
-      _machine.dispatch(PlayPressed());
-      await _serializeEngineOperation(() => engine.play());
+  Future<void> resume() async {
+    final engine = _engine;
+    if (engine == null || state.playbackState != PlaybackState.paused) return;
+    _machine.dispatch(PlayPressed());
+    try {
+      unawaited(engine.play().catchError((Object error, StackTrace stackTrace) {
+        _machine.dispatch(SourceResolutionFailed('RESUME_FAILED', requestId: _machine.activeRequestId));
+      }));
+    } catch (_) {
+      _machine.dispatch(SourceResolutionFailed('RESUME_FAILED', requestId: _machine.activeRequestId));
+    }
+  }
+
+  Future<void> togglePlayPause() async {
+    if (state.playbackState == PlaybackState.playing) {
+      await pause();
+    } else if (state.playbackState == PlaybackState.paused) {
+      await resume();
     }
   }
 
