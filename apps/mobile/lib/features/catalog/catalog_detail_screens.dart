@@ -116,7 +116,7 @@ class TrackDetailScreen extends ConsumerWidget {
                         origin: origin,
                         sourceContext: 'Song details',
                       ),
-                      icon: const BzSvgIcon(name: 'list-plus'),
+                      icon: const BzSvgIcon(name: 'list-music'),
                       label: const Text('Play Next'),
                     ),
                   ],
