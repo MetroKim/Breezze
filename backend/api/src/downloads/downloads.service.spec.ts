@@ -4,7 +4,7 @@ import { MediaSigner } from '../playback/media-signer.service';
 import { DownloadsService } from './downloads.service';
 
 describe('DownloadsService', () => {
-  const prisma = { downloadRecord: { upsert: jest.fn() } };
+  const prisma = { downloadRecord: { upsert: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() } };
   const rights = { decide: jest.fn() };
   const signer = { createPlaybackUrl: jest.fn() };
   let service: DownloadsService;
@@ -16,6 +16,32 @@ describe('DownloadsService', () => {
       rights as unknown as RightsDecisionService,
       signer as unknown as MediaSigner,
     );
+  });
+
+  it('revokes an existing offline lease when rights are no longer valid', async () => {
+    prisma.downloadRecord.findFirst.mockResolvedValue({ id: 'download-1' });
+    rights.decide.mockResolvedValue({
+      allowed: false, previewOnly: false, reason: 'TAKEDOWN_ACTIVE',
+    });
+    await expect(service.revalidateOfflineLease('user-1', 'track-1', 'TZ'))
+      .resolves.toEqual({ allowed: false, reason: 'TAKEDOWN_ACTIVE' });
+    expect(prisma.downloadRecord.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', trackId: 'track-1', status: 'active' },
+      data: expect.objectContaining({ status: 'revoked', expiresAt: expect.any(Date) }),
+    });
+  });
+
+  it('extends a valid offline lease by at most 72 hours', async () => {
+    prisma.downloadRecord.findFirst.mockResolvedValue({ id: 'download-1' });
+    prisma.downloadRecord.updateMany.mockResolvedValue({ count: 1 });
+    rights.decide.mockResolvedValue({
+      allowed: true, previewOnly: false, reason: 'OK', expiresAt: null,
+    });
+    const before = Date.now();
+    const result = await service.revalidateOfflineLease('user-1', 'track-1', 'TZ');
+    expect(result.allowed).toBe(true);
+    expect(result.offlineLeaseExpiresAt.getTime()).toBeGreaterThanOrEqual(before + 72 * 60 * 60 * 1000 - 1000);
+    expect(result.offlineLeaseExpiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 72 * 60 * 60 * 1000);
   });
 
   it('does not create a download for a preview-only decision', async () => {
