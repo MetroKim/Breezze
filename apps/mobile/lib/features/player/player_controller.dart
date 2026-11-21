@@ -30,6 +30,7 @@ class PlayerController extends Notifier<PlayerState> {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlaybackState>? _engineStateSub;
   int _requestGeneration = 0;
+  String? _autoAdvancedTrackId;
   Future<void> _engineOperations = Future<void>.value();
 
   /// Track info remembered for the current queue, keyed by track id.
@@ -81,6 +82,16 @@ class PlayerController extends Notifier<PlayerState> {
           engineState == PlaybackState.failed) {
         final currentTrackId = state.currentTrack?.id;
         if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+        // just_audio reports completion on the engine stream. Advance the
+        // single app-wide queue here so playback continues without requiring
+        // the user to tap Next. The guard prevents duplicate completed events
+        // from advancing more than once for the same item.
+        if (engineState == PlaybackState.ended &&
+            currentTrackId != null &&
+            _autoAdvancedTrackId != currentTrackId) {
+          _autoAdvancedTrackId = currentTrackId;
+          unawaited(next());
+        }
       }
     });
   }
@@ -291,6 +302,7 @@ class PlayerController extends Notifier<PlayerState> {
       _scrobbles.onStop(previousTrackId);
     }
     final requestId = ++_requestGeneration;
+    _autoAdvancedTrackId = null;
     _trackInfos[info.id] = info;
     state = state.copyWith(
       currentTrack: info,
