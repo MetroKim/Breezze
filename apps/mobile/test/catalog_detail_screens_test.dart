@@ -39,6 +39,43 @@ void main() {
     );
   });
 
+  testWidgets('track detail shows song metadata and honest album limitation',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: bzLightTheme(),
+          home: const TrackDetailScreen(
+            track: BzTrack(
+              id: 'bz:track-1',
+              title: 'Search Result Song',
+              artist: 'Search Result Artist',
+              duration: Duration(minutes: 3, seconds: 8),
+            ),
+            relatedTracks: [
+              BzTrack(
+                id: 'bz:track-1',
+                title: 'Search Result Song',
+                artist: 'Search Result Artist',
+              ),
+              BzTrack(
+                id: 'bz:track-2',
+                title: 'Another Song',
+                artist: 'Search Result Artist',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Search Result Song'), findsOneWidget);
+    expect(find.text('Search Result Artist'), findsOneWidget);
+    expect(find.text('Add to Library'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Album'), 240);
+    expect(find.textContaining('does not provide a verified album relationship'), findsOneWidget);
+  });
+
   testWidgets('album detail renders its canonical metadata and tracklist',
       (tester) async {
     await tester.pumpWidget(
