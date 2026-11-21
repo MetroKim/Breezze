@@ -5,7 +5,6 @@ import {
   ProviderAdapter,
   ProviderCapabilities,
   ProviderTrack,
-  ProviderPlaybackLaunch,
 } from './provider-adapter.interface';
 import { ProviderResult, providerError, providerOk, providerUnsupported } from './provider-result';
 
@@ -154,26 +153,6 @@ export class YtMusicAdapter implements ProviderAdapter {
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
       }
     }));
-  }
-
-  getPlaybackLaunch(providerTrackId: string): ProviderResult<ProviderPlaybackLaunch> {
-    if (!/^[A-Za-z0-9_-]{6,64}$/.test(providerTrackId)) {
-      return providerError('INVALID_YTMUSIC_ID', 'Invalid YouTube Music track identifier', false);
-    }
-
-    // YouTube's official player owns the media session. Breezze deliberately
-    // does not request, store, proxy, or expose extracted stream URLs.
-    const encodedId = encodeURIComponent(providerTrackId);
-    return providerOk({
-      mode: 'external_official_player',
-      providerId: this.providerId,
-      providerTrackId,
-      watchUrl: `https://www.youtube.com/watch?v=${encodedId}`,
-      embedUrl: `https://www.youtube-nocookie.com/embed/${encodedId}?playsinline=1&rel=0`,
-      requiresUserGesture: true,
-      supportsBackgroundAudio: false,
-      supportsNativeQueueControls: false,
-    }, 'Playback is handled by the official YouTube player');
   }
 
   async getAvailability(): Promise<ProviderResult<{ available: boolean }>> {
