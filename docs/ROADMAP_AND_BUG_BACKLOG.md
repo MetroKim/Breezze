@@ -47,7 +47,7 @@ The complete Breezze quality workflow passed on that commit.
 - [ ] Add mobile radio request/widget tests and a station timezone contract. The current schema has no station timezone.
 - [ ] Add a real radio playback session contract only after stream rights, secure URL resolution, buffering/reconnect behavior and engine integration are designed.
 - [ ] No Prisma migration directory/history is present. Establish a safe baseline/migration strategy against the actual deployed database before deployment.
-- [ ] Audit and remediate npm dependency vulnerabilities (previous install reported 26: 3 low, 12 moderate, 11 high); re-run `npm audit` after the AWS SDK addition and update vulnerable transitive dependencies without breaking Nest/Prisma compatibility.
+- [x] Remediate the reported npm dependency vulnerabilities: upgrade the backend to patched NestJS 11.2.11 packages, update related Nest integrations, pin patched `glob`/`minimatch` overrides, and upgrade Wrangler to 4.166.0 with matching Cloudflare Worker types. Latest CI `npm audit` reports **0 backend vulnerabilities and 0 Worker vulnerabilities**.
 - [ ] Verify repeated-play semantics for `RecentlyPlayed` against deployed data before changing its current `@@unique([userId, trackId])` constraint.
 - [ ] Finish full artist/album/playlist detail routes, catalog-backed editorial feeds, account-isolation integration tests, accessibility/responsive checks and real-device audio validation.
 
@@ -95,7 +95,7 @@ Severity key: **P0** blocks reliable release; **P1** can break a core feature or
 
 ### Validation status
 
-GitHub Actions now runs Flutter analysis/tests and NestJS/Prisma validation for pull requests targeting `breezze`. Backend checks have passed. Mobile analysis and mobile tests have passed in a completed run. The audio-contracts suite exposed two test defects and one shuffle traversal defect; these have been fixed, and a complete post-fix run is required before this phase can be marked green. Do not treat a cancelled workflow as a pass.
+GitHub Actions now runs Flutter analysis/tests, NestJS/Prisma validation, and Cloudflare Worker typechecking for pull requests targeting `breezze`. Full workflow `44913618622` passed all three jobs on source commit `9cc102e2143fce884569ecc327411374f873214d`.
 
 ---
 
