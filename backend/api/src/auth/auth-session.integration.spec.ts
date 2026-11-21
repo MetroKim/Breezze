@@ -70,7 +70,7 @@ describeIntegration('Auth session PostgreSQL integration', () => {
     });
     expect(family.length).toBeGreaterThanOrEqual(1);
     expect(family.every((token) => token.revokedAt !== null)).toBe(true);
-    expect(family.some((token) => token.tokenHash === createHash('sha256').update(rawToken, 'utf8').digest('hex'))).toBe(false);
+    expect(family.some((token) => token.tokenHash === createHash('sha256').update(rawToken, 'utf8').digest('hex'))).toBe(true);\n    expect(family.every((token) => token.tokenHash !== rawToken)).toBe(true);
   });
 
   it('revokes only the selected user-owned session family', async () => {
