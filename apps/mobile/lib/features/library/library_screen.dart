@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/bootstrap.dart';
 import '../../app/playlist_store.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/audio/youtube_player_handoff.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
@@ -132,19 +133,35 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         for (final f in _favorites) f.toTrackInfo(),
       ];
 
-  void _playAll() {
+  Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: _favorites.first.id,
-          queue: _queue(),
-          origin: 'library',
-          sourceContext: 'Songs',
-        );
+    await _playOne(0);
   }
 
-  void _playOne(int index) {
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: _favorites[index].id,
+  Future<void> _playOne(int index) async {
+    final track = _favorites[index];
+    if (track.id.startsWith('bz:')) {
+      try {
+        final opened = await YoutubePlayerHandoff.openFromApi(
+          ref.read(authSessionProvider.notifier).api,
+          track.id,
+        );
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open the official YouTube player.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
+          );
+        }
+      }
+      return;
+    }
+    await ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: track.id,
           queue: _queue(),
           startIndex: index,
           origin: 'library',
