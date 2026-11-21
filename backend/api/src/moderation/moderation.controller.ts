@@ -48,10 +48,12 @@ export class ModerationController {
   @UseGuards(AdminGuard)
   @Post('reports/:id/resolve')
   resolve(
+    @CurrentUser() actorId: string,
     @Param('id') id: string,
     @Body() dto: ResolveDto,
   ) {
     return this.moderation.resolve(
+      actorId,
       id,
       dto.resolution as 'dismissed' | 'actioned',
     );
