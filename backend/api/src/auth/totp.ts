@@ -93,7 +93,7 @@ export function getVerifiedTotpCounter(
   candidate: string,
   now = Date.now(),
 ): number | null {
-  if (!/^\\d{6}$/.test(candidate)) return null;
+  if (!/^\d{6}$/.test(candidate)) return null;
   const counter = Math.floor(now / 1000 / STEP_SECONDS);
   const supplied = Buffer.from(candidate);
   for (let offset = -WINDOW; offset <= WINDOW; offset += 1) {
