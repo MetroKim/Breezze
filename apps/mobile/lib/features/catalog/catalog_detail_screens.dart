@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/bootstrap.dart';
 import '../../core/auth/auth_session.dart';
 import '../../features/player/player_controller.dart';
+import '../../core/audio/youtube_player_handoff.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 final _appleTrackMatchesProvider =
@@ -123,13 +124,24 @@ class TrackDetailScreen extends ConsumerWidget {
                   runSpacing: 10,
                   children: [
                     FilledButton.icon(
-                      onPressed: () => ref.read(playerControllerProvider.notifier).playTrack(
-                        trackId: track.id,
-                        queue: queue,
-                        startIndex: selectedIndex < 0 ? 0 : selectedIndex,
-                        origin: origin,
-                        sourceContext: 'Song details',
-                      ),
+                      onPressed: () async {
+                        if (track.id.startsWith('bz:')) {
+                          final opened = await YoutubePlayerHandoff.openBreezzeTrackId(track.id);
+                          if (!opened && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Could not open the official YouTube player.')),
+                            );
+                          }
+                          return;
+                        }
+                        await ref.read(playerControllerProvider.notifier).playTrack(
+                          trackId: track.id,
+                          queue: queue,
+                          startIndex: selectedIndex < 0 ? 0 : selectedIndex,
+                          origin: origin,
+                          sourceContext: 'Song details',
+                        );
+                      },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
                       label: const Text('Play'),
                     ),
