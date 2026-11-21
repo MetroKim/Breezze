@@ -16,6 +16,7 @@ class BzSvgIcon extends StatelessWidget {
   });
 
   static const _paths = <String, String>{
+    'help-circle': '<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.7c-1.1 1-1.9 1.4-1.9 3.1M12 17.5h.01"/>',
     'wifi-off': '<path d="M3 3 21 21M8.5 8.5A12 12 0 0 1 21 12M5 12a12 12 0 0 1 2.2-1.2M2 8a16 16 0 0 1 3.2-2M12 20h.01" />',
     'music-note': '<path d="M14.5 4.25v11.2a3.1 3.1 0 1 1-1.8-2.82V7.1l7-1.55v8.4a3.1 3.1 0 1 1-1.8-2.82V3.6l-3.4.65Z" />',
     'download': '<path d="M12 3.75v10.5m-4-4 4 4 4-4M4.5 16.5v2A1.75 1.75 0 0 0 6.25 20.25h11.5a1.75 1.75 0 0 0 1.75-1.75v-2" />',
