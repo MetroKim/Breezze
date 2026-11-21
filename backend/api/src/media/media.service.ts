@@ -1,15 +1,16 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { MediaSigner } from '../playback/media-signer.service';
 import { mediaQueue, MediaJobData } from '../workers/media.queue';
 
-// Plan §10.1 — media ingestion. Upload registration creates the
-// quarantined job record AND enqueues it; the worker (separate
-// process) drives validate → transcode → publish.
 @Injectable()
 export class MediaService implements OnModuleInit {
   private queue: ReturnType<typeof mediaQueue> | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly signer: MediaSigner,
+  ) {}
 
   async onModuleInit() {
     const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
@@ -30,27 +31,50 @@ export class MediaService implements OnModuleInit {
       },
     });
 
-    if (this.queue) {
-      await this.queue.add('pipeline', {
-        jobId: job.id,
-        submissionId: job.submissionId,
-        // The uploader delivers to quarantine storage; the path is the
-        // storage adapter's key. Real path comes from the upload
-        // handler (multer/S3 presign) — stubbed as filename for now.
-        inputPath: `quarantine/${job.id}/${dto.originalFilename}`,
-      } satisfies MediaJobData);
+    try {
+      const upload = this.signer.createUploadUrl(
+        userId,
+        job.id,
+        dto.originalFilename,
+        dto.bytes,
+      );
+      return {
+        job,
+        uploadUrl: upload.url,
+        uploadExpiresAt: upload.expiresAt,
+        objectKey: upload.objectKey,
+        requiredHeaders: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(dto.bytes) },
+        completeEndpoint: `/api/v1/media/jobs/${job.id}/complete`,
+      };
+    } catch (error) {
+      await this.prisma.mediaJob.updateMany({
+        where: { id: job.id, userId },
+        data: { status: 'rejected' },
+      });
+      throw error;
     }
-
-    return job;
   }
 
-  async markStatus(jobId: string, status: string) {
+  async completeUpload(userId: string, jobId: string) {
     const result = await this.prisma.mediaJob.updateMany({
-      where: { id: jobId },
-      data: { status },
+      where: { id: jobId, userId, status: 'quarantined' },
+      data: { status: 'uploaded' },
     });
-    if (result.count === 0) throw new NotFoundException('JOB_NOT_FOUND');
-    return { jobId, status };
+    if (result.count === 0) throw new NotFoundException('UPLOAD_JOB_NOT_FOUND');
+
+    const job = await this.prisma.mediaJob.findFirst({
+      where: { id: jobId, userId },
+    });
+    if (!job) throw new NotFoundException('UPLOAD_JOB_NOT_FOUND');
+
+    if (!this.queue) throw new Error('MEDIA_QUEUE_UNAVAILABLE');
+    await this.queue.add('pipeline', {
+      jobId: job.id,
+      submissionId: job.submissionId,
+      inputPath: `quarantine/${userId}/${job.id}/${job.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)}`,
+    } satisfies MediaJobData);
+
+    return { jobId, status: 'uploaded', queued: true };
   }
 
   async listJobs(userId: string) {
