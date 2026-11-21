@@ -136,6 +136,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
+    final nativeIndex = _favorites.indexWhere((item) => !item.id.startsWith('bz:'));
+    if (nativeIndex >= 0) {
+      if (_favorites.any((item) => item.id.startsWith('bz:')) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('YouTube tracks open separately and are excluded from Breezze queue playback.')),
+        );
+      }
+      await _playOne(nativeIndex);
+      return;
+    }
     await _playOne(0);
   }
 
