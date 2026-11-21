@@ -9,6 +9,7 @@ import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
+import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
 
 /// Library navigation follows the user's requested section order. Only
@@ -392,9 +393,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => _SavedArtistScreen(
+              builder: (_) => ArtistDetailScreen(
                 artist: entry.key,
-                tracks: entry.value,
+                savedTracks: entry.value,
               ),
             ),
           ),
@@ -540,95 +541,3 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 }
 
-
-class _SavedArtistScreen extends ConsumerWidget {
-  final String artist;
-  final List<FavoriteTrack> tracks;
-
-  const _SavedArtistScreen({
-    required this.artist,
-    required this.tracks,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final queue = [for (final track in tracks) track.toTrackInfo()];
-    return Scaffold(
-      backgroundColor: theme.bzBackground,
-      appBar: AppBar(title: Text(artist)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-        children: [
-          Center(
-            child: Container(
-              width: 132,
-              height: 132,
-              decoration: BoxDecoration(
-                color: theme.bzSurface1,
-                shape: BoxShape.circle,
-                border: Border.all(color: theme.bzSeparator),
-              ),
-              alignment: Alignment.center,
-              child: BzBnoteMark(size: 56, color: theme.bzText2),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text(artist, textAlign: TextAlign.center,
-              style: theme.textTheme.headlineMedium),
-          const SizedBox(height: 6),
-          Text(
-            '${tracks.length} saved ${tracks.length == 1 ? 'song' : 'songs'} in your Library',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.bzText2),
-          ),
-          const SizedBox(height: 18),
-          Align(
-            alignment: Alignment.center,
-            child: FilledButton.icon(
-              onPressed: tracks.isEmpty
-                  ? null
-                  : () => ref.read(playerControllerProvider.notifier).playTrack(
-                        trackId: tracks.first.id,
-                        queue: queue,
-                        origin: 'library',
-                        sourceContext: artist,
-                      ),
-              icon: BzSvgIcon(name: 'play', color: theme.bzBackground),
-              label: const Text('Play saved songs'),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text('SAVED SONGS', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 8),
-          for (final track in tracks)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: track.artworkUrl == null
-                  ? BzBnoteMark(size: 46, color: theme.bzText2)
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(BzRadius.artwork),
-                      child: Image.network(
-                        track.artworkUrl!,
-                        width: 46,
-                        height: 46,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            BzBnoteMark(size: 46, color: theme.bzText2),
-                      ),
-                    ),
-              title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
-              onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
-                    trackId: track.id,
-                    queue: queue,
-                    startIndex: tracks.indexOf(track),
-                    origin: 'library',
-                    sourceContext: artist,
-                  ),
-            ),
-        ],
-      ),
-    );
-  }
-}
