@@ -119,6 +119,20 @@ Keep catalogue entities distinct from playback assets. An album can contain trac
 - Instrument provider latency, cache hit ratio, upstream failures, rights denials, playback start failures, queue transitions, and download lease failures. Do not log tokens, cookies, or signed URLs.
 - A target of hundreds of millions of users is a capacity objective, not a guarantee. Validate it with load tests, queue/backpressure design, database partitioning strategy, CDN budgets, and provider contractual limits.
 
+
+## Repository audit: remaining implementation gaps
+
+The current repository is not yet feature-complete against the product contract. These are explicit gaps, not completed features:
+
+- `DiscoveryService` still calls Apple Music RSS and iTunes lookup for song charts, new releases, artist albums, and album tracks. `dailyTop100` still requires `APPLE_MUSIC_DEVELOPER_TOKEN`. This must be migrated to ytmusicapi metadata methods where they are actually available, or the corresponding feed must be disabled with an honest unavailable state. It must not silently remain an Apple-backed dependency in a YouTube-primary architecture.
+- The Flutter search adapter currently searches songs; the dedicated music-video query is separate. Album, artist, playlist, lyric, and typed result search are not yet a unified search implementation.
+- The current sidecar exposes song search, track metadata, and Original Music Video search. It does not yet expose validated album, artist, playlist, chart, mood, or home-feed metadata endpoints.
+- Personal YouTube Music library/history synchronization is not implemented and must not be claimed. Breezze's own favorites, playlists, and history are separate first-party data.
+- Radio, licensed lyrics, offline downloads, and personalized recommendations are not supplied by the current sidecar. These remain disabled or Breezze-owned features built from eligible data.
+- The repository still contains other Apple catalog discovery code and legacy Apple-specific screen names/providers. Remove or rename those dependencies as part of the discovery migration; do not leave Apple as a hidden requirement.
+- Search results that are YouTube Music song metadata now show an unavailable native-playback message instead of launching an unrelated external audio session. Dedicated music-video results are tagged separately and use the official YouTube watch player. The global player rejects metadata-only song and video IDs from its native queue.
+- The Web Drift database CI build passed in the previous quality run. The database executor and asset pinning still need runtime browser persistence tests, not only compilation.
+
 ## Acceptance gates
 
 1. A metadata-only ytmusicapi item cannot receive a native playback grant or download lease.
