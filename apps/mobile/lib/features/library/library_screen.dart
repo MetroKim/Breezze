@@ -152,22 +152,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
     if (track.id.startsWith('bz:')) {
-      try {
-        final opened = await YoutubePlayerHandoff.openFromApi(
-          ref.read(authSessionProvider.notifier).api,
-          track.id,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This saved item has metadata only; Breezze cannot play it from this source.')),
         );
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open the official YouTube player.')),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
-          );
-        }
       }
       return;
     }
