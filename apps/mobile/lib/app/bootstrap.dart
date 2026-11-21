@@ -127,9 +127,15 @@ final liveResolverProvider =
 // ---------------------------------------------------------------------------
 
 /// App-private downloads directory — the real per-track offline library.
-Future<Directory> downloadsDirectory() async {
+Future<Directory> downloadsDirectory({required String userId}) async {
+  // Scope local media by authenticated account. Never share one account's
+  // downloaded catalogue with another account on the same device.
+  final safeUserId = userId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+  if (safeUserId.isEmpty) {
+    throw ArgumentError.value(userId, 'userId', 'must be non-empty');
+  }
   final base = await getApplicationDocumentsDirectory();
-  final dir = Directory('${base.path}/downloads');
+  final dir = Directory('${base.path}/downloads/$safeUserId');
   await dir.create(recursive: true);
   return dir;
 }
