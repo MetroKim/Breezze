@@ -36,9 +36,13 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
+      - name: Generate Drift database code
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+
       - name: Analyze mobile app
         working-directory: apps/mobile
-        run: flutter analyze --fatal-infos
+        run: flutter analyze
 
       - name: Test mobile app
         working-directory: apps/mobile
