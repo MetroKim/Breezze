@@ -77,27 +77,24 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Rename playlist'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(hintText: 'Playlist name'),
-        ),
+        content: TextField(controller: controller, autofocus: true),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Save'),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(controller.text), child: const Text('Save')),
         ],
       ),
     );
     controller.dispose();
     if (name == null || name.trim().isEmpty) return;
-    if (widget.ownerId != 'guest' && RegExp(r'^[0-9a-fA-F-]{36}
+    if (widget.ownerId != 'guest' && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
+      try {
+        await ref.read(authSessionProvider.notifier).api.renamePlaylist(playlist.id, name.trim());
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not sync playlist rename.')));
+        return;
+      }
+    }
+    await _store.rename(widget.ownerId, playlist.id, name);
     await _load();
     widget.onChanged?.call();
   }
@@ -109,19 +106,21 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         title: const Text('Delete playlist?'),
         content: Text('“${playlist.name}” will be removed from this device.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
         ],
       ),
     );
     if (confirmed != true) return;
-    if (widget.ownerId != 'guest' && RegExp(r'^[0-9a-fA-F-]{36}
+    if (widget.ownerId != 'guest' && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
+      try {
+        await ref.read(authSessionProvider.notifier).api.deletePlaylist(playlist.id);
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not delete playlist from your account.')));
+        return;
+      }
+    }
+    await _store.delete(widget.ownerId, playlist.id);
     widget.onChanged?.call();
     if (mounted) Navigator.of(context).pop();
   }
