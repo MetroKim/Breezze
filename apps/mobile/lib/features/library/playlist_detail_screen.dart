@@ -306,13 +306,12 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   padding: EdgeInsets.zero,
                   itemCount: playlist.tracks.length,
-                  onReorder: (oldIndex, newIndex) async {
-                    final target = newIndex > oldIndex ? newIndex - 1 : newIndex;
+                  onReorderItem: (oldIndex, newIndex) async {
                     await _store.reorderTracks(
                       widget.ownerId,
                       playlist.id,
                       oldIndex,
-                      target,
+                      newIndex,
                     );
                     await _load();
                     widget.onChanged?.call();
