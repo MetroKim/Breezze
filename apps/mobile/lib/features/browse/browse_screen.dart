@@ -158,24 +158,90 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                 ),
                 const SizedBox(height: 18),
                 Text('Discover', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final destination in _browseDestinations)
-                      ActionChip(
-                        avatar: BzSvgIcon(
-                          name: destination.icon,
-                          size: 16,
-                          color: theme.bzText2,
-                        ),
-                        label: Text(destination.title),
-                        onPressed: () => _openCollection(destination),
-                        backgroundColor: theme.bzSurface1,
-                        side: BorderSide(color: theme.bzSeparator),
+                const SizedBox(height: 10),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 1080
+                        ? 4
+                        : constraints.maxWidth >= 620
+                            ? 3
+                            : 2;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _browseDestinations.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 2.45,
                       ),
-                  ],
+                      itemBuilder: (context, index) {
+                        final destination = _browseDestinations[index];
+                        return Material(
+                          color: theme.bzSurface1,
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(BzRadius.card),
+                            onTap: () => _openCollection(destination),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(BzRadius.card),
+                                border: Border.all(color: theme.bzSeparator),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: theme.bzSurface2,
+                                      borderRadius: BorderRadius.circular(11),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: BzSvgIcon(
+                                      name: destination.icon,
+                                      size: 19,
+                                      color: theme.bzAccent,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          destination.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.labelLarge,
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          destination.description,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: theme.bzText2,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
                 ),
               ],
             ),
