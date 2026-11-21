@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../app/search_history_store.dart';
+import '../../app/playlist_store.dart';
+import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -166,6 +168,129 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _controller.text = query;
     _controller.selection = TextSelection.collapsed(offset: query.length);
     _search(query);
+  }
+
+  Future<String?> _requestPlaylistName() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Playlist'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Playlist name'),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return name?.trim().isEmpty == true ? null : name?.trim();
+  }
+
+  Future<void> _showAddToPlaylist(BzTrack track) async {
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final store = PlaylistStore();
+    var playlists = await store.load(ownerId);
+    String? selectedId;
+
+    if (playlists.isEmpty) {
+      final name = await _requestPlaylistName();
+      if (name == null || name.isEmpty) return;
+      await store.create(ownerId, name);
+      playlists = await store.load(ownerId);
+      if (playlists.isNotEmpty) selectedId = playlists.first.id;
+    } else {
+      selectedId = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                child: Text('Add to Playlist',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              for (final playlist in playlists)
+                ListTile(
+                  leading: BzBnoteMark(
+                    size: 40,
+                    color: Theme.of(context).bzText2,
+                  ),
+                  title: Text(playlist.name),
+                  subtitle: Text('${playlist.tracks.length} songs'),
+                  onTap: () => Navigator.of(context).pop(playlist.id),
+                ),
+              ListTile(
+                leading: BzSvgIcon(
+                  name: 'plus',
+                  color: Theme.of(context).bzAccent,
+                ),
+                title: const Text('New Playlist'),
+                onTap: () => Navigator.of(context).pop('__new__'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (selectedId == '__new__') {
+        final name = await _requestPlaylistName();
+        if (name == null || name.isEmpty) return;
+        await store.create(ownerId, name);
+        playlists = await store.load(ownerId);
+        selectedId = playlists.isEmpty ? null : playlists.first.id;
+      }
+    }
+
+    if (selectedId == null) return;
+    await store.addTrack(
+      ownerId,
+      selectedId,
+      FavoriteTrack(
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        durationMs: track.duration.inMilliseconds,
+      ),
+    );
+    if (!mounted) return;
+    ref.read(playlistRefreshSignalProvider.notifier).state++;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Added to playlist')),
+    );
+  }
+
+  Future<void> _addFavorite(BzTrack track) async {
+    await ref.read(favoritesStoreProvider).toggle(
+          FavoriteTrack(
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            artworkUrl: track.artworkUrl,
+            durationMs: track.duration.inMilliseconds,
+          ),
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Library updated')),
+    );
   }
 
   void _download(BzTrack track) {
@@ -346,22 +471,54 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
-                                    trailing: value != null
-                                        ? const SizedBox(
-                                            width: 24,
-                                            height: 24,
-                                            child: Center(
-                                              child:
-                                                  CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            ),
-                                          )
-                                        : IconButton(
-                                            tooltip: 'Download',
-                                            icon: BzSvgIcon(name: 'download', color: theme.bzText1),
-                                            onPressed: () => _download(track),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        PopupMenuButton<String>(
+                                          tooltip: 'Track actions',
+                                          icon: BzSvgIcon(
+                                            name: 'more-vertical',
+                                            color: theme.bzText2,
+                                            size: 20,
                                           ),
+                                          onSelected: (action) {
+                                            if (action == 'playlist') {
+                                              _showAddToPlaylist(track);
+                                            } else if (action == 'favorite') {
+                                              _addFavorite(track);
+                                            }
+                                          },
+                                          itemBuilder: (context) => const [
+                                            PopupMenuItem(
+                                              value: 'playlist',
+                                              child: Text('Add to Playlist'),
+                                            ),
+                                            PopupMenuItem(
+                                              value: 'favorite',
+                                              child: Text('Add to Library'),
+                                            ),
+                                          ],
+                                        ),
+                                        value != null
+                                            ? const SizedBox(
+                                                width: 24,
+                                                height: 24,
+                                                child: Center(
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                  ),
+                                                ),
+                                              )
+                                            : IconButton(
+                                                tooltip: 'Download',
+                                                icon: BzSvgIcon(
+                                                  name: 'download',
+                                                  color: theme.bzText1,
+                                                ),
+                                                onPressed: () => _download(track),
+                                              ),
+                                      ],
+                                    ),
                                     onTap: () => _play(track),
                                   );
                                 },
