@@ -12,7 +12,7 @@ describe('MediaService tenant isolation', () => {
     },
   };
   const signer = { createUploadUrl: jest.fn() };
-  const queue = { add: jest.fn() };
+  const queue = { add: jest.fn(), getJob: jest.fn() };
   const service = new MediaService(prisma as any, signer as any);
 
   beforeEach(() => {
@@ -115,4 +115,56 @@ describe('MediaService tenant isolation', () => {
     });
     expect(queue.add).not.toHaveBeenCalled();
   });
+
+  it('retries a terminal failed upload by removing the retained failed BullMQ job', async () => {
+    const remove = jest.fn().mockResolvedValue(undefined);
+    const existing = { getState: jest.fn().mockResolvedValue('failed'), remove };
+    prisma.mediaJob.updateMany.mockResolvedValue({ count: 1 });
+    prisma.mediaJob.findFirst.mockResolvedValue({
+      id: 'job-failed', userId: 'user-a', submissionId: 'release-1',
+      originalFilename: 'track.wav', status: 'failed',
+    });
+    queue.getJob.mockResolvedValue(existing);
+    queue.add.mockResolvedValue({});
+
+    await expect(service.retryFailedUpload('user-a', 'job-failed')).resolves.toEqual({
+      jobId: 'job-failed', status: 'uploaded', queued: true,
+    });
+    expect(queue.getJob).toHaveBeenCalledWith('media_job-failed');
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(queue.add).toHaveBeenCalledWith(
+      'pipeline',
+      expect.objectContaining({ jobId: 'job-failed', submissionId: 'release-1' }),
+      expect.objectContaining({ jobId: 'media_job-failed', attempts: 5 }),
+    );
+  });
+
+  it('does not retry another account failed upload', async () => {
+    prisma.mediaJob.updateMany.mockResolvedValue({ count: 0 });
+    prisma.mediaJob.findFirst.mockResolvedValue(null);
+    await expect(service.retryFailedUpload('user-a', 'job-owned-by-user-b'))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(queue.getJob).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('restores failed state when retry enqueue fails so the owner can retry later', async () => {
+    prisma.mediaJob.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 });
+    prisma.mediaJob.findFirst.mockResolvedValue({
+      id: 'job-failed', userId: 'user-a', submissionId: 'release-1',
+      originalFilename: 'track.wav', status: 'failed',
+    });
+    queue.getJob.mockResolvedValue(null);
+    queue.add.mockRejectedValue(new Error('REDIS_UNAVAILABLE'));
+
+    await expect(service.retryFailedUpload('user-a', 'job-failed'))
+      .rejects.toThrow('REDIS_UNAVAILABLE');
+    expect(prisma.mediaJob.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'job-failed', userId: 'user-a', status: 'uploaded' },
+      data: { status: 'failed' },
+    });
+  });
+
 });
