@@ -60,7 +60,7 @@ export class MfaRecoveryRegenerationDto {
   password!: string;
 
   @IsString()
-  @Matches(/^(?:\\d{6}|[A-Fa-f0-9]{4}(?:-?[A-Fa-f0-9]{4}){3})$/)
+  @Matches(/^(?:\d{6}|[A-Fa-f0-9]{4}(?:-?[A-Fa-f0-9]{4}){3})$/)
   code!: string;
 }
 
