@@ -137,6 +137,27 @@ class PlayerController extends Notifier<PlayerState> {
     await _resolveAndPlay(info);
   }
 
+  /// Stops playback and clears the current queue. Used on explicit user stop
+  /// and account sign-out so one user's media cannot continue into another
+  /// account session.
+  Future<void> stop() async {
+    final requestId = ++_requestGeneration;
+    final engine = _engine;
+    _queue.clear(keepCurrent: false);
+    _machine.dispatch(StopRequested(requestId: requestId));
+    state = state.copyWith(
+      clearCurrentTrack: true,
+      position: Duration.zero,
+      duration: Duration.zero,
+    );
+    if (engine == null) return;
+    try {
+      await _serializeEngineOperation(() => engine.stop());
+    } catch (_) {
+      // The logical player is already idle; native stop is best-effort.
+    }
+  }
+
   Future<void> togglePlayPause() async {
     final engine = _engine;
     if (engine == null) return;
@@ -347,13 +368,14 @@ class PlayerState {
     Duration? position,
     Duration? duration,
     TrackInfo? currentTrack,
+    bool clearCurrentTrack = false,
     int? queueVersion,
   }) {
     return PlayerState(
       playbackState: playbackState ?? this.playbackState,
       position: position ?? this.position,
       duration: duration ?? this.duration,
-      currentTrack: currentTrack ?? this.currentTrack,
+      currentTrack: clearCurrentTrack ? null : (currentTrack ?? this.currentTrack),
       queueVersion: queueVersion ?? this.queueVersion,
     );
   }
