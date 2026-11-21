@@ -224,7 +224,7 @@ class PlayerController extends Notifier<PlayerState> {
     if (activeSource != null && activeSource.isExpired && currentTrack != null) {
       // Provider grants are short-lived. Resolve a fresh grant instead of
       // attempting to resume a stale URL after a long pause/background.
-      await _resolveAndPlay(currentTrack);
+      await _resolveAndPlay(currentTrack, initialPosition: state.position);
       return;
     }
     _machine.dispatch(PlayPressed());
@@ -267,6 +267,7 @@ class PlayerController extends Notifier<PlayerState> {
     _machine.dispatch(SeekRequested(position));
     try {
       await _serializeEngineOperation(() => engine.seek(position));
+      state = state.copyWith(position: position);
       _machine.dispatch(SeekCompleted());
     } catch (_) {
       final currentTrackId = state.currentTrack?.id;
@@ -376,7 +377,10 @@ class PlayerController extends Notifier<PlayerState> {
     return result;
   }
 
-  Future<void> _resolveAndPlay(TrackInfo info) async {
+  Future<void> _resolveAndPlay(
+    TrackInfo info, {
+    Duration initialPosition = Duration.zero,
+  }) async {
     // Defensive check for restored or stale queue entries created before the
     // metadata-only provider capability was enforced.
     if (_isMetadataOnlyProviderTrack(info.id) && info.localFilePath == null) return;
@@ -389,7 +393,7 @@ class PlayerController extends Notifier<PlayerState> {
     _trackInfos[info.id] = info;
     state = state.copyWith(
       currentTrack: info,
-      position: Duration.zero,
+      position: initialPosition,
       duration: info.duration,
     );
     _machine.dispatch(StartRequested(info.id, requestId: requestId));
@@ -439,6 +443,12 @@ class PlayerController extends Notifier<PlayerState> {
         await engine.prepare(source);
         if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
           return;
+        }
+        if (initialPosition > Duration.zero) {
+          await engine.seek(initialPosition);
+          if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
+            return;
+          }
         }
 
         _machine.dispatch(MediaReady(requestId: requestId));
