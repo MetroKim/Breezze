@@ -25,13 +25,21 @@ The backend requests `dailyGlobalTopCharts` for the selected storefront. Without
 
 ### YouTube music videos
 
-Set:
+Primary source: the existing internal `ytmusicapi` sidecar, using the MIT-licensed `sigma67/ytmusicapi` Python library.
+
+- No API key or user Google cookie is required for the public search endpoint.
+- `GET /videos` calls `YTMusic().search(query, filter="videos")`.
+- The adapter returns only `MUSIC_VIDEO_TYPE_OMV` (Original Music Video) results. The upstream FAQ describes OMV as an original-artist upload with actual video content; UGC uploads and audio tracks with static artwork are excluded.
+- The sidecar is already included in `backend/docker-compose.yml`; NestJS calls it using `YTMUSIC_API_URL`.
+- The app opens the result on YouTube. Breezze does not download, extract stream URLs, rehost, or relay YouTube media.
+
+This is an unofficial client that emulates YouTube Music web requests and is not supported or endorsed by Google. It may break when YouTube changes its web client, and upstream rate limits apply. Treat it as a best-effort discovery source with monitoring, caching, concurrency limits and a fallback—not as a production SLA or a music licence.
+
+Optional fallback:
 - `YOUTUBE_DATA_API_KEY`
 - `YOUTUBE_OFFICIAL_CHANNEL_IDS` — comma-separated channel IDs manually reviewed and approved by Breezze.
 
-The API search is restricted to the Music category and embeddable videos, then filtered to the approved channel allowlist. A generic YouTube search result is not automatically called an official music video. If the allowlist is empty, the endpoint remains unavailable rather than showing unverified uploads.
-
-The app opens the video on YouTube. Breezze does not download, rehost, or relay YouTube media.
+The official YouTube Data API fallback is used only when both values are configured and the ytmusicapi sidecar is unavailable. Fallback results are filtered to the approved channel allowlist.
 
 ### JamBase concerts
 
@@ -73,7 +81,9 @@ Do not add real values to this file or commit them. Configure the secrets in the
 - [ ] Daily Top 100 is populated only when a valid Apple Music developer token returns the `dailyGlobalTopCharts` feed.
 - [ ] Apple artist search uses exact artist-name matching before opening a discography.
 - [ ] Apple album tracks are loaded only from a returned collection ID.
-- [ ] YouTube video results are empty until both API key and approved channel allowlist are configured.
+- [ ] The ytmusicapi sidecar returns only `MUSIC_VIDEO_TYPE_OMV` videos.
+- [ ] UGC and static-artwork audio tracks are excluded from Music Videos.
+- [ ] The optional YouTube Data API fallback is used only with both API key and approved channel allowlist configured.
 - [ ] JamBase event data is fetched only server-side; no key is sent to the Flutter client.
 - [ ] Provider attribution and outbound links remain visible.
 - [ ] No catalog-only record is treated as a Breezze playback authorization.
