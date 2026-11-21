@@ -10,6 +10,7 @@ import { IsIn, IsUUID } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { AdminService } from './admin.service';
+import { CurrentUser } from '../auth/current-user.decorator';
 
 export class RoleDto {
   @IsUUID()
@@ -36,12 +37,17 @@ export class AdminController {
   }
 
   @Post('takedowns/:id/resolve')
-  resolve(@Param('id') id: string) {
-    return this.admin.resolveTakedown(id);
+  resolve(@CurrentUser() actorId: string, @Param('id') id: string) {
+    return this.admin.resolveTakedown(actorId, id);
+  }
+
+  @Get('audit-events')
+  auditEvents() {
+    return this.admin.listAuditEvents();
   }
 
   @Post('roles')
-  grantRole(@Body() dto: RoleDto) {
-    return this.admin.createUserRole(dto.userId, dto.role);
+  grantRole(@CurrentUser() actorId: string, @Body() dto: RoleDto) {
+    return this.admin.createUserRole(actorId, dto.userId, dto.role);
   }
 }
