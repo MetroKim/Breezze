@@ -126,13 +126,9 @@ class TrackDetailScreen extends ConsumerWidget {
                   runSpacing: 10,
                   children: [
                     FilledButton.icon(
-                      onPressed: () async {
-                        if (track.id.startsWith('bz:')) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
-                          );
-                          return;
-                        }
+                      onPressed: track.id.startsWith('bz:')
+                          ? null
+                          : () async {
                         await ref.read(playerControllerProvider.notifier).playTrack(
                           trackId: track.id,
                           queue: queue,
@@ -142,7 +138,7 @@ class TrackDetailScreen extends ConsumerWidget {
                         );
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
-                      label: const Text('Play'),
+                      label: Text(track.id.startsWith('bz:') ? 'Playback unavailable' : 'Play'),
                     ),
                     OutlinedButton.icon(
                       onPressed: saveToLibrary,
