@@ -217,6 +217,15 @@ class _MiniPlayer extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Previous track',
+                      onPressed: controller.previous,
+                      icon: BzSvgIcon(
+                        name: 'skip-previous',
+                        color: theme.bzText1,
+                        size: 20,
+                      ),
+                    ),
                     _PlayerIconButton(
                       asset: playing
                           ? 'assets/icons/pause.svg'
