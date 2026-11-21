@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Post,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import { IsEmail, IsString, IsOptional, MaxLength, MinLength } from 'class-validator';
@@ -80,5 +82,12 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   sessions(@CurrentUser() userId: string) {
     return this.auth.listSessions(userId);
+  }
+
+  @Delete('sessions/:id')
+  @UseGuards(JwtAuthGuard)
+  async revokeSession(@CurrentUser() userId: string, @Param('id') sessionId: string) {
+    await this.auth.revokeSession(userId, sessionId);
+    return { revoked: true };
   }
 }
