@@ -388,24 +388,29 @@ class _TabButton extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(BzRadius.control),
             onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: BzMotion.fastMs),
-              curve: const Cubic(0.22, 1, 0.36, 1),
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              decoration: BoxDecoration(
-                color: active ? theme.bzSurface2 : Colors.transparent,
-                borderRadius: BorderRadius.circular(BzRadius.control),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SvgPicture.asset(
-                    destination.asset,
-                    width: 22,
-                    height: 22,
-                    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: BzMotion.fastMs),
+                    curve: const Cubic(0.22, 1, 0.36, 1),
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: active ? theme.bzSurface2 : Colors.transparent,
+                      borderRadius: BorderRadius.circular(BzRadius.control),
+                    ),
+                    alignment: Alignment.center,
+                    child: SvgPicture.asset(
+                      destination.asset,
+                      width: 22,
+                      height: 22,
+                      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                    ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     destination.label,
                     style: TextStyle(
