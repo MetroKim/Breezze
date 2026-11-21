@@ -310,7 +310,7 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Queue',
   }) {
-    if (track.id.startsWith('bz:') || item.id.startsWith('bzv:') && track.localFilePath == null) return;
+    if ((track.id.startsWith('bz:') || track.id.startsWith('bzv:')) && track.localFilePath == null) return;
     _trackInfos[track.id] = track;
     if (state.currentTrack == null) {
       unawaited(playTrack(
