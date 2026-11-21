@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/download_preferences.dart';
 import '../../core/auth/auth_session.dart';
+import 'account_screen.dart';
+import 'artist_portal_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Settings — audio quality, playback, downloads, account (§19).
@@ -58,6 +60,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: Text(email ?? 'Not signed in'),
               subtitle: Text('Breezze — free for everyone',
                   style: theme.textTheme.bodySmall),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AccountScreen()),
+              ),
+            ),
+            ListTile(
+              leading: BzSvgIcon(name: 'user-round'),
+              title: const Text('Account details and sessions'),
+              trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AccountScreen()),
+              ),
+            ),
+            ListTile(
+              leading: BzSvgIcon(name: 'mic'),
+              title: const Text('Artist Portal'),
+              trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ArtistPortalScreen()),
+              ),
             ),
             ListTile(
               leading: BzSvgIcon(name: 'logout'),
