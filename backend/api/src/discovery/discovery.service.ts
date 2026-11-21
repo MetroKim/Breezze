@@ -118,6 +118,106 @@ export class DiscoveryService {
   }
 
 
+
+  async musicVideos(query = 'official music video') {
+    const apiKey = process.env.YOUTUBE_DATA_API_KEY;
+    const approvedChannels = (process.env.YOUTUBE_OFFICIAL_CHANNEL_IDS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!apiKey || approvedChannels.length === 0) {
+      throw new Error('YOUTUBE_VIDEO_PROVIDER_NOT_CONFIGURED');
+    }
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('type', 'video');
+    url.searchParams.set('videoCategoryId', '10');
+    url.searchParams.set('videoEmbeddable', 'true');
+    url.searchParams.set('order', 'viewCount');
+    url.searchParams.set('maxResults', '50');
+    url.searchParams.set('q', query.trim().slice(0, 100) || 'official music video');
+    url.searchParams.set('key', apiKey);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error(`YOUTUBE_DATA_HTTP_${response.status}`);
+    const payload = await response.json() as {
+      items?: { id?: { videoId?: string }; snippet?: {
+        title?: string; channelId?: string; channelTitle?: string;
+        publishedAt?: string; thumbnails?: { high?: { url?: string }; medium?: { url?: string } };
+      } }[];
+    };
+    const items = (payload.items ?? []).filter((item) =>
+      item.snippet?.channelId && approvedChannels.includes(item.snippet.channelId),
+    );
+    return {
+      source: 'YouTube Data API',
+      verifiedChannelPolicy: 'Only channel IDs configured in YOUTUBE_OFFICIAL_CHANNEL_IDS are shown.',
+      fetchedAt: new Date().toISOString(),
+      items: items.map((item) => ({
+        id: item.id?.videoId ?? null,
+        title: item.snippet?.title ?? 'Untitled video',
+        artist: item.snippet?.channelTitle ?? 'Verified channel',
+        channelId: item.snippet?.channelId ?? null,
+        publishedAt: item.snippet?.publishedAt ?? null,
+        artworkUrl: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url ?? null,
+        url: item.id?.videoId ? `https://www.youtube.com/watch?v=${item.id.videoId}` : null,
+        playback: 'external_youtube_only',
+      })),
+    };
+  }
+
+  async concerts(country = 'TZ', city?: string) {
+    const apiKey = process.env.JAMBASE_DATA_API_KEY;
+    if (!apiKey) throw new Error('JAMBASE_PROVIDER_NOT_CONFIGURED');
+    const territory = this.country(country).toUpperCase();
+    const url = new URL('https://api.data.jambase.com/v3/events');
+    url.searchParams.set('geoCountryIso2', territory);
+    url.searchParams.set('eventType', 'concerts');
+    url.searchParams.set('eventDateFrom', new Date().toISOString().slice(0, 10));
+    url.searchParams.set('perPage', '50');
+    url.searchParams.set('page', '1');
+    if (city?.trim()) url.searchParams.set('geoCityName', city.trim().slice(0, 80));
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+        'User-Agent': 'Breezze/0.1 (+https://breezze.app)',
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!response.ok) throw new Error(`JAMBASE_EVENTS_HTTP_${response.status}`);
+    const payload = await response.json() as {
+      events?: Record<string, any>[];
+      pagination?: Record<string, unknown>;
+    };
+    return {
+      source: 'JamBase Data',
+      attribution: 'Concert data provided by JamBase',
+      territory,
+      city: city?.trim() || null,
+      fetchedAt: new Date().toISOString(),
+      pagination: payload.pagination ?? null,
+      items: (payload.events ?? []).filter((event) => event.deletionStatus == null).map((event) => {
+        const performers = Array.isArray(event.performer) ? event.performer : [];
+        const location = event.location ?? {};
+        const address = location.address ?? {};
+        const offers = Array.isArray(event.offers) ? event.offers : [];
+        const ticket = offers.find((offer) => typeof offer.url === 'string');
+        return {
+          id: event.identifier ?? null,
+          title: event.name ?? 'Live music event',
+          artist: performers.map((performer: Record<string, any>) => performer.name).filter(Boolean).join(', '),
+          date: event.startDate ?? null,
+          venue: location.name ?? null,
+          city: address.addressLocality ?? city ?? null,
+          country: address.addressCountry?.name ?? territory,
+          artworkUrl: event.image ?? null,
+          url: event.url ?? null,
+          ticketUrl: ticket?.url ?? null,
+        };
+      }),
+    };
+  }
+
   async searchTracks(query: string) {
     const q = query.trim().slice(0, 120);
     if (q.length < 2) return { source: 'Apple iTunes Search API', items: [] };
