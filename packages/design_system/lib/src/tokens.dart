@@ -13,7 +13,7 @@ class BzColorsLight {
   static const textSecondary = Color(0xFF626A73);
   static const separator = Color(0xFFE2E6EA);
   static const brandMonochrome = Color(0xFF111317);
-  static const accent = Color(0xFF34465B);
+  static const accent = Color(0xFFE5484D);
   static const success = Color(0xFF237A4B);
   static const warning = Color(0xFF98620E);
   static const error = Color(0xFFB42332);
@@ -28,7 +28,7 @@ class BzColorsDark {
   static const textSecondary = Color(0xFFA1A9B3);
   static const separator = Color(0xFF2C323A);
   static const brandOnDark = Color(0xFFF5F7FA);
-  static const accent = Color(0xFFBCC9D8);
+  static const accent = Color(0xFFFF6670);
   static const success = Color(0xFF55C88A);
   static const warning = Color(0xFFEAB95C);
   static const error = Color(0xFFFF6574);
