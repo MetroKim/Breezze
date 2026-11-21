@@ -225,6 +225,30 @@ void main() {
     expect(resolver.pending.containsKey('track-c'), isFalse);
   });
 
+  test('reports successfully started plays for backend analytics', () async {
+    final reported = <String>[];
+    final testContainer = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playHistoryReporterProvider.overrideWithValue((track) async {
+        reported.add(track.id);
+      }),
+    ]);
+    final testEngine = _FakeEngine();
+    testContainer.read(playerControllerProvider.notifier).attachEngine(testEngine);
+
+    final request = testContainer.read(playerControllerProvider.notifier).playTrack(
+      trackId: 'track-analytics',
+      title: 'Analytics track',
+    );
+    resolver.complete('track-analytics');
+    await request;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(reported, ['track-analytics']);
+    testContainer.dispose();
+    await testEngine.dispose();
+  });
+
   test('resolver failure leaves the controller in failed state', () async {
     final player = container.read(playerControllerProvider.notifier);
     final request = player.playTrack(trackId: 'missing');
