@@ -627,14 +627,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                 child: Text('Add to Queue'),
                                               ),
                                             ],
-                                            const PopupMenuItem(
-                                              value: 'playlist',
-                                              child: Text('Add to Playlist'),
-                                            ),
-                                            const PopupMenuItem(
-                                              value: 'favorite',
-                                              child: Text('Add to Library'),
-                                            ),
+                                            if (!track.id.startsWith('bzv:')) ...[
+                                              const PopupMenuItem(
+                                                value: 'playlist',
+                                                child: Text('Add to Playlist'),
+                                              ),
+                                              const PopupMenuItem(
+                                                value: 'favorite',
+                                                child: Text('Add to Library'),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                         value != null
