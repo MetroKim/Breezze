@@ -197,16 +197,24 @@ class PlayerController extends Notifier<PlayerState> {
     _machine.dispatch(PlayPressed());
     try {
       await _serializeEngineOperation(() async {
-        unawaited(engine.play().catchError((Object error, StackTrace stackTrace) {
-          final currentTrackId = state.currentTrack?.id;
-          if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
-          final currentTrackId = state.currentTrack?.id;
-      if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
-      _machine.dispatch(SourceResolutionFailed('RESUME_FAILED', requestId: _machine.activeRequestId));
-        }));
+        unawaited(engine.play().catchError(
+          (Object error, StackTrace stackTrace) {
+            final currentTrackId = state.currentTrack?.id;
+            if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+            _machine.dispatch(SourceResolutionFailed(
+              'RESUME_FAILED',
+              requestId: _machine.activeRequestId,
+            ));
+          },
+        ));
       });
     } catch (_) {
-      _machine.dispatch(SourceResolutionFailed('RESUME_FAILED', requestId: _machine.activeRequestId));
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      _machine.dispatch(SourceResolutionFailed(
+        'RESUME_FAILED',
+        requestId: _machine.activeRequestId,
+      ));
     }
   }
 
