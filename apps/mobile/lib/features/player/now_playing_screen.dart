@@ -90,7 +90,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_down),
+                      icon: BzSvgIcon(name: 'chevron-down'),
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     Expanded(
@@ -109,7 +109,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.more_vert),
+                      icon: BzSvgIcon(name: 'more-vertical'),
                       onPressed: () {},
                     ),
                   ],
@@ -193,13 +193,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.shuffle),
+                    icon: BzSvgIcon(name: 'shuffle'),
                     onPressed: controller.toggleShuffle,
                     color: theme.bzText2,
                   ),
                   const SizedBox(width: 16),
                   IconButton(
-                    icon: const Icon(Icons.skip_previous, size: 36),
+                    icon: BzSvgIcon(name: 'skip-previous', size: 34),
                     onPressed: controller.previous,
                   ),
                   const SizedBox(width: 16),
@@ -210,12 +210,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   ),
                   const SizedBox(width: 16),
                   IconButton(
-                    icon: const Icon(Icons.skip_next, size: 36),
+                    icon: BzSvgIcon(name: 'skip-next', size: 34),
                     onPressed: controller.next,
                   ),
                   const SizedBox(width: 16),
                   IconButton(
-                    icon: const Icon(Icons.repeat),
+                    icon: BzSvgIcon(name: 'repeat'),
                     onPressed: controller.cycleRepeat,
                     color: theme.bzText2,
                   ),
@@ -339,10 +339,10 @@ class _PlayPauseButton extends StatelessWidget {
           color: theme.bzText1,
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          playing ? Icons.pause : Icons.play_arrow,
+        child: BzSvgIcon(
+          name: playing ? 'pause' : 'play',
           color: theme.bzBackground,
-          size: size * 0.55,
+          size: size * 0.42,
         ),
       ),
     );
@@ -435,7 +435,7 @@ class _FavoriteButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return IconButton(
-      icon: const Icon(Icons.favorite_border),
+      icon: BzSvgIcon(name: 'favorite'),
       onPressed: () async {
         final added = await ref.read(favoritesStoreProvider).toggle(
               FavoriteTrack(
