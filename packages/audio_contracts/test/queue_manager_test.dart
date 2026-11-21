@@ -1,4 +1,4 @@
-import 'package:audio_contracts/audio_contracts.dart';
+import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 QueueEntry entry(String id, {String origin = 'manual'}) => QueueEntry(
