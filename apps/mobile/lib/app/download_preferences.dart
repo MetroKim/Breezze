@@ -12,6 +12,7 @@ class DownloadPreferences {
   final bool autoCleanup;
   final int minimumFreeSpaceGb;
   final String quality;
+  final String streamingQuality;
 
   const DownloadPreferences({
     this.wifiOnly = true,
@@ -19,6 +20,7 @@ class DownloadPreferences {
     this.autoCleanup = true,
     this.minimumFreeSpaceGb = 2,
     this.quality = 'standard',
+    this.streamingQuality = 'AAC_256',
   });
 
   DownloadPreferences copyWith({
@@ -27,6 +29,7 @@ class DownloadPreferences {
     bool? autoCleanup,
     int? minimumFreeSpaceGb,
     String? quality,
+    String? streamingQuality,
   }) =>
       DownloadPreferences(
         wifiOnly: wifiOnly ?? this.wifiOnly,
@@ -34,6 +37,7 @@ class DownloadPreferences {
         autoCleanup: autoCleanup ?? this.autoCleanup,
         minimumFreeSpaceGb: minimumFreeSpaceGb ?? this.minimumFreeSpaceGb,
         quality: quality ?? this.quality,
+        streamingQuality: streamingQuality ?? this.streamingQuality,
       );
 
   Map<String, Object> toJson() => {
@@ -42,6 +46,7 @@ class DownloadPreferences {
         'autoCleanup': autoCleanup,
         'minimumFreeSpaceGb': minimumFreeSpaceGb,
         'quality': quality,
+        'streamingQuality': streamingQuality,
       };
 
   factory DownloadPreferences.fromJson(Map<String, dynamic> json) {
@@ -61,6 +66,9 @@ class DownloadPreferences {
           ? requestedMinimum!
           : 2,
       quality: requestedQuality == 'lossless' ? 'lossless' : 'standard',
+      streamingQuality: const ['AAC_128', 'AAC_256', 'LOSSLESS', 'HI_RES'].contains(json['streamingQuality'])
+          ? json['streamingQuality'] as String
+          : 'AAC_256',
     );
   }
 }
