@@ -198,3 +198,12 @@ returns, with a policy for expired or revoked leases.
 - Important: processed outputs are staged under `processed/{jobId}`. A moderated publication step must map them to canonical `audio/{trackId}/{variant}` objects before playback URLs can resolve. No public R2 access is enabled.
 
 Operator setup remains: create the bucket and scoped R2 token; deploy the Worker; attach a custom domain; set the same `MEDIA_SIGNING_KEY` on Worker and API; configure the backend media worker's R2 credentials; and run live upload/range/playback tests. These account-side actions have not been performed by repository commits.
+
+
+## Dependency audit + framework upgrade — 2026-11-21
+
+- Upgraded the API from NestJS 10 to patched NestJS 11.2.11 packages, with compatible Config 4.0.4, Swagger 11.2.7, Throttler 6.8.0, Passport 11.0.5 and JWT 11.0.2 integrations.
+- Added patched `glob` 14.0.2 and `minimatch` 11.0.1 overrides for the Nest CLI dependency chain.
+- Upgraded the Cloudflare Worker to Wrangler 4.166.0 and matching `@cloudflare/workers-types` 5.20261121.1; Worker CI uses Node 22.
+- Full CI workflow `44913618622` passed backend typecheck/tests/build, Flutter analysis/tests and API client/audio contract checks, plus Cloudflare Worker typechecking.
+- `npm audit` reports 0 vulnerabilities for both the backend and Cloudflare Worker dependency trees.
