@@ -10,9 +10,9 @@ class _ControlledResolver implements PlaybackResolver {
   final Map<String, Completer<PlayableSource?>> pending = {};
 
   @override
-  Future<PlayableSource?> resolve(String trackId) {
+  Future<PlayableSource?> resolve(TrackInfo track) {
     final completer = Completer<PlayableSource?>();
-    pending[trackId] = completer;
+    pending[track.id] = completer;
     return completer.future;
   }
 
