@@ -22,6 +22,7 @@ export class SearchService {
 
     const [tracks, artists, albums, externalResult] = await Promise.all([this.prisma.track.findMany({
       where: { title: { contains: q, mode: 'insensitive' } },
+      include: { artist: true, album: true },
       take: 20,
     }), this.prisma.artist.findMany({
       where: { name: { contains: q, mode: 'insensitive' } },
