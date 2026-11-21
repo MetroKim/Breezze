@@ -58,7 +58,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     if (nativeIndex >= 0) {
       if (playlist.tracks.any((item) => item.id.startsWith('bz:')) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('YouTube tracks open separately and are excluded from Breezze queue playback.')),
+          const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
       }
       await _playTrack(playlist, nativeIndex);
