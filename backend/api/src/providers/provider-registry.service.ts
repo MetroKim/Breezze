@@ -21,7 +21,8 @@ export class ProviderRegistry {
   }
 
   get(providerId: string): ProviderAdapter | undefined {
-    return this.adapters.get(providerId);
+    const adapter = this.adapters.get(providerId);
+    return adapter?.enabled === false ? undefined : adapter;
   }
 
   list() {
