@@ -45,7 +45,11 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
 
       final downloadUrl = authorization['url'] as String?;
       if (downloadUrl == null || downloadUrl.isEmpty) return;
-      final rightsExpiryRaw = authorization['rightsExpiresAt'] as String?;
+      // The server issues a bounded offline lease, capped by the actual rights end.
+      // Keep the effective expiry in the local metadata so a device offline for
+      // longer than the lease cannot continue playing indefinitely.
+      final rightsExpiryRaw = (authorization['offlineLeaseExpiresAt']
+          ?? authorization['rightsExpiresAt']) as String?;
       final rightsExpiry = rightsExpiryRaw == null
           ? null
           : DateTime.tryParse(rightsExpiryRaw)?.toUtc();
