@@ -152,7 +152,11 @@ export class AudiusAdapter implements ProviderAdapter {
       );
       const track = payload.data;
       const gated = track?.is_stream_gated ?? track?.isStreamGated ?? false;
-      return providerOk({ available: Boolean(track?.id && !gated) });
+      const streamable = track?.is_streamable ?? track?.isStreamable;
+      const allowedKeys = track?.allowed_api_keys ?? track?.allowedApiKeys ?? [];
+      const apiKey = process.env.AUDIUS_API_KEY;
+      const keyAllowed = allowedKeys.length === 0 || Boolean(apiKey && allowedKeys.includes(apiKey));
+      return providerOk({ available: Boolean(track?.id && !gated && streamable !== false && keyAllowed) });
     } catch {
       return providerError('AUDIUS_AVAILABILITY_FAILED', 'Could not verify Audius track availability', true);
     }
