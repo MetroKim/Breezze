@@ -22,6 +22,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   Lyrics? _lyrics;
   String _lyricsMode = 'none';
   int _lyricsRequestGeneration = 0;
+  bool _lyricsVisible = true;
 
   @override
   void initState() {
@@ -262,21 +263,37 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ],
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: _openPlayingNext,
-                  icon: BzSvgIcon(name: 'queue', size: 18),
-                  label: const Text('Playing Next'),
-                ),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () =>
+                        setState(() => _lyricsVisible = !_lyricsVisible),
+                    icon: BzSvgIcon(name: 'lyrics', size: 18),
+                    label: Text(_lyricsVisible ? 'Hide Lyrics' : 'Show Lyrics'),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _openPlayingNext,
+                    icon: BzSvgIcon(name: 'queue', size: 18),
+                    label: const Text('Playing Next'),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Expanded(
-                child: _LyricsView(
-                  lyrics: _lyrics,
-                  mode: _lyricsMode,
-                  position: player.position,
-                ),
+                child: _lyricsVisible
+                    ? _LyricsView(
+                        lyrics: _lyrics,
+                        mode: _lyricsMode,
+                        position: player.position,
+                      )
+                    : Center(
+                        child: Text(
+                          'Lyrics hidden',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.bzText2),
+                        ),
+                      ),
               ),
             ],
           ),
