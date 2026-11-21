@@ -250,3 +250,14 @@ Use trace/request IDs across Flutter, Cloudflare and NestJS. Redact credentials 
 - [ ] Cross-user authorization tests pass.
 - [ ] Dashboards cover edge, API, DB, Redis, queues and provider health.
 - [ ] Staged load tests are complete and results recorded through 1M target.
+
+## Implemented API edge Worker
+
+The repository now contains a separate API gateway Worker at [`api-worker/`](./api-worker/README.md). It forwards requests to the NestJS API and caches only anonymous catalog detail GETs for songs, albums and artists. Authenticated requests, cookies, writes, playback resolution, search, range requests and all unlisted routes bypass edge cache.
+
+Initial edge TTL is 90 seconds with a 30-second stale-while-revalidate window. Cache keys include the full URL/query, Cloudflare visitor country and accepted language. Responses with unsafe `Vary` headers, cookies, non-200 status or private/no-store/no-cache directives bypass cache.
+
+The existing [`media-worker/`](./media-worker/README.md) remains a separate private R2 gateway for Breezze-owned or rights-cleared uploads. It is not the general provider streaming proxy. Signed media responses are `private, no-store`.
+
+**Deployment is not yet performed.** Set `API_ORIGIN` to the private HTTPS NestJS origin, deploy the API Worker, attach the API hostname, configure origin authentication/network restrictions, and create Cloudflare WAF/rate-limit rules before routing production traffic through it. Account-side setup and load testing are still required.
+
