@@ -147,7 +147,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                       style: theme.textTheme.displayMedium),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.refresh),
+                  icon: BzSvgIcon(name: 'refresh'),
                   onPressed: _refresh,
                 ),
               ],
@@ -231,10 +231,10 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline),
+                                  icon: BzSvgIcon(name: 'trash'),
                                   onPressed: () => _remove(track),
                                 ),
-                                const Icon(Icons.download_done,
+                                BzSvgIcon(name: 'download-done',
                                     color: Colors.green),
                               ],
                             ),
