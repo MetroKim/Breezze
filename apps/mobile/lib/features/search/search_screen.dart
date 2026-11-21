@@ -470,7 +470,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            track.artist,
+                                            track.id.startsWith('bz:')
+                                                ? '${track.artist} · YouTube Music'
+                                                : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
