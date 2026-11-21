@@ -49,6 +49,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     });
   }
 
+  void _openPlayingNext() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).bzBackground,
+      builder: (_) => const _PlayingNextSheet(),
+    );
+  }
+
   String _format(Duration d) {
     final m = d.inMinutes;
     final s = (d - Duration(minutes: m)).inSeconds;
@@ -221,7 +231,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _openPlayingNext,
+                  icon: BzSvgIcon(name: 'queue', size: 18),
+                  label: const Text('Playing Next'),
+                ),
+              ),
+              const SizedBox(height: 4),
               Expanded(
                 child: _LyricsView(
                   lyrics: _lyrics,
@@ -452,6 +471,172 @@ class _FavoriteButton extends ConsumerWidget {
                   Text(added ? 'Added to favorites' : 'Removed from favorites')));
         }
       },
+    );
+  }
+}
+
+
+class _PlayingNextSheet extends ConsumerWidget {
+  const _PlayingNextSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final player = ref.watch(playerControllerProvider);
+    final controller = ref.read(playerControllerProvider.notifier);
+    final queue = controller.queue;
+    final upcoming = queue.upNext;
+    final theme = Theme.of(context);
+    final current = player.currentTrack;
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.72,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Playing Next',
+                        style: theme.textTheme.titleLarge),
+                  ),
+                  IconButton(
+                    tooltip: queue.shuffle ? 'Disable shuffle' : 'Shuffle',
+                    onPressed: controller.toggleShuffle,
+                    icon: BzSvgIcon(
+                      name: 'shuffle',
+                      color: queue.shuffle ? theme.bzAccent : theme.bzText2,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Change repeat mode',
+                    onPressed: controller.cycleRepeat,
+                    icon: BzSvgIcon(
+                      name: 'repeat',
+                      color: queue.repeatMode == RepeatMode.off
+                          ? theme.bzText2
+                          : theme.bzAccent,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: upcoming.isEmpty
+                        ? null
+                        : () => queue.clear(keepCurrent: true),
+                    child: const Text('Clear'),
+                  ),
+                ],
+              ),
+            ),
+            if (current != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.bzSurface1,
+                    borderRadius: BorderRadius.circular(BzRadius.card),
+                    border: Border.all(color: theme.bzSeparator),
+                  ),
+                  child: Row(
+                    children: [
+                      BzBnoteMark(size: 36, color: theme.bzAccent),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Now Playing',
+                                style: TextStyle(
+                                  color: theme.bzAccent,
+                                  fontSize: BzType.caption,
+                                  fontWeight: FontWeight.w700,
+                                )),
+                            Text(current.title ?? 'Unknown track',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text(current.artist ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: theme.bzText2,
+                                  fontSize: BzType.footnote,
+                                )),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Text('UP NEXT',
+                  style: TextStyle(
+                    color: theme.bzText2,
+                    fontSize: BzType.caption,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  )),
+            ),
+            Expanded(
+              child: upcoming.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No upcoming tracks in the queue.',
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: theme.bzText2),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: upcoming.length,
+                      itemBuilder: (context, index) {
+                        final entry = upcoming[index];
+                        final info = controller.trackInfoFor(entry.trackId);
+                        return Dismissible(
+                          key: ValueKey(entry.entryId),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 24),
+                            color: theme.bzError,
+                            child: BzSvgIcon(
+                              name: 'trash',
+                              color: theme.bzBackground,
+                            ),
+                          ),
+                          onDismissed: (_) => queue.remove(entry.entryId),
+                          child: ListTile(
+                            leading: BzBnoteMark(
+                                size: 40, color: theme.bzText2),
+                            title: Text(
+                              info?.title ?? 'Track',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              info?.artist ?? entry.sourceContext,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Remove from queue',
+                              onPressed: () => queue.remove(entry.entryId),
+                              icon: BzSvgIcon(
+                                name: 'close',
+                                color: theme.bzText2,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
