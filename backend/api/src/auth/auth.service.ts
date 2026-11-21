@@ -303,6 +303,81 @@ export class AuthService {
     return { verified: true, accessToken };
   }
 
+  async regenerateMfaRecoveryCodes(userId: string, sessionId: string, password: string, code: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true, role: true, mfaEnabled: true, mfaSecretCiphertext: true },
+    });
+    if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (user.role !== 'admin') throw new ForbiddenException('ADMIN_MFA_ONLY');
+    if (!user.mfaEnabled || !user.mfaSecretCiphertext) {
+      throw new UnauthorizedException('MFA_NOT_CONFIGURED');
+    }
+    const passwordValid = await argon2.verify(user.passwordHash, password).catch(() => false);
+    if (!passwordValid) throw new UnauthorizedException('INVALID_CREDENTIALS');
+
+    const totpCounter = getVerifiedTotpCounter(decryptTotpSecret(user.mfaSecretCiphertext), code);
+    const method = totpCounter === null ? 'recovery_code' : 'totp';
+    if (totpCounter === null && !/^[A-Fa-f0-9]{4}(?:-?[A-Fa-f0-9]{4}){3}$/.test(code)) {
+      throw new UnauthorizedException('MFA_CODE_INVALID');
+    }
+    const recoveryCodes = generateRecoveryCodes();
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      const session = await tx.refreshToken.findFirst({
+        where: {
+          userId,
+          familyId: sessionId,
+          revokedAt: null,
+          expiresAt: { gt: now },
+          mfaVerified: true,
+        },
+        select: { id: true },
+      });
+      if (!session) throw new UnauthorizedException('SESSION_INVALID');
+
+      if (totpCounter !== null) {
+        const accepted = await tx.user.updateMany({
+          where: { id: userId, OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: BigInt(totpCounter) } }] },
+          data: { mfaLastUsedStep: BigInt(totpCounter) },
+        });
+        if (accepted.count === 0) throw new UnauthorizedException('MFA_CODE_REPLAYED');
+      } else {
+        const existingCode = await tx.mfaRecoveryCode.findFirst({
+          where: { userId, codeHash: hashRecoveryCode(code), consumedAt: null },
+          select: { id: true },
+        });
+        if (!existingCode) throw new UnauthorizedException('MFA_CODE_INVALID');
+        const consumed = await tx.mfaRecoveryCode.updateMany({
+          where: { id: existingCode.id, userId, consumedAt: null },
+          data: { consumedAt: now },
+        });
+        if (consumed.count !== 1) throw new UnauthorizedException('MFA_RECOVERY_CODE_USED');
+      }
+
+      await tx.mfaRecoveryCode.deleteMany({ where: { userId } });
+      await tx.mfaRecoveryCode.createMany({
+        data: recoveryCodes.map((recoveryCode) => ({
+          userId,
+          codeHash: hashRecoveryCode(recoveryCode),
+        })),
+      });
+      await tx.adminAuditEvent.create({
+        data: {
+          actorId: userId,
+          action: 'admin.mfa.recovery_codes.regenerated',
+          targetType: 'user',
+          targetId: userId,
+          metadata: { method, codeCount: recoveryCodes.length },
+        },
+      });
+    });
+
+    return { regenerated: true, recoveryCodes };
+  }
+
+
   async logout(refreshToken: string): Promise<void> {
     const token = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: this.hashRefreshToken(refreshToken) },
