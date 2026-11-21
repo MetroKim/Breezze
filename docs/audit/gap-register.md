@@ -147,3 +147,42 @@ release acceptance criteria.
 | Native prepare operations racing | FIX APPLIED — tests added | PlayerController serializes prepare/play engine mutations and rechecks request generation before/after prepare | Execute delayed-prepare race test on CI and real device |
 | State machine rejects a new selection from active states | FIX APPLIED — tests added | `PlaybackStateMachine` treats each new start as superseding and rejects stale request IDs | Execute package tests and expand transition matrix |
 | Playback Future awaited for entire song | FIX APPLIED — test pending | Controller no longer awaits the long-lived just_audio play Future as if it meant “started” | Verify actual just_audio behavior on Android/iOS and ensure async engine errors surface |
+
+
+## Verified implementation update — 2026-11-21
+
+This section supersedes older "verification pending" and "suite not run"
+statements above for the exact commit tested below.
+
+**Verified commit:** `e3a6f0f9d638a6e3a2e1a9ff79e5a441d4e30234`  
+**CI run:** [44910820541 — all jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/44910820541)
+
+| Requirement | Current status | Evidence | Remaining work |
+|---|---|---|---|
+| Search-history persistence, deduplication, cap, remove and clear | IMPLEMENTED + tests passed | `apps/mobile/test/search_history_store_test.dart`; full mobile test suite passed | Add widget-level coverage for visual actions and storage failure |
+| Browse and Radio directories | IMPLEMENTED + app analysis/tests passed | Browse genre search and Radio API integration | Widget tests; curated editorial feeds; radio playback remains separate |
+| Playback request races and serialized prepare | IMPLEMENTED + tests passed | `player_controller_test.dart` | Device-level Android/iOS validation and detach lifecycle tests |
+| Native seek failure handling | IMPLEMENTED + regression test passed | PlayerController dispatches `SEEK_FAILED` | Verify on real devices |
+| Scrobble listening-time ticks and session cleanup | IMPLEMENTED IN CODE | Position stream ticks only while player is playing; stop/track-change/end/detach/dispose remove pending sessions | Add deterministic controller integration tests for 30-second threshold and pause behavior |
+| Download account isolation | IMPLEMENTED + API-client tests passed | Per-user storage directories; owner ID persisted; owner-filtered library; legacy ownerless records hidden | Device-level account-switch tests |
+| Offline local-file playback | IMPLEMENTED IN CODE + mobile tests passed | Local `PlayableSource`, `setFilePath`, resolver bypass test | Real-device codec/container validation and corrupted-file recovery |
+| Offline licence expiry | IMPLEMENTED IN CODE + metadata tests passed | Rights end time persisted and checked before local playback | Define bounded offline licence leases and online takedown/revocation revalidation |
+| Download storage path safety | IMPLEMENTED IN CODE | User IDs and track storage keys sanitized | Add adversarial path test cases |
+| Full CI | PASSED | Run 44910820541: Drift codegen, mobile/API-client/design-system/audio-contracts checks, Prisma generation/validation, backend typecheck/tests/build | Re-run after any subsequent code changes |
+
+### Offline-rights limitation
+
+A fully offline device cannot learn that a rights holder has issued a new takedown
+or revoked a licence after the last successful authorization. Local playback
+currently enforces the stored rights end time and account owner; it does not
+provide instantaneous offline revocation. Production release requires a
+bounded offline licence lease and mandatory revalidation when connectivity
+returns, with a policy for expired or revoked leases.
+
+### Still not implemented
+
+- CDN/media delivery and end-to-end signature validation.
+- Radio streaming sessions and player-engine support.
+- Prisma migration baseline/history against the deployed database.
+- Artist, album and playlist detail routes and catalog-backed editorial feeds.
+- Full tenant-isolation integration tests, accessibility/responsive audits and real-device audio/download validation.
