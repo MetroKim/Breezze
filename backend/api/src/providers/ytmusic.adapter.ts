@@ -28,6 +28,9 @@ export class YtMusicAdapter implements ProviderAdapter {
   };
 
   private readonly inFlight = new Map<string, Promise<ProviderResult<unknown>>>();
+  private consecutiveFailures = 0;
+  private circuitOpenUntil = 0;
+  private halfOpenProbeInFlight = false;
 
   constructor(private readonly cache: ProviderCacheService) {}
 
@@ -36,6 +39,41 @@ export class YtMusicAdapter implements ProviderAdapter {
    * cross-process cache; this prevents one hot query from fanning out dozens
    * of identical sidecar calls on a single replica.
    */
+  private async withCircuit<T>(
+    operation: () => Promise<ProviderResult<T>>,
+  ): Promise<ProviderResult<T>> {
+    const now = Date.now();
+    if (this.circuitOpenUntil > now) {
+      return providerError('YTMUSIC_CIRCUIT_OPEN', 'YouTube Music metadata is temporarily paused after repeated upstream failures', true);
+    }
+
+    const halfOpen = this.circuitOpenUntil > 0;
+    if (halfOpen && this.halfOpenProbeInFlight) {
+      return providerError('YTMUSIC_CIRCUIT_OPEN', 'YouTube Music metadata recovery check is already in progress', true);
+    }
+    if (halfOpen) this.halfOpenProbeInFlight = true;
+
+    try {
+      const result = await operation();
+      if (result.kind === 'ok') {
+        this.consecutiveFailures = 0;
+        this.circuitOpenUntil = 0;
+      } else if (result.kind === 'error' && result.retryable) {
+        this.recordUpstreamFailure();
+      }
+      return result;
+    } finally {
+      if (halfOpen) this.halfOpenProbeInFlight = false;
+    }
+  }
+
+  private recordUpstreamFailure(): void {
+    this.consecutiveFailures += 1;
+    if (this.consecutiveFailures >= 5) {
+      this.circuitOpenUntil = Date.now() + 30_000;
+    }
+  }
+
   private coalesce<T>(
     key: string,
     operation: () => Promise<ProviderResult<T>>,
@@ -59,14 +97,14 @@ export class YtMusicAdapter implements ProviderAdapter {
     const cacheKey = `provider:youtube_music:search:v1:${queryHash}`;
     const cached = await this.cache.get<ProviderResult<ProviderTrack[]>>(cacheKey);
     if (cached) return cached;
-    return this.coalesce(cacheKey, async () => {
+    return this.coalesce(cacheKey, () => this.withCircuit(async () => {
       try {
         const url = new URL('/search', this.baseUrl);
         url.searchParams.set('q', q);
         url.searchParams.set('limit', '20');
         const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
         if (!response.ok) {
-          return providerError('YTMUSIC_SEARCH_FAILED', `Metadata provider returned HTTP ${response.status}`, response.status >= 500);
+          return providerError('YTMUSIC_SEARCH_FAILED', `Metadata provider returned HTTP ${response.status}`, response.status >= 500 || response.status === 429);
         }
         const payload = await response.json() as SearchPayload;
         if (!Array.isArray(payload.tracks)) {
@@ -78,7 +116,7 @@ export class YtMusicAdapter implements ProviderAdapter {
       } catch {
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
       }
-    });
+    }));
   }
 
   async getTrack(providerTrackId: string): Promise<ProviderResult<ProviderTrack>> {
@@ -108,7 +146,7 @@ export class YtMusicAdapter implements ProviderAdapter {
       } catch {
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
       }
-    });
+    }));
   }
 
   async getAvailability(): Promise<ProviderResult<{ available: boolean }>> {
