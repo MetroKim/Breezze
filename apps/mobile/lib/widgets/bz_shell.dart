@@ -3,11 +3,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../app/bootstrap.dart';
 import '../app/downloads_controller.dart';
-import '../core/audio/audio_service_bridge.dart';
-import '../core/audio/background_audio.dart';
-import '../core/database/migrate_to_drift.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/radio/radio_screen.dart';
 import '../features/downloads/downloads_screen.dart';
@@ -19,30 +15,14 @@ import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import 'bz_brand_icons.dart';
 
-/// App root: ProviderScope with the live resolver override + engine +
-/// background audio. FavoritesStore and RecentStore are drift-backed
-/// at the class level (bootstrap.dart / recent_store.dart), so the
-/// JSON→SQLite migration is the only wiring needed here.
+/// Main product shell. The application-level ProviderScope and its
+/// playback engine are owned by BreezzeAppRoot; rebuilding this widget
+/// must never create another provider container or audio engine.
 class BreezzeShell extends StatelessWidget {
   const BreezzeShell({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final container = ProviderContainer(overrides: [
-      playbackResolverProvider.overrideWith(
-          (ref) => ref.watch(liveResolverProvider)),
-    ]);
-
-    attachPlaybackEngine(container);
-
-    // One-shot JSON → SQLite migration against this container.
-    migrateJsonStoresToDrift(container);
-
-    return UncontrolledProviderScope(
-      container: container,
-      child: const _BreezzeRoot(),
-    );
-  }
+  Widget build(BuildContext context) => const _BreezzeRoot();
 }
 
 class _BreezzeRoot extends ConsumerStatefulWidget {
