@@ -23,9 +23,6 @@ import { AdminModule } from './admin/admin.module';
 import { ProvidersModule } from './providers/providers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ModerationModule } from './moderation/moderation.module';
-import { ArtistPortalModule } from './artist_portal/artist-portal.module';
-import { DistributorModule } from './distributor/distributor.module';
-import { MediaModule } from './media/media.module';
 import { CloudflareAwareThrottlerGuard } from './cloudflare-aware-throttler.guard';
 
 @Module({
@@ -53,9 +50,6 @@ import { CloudflareAwareThrottlerGuard } from './cloudflare-aware-throttler.guar
     ProvidersModule,
     NotificationsModule,
     ModerationModule,
-    ArtistPortalModule,
-    DistributorModule,
-    MediaModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: CloudflareAwareThrottlerGuard }],
 })
