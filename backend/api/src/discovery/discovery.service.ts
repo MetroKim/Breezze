@@ -23,7 +23,7 @@ export class DiscoveryService {
 
   private async appleFeed(kind: 'songs' | 'albums', feed: 'most-played' | 'new-releases', country?: string) {
     const territory = this.country(country);
-    const url = `https://rss.applemarketingtools.com/api/v2/${territory}/music/${feed}/100/${kind}.json`;
+    const url = `https://rss.marketingtools.apple.com/api/v2/${territory}/music/${feed}/100/${kind}.json`;
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) {
       throw new Error(`APPLE_RSS_HTTP_${response.status}`);
