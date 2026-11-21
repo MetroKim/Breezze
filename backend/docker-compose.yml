@@ -41,6 +41,8 @@ services:
     environment:
       DATABASE_URL: postgresql://breezze:breezze_dev@postgres:5432/breezze
       REDIS_URL: redis://redis:6379
+      NODE_ENV: ${NODE_ENV:-development}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       YTMUSIC_API_URL: http://ytmusicapi:8000
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
       EDGE_SHARED_SECRET: ${EDGE_SHARED_SECRET:-}
