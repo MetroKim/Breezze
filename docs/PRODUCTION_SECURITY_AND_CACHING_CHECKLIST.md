@@ -50,9 +50,9 @@
 - [~] Deny by default: guards exist on parts of API; audit every controller and route.
 - [~] Server-side permission checks exist in selected services; require a route-by-route authorization matrix and tests.
 - [~] Object-level/IDOR checks: playlist and favorites ownership regression tests cover cross-account query scoping; expand adversarial tests to every resource ID and role.
-- [ ] Formal RBAC; ABAC for territory/rights/resource context where needed.
+- [~] Persisted admin RBAC now protects admin and moderation-review routes; full resource-level RBAC and ABAC for territory/rights/resource context remain.
 - [ ] PostgreSQL RLS or equivalent tenant isolation; current schema is user-scoped, not a complete tenant/RLS implementation.
-- [ ] Admin isolation: separate hostname/network boundary, MFA, privileged audit trail and just-in-time access.
+- [~] Admin routes require persisted admin role; separate hostname/network boundary, MFA, privileged audit trail and just-in-time access remain.
 - [~] Least privilege: separate DB users and service identities; deployment examples still use shared development credentials.
 - [ ] Re-authentication for email change, account deletion, artist ownership and other sensitive actions.
 
