@@ -278,6 +278,8 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 
 ## 16. Push-token ownership isolation (added 2026-11-21)
 - [x] Registering a device token already associated with a different account returns a conflict instead of silently transferring ownership.
-- [x] Existing token owners may refresh platform metadata without changing the stored owner.
-- [x] Unit tests cover cross-account rejection and owner-preserving updates.
-- [~] Add a database-backed concurrency test for simultaneous first registration of the same token by different accounts; enforce unique-token ownership under races before production push delivery.
+- [x] Existing token owners update platform metadata with an owner-scoped conditional write; ownership is re-read and verified.
+- [x] First registration uses create rather than upsert, preventing an upsert race from transferring token ownership.
+- [x] Prisma unique-constraint race recovery re-reads the winning owner; a different owner receives a conflict, while the same owner may safely update metadata.
+- [x] Unit tests cover cross-account rejection, owner-scoped updates, first registration and both outcomes of a simulated P2002 race.
+- [~] Add a PostgreSQL-backed concurrency integration test with simultaneous requests; unit tests simulate the unique-constraint race but do not replace a real DB race test.
