@@ -217,13 +217,12 @@ class AlbumDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final player = ref.read(playerControllerProvider.notifier);
     final queue = tracks;
 
-    void play({bool shuffle = false}) {
+    Future<void> play({bool shuffle = false}) async {
       if (queue.isEmpty) return;
       final player = ref.read(playerControllerProvider.notifier);
-      player.playTrack(
+      await player.playTrack(
         trackId: queue.first.id,
         queue: queue,
         origin: 'album',
@@ -241,13 +240,6 @@ class AlbumDetailScreen extends ConsumerWidget {
           icon: const BzSvgIcon(name: 'chevron-left'),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'More album actions',
-            onPressed: null,
-            icon: const BzSvgIcon(name: 'more-vertical'),
-          ),
-        ],
       ),
       body: SafeArea(
         child: Center(
