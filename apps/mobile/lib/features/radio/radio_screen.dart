@@ -67,6 +67,7 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
   List<_RadioStation> _stations = [];
   bool _loading = true;
   String? _error;
+  int _stationsRequestGeneration = 0;
 
   @override
   void initState() {
@@ -76,6 +77,7 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
 
   Future<void> _loadStations() async {
     if (!mounted) return;
+    final requestGeneration = ++_stationsRequestGeneration;
     setState(() {
       _loading = true;
       _error = null;
@@ -83,9 +85,9 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
 
     try {
       final api = ref.read(authSessionProvider.notifier).api;
-      final response = await http.get(
-        Uri.parse('${api.baseUrl}/api/v1/radio/stations'),
-      );
+      final response = await http
+          .get(Uri.parse('${api.baseUrl}/api/v1/radio/stations'))
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode >= 400) {
         throw Exception('Radio API returned ${response.statusCode}');
       }
@@ -105,13 +107,13 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
           .where((station) => station.id.isNotEmpty)
           .toList();
 
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _stationsRequestGeneration) return;
       setState(() {
         _stations = stations;
         _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _stationsRequestGeneration) return;
       setState(() {
         _loading = false;
         _error = 'Radio stations could not be loaded. Check your connection.';
@@ -123,9 +125,9 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
     String baseUrl,
     String stationId,
   ) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/v1/radio/stations/$stationId'),
-    );
+    final response = await http
+        .get(Uri.parse('$baseUrl/api/v1/radio/stations/$stationId'))
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode >= 400) {
       throw Exception('Station detail unavailable');
     }
@@ -206,6 +208,12 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _stationsRequestGeneration++;
+    super.dispose();
   }
 
   @override
