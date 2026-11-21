@@ -41,8 +41,10 @@ describe('DownloadsService', () => {
     const result = await service.revalidateOfflineLease('user-1', 'track-1', 'TZ');
     expect(result.allowed).toBe(true);
     if (!result.allowed) throw new Error('LEASE_REVALIDATION_DENIED');
-    expect(result.offlineLeaseExpiresAt.getTime()).toBeGreaterThanOrEqual(before + 72 * 60 * 60 * 1000 - 1000);
-    expect(result.offlineLeaseExpiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 72 * 60 * 60 * 1000);
+    const renewedExpiry = result.offlineLeaseExpiresAt;
+    if (!renewedExpiry) throw new Error('LEASE_EXPIRY_MISSING');
+    expect(renewedExpiry.getTime()).toBeGreaterThanOrEqual(before + 72 * 60 * 60 * 1000 - 1000);
+    expect(renewedExpiry.getTime()).toBeLessThanOrEqual(Date.now() + 72 * 60 * 60 * 1000);
   });
 
   it('does not create a download for a preview-only decision', async () => {
