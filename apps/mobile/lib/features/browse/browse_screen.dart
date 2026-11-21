@@ -295,7 +295,9 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                           : IconButton(
                               tooltip: 'Download',
                               icon: const BzSvgIcon(name: 'download', size: 20),
-                              onPressed: () => ref.read(downloadProgressProvider.notifier).download(track),
+                              onPressed: track.id.startsWith('bz:')
+                                  ? null
+                                  : () => ref.read(downloadProgressProvider.notifier).download(track),
                             ),
                       onTap: () => _play(index),
                     );
@@ -699,7 +701,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                                 : IconButton(
                                                     tooltip: 'Download',
                                                     icon: const BzSvgIcon(name: 'download', size: 20),
-                                                    onPressed: () => ref.read(downloadProgressProvider.notifier).download(track),
+                                                    onPressed: track.id.startsWith('bz:')
+                                                        ? null
+                                                        : () => ref.read(downloadProgressProvider.notifier).download(track),
                                                   ),
                                             onTap: () => _play(index),
                                           );
