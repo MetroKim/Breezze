@@ -1,7 +1,7 @@
 import 'package:breezze/features/catalog/catalog_detail_screens.dart';
 import 'package:breezze/app/bootstrap.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
-import 'package:breezze_audio_contracts/audio_contracts.dart';
+import 'package:breezze/features/player/player_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
