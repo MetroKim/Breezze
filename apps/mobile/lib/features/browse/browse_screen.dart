@@ -2,6 +2,7 @@ import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
@@ -433,6 +434,16 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   bool _loading = false;
   String? _error;
   int _generation = 0;
+  List<Map<String, dynamic>> _catalogItems = [];
+  String? _catalogSource;
+  String? _catalogError;
+  String? _catalogTerritory;
+  DateTime? _catalogFetchedAt;
+
+  bool get _appleChart => const ['Trending Songs', 'Daily Top 100', 'Charts']
+      .contains(widget.destination.title);
+  bool get _appleReleases => widget.destination.title == 'New Releases';
+  bool get _appleCatalog => _appleChart || _appleReleases;
 
   bool get _genre => widget.destination.title == 'Browse by Genre';
   bool get _mood => widget.destination.title == 'Moods & Activities';
@@ -447,7 +458,53 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _search(_selected);
       });
+    } else if (_appleCatalog) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadAppleCatalog();
+      });
     }
+  }
+
+  Future<void> _loadAppleCatalog() async {
+    final generation = ++_generation;
+    setState(() {
+      _loading = true;
+      _catalogError = null;
+      _catalogItems = [];
+    });
+    try {
+      final api = ref.read(authSessionProvider.notifier).api;
+      final territory = ref.read(outboxTerritoryProvider).toLowerCase();
+      final data = _appleReleases
+          ? await api.discoveryNewReleases(country: territory)
+          : await api.discoverySongsChart(country: territory);
+      if (!mounted || generation != _generation) return;
+      final rawItems = data['items'];
+      setState(() {
+        _catalogItems = rawItems is List
+            ? rawItems.whereType<Map>().map((item) =>
+                item.map((key, value) => MapEntry(key.toString(), value))).toList()
+            : [];
+        _catalogSource = data['source'] as String?;
+        _catalogTerritory = data['territory'] as String? ?? territory.toUpperCase();
+        _catalogFetchedAt = DateTime.tryParse(data['fetchedAt'] as String? ?? '');
+        _catalogError = null;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _catalogError = 'The Apple catalog feed could not be reached. Try again in a moment.';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _openExternalCatalogItem(Map<String, dynamic> item) async {
+    final rawUrl = item['url'];
+    final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
+    if (uri == null || !['https'].contains(uri.scheme)) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _search(String choice) async {
@@ -520,7 +577,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
-            child: _searchable
+            child: _appleCatalog
+                ? _appleCatalogContent(theme)
+                : _searchable
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -621,6 +680,139 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
           ),
         ),
       ),
+    );
+  }
+
+  Widget _appleCatalogContent(ThemeData theme) {
+    final isReleaseFeed = _appleReleases;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.destination.description, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              Text(
+                isReleaseFeed
+                    ? 'Newly released albums from Apple Music'
+                    : 'Apple Music most-played songs chart',
+                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+              ),
+              if (_catalogSource != null || _catalogTerritory != null) ...[
+                const SizedBox(height: 5),
+                Text(
+                  '${_catalogSource ?? 'Catalog source'} • ${_catalogTerritory ?? 'Territory'}'
+                  '${_catalogFetchedAt == null ? '' : ' • Updated ${_catalogFetchedAt!.toLocal()}'}',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: theme.bzSurface1,
+                  borderRadius: BorderRadius.circular(BzRadius.card),
+                  border: Border.all(color: theme.bzSeparator),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    BzSvgIcon(name: 'info', size: 17, color: theme.bzText2),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; open an item in Apple Music. Breezze playback remains subject to its own provider rights checks.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: 8,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                )
+              : _catalogError != null
+                  ? _MessageState(
+                      icon: 'wifi-off',
+                      title: 'Catalog unavailable',
+                      message: _catalogError!,
+                      onRetry: _loadAppleCatalog,
+                    )
+                  : _catalogItems.isEmpty
+                      ? _MessageState(
+                          icon: 'music-note',
+                          title: 'No catalog entries',
+                          message: 'The source returned no entries for this territory.',
+                          onRetry: _loadAppleCatalog,
+                        )
+                      : ListView.separated(
+                          padding: EdgeInsets.fromLTRB(12, 4, 12, BzBreakpoints.bottomClearance(context, compact: 220)),
+                          itemCount: _catalogItems.length,
+                          separatorBuilder: (_, __) => Divider(height: 1, color: theme.bzSeparator),
+                          itemBuilder: (context, index) {
+                            final item = _catalogItems[index];
+                            final artwork = item['artworkUrl'];
+                            final title = item['title'] as String? ?? 'Untitled';
+                            final artist = item['artist'] as String? ?? 'Unknown artist';
+                            final rank = item['rank'];
+                            return ListTile(
+                              leading: SizedBox(
+                                width: 52,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (rank is int)
+                                      SizedBox(
+                                        width: 20,
+                                        child: Text(rank.toString(), style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2)),
+                                      ),
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(BzRadius.artwork),
+                                        child: artwork is String
+                                            ? Image.network(
+                                                artwork,
+                                                width: 48,
+                                                height: 48,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, __, ___) => BzBnoteMark(size: 44, color: theme.bzText2),
+                                              )
+                                            : BzBnoteMark(size: 44, color: theme.bzText2),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                isReleaseFeed
+                                    ? '$artist • ${item['releaseDate'] ?? 'Release date not supplied'}'
+                                    : artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: IconButton(
+                                tooltip: 'Open in Apple Music',
+                                icon: const BzSvgIcon(name: 'external-link', size: 19),
+                                onPressed: () => _openExternalCatalogItem(item),
+                              ),
+                              onTap: () => _openExternalCatalogItem(item),
+                            );
+                          },
+                        ),
+        ),
+      ],
     );
   }
 
