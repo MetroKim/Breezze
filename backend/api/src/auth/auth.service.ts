@@ -1,6 +1,7 @@
 import {
   Injectable,
   UnauthorizedException,
+  ForbiddenException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
@@ -73,7 +74,7 @@ export class AuthService {
       });
     }
     const mfaSetupRequired = user.role === 'admin' && user.mfaEnabled !== true;
-    const mfaRequired = (user.role === 'admin' || user.mfaEnabled === true) && !mfaVerified;
+    const mfaRequired = user.role === 'admin' && !mfaVerified;
     return {
       accessToken,
       refreshToken,
@@ -162,9 +163,10 @@ export class AuthService {
   async beginMfaSetup(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, mfaEnabled: true },
+      select: { id: true, email: true, role: true, mfaEnabled: true },
     });
     if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (user.role !== 'admin') throw new ForbiddenException('ADMIN_MFA_ONLY');
     if (user.mfaEnabled) throw new ConflictException('MFA_ALREADY_ENABLED');
 
     const secret = generateTotpSecret();
@@ -187,6 +189,7 @@ export class AuthService {
       select: { id: true, email: true, displayName: true, role: true, mfaEnabled: true, mfaPendingSecretCiphertext: true },
     });
     if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (user.role !== 'admin') throw new ForbiddenException('ADMIN_MFA_ONLY');
     if (user.mfaEnabled || !user.mfaPendingSecretCiphertext) {
       throw new ConflictException('MFA_SETUP_NOT_PENDING');
     }
@@ -244,6 +247,7 @@ export class AuthService {
       select: { id: true, email: true, role: true, mfaEnabled: true, mfaSecretCiphertext: true },
     });
     if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (user.role !== 'admin') throw new ForbiddenException('ADMIN_MFA_ONLY');
     if (!user.mfaEnabled || !user.mfaSecretCiphertext) {
       throw new UnauthorizedException('MFA_NOT_CONFIGURED');
     }
