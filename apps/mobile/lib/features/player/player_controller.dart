@@ -248,7 +248,7 @@ class PlayerController extends Notifier<PlayerState> {
 
     try {
       final source =
-          await ref.read(playbackResolverProvider).resolve(info.id);
+          await ref.read(playbackResolverProvider).resolve(info);
       if (!_isCurrentRequest(requestId)) return;
 
       if (source == null) {
@@ -351,7 +351,7 @@ class TrackInfo {
 
 /// The backend playback resolver contract — platform-agnostic.
 abstract interface class PlaybackResolver {
-  Future<PlayableSource?> resolve(String trackId);
+  Future<PlayableSource?> resolve(TrackInfo track);
 }
 
 /// Provider for the resolver; overridden in bootstrap with the real
