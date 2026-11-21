@@ -156,6 +156,15 @@ class BreezzeApi {
     return AuthResponse.fromJson(data);
   }
 
+  Future<Map<String, dynamic>> beginMfaSetup(String password) =>
+      _post('/auth/mfa/setup', {'password': password});
+
+  Future<Map<String, dynamic>> verifyMfaSetup(String code) =>
+      _post('/auth/mfa/setup/verify', {'code': code});
+
+  Future<Map<String, dynamic>> verifyMfa(String code) =>
+      _post('/auth/mfa/verify', {'code': code});
+
   Future<void> logout(String refreshToken) async {
     await _post('/auth/logout', {'refreshToken': refreshToken});
   }
@@ -168,12 +177,16 @@ class AuthResponse {
   final String refreshToken;
   final String userId;
   final String email;
+  final bool mfaRequired;
+  final bool mfaSetupRequired;
 
   const AuthResponse({
     required this.accessToken,
     required this.refreshToken,
     required this.userId,
     required this.email,
+    this.mfaRequired = false,
+    this.mfaSetupRequired = false,
   });
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
@@ -183,6 +196,8 @@ class AuthResponse {
       refreshToken: json['refreshToken'] as String,
       userId: user is Map ? (user['id'] as String? ?? '') : '',
       email: user is Map ? (user['email'] as String? ?? '') : '',
+      mfaRequired: json['mfaRequired'] == true,
+      mfaSetupRequired: json['mfaSetupRequired'] == true,
     );
   }
 }
