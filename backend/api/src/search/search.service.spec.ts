@@ -56,6 +56,7 @@ describe('SearchService', () => {
 
     expect(prisma.track.findMany).toHaveBeenCalledWith({
       where: { title: { contains: 'Amapiano', mode: 'insensitive' } },
+      include: { artist: true, album: true },
       take: 20,
     });
     expect(prisma.artist.findMany).toHaveBeenCalledWith({
