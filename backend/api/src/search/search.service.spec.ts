@@ -1,5 +1,6 @@
 import { PrismaService } from '../prisma.service';
 import { SearchService } from './search.service';
+import { ProviderRegistry } from '../providers/provider-registry.service';
 
 describe('SearchService', () => {
   const tracks = [{ id: 'track-1', title: 'Amapiano Nights' }];
@@ -12,6 +13,14 @@ describe('SearchService', () => {
     album: { findMany: jest.fn() },
   };
 
+  const youtubeMusic = {
+    capabilities: { search: true },
+    search: jest.fn().mockResolvedValue({ kind: 'ok', value: [] }),
+  };
+  const providers = {
+    get: jest.fn().mockReturnValue(youtubeMusic),
+  };
+
   let service: SearchService;
 
   beforeEach(() => {
@@ -19,7 +28,7 @@ describe('SearchService', () => {
     prisma.track.findMany.mockResolvedValue(tracks);
     prisma.artist.findMany.mockResolvedValue(artists);
     prisma.album.findMany.mockResolvedValue(albums);
-    service = new SearchService(prisma as unknown as PrismaService);
+    service = new SearchService(prisma as unknown as PrismaService, providers as unknown as ProviderRegistry);
   });
 
   it('returns empty result groups for queries shorter than two characters', async () => {
@@ -27,6 +36,8 @@ describe('SearchService', () => {
       tracks: [],
       artists: [],
       albums: [],
+      externalTracks: [],
+      externalProviderStatus: 'skipped',
     });
 
     expect(prisma.track.findMany).not.toHaveBeenCalled();
@@ -39,6 +50,8 @@ describe('SearchService', () => {
       tracks,
       artists,
       albums,
+      externalTracks: [],
+      externalProviderStatus: 'ok',
     });
 
     expect(prisma.track.findMany).toHaveBeenCalledWith({
@@ -49,6 +62,7 @@ describe('SearchService', () => {
       where: { name: { contains: 'Amapiano', mode: 'insensitive' } },
       take: 5,
     });
+    expect(youtubeMusic.search).toHaveBeenCalledWith('Amapiano');
     expect(prisma.album.findMany).toHaveBeenCalledWith({
       where: { title: { contains: 'Amapiano', mode: 'insensitive' } },
       take: 5,
