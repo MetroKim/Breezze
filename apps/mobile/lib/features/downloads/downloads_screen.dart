@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../core/auth/auth_session.dart';
-import '../../core/api/breezze_api.dart';
+import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
