@@ -123,6 +123,9 @@ class BreezzeApi {
 
 
   // ---- public catalog discovery (metadata only; never playback grants) ----
+  Future<Map<String, dynamic>> discoveryDailyTop100({String country = 'us'}) =>
+      _get('/discovery/charts/daily-top-100?country=${Uri.encodeQueryComponent(country)}');
+
   Future<Map<String, dynamic>> discoverySongsChart({String country = 'us'}) =>
       _get('/discovery/charts/songs?country=${Uri.encodeQueryComponent(country)}');
 
