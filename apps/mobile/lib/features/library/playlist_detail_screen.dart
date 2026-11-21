@@ -55,6 +55,16 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   Future<void> _playAll(UserPlaylist playlist) async {
     if (playlist.tracks.isEmpty) return;
+    final nativeIndex = playlist.tracks.indexWhere((item) => !item.id.startsWith('bz:'));
+    if (nativeIndex >= 0) {
+      if (playlist.tracks.any((item) => item.id.startsWith('bz:')) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('YouTube tracks open separately and are excluded from Breezze queue playback.')),
+        );
+      }
+      await _playTrack(playlist, nativeIndex);
+      return;
+    }
     await _playTrack(playlist, 0);
   }
 
