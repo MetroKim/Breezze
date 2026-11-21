@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/api/breezze_api.dart';
+import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
@@ -168,9 +169,11 @@ class LiveResolver implements PlaybackResolver {
       final catalogId = await _resolveCatalogId(api, track);
       if (catalogId == null) return null;
 
+      final preferences = await DownloadPreferencesStore().load();
       final result = await api.resolvePlayback(
         trackId: catalogId,
         territory: _ref.read(outboxTerritoryProvider),
+        requestedQuality: preferences.streamingQuality,
       );
       final streamUrl = result['streamUrl'] as String?;
       final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
