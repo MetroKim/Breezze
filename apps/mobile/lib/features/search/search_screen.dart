@@ -311,8 +311,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _openTrack(BzTrack track) {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => TrackDetailScreen(
-        track: track,
-        relatedTracks: _results,
+        track: TrackInfo(
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          artworkUrl: track.artworkUrl,
+          duration: track.duration,
+        ),
+        relatedTracks: [
+          for (final item in _results)
+            TrackInfo(
+              id: item.id,
+              title: item.title,
+              artist: item.artist,
+              artworkUrl: item.artworkUrl,
+              duration: item.duration,
+            ),
+        ],
         origin: _searchLibrary ? 'library' : 'search',
       ),
     ));
