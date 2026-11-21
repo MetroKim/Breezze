@@ -1,188 +1,252 @@
-# Breezze Cloudflare-First Infrastructure Architecture
+# Breezze Cloudflare Edge, Caching and Traffic Architecture
 
-**Status:** Architecture decision record / implementation target  
-**Decision:** Cloudflare is Breezze's primary edge, media-delivery, and perimeter-security platform. The existing NestJS + PostgreSQL backend remains the application system of record.
+**Status:** Target architecture — not yet deployed or load-tested  
+**Decision:** Cloudflare is Breezze's edge security, API acceleration and static-delivery layer. Audio is resolved from approved external providers and delivered directly from provider to the Flutter audio engine. Breezze does not operate a cloud music-file store.
 
-## 1. Decision and boundaries
+## 1. Architecture boundaries
 
-Breezze will use Cloudflare where it provides clear operational value: edge routing, private object storage, CDN delivery, caching, request filtering, rate limiting, and asynchronous edge workloads.
-
-Cloudflare does **not** replace the NestJS domain backend or PostgreSQL by default. We will not migrate the application into Workers merely for architectural fashion. The Flutter app continues to call the NestJS API; the Cloudflare edge sits in front of the API and serves authorized media.
-
-### System topology
+Cloudflare protects and accelerates Breezze's own API. It does not become a proxy for every audio byte and does not replace the NestJS/PostgreSQL application backend.
 
 ```text
-Flutter clients (Android / iOS / tablet / desktop)
-        |
-        v
-Cloudflare DNS + TLS + WAF + rate limiting
-        |
-        +--------------------------+
-        |                          |
-        v                          v
-api.breezze...                 media.breezze...
-Cloudflare Worker              Cloudflare Worker
-(edge routing /                 (auth + signed access /
-request policy)                 range-aware media gateway)
-        |                          |
-        v                          v
-NestJS API (origin)             Private R2 bucket
-        |                          |
-        +---- PostgreSQL            +---- CDN/cache policy
-        +---- Redis / BullMQ
-        +---- external catalog / rights providers
+Flutter clients
+   |                                  Approved music providers
+   | API / metadata / playback       (provider-hosted audio)
+   v                                          ^
+Cloudflare DNS + TLS + WAF + rate limits      |
+   |                                          | direct HTTPS stream
+   v                                          |
+Cloudflare API Worker                         |
+   |                                          |
+   v                                          |
+NestJS API ---- Provider Resolver ------------+
+   |              | adapters / health /
+   |              | timeout / circuit breaker
+   |
+   +---- PostgreSQL (canonical user + catalog metadata)
+   +---- Redis (hot ephemeral cache / BullMQ coordination)
+   +---- BullMQ workers (async metadata, sync, analytics)
 ```
 
-The Worker layer is an edge gateway and policy enforcement point. Domain decisions, user ownership, catalog normalization, playlist rules, and rights decisions remain in NestJS unless a specific edge use case is approved.
+**Audio path:** the API returns a provider-approved, short-lived playable source to the client. The Flutter audio engine connects to that provider directly. Do not route full audio streams through Workers or the NestJS origin unless a provider contract, rights requirement, and measured use case explicitly require it.
+
+**No R2 requirement:** R2, media upload pipelines, audio transcoding storage, and a Breezze-operated audio CDN are out of scope. Artwork may be fetched from its source and cached by the client; public artwork proxying is an optional later decision, not a prerequisite.
 
 ## 2. Cloudflare service allocation
 
-| Service | Breezze responsibility | Policy |
+| Service | Use in Breezze | Guardrail |
 |---|---|---|
-| DNS | Authoritative DNS for Breezze zones | Enable DNSSEC where supported |
-| TLS / SSL | Client-to-edge encryption and origin encryption | Full (strict); no insecure origin mode |
-| WAF / managed rules | Filter common web attacks and abusive traffic | Start in log/simulate mode, tune, then block |
-| Rate Limiting | Per-route and per-identity abuse controls | Apply stricter limits to auth, search, playback resolution, and uploads |
-| Workers | API gateway, media authorization gateway, edge request logic | Keep stateless; do not move NestJS domain logic wholesale |
-| R2 | Private object storage for owned/licensed media, artwork, and derived assets | Private buckets; access only through authorized service paths |
-| CDN / Cache API | Cache safe public assets and eligible media responses near users | Never cache private user data or unvalidated authorization responses |
-| KV | Small, eventually consistent configuration and short-lived cache entries | Not the source of truth for balances, rights, or critical session state |
-| Durable Objects | Coordination for genuinely stateful real-time features | Introduce only for live collaborative playback/rooms where required |
-| Queues | Async media processing, metadata jobs, webhook fan-out, and retries | Consumers must be idempotent; use dead-letter handling |
-| Turnstile | Bot mitigation on registration, login recovery, and abuse-prone public forms | Validate tokens server-side |
-| Observability | Worker logs, traces, metrics and alerts | Redact tokens, signed URLs, and personal data |
+| DNS + DNSSEC | Authoritative DNS and domain protection | Enable DNSSEC where supported |
+| TLS | Client-to-edge and edge-to-origin encryption | Full (strict) |
+| WAF / managed rules | Filter common web attacks and abusive traffic | Tune in log mode before blocking |
+| Rate Limiting | Route and identity-aware abuse controls | Separate limits for auth, search, resolve, mutations |
+| Workers | Thin API gateway, request normalization, cache policy, edge checks | Stateless; keep domain authorization in NestJS |
+| Cache API / CDN cache | Public, non-personalized metadata and static assets | Explicit allowlist; never cache private responses |
+| KV | Small, eventually consistent config and selected short-lived data | Not canonical rights/session/playlist storage |
+| Queues | Async event fan-out or provider metadata refresh where useful | Idempotent consumers, bounded retries, DLQ |
+| Turnstile | Bot signal on selected abuse-prone flows | Validate server-side; not authentication |
+| Durable Objects | Only for real-time shared sessions/rooms if required | Do not create one per ordinary listener |
+| Observability | Edge logs, traces, metrics and alerts | Redact tokens, URLs and personal data |
 
-**Not selected as primary database:** D1. PostgreSQL remains the canonical relational database because the existing NestJS/Prisma data model, transactions, joins, and operational workflows already depend on it. D1 may be evaluated for an isolated edge-owned dataset, not as a second competing source of truth.
+PostgreSQL remains the canonical relational store. Redis remains for existing BullMQ and low-latency ephemeral backend needs. Cloudflare KV is not a Redis replacement. Do not add D1 as a second source of truth.
 
-**Redis remains:** BullMQ and current backend workloads depend on Redis. Cloudflare KV is not a drop-in Redis replacement.
+## 3. Cache architecture
 
-## 3. Request and media flows
+Caching is layered. Every cache entry has a defined owner, key, TTL, stale policy and invalidation rule.
 
-### API request
+### 3.1 Cache layers
 
-1. Client sends HTTPS request to the public API hostname.
-2. Cloudflare terminates TLS, applies WAF and route-level rate limits.
-3. API Worker validates basic request shape and forwards to the private NestJS origin.
-4. NestJS authenticates the user, authorizes the operation, applies domain rules, and accesses PostgreSQL/Redis.
-5. Response returns through Cloudflare.
-6. Cache only explicitly public, versioned, non-user-specific GET responses. Authenticated API responses default to `private, no-store` unless a route is reviewed and explicitly opted in.
+1. **Flutter local cache:** recently viewed metadata, artwork, search history, and local library data. Bound disk size and evict least-recently-used entries. Local cache never grants playback rights.
+2. **Cloudflare edge cache:** only explicitly public and non-user-specific GET responses, plus immutable static assets.
+3. **NestJS/Redis cache:** hot normalized catalog/provider metadata and short-lived provider health/lookup data. Use versioned keys and bounded TTLs.
+4. **PostgreSQL:** canonical accounts, ownership, playlists, favorites, library records, rights decisions/audit state, and durable listening data.
 
-### Authorized media playback
+### 3.2 Initial cache policy (tune from measured freshness)
 
-1. Flutter requests playback resolution from NestJS using a canonical track ID.
-2. NestJS resolves the catalog provider and invokes the Rights module.
-3. If permitted, backend returns a short-lived media access grant or opaque playback token.
-4. Client requests the media object through the media Worker.
-5. Worker validates the grant, object key, expiry, allowed method, and byte-range policy.
-6. Worker streams the private R2 object and supports HTTP Range requests for seeking.
-7. Cache behavior is selected by object class and authorization model. Do not put user-specific or revocable private streams into a shared cache key.
+| Data class | Suggested initial TTL | Cache rules |
+|---|---:|---|
+| Hashed app assets / versioned SVG | 1 year | immutable; filename changes on release |
+| Public artwork, when safely cacheable | 1–7 days | honor source rights/cache headers; use content/version key |
+| Stable artist/album metadata | 15–60 min | public only; stale-while-revalidate |
+| Search suggestions | 1–5 min | normalized query + locale + territory + catalog version |
+| Public browse/editorial feed | 1–5 min | key includes locale + territory + feed version |
+| Search result page | 30–120 sec | key includes normalized query, filters, locale, territory, cursor |
+| Provider availability/health | 5–30 sec | short TTL; never treat as rights approval |
+| User library, playlists, favorites, profile | no shared edge cache | private; user-scoped server/client cache only |
+| Auth/session/refresh | no shared edge cache | private, no-store |
+| Playback resolve/grant | no shared edge cache | no-store; short-lived and user/territory scoped |
+| Listening event writes | no cache | durable, idempotent ingestion |
 
-A successful HTTP response is not proof that a track is legally playable. Rights and territory checks must happen before issuing the grant and must be revocable.
+These are starting values, not measured guarantees. Provider terms and origin Cache-Control take precedence where applicable.
 
-## 4. R2 bucket and object layout
+### 3.3 Cache-key and invalidation rules
 
-Use separate private buckets or strict prefixes for different lifecycle/security classes:
+- Normalize search input before key creation (Unicode normalization, whitespace normalization, bounded length).
+- Include every response-varying dimension: locale, territory, content filter, pagination cursor, schema version and catalog/provider version as applicable.
+- Never include bearer tokens or raw secrets in a cache key.
+- Never use one shared cache key for authenticated user data.
+- Use versioned keys for catalog/feed generations. Prefer version bumps over broad purge storms.
+- Use stale-while-revalidate for safe public metadata. Serve stale only within a bounded stale window.
+- Use request coalescing/single-flight at the backend for hot cache misses to prevent thundering herds.
+- Add TTL jitter to backend cache expiry to avoid synchronized expiration.
+- Negative-cache only safe not-found/provider-unavailable results, with very short TTLs. Never negative-cache authorization failures globally.
+- Purge by tag or version on editorial/catalog changes. Do not purge all edge cache for a single item update.
+- A cache hit must never bypass current rights, territory, account state or revocation checks.
 
-- `audio-originals/` — quarantined uploads and source masters; never public.
-- `audio-transcoded/` — approved playback renditions.
-- `artwork/` — cover art and artist imagery.
-- `previews/` — explicitly authorized preview assets.
-- `temporary/` — short-lived processing artifacts with lifecycle cleanup.
+### 3.4 Edge cache eligibility
 
-Object keys must be opaque and non-guessable; do not include email addresses or other personal identifiers. Persist canonical object keys and metadata in PostgreSQL, not public R2 URLs.
+The Worker should use an explicit route allowlist, not a broad “cache GET” rule. Default everything to pass-through/no-store. Cache only routes whose handler declares public, deterministic, non-personalized output. Set correct Cache-Control/Vary headers at origin and test them at the edge.
 
-Upload path:
-1. Authenticated client asks NestJS for an upload session.
-2. NestJS validates ownership, quota/abuse policy, and upload metadata.
-3. Upload goes to a restricted staging destination.
-4. Queue job validates MIME signature, file size, malware/moderation status, and metadata.
-5. Approved asset is transcoded/processed and moved to the approved prefix.
-6. Database state changes to ready only after processing succeeds.
+## 4. API request flow
 
-## 5. Cache policy
+1. Flutter sends HTTPS request to the API hostname.
+2. Cloudflare applies WAF, bot signals where configured, request-size limits and route-specific rate limits.
+3. A thin Worker applies request normalization and the public-cache allowlist.
+4. Worker forwards misses/private requests to the protected NestJS origin.
+5. NestJS authenticates identity, authorizes the exact resource/action, applies domain rules, then accesses PostgreSQL/Redis.
+6. Response returns with explicit cache headers; only eligible public responses enter edge cache.
 
-| Content | Cache policy |
-|---|---|
-| Versioned app assets, SVGs, static artwork | Long TTL + immutable where versioned |
-| Public catalog metadata | Short/medium TTL; purge or version on updates |
-| Public chart/editorial feeds | Short TTL with explicit freshness metadata |
-| Authenticated library/profile/playlist data | Private, no-store by default |
-| Playback authorization responses | No shared cache |
-| Private audio | No shared cache unless token-bound cache key and revocation behavior are explicitly designed and tested |
-| Signed upload/download grants | No-store |
+Keep the origin inaccessible except through the intended Cloudflare path where deployment permits. If private networking is unavailable, require authenticated origin access and strict network controls.
 
-Use cache tags or purge workflows for assets that need invalidation. Cache misses must safely fall through to the origin. Never treat KV or cache as the authoritative rights database.
+## 5. Provider resolver and fallback behavior
 
-## 6. Security model
+The Provider Resolver is a NestJS domain/application service, not a Cloudflare Worker responsibility.
 
-- Keep R2 buckets private.
-- Keep origin services inaccessible from the public internet where deployment supports private networking; otherwise require authenticated origin access and strict firewall allowlists.
-- Store API keys, origin credentials, signing keys, and provider secrets as Worker secrets or backend secret-manager values. Never commit secrets.
-- Validate signed grants server-side, including expiry, object key, HTTP method, byte-range allowance, and user/territory binding as required.
-- Apply request-size limits and upload content validation.
-- Use per-route rate limits plus account/device/IP signals; avoid IP-only controls that punish carrier-grade NAT users.
-- Turnstile is a bot signal, not authentication.
-- Log request IDs and security outcomes, not access tokens, passwords, raw signed URLs, or unnecessary personal data.
-- Keep authentication and authorization separate: authentication establishes identity; authorization checks whether that identity may perform this action on this resource now.
+- Each provider implements a common contract: search, resolve, health, capabilities, attribution and error classification.
+- Normalize provider results into canonical Breezze Track metadata; preserve source IDs separately.
+- Resolve a track using stable identity signals (provider ID when known, ISRC when available, normalized title/artist/duration as a cautious fallback).
+- Apply rights/territory policy before returning a playable source.
+- Use bounded timeouts, limited retries with exponential backoff + jitter, per-provider concurrency limits, circuit breakers and health scoring.
+- Fallback only to a provider that has the same or a confidently matched recording and is permitted for the user's territory and requested use.
+- Do not silently swap to a different recording, live edit, remix or low-quality version.
+- Return typed failures: not found, unavailable, rate limited, rights denied, territory blocked, expired URL, unsupported format and provider timeout.
+- Never cache signed playback URLs or treat provider health as a rights decision.
+- Liner Desktop is **not an approved fallback integration**: its current repository license prohibits commercial use/distribution and reuse of core algorithms, and requires modified builds to use official Liner services only. Do not embed, fork, rebrand, extract its resolver, or depend on its private client behavior for Breezze without explicit written authorization from the rights holder.
 
-## 7. Reliability and scale
+The resolver must support multiple independently replaceable provider adapters. A provider outage should degrade discovery or playback cleanly rather than take down auth, library, playlists or the rest of the app.
 
-Cloudflare's edge reduces latency and absorbs/cache-serves repeat traffic, but it does not make the whole system infinitely scalable. The database, origin API, provider quotas, audio egress, and queue consumers remain capacity constraints.
+## 6. One-million-concurrent-user capacity strategy
 
-Required controls:
-- PostgreSQL indexes, connection pooling, query budgets, and read-path optimization.
-- Redis/BullMQ queue concurrency limits, bounded retries with exponential backoff and jitter, idempotency keys, and dead-letter queues.
-- Per-provider timeouts, circuit breakers, and fallback behavior.
-- CDN cache-hit ratio, R2 egress, Worker CPU/duration, origin latency, DB saturation, queue age, playback-start latency, and playback failure dashboards.
-- Load tests for concurrent search, playback resolution, range requests, uploads, and hot-object traffic.
-- Multi-region database strategy only when measured availability/latency needs justify the complexity.
+“One million concurrent users” is a capacity objective, not a Cloudflare checkbox. It must be translated into traffic profiles and proven with staged load tests. One million people streaming from external providers is materially different from one million people repeatedly hitting the Breezze API.
 
-## 8. Deployment environments
+### 6.1 Keep audio off Breezze infrastructure
 
-Use separate Cloudflare resources and credentials for development, staging, and production. Production R2 buckets and secrets must never be reused by local development.
+- Resolve playback through the API, then have the device stream directly from the approved provider.
+- Do not relay audio bytes through Cloudflare Workers, NestJS or a Breezze storage bucket by default.
+- This removes the largest bandwidth/egress workload from Breezze, but provider capacity, provider quotas, client network quality and rights remain external dependencies.
+- If a provider requires proxying, treat it as a separate architecture and cost/risk review.
 
-Deployment pipeline:
-1. Typecheck and unit test Worker code.
-2. Run API contract and authorization tests.
-3. Deploy Worker to staging.
-4. Run smoke tests for health, auth forwarding, R2 authorization, range requests, cache headers, and rate limiting.
-5. Promote the same artifact to production.
-6. Monitor error rate and playback-start latency; support fast rollback.
+### 6.2 Keep the API stateless and horizontally scalable
 
-Wrangler configuration must use environment-specific bindings. Resource IDs and secret values belong in deployment configuration/secrets, not checked-in source.
+- Run multiple NestJS instances across failure domains behind the Cloudflare-protected origin/load balancer.
+- Store durable state in PostgreSQL; keep process memory disposable.
+- Use connection pooling (e.g. PgBouncer or managed equivalent), strict DB connection budgets and query timeouts.
+- Separate latency-sensitive request paths from background work.
+- Apply cursor pagination and bounded response sizes everywhere.
+- Avoid N+1 queries; select only required columns; inspect query plans and add indexes based on measured workloads.
+- Use read replicas only for read paths with acceptable replication lag. Keep writes and authorization-sensitive reads on the primary/consistent path.
+- Partition high-volume append-only listening events by time when actual volume justifies it; define retention and aggregation policies.
+- Keep Redis hot keys bounded and monitor memory/eviction. Do not use Redis as durable truth.
 
-## 9. Initial rollout order
+### 6.3 Protect provider dependencies
 
-1. DNS, TLS Full (strict), WAF baseline, and origin protection.
-2. API hostname proxy and route-specific rate limiting.
-3. Private R2 buckets and upload-processing workflow.
-4. Media Worker with authorization and byte-range support.
-5. Cache only static/versioned assets and explicitly public catalog responses.
-6. Queues for media processing and background jobs.
-7. Turnstile for selected abuse-prone flows.
-8. Durable Objects only after a concrete real-time feature requires coordinated state.
+- Per-provider concurrency budgets and request queues.
+- Timeouts shorter than the user-facing request budget.
+- Circuit breaker opens after measured failure thresholds; half-open probes recover carefully.
+- Cache stable metadata, not signed streams or rights grants.
+- Apply retry budgets; retries must not amplify an outage.
+- Use provider priority and fallback only among approved, rights-compatible sources.
+- Return fast, typed degraded responses when every provider is unhealthy.
+
+### 6.4 Control traffic and abuse
+
+- Route-specific Cloudflare rate limits for login, registration, password recovery, search, playback resolution and mutations.
+- Combine account/device/IP signals; do not rely on IP alone because mobile carrier NAT can group many legitimate users.
+- Enforce per-account playback-resolution budgets and abuse detection in NestJS.
+- Use idempotency keys for retryable writes.
+- Bound request bodies, pagination sizes, concurrent playback resolutions and expensive search filters.
+- Protect expensive endpoints with bot controls and progressive challenges where appropriate.
+
+### 6.5 Asynchronous work
+
+Use BullMQ for non-interactive work such as listening-event aggregation, metadata refresh, recommendations, sync fan-out and cleanup. Consumers must be idempotent, concurrency-limited, observable and protected by bounded retries plus dead-letter handling. Do not put synchronous playback start behind a long-running queue.
+
+### 6.6 Capacity model and test gates
+
+Before launch, record assumptions for:
+- concurrent active listeners;
+- API requests per active listener per minute;
+- search requests per second;
+- playback resolutions per second (not per audio segment);
+- metadata cache hit ratio;
+- provider quota/concurrency per provider;
+- DB read/write QPS and connection budget;
+- background event ingestion and queue drain rate;
+- regional traffic distribution and peak factor.
+
+Run staged tests at 10k, 50k, 100k, 250k, 500k and 1M virtual active clients using realistic think time, cache warmth, cold-cache bursts, provider throttling and regional distribution. Test both steady state and sudden traffic spikes. Record p50/p95/p99 latency, error rate, cache hit ratio, DB saturation, queue age, provider failures, playback resolve/start success and cost per active listener.
+
+Do not claim the one-million target is achieved until the test environment and production-like dependencies demonstrate it. Cloudflare absorbs and caches eligible traffic; origin, database and providers still need independently measured capacity.
+
+## 7. Security and privacy
+
+- Authentication establishes identity; authorization checks access to a specific resource/action.
+- Derive user identity from the verified session, never a client-supplied user ID.
+- Keep provider/API secrets in server-side secret storage or Worker secret bindings, never Flutter or Git.
+- Validate provider playback grants and expiry; never trust client-side rights checks.
+- Log correlation IDs and outcomes, not access tokens, passwords, signed URLs, raw search queries or unnecessary personal data.
+- Ensure user A cannot read or mutate user B's library, playlists, profile or listening history.
+- Turnstile is an abuse signal, not a replacement for authentication.
+
+## 8. Deployment and observability
+
+Separate development, staging and production zones, Worker environments, secrets and origin credentials. Deploy a thin Worker only after tests pass; keep a fast rollback path.
+
+Dashboards and alerts must cover:
+- Cloudflare cache hit/miss, WAF actions, rate-limit events, Worker errors and CPU;
+- API p50/p95/p99 latency, throughput, error rate and saturation;
+- PostgreSQL connections, slow queries, locks, replication lag and pool wait;
+- Redis memory, hit rate, evictions and command latency;
+- BullMQ queue depth, oldest job age, retries and dead letters;
+- provider latency, quota/throttle errors, circuit state and resolution success;
+- playback resolve-to-first-audio latency and failure classification.
+
+Use trace/request IDs across Flutter, Cloudflare and NestJS. Redact credentials and personal data.
+
+## 9. Rollout order
+
+1. Protect API origin with DNS, TLS Full (strict), WAF baseline and route-level rate limits.
+2. Add thin API Worker and explicit public-cache allowlist; keep private routes pass-through.
+3. Implement provider adapter contract, resolver health, timeouts, circuit breakers and typed errors.
+4. Add Redis cache-aside/single-flight for safe normalized metadata; define TTLs and invalidation.
+5. Add DB pool/query budgets, indexes and read-path optimization from actual query plans.
+6. Move non-interactive work to bounded BullMQ consumers.
+7. Add regional and spike load tests; tune based on bottleneck evidence.
+8. Consider Durable Objects only for a real-time feature that needs coordinated state.
 
 ## 10. Explicit non-goals
 
+- No R2, cloud audio storage, upload pipeline or Breezze-hosted music CDN in the current product architecture.
+- No default audio proxying through Workers or NestJS.
 - No wholesale NestJS-to-Workers rewrite.
 - No D1/PostgreSQL dual-write architecture.
 - No replacing Redis/BullMQ with KV.
-- No public R2 bucket for protected music.
-- No caching of private library/profile/playback authorization data.
-- No claim that Cloudflare alone guarantees a target of hundreds of millions of concurrent users.
-- No addition of subscription, billing, or paywall services. Breezze remains free.
+- No shared edge caching of private user data, rights decisions or playback grants.
+- No claim that Cloudflare alone guarantees one million concurrent listeners.
+- No subscription, billing or paywall infrastructure. Breezze remains free.
 
 ## 11. Operational acceptance checklist
 
-- [ ] TLS is Full (strict); origin is protected.
+- [ ] API origin is protected and TLS is Full (strict).
 - [ ] WAF rules are tuned against observed false positives.
-- [ ] Auth, search, playback, and upload routes have explicit rate limits.
-- [ ] R2 buckets are private and lifecycle policies are configured.
-- [ ] Playback grants are short-lived, scoped, and revocable.
-- [ ] Media Worker supports byte ranges and correct content headers.
-- [ ] Private responses are not shared-cached.
-- [ ] Upload pipeline validates content before publication.
-- [ ] Queue consumers are idempotent and have bounded retry/dead-letter behavior.
-- [ ] Secrets are deployed through secret bindings, never committed.
-- [ ] Dashboards and alerts cover edge, origin, database, queue, and playback health.
-- [ ] Load tests include origin saturation and cache-miss scenarios.
+- [ ] Auth, search, resolve and mutation routes have explicit rate limits.
+- [ ] Worker cache is explicit allowlist only; private responses are no-store.
+- [ ] Cache keys include all public response-varying dimensions.
+- [ ] Metadata cache has TTL jitter, single-flight and invalidation.
+- [ ] No signed stream URL or rights grant is shared-cached.
+- [ ] Audio streams directly from approved providers by default.
+- [ ] Provider adapters have timeouts, circuit breakers and concurrency budgets.
+- [ ] PostgreSQL pool/query budgets and Redis limits are measured.
+- [ ] Queue consumers are idempotent and have bounded retry/DLQ behavior.
+- [ ] Cross-user authorization tests pass.
+- [ ] Dashboards cover edge, API, DB, Redis, queues and provider health.
+- [ ] Staged load tests are complete and results recorded through 1M target.
