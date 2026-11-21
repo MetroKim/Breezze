@@ -14,6 +14,7 @@ describe('SearchService', () => {
   };
 
   const youtubeMusic = {
+    providerId: 'youtube_music',
     capabilities: { search: true },
     search: jest.fn().mockResolvedValue({ kind: 'ok', value: [] }),
   };
