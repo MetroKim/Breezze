@@ -6,7 +6,7 @@ import { DownloadsService } from './downloads.service';
 describe('DownloadsService', () => {
   const prisma = { downloadRecord: { upsert: jest.fn() } };
   const rights = { decide: jest.fn() };
-  const signer = { signPlaybackUrl: jest.fn() };
+  const signer = { createPlaybackUrl: jest.fn() };
   let service: DownloadsService;
 
   beforeEach(() => {
@@ -40,7 +40,7 @@ describe('DownloadsService', () => {
     });
 
     expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
-    expect(signer.signPlaybackUrl).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 
   it('records and signs a download only after explicit authorization', async () => {
@@ -53,7 +53,10 @@ describe('DownloadsService', () => {
       attribution: 'Licensed via label',
     });
     prisma.downloadRecord.upsert.mockResolvedValue({ id: 'download-1' });
-    signer.signPlaybackUrl.mockReturnValue('https://cdn.example/download');
+    signer.createPlaybackUrl.mockReturnValue({
+      url: 'https://cdn.example/download',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
 
     await expect(
       service.authorizeAndRecord('user-1', {
@@ -66,6 +69,6 @@ describe('DownloadsService', () => {
       recordId: 'download-1',
     });
 
-    expect(signer.signPlaybackUrl).toHaveBeenCalledWith('track-1', 'download');
+    expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'download', null);
   });
 });
