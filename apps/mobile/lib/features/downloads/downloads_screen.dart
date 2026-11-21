@@ -33,7 +33,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final dir = await downloadsDirectory();
     final library = DownloadsLibrary(
       root: dir,
-      source: ref.read(youtubeSourceProvider),
       lyrics: ref.read(lyricsProvider),
     );
     final tracks = await library.list();
