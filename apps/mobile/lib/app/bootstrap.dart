@@ -15,10 +15,11 @@ import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
 
-/// Composition root — the real, working wiring at startup.
+/// Composition root for Breezze app services.
 ///
-/// No user API key anywhere: search + playback run through
-/// youtube_explode_dart (keyless), lyrics through LRCLIB (keyless).
+/// YouTube is used for metadata discovery only. Full playback and downloads
+/// are resolved through backend rights checks and signed CDN URLs. Lyrics
+/// lookup remains keyless through LRCLIB.
 
 /// package:http impl of the lyrics HTTP seam.
 class HttpLyrics implements LyricsHttp {
@@ -34,7 +35,7 @@ class HttpLyrics implements LyricsHttp {
   }
 }
 
-/// The real playback source provider — app-wide singleton.
+/// The app-wide metadata/search adapter; it is not a playback authority.
 final youtubeSourceProvider =
     Provider<YoutubeSourceAdapter>((ref) => YoutubeSourceAdapter());
 
@@ -42,7 +43,7 @@ final youtubeSourceProvider =
 final lyricsProvider =
     Provider<LyricsProvider>((ref) => LyricsProvider(HttpLyrics()));
 
-/// The source chain: youtube_explode primary.
+/// Metadata search chain. No source in this chain grants playback rights.
 final sourceChainProvider = Provider<SourceChain>((ref) => SourceChain([
       ref.watch(youtubeSourceProvider),
     ]));
