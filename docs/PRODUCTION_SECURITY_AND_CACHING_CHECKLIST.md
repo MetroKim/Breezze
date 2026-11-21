@@ -50,11 +50,12 @@
 ## 3. Authorization
 - [~] Deny by default: guards exist on parts of API; audit every controller and route.
 - [~] Server-side permission checks exist in selected services; require a route-by-route authorization matrix and tests.
-- [~] Object-level/IDOR checks: playlist, favorites, media uploads, distributor submissions and artist analytics have account-scoped regression tests; push-token registration rejects cross-account reassignment and handles unique-insert races; artist claims now have database uniqueness and idempotent retry handling. PostgreSQL-backed concurrent request tests and adversarial tests for every resource ID remain.
+- [~] Object-level/IDOR checks: playlist, favorites, media uploads, distributor submissions and artist analytics have account-scoped regression tests; push-token registration rejects cross-account reassignment and handles unique-insert races; artist claims now have database uniqueness and idempotent retry handling. PostgreSQL-backed concurrent artist-claim constraint tests now run in CI; broader endpoint-level concurrency tests and adversarial tests for every resource ID remain.
 - [~] Persisted admin RBAC now protects admin and moderation-review routes; distributor release validation is transactionally audited. Full resource-level RBAC and ABAC for territory/rights/resource context remain.
 - [ ] PostgreSQL RLS or equivalent tenant isolation; current schema is user-scoped, not a complete tenant/RLS implementation.
-- [x] Artist claim uniqueness: one claim per account/artist plus a partial unique index allowing only one approved claimant per artist. Before applying the migration to an existing database, check for duplicate `(userId, artistId)` pairs and multiple approved claims per artist and reconcile them; the migration intentionally fails rather than deleting claim records.
+- [x] Artist claim uniqueness: one claim per account/artist plus a partial unique index allowing only one approved claimant per artist. CI applies migrations to PostgreSQL and runs concurrent insert tests for both constraints. Before applying the migration to an existing database, check for duplicate `(userId, artistId)` pairs and multiple approved claims per artist and reconcile them; the migration intentionally fails rather than deleting claim records.
 - [~] Admin routes require persisted admin role; separate hostname/network boundary, MFA, privileged audit trail and just-in-time access remain.
+- [x] Media upload completion is retry-safe after queue insertion/network failures: owner-scoped state checks plus deterministic BullMQ job IDs prevent duplicate pipeline work.
 - [~] Least privilege: separate DB users and service identities; deployment examples still use shared development credentials.
 - [ ] Re-authentication for email change, account deletion, artist ownership and other sensitive actions.
 
