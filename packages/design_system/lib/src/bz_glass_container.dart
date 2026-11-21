@@ -7,8 +7,8 @@ import 'bz_theme.dart';
 /// BzGlassContainer — the one glass surface every floating widget uses.
 ///
 /// Translucent fill + backdrop blur + hairline border. Degrades to a
-/// solid surface automatically when platform reduced-transparency /
-/// accessibility settings ask for it.
+/// solid surface when the caller requests reduced transparency or the
+/// platform enables high-contrast accessibility mode.
 class BzGlassContainer extends StatelessWidget {
   final Widget child;
   final double radius;
@@ -35,7 +35,10 @@ class BzGlassContainer extends StatelessWidget {
     final fill = fillColor ?? colors.atmoRegular;
     final border = borderColor ?? colors.separator;
 
-    if (reduceTransparency) {
+    final useSolidSurface = reduceTransparency ||
+        MediaQuery.highContrastOf(context);
+
+    if (useSolidSurface) {
       return Container(
         decoration: BoxDecoration(
           color: colors.surface1,

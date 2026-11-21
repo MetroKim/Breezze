@@ -175,8 +175,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       body: BzAmbientBackdrop(
         artworkUrl: track.artworkUrl,
         child: SafeArea(
-          child: Column(
-            children: [
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: SizedBox.expand(
+                child: Column(
+                  children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Row(
@@ -357,7 +361,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         ),
                       ),
               ),
-            ],
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -388,16 +395,24 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
     lowerBound: 0.96,
     upperBound: 1.0,
   );
+  bool _reduceMotion = false;
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.playing) _controller.repeat(reverse: true);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reduceMotion) {
+      _controller.stop();
+      _controller.value = 1;
+    } else if (widget.playing && !_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override
   void didUpdateWidget(covariant _BreathingArtwork oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_reduceMotion) return;
     if (widget.playing != oldWidget.playing) {
       if (widget.playing) {
         _controller.repeat(reverse: true);
@@ -416,30 +431,37 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).bz;
-    return ScaleTransition(
-      scale: _controller,
-      child: Container(
-        width: 280,
-        height: 280,
-        decoration: BoxDecoration(
-          color: colors.surface2,
-          borderRadius: BorderRadius.circular(BzRadius.artwork),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(BzRadius.artwork),
-          child: widget.artworkUrl != null
-              ? Image.network(
-                  widget.artworkUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Center(
-                    child: BzBnoteMark(size: 96, color: widget.fallbackColor),
-                  ),
-                )
-              : Center(
-                  child: BzBnoteMark(size: 96, color: widget.fallbackColor),
-                ),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final side = (constraints.maxWidth * 0.72)
+            .clamp(220.0, 420.0)
+            .toDouble();
+        return ScaleTransition(
+          scale: _controller,
+          child: Container(
+            width: side,
+            height: side,
+            decoration: BoxDecoration(
+              color: colors.surface2,
+              borderRadius: BorderRadius.circular(BzRadius.artwork),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(BzRadius.artwork),
+              child: widget.artworkUrl != null
+                  ? Image.network(
+                      widget.artworkUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: BzBnoteMark(size: 96, color: widget.fallbackColor),
+                      ),
+                    )
+                  : Center(
+                      child: BzBnoteMark(size: 96, color: widget.fallbackColor),
+                    ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -493,7 +515,16 @@ class _LyricsView extends StatelessWidget {
     final theme = Theme.of(context);
 
     if (mode == 'loading') {
-      return const Center(child: CircularProgressIndicator());
+      return const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          BzSkeleton(width: 220, height: 14, radius: 5),
+          SizedBox(height: 14),
+          BzSkeleton(width: 280, height: 14, radius: 5),
+          SizedBox(height: 14),
+          BzSkeleton(width: 190, height: 14, radius: 5),
+        ],
+      );
     }
 
     if (mode == 'none' || lyrics == null || lyrics!.lines.isEmpty) {

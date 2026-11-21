@@ -498,6 +498,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Widget _buildEmptySection(ThemeData theme, String section) {
+    if (_loading) {
+      return ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: 6,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+      );
+    }
     final detail = switch (section) {
       'Playlists' => 'Your created and saved playlists will appear here.',
       'Artists' => 'Artists you follow or save will appear here.',

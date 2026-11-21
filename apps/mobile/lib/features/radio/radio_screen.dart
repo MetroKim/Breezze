@@ -178,7 +178,15 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
                   Text('PROGRAM SCHEDULE', style: theme.textTheme.labelLarge),
                   const SizedBox(height: 8),
                   if (snapshot.connectionState == ConnectionState.waiting)
-                    const Center(child: CircularProgressIndicator())
+                    const Column(
+                      children: [
+                        BzSkeleton(width: double.infinity, height: 14, radius: 4),
+                        SizedBox(height: 10),
+                        BzSkeleton(width: double.infinity, height: 14, radius: 4),
+                        SizedBox(height: 10),
+                        BzSkeleton(width: 180, height: 14, radius: 4),
+                      ],
+                    )
                   else if (snapshot.hasError)
                     const Text('The station schedule could not be loaded.')
                   else if (snapshot.data == null || snapshot.data!.isEmpty)

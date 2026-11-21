@@ -249,7 +249,12 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
             ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 5,
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                  )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(0, 8, 0, 220),
                     children: [
@@ -294,7 +299,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                               IconButton(
                                 tooltip: 'Cancel download',
                                 onPressed: () => downloadController.cancel(entry.key),
-                                icon: const Icon(Icons.close),
+                                icon: const BzSvgIcon(name: 'close'),
                               ),
                             ],
                           ),
