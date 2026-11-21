@@ -49,6 +49,28 @@ class BzSvgIcon extends StatelessWidget {
     'queue': '<path d="M4 5h16M4 10h16M4 15h10M4 20h7m5-5 4 4 3-4"/>',
     'star-filled': '<path d="M12 3.25 14.7 8.73l6.05.88-4.38 4.27 1.03 6.03L12 17.06l-5.4 2.85 1.03-6.03-4.38-4.27 6.05-.88L12 3.25Z" fill="currentColor" stroke="none"/>',
     'star': '<path d="m12 3.25 2.7 5.48 6.05.88-4.38 4.27 1.03 6.03L12 17.06l-5.4 2.85 1.03-6.03L3.25 9.61l6.05-.88L12 3.25Z"/>',
+    'drag-handle': '<path d="M8 5h8M8 12h8M8 19h8"/>',
+    'volume-2': '<path d="M4 10v4h3l5 4V6l-5 4H4Z"/><path d="M16 9a5 5 0 0 1 0 6m2.5-9a9 9 0 0 1 0 12"/>',
+    'infinity': '<path d="M8.2 8.2c-2.4-2.4-5.7-.8-5.7 3.8s3.3 6.2 5.7 3.8l7.6-7.6c2.4-2.4 5.7-.8 5.7 3.8s-3.3 6.2-5.7 3.8L8.2 8.2Z"/>',
+    'clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+    'settings': '<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.6.9l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.6-.9l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.9L6.1 12l1.4-2.4 1.7.7a8 8 0 0 1 1.6-.9l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.6.9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1-.1 1.9Z"/>',
+    'moon': '<path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.7 8.7 0 1 0 20.5 14.2Z"/>',
+    'globe': '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+
+    'airplay': '<path d="M5 4.5h14A2.5 2.5 0 0 1 21.5 7v9A2.5 2.5 0 0 1 19 18.5h-2.5M7.5 18.5H5A2.5 2.5 0 0 1 2.5 16V7A2.5 2.5 0 0 1 5 4.5Z"/><path d="m8 21 4-5 4 5"/>',
+    'calendar': '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
+    'compass': '<circle cx="12" cy="12" r="9"/><path d="m15.8 8.2-2.4 5.2-5.2 2.4 2.4-5.2 5.2-2.4Z"/>',
+    'grid': '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>',
+    'video': '<rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/>',
+    'headphones': '<path d="M3 13v-1a9 9 0 0 1 18 0v1"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/>',
+    'filter': '<path d="M4 6h16M7 12h10m-7 6h4"/>',
+    'list-music': '<path d="M4 6h10M4 11h10M4 16h6"/><path d="M18 4v12.5a2.5 2.5 0 1 1-2-2.45V7l6-1.5v8.5"/>',
+    'album': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 3a9 9 0 0 1 9 9"/>',
+    'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    'arrow-up-right': '<path d="M7 17 17 7M8 7h9v9"/>',
+    'check': '<path d="m5 12 4 4L19 6"/>',
+    'user-round-plus': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 21a6.5 6.5 0 0 1 13 0m3-13v8m-4-4h8"/>',
+    'wifi': '<path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0m-11 3.5a5 5 0 0 1 8 0M12 20h.01"/>',
   };
 
   @override
