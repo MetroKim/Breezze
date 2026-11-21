@@ -492,7 +492,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                 item.map((key, value) => MapEntry(key.toString(), value))).toList()
             : [];
         _catalogSource = data['source'] as String?;
-        _catalogTerritory = data['territory'] as String? ?? territory.toUpperCase();
+        _catalogTerritory = data['territory'] as String? ??
+            (_videoFeed ? null : territory.toUpperCase());
         _catalogFetchedAt = DateTime.tryParse(data['fetchedAt'] as String? ?? '');
         _catalogError = null;
         _loading = false;
