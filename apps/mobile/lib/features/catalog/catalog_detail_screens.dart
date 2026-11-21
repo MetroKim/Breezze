@@ -51,7 +51,10 @@ class TrackDetailScreen extends ConsumerWidget {
     final artistTracks = relatedTracks
         .where((item) => (item.artist ?? '').trim().toLowerCase() == artistName.trim().toLowerCase())
         .toList();
-    final queueTracks = relatedTracks.isEmpty ? [track] : relatedTracks;
+    final queueTracks = (relatedTracks.isEmpty ? [track] : relatedTracks)
+        .where((item) =>
+            !item.id.startsWith('bz:') && !item.id.startsWith('bzv:'))
+        .toList();
     final queue = [
       for (final item in queueTracks)
         TrackInfo(
