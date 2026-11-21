@@ -269,6 +269,9 @@ class PlayerController extends Notifier<PlayerState> {
 
   TrackInfo? _trackInfoFor(String trackId) => _trackInfos[trackId];
 
+  /// Read-only metadata lookup for queue and playlist surfaces.
+  TrackInfo? trackInfoFor(String trackId) => _trackInfoFor(trackId);
+
   bool _isCurrentRequest(int requestId) =>
       requestId == _requestGeneration && _engine != null;
 
