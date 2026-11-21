@@ -64,57 +64,6 @@ function error(status: number, message: string): Response {
   });
 }
 
-async function upload(request: Request, url: URL, env: Env): Promise<Response> {
-  if (request.method !== 'PUT') return error(405, 'METHOD_NOT_ALLOWED');
-  const parts = url.pathname.split('/').filter(Boolean);
-  if (parts.length !== 4) return error(404, 'NOT_FOUND');
-
-  let userId: string;
-  let filename: string;
-  try {
-    userId = decodeURIComponent(parts[1]);
-    filename = decodeURIComponent(parts[3]);
-  } catch {
-    return error(400, 'INVALID_PATH');
-  }
-
-  const jobId = parts[2];
-  const bytes = Number(url.searchParams.get('b'));
-  const expires = Number(url.searchParams.get('e'));
-  const signature = url.searchParams.get('s');
-  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
-  // These values become R2 key segments. Keep them opaque and path-safe even
-  // though the signature is server-issued; never let encoded separators or
-  // traversal-like identifiers alter the quarantine namespace.
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(userId)
-    || !/^[a-zA-Z0-9_-]{1,128}$/.test(jobId)
-    || !safeName || safeName !== filename
-    || !Number.isSafeInteger(bytes) || bytes < 1 || bytes > 100 * 1024 * 1024) {
-    return error(400, 'INVALID_UPLOAD');
-  }
-
-  const payload = `upload:${userId}:${jobId}:${filename}:${bytes}:${expires}`;
-  if (!await validSignature(env.MEDIA_SIGNING_KEY, payload, signature, expires)) {
-    return error(403, 'UPLOAD_SIGNATURE_INVALID_OR_EXPIRED');
-  }
-
-  const declaredLength = Number(request.headers.get('content-length'));
-  if (declaredLength !== bytes) return error(413, 'CONTENT_LENGTH_MISMATCH');
-  const key = `quarantine/${userId}/${jobId}/${filename}`;
-  if (!request.body) return error(400, 'UPLOAD_BODY_REQUIRED');
-  await env.MEDIA_BUCKET.put(key, request.body, {
-    httpMetadata: {
-      contentType: request.headers.get('content-type') || 'application/octet-stream',
-      cacheControl: 'private, no-store',
-    },
-    customMetadata: { userId, jobId, originalFilename: filename },
-  });
-  return new Response(null, {
-    status: 201,
-    headers: { 'Cache-Control': 'no-store', 'X-Upload-Object': key },
-  });
-}
-
 async function playback(request: Request, url: URL, env: Env): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return error(405, 'METHOD_NOT_ALLOWED');
@@ -196,7 +145,6 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!env.MEDIA_SIGNING_KEY || !env.MEDIA_BUCKET) return error(503, 'MEDIA_STORAGE_NOT_CONFIGURED');
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/upload/')) return upload(request, url, env);
     if (url.pathname.startsWith('/audio/')) return playback(request, url, env);
     return error(404, 'NOT_FOUND');
   },

@@ -1,39 +1,21 @@
 # Breezze Cloudflare media edge
 
-This Worker is the private R2 media gateway for Breezze. It supports:
-
-- HMAC-signed, expiring playback URLs for Breezze-owned or properly licensed media at `/audio/{trackId}/{variant}`.
-- Short-lived, size-bound upload URLs at `/upload/{userId}/{jobId}/{filename}`.
-- Private quarantine uploads into R2 and byte-range playback for seeking.
-- No public R2 bucket or public object URLs.
+This Worker is a private R2 playback gateway for Breezze-owned or separately rights-cleared catalog audio. It does not accept user uploads or ingest third-party provider streams.
 
 ## Provisioning
 
-1. Create a Cloudflare R2 bucket named `breezze-media`.
-2. Install Wrangler and authenticate: `npx wrangler login`.
-3. From this directory, set the same random signing secret used by the NestJS API:
-   `npx wrangler secret put MEDIA_SIGNING_KEY`.
-   Use at least 32 random bytes. Do not commit it or put it in a frontend build.
-4. Deploy: `npx wrangler deploy`.
-5. Attach a custom domain such as `media.breezze.app` to the Worker route in Cloudflare.
-6. Set the API `CDN_BASE_URL=https://media.breezze.app` and the same `MEDIA_SIGNING_KEY`.
-7. Configure the backend media worker with `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME=breezze-media`. Create an R2 API token scoped to this bucket only. Keep these credentials in the worker runtime secret store, never in Flutter or the Worker bundle.
-8. Copy `backend/api/.env.example` into the backend's private environment configuration and populate the values. The Worker signing secret and API signing key must match exactly.
+1. Create a private Cloudflare R2 bucket named `breezze-media`.
+2. Authenticate Wrangler and set `MEDIA_SIGNING_KEY` with at least 32 random bytes using `npx wrangler secret put MEDIA_SIGNING_KEY`.
+3. Deploy with `npx wrangler deploy` and attach the media hostname.
+4. Configure the API signing key and CDN base URL to match the Worker.
 
-The R2 bucket must remain private. Do not enable public bucket access or expose R2 S3 credentials to mobile clients.
+Keep the bucket private. Never expose R2 credentials to the mobile client. Playback URLs are short-lived bearer capabilities and are returned only after the API authorizes the track's rights and territory.
 
-## Object contract
+## Object and request contract
 
-- Uploads are written to `quarantine/{userId}/{jobId}/{filename}`.
-- The media processing worker must validate, scan and transcode the quarantined object before publishing.
-- Published playback objects use `audio/{canonicalTrackId}/{variant}`, where variant matches the signed playback URL.
-- The API must authorize territory and rights before it issues a playback URL.
+- Objects use `audio/{canonicalTrackId}/{variant}`.
+- The Worker accepts signed `GET` and `HEAD` requests and supports byte ranges for seeking.
+- Responses are `private, no-store`; signed URLs must not enter shared caches.
+- No upload, quarantine, artist-submission, or media-transcoding endpoint exists in the listener app.
 
-## Operational notes
-
-Playback GET and byte-range responses use `Cache-Control: private, no-store`; signed URLs are bearer capabilities and must not enter shared caches. The signature expiry is checked on every Worker request. Uploads are limited to 100 MiB and the exact registered Content-Length. Configure Cloudflare WAF/rate limits on the custom domain and monitor R2 request/egress costs.
-
-This Worker is an edge gateway, not a media transcoder or rights-management system. Production release still requires a real ingestion/transcoding pipeline, malware/content validation, a retention policy for quarantine objects, and an operational licence-revocation policy. Deploying the Worker and provisioning the bucket/domain are account-side steps and cannot be completed from this repository alone.
-
-
-This R2 Worker is not the general music-provider fallback and must not be used to ingest or re-host third-party catalog tracks without explicit rights. Provider-hosted audio should be delivered directly from the approved provider to the client. Use this bucket only for Breezze-owned, artist-delivered, or separately rights-cleared media.
+Provider-hosted audio must be delivered by the approved provider directly to the client. This R2 bucket is only for Breezze-owned or explicitly rights-cleared audio. Provisioning and deployment remain account-side steps.

@@ -84,6 +84,57 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
   }
 
+
+  void _showPlayerActions(
+    BuildContext context,
+    PlayerController controller,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).bzBackground,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const BzSvgIcon(name: 'queue'),
+              title: const Text('Playing Next'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _openPlayingNext();
+              },
+            ),
+            ListTile(
+              leading: const BzSvgIcon(name: 'shuffle'),
+              title: const Text('Shuffle queue'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                controller.toggleShuffle();
+              },
+            ),
+            ListTile(
+              leading: const BzSvgIcon(name: 'repeat'),
+              title: const Text('Change repeat mode'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                controller.cycleRepeat();
+              },
+            ),
+            ListTile(
+              leading: BzSvgIcon(name: _lyricsVisible ? 'lyrics' : 'lyrics'),
+              title: Text(_lyricsVisible ? 'Hide lyrics' : 'Show lyrics'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                setState(() => _lyricsVisible = !_lyricsVisible);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _format(Duration d) {
     final m = d.inMinutes;
     final s = (d - Duration(minutes: m)).inSeconds;
@@ -151,7 +202,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     ),
                     IconButton(
                       icon: BzSvgIcon(name: 'more-vertical'),
-                      onPressed: () {},
+                      onPressed: () => _showPlayerActions(context, controller),
                     ),
                   ],
                 ),
@@ -230,37 +281,48 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: BzSvgIcon(name: 'shuffle'),
-                    onPressed: controller.toggleShuffle,
-                    color: theme.bzText2,
+              BzGlassContainer(
+                radius: BzRadius.capsule,
+                blur: 18,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        tooltip: 'Shuffle',
+                        icon: BzSvgIcon(name: 'shuffle'),
+                        onPressed: controller.toggleShuffle,
+                        color: theme.bzText2,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Previous track',
+                        icon: BzSvgIcon(name: 'skip-previous', size: 34),
+                        onPressed: controller.previous,
+                      ),
+                      const SizedBox(width: 8),
+                      _PlayPauseButton(
+                        playing: playing,
+                        size: 64,
+                        onTap: controller.togglePlayPause,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Next track',
+                        icon: BzSvgIcon(name: 'skip-next', size: 34),
+                        onPressed: controller.next,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Repeat',
+                        icon: BzSvgIcon(name: 'repeat'),
+                        onPressed: controller.cycleRepeat,
+                        color: theme.bzText2,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  IconButton(
-                    icon: BzSvgIcon(name: 'skip-previous', size: 34),
-                    onPressed: controller.previous,
-                  ),
-                  const SizedBox(width: 16),
-                  _PlayPauseButton(
-                    playing: playing,
-                    size: 64,
-                    onTap: controller.togglePlayPause,
-                  ),
-                  const SizedBox(width: 16),
-                  IconButton(
-                    icon: BzSvgIcon(name: 'skip-next', size: 34),
-                    onPressed: controller.next,
-                  ),
-                  const SizedBox(width: 16),
-                  IconButton(
-                    icon: BzSvgIcon(name: 'repeat'),
-                    onPressed: controller.cycleRepeat,
-                    color: theme.bzText2,
-                  ),
-                ],
+                ),
               ),
               const SizedBox(height: 4),
               Row(

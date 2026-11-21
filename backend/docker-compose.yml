@@ -69,23 +69,7 @@ services:
       timeout: 5s
       retries: 3
 
-  worker:
-    build:
-      context: ./api
-      dockerfile: Dockerfile.worker
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://breezze:breezze_dev@postgres:5432/breezze
-      REDIS_URL: redis://redis:6379
-      MEDIA_ROOT: /media
-    volumes:
-      - mediadata:/media
 
 volumes:
   pgdata:
   redisdata:
-  mediadata:
