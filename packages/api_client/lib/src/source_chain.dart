@@ -35,8 +35,9 @@ class SourceChain {
 
   SourceChain(this.sources);
 
-  /// Resolves the first source that can serve the track; the chain is
-  /// BitChord-style primary -> Liner-style fallback per §52.7.
+  /// Resolves the first eligible provider source. The provider must have
+  /// an explicit playback capability and independently enforce the backend
+  /// authorization contract; metadata adapters are never playback sources.
   Future<SourceChainResult> resolve(
     String trackId,
     ProviderUserContext userContext,
@@ -53,7 +54,7 @@ class SourceChain {
     return SourceChainUnavailable('no_licensed_source', alternativesShown: [
       'preview',
       'related_track',
-      'external_player_link',
+      'local_file',
     ]);
   }
 
