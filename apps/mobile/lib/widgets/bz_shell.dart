@@ -8,6 +8,8 @@ import '../app/downloads_controller.dart';
 import '../core/audio/audio_service_bridge.dart';
 import '../core/audio/background_audio.dart';
 import '../core/database/migrate_to_drift.dart';
+import '../features/browse/browse_screen.dart';
+import '../features/radio/radio_screen.dart';
 import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
@@ -90,7 +92,7 @@ class BzHome extends ConsumerStatefulWidget {
 class _BzHomeState extends ConsumerState<BzHome> {
   int _index = 0;
 
-  static const _tabs = ['Home', 'Search', 'Library', 'Downloads', 'Settings'];
+  static const _tabs = ['Home', 'Browse', 'Radio', 'Library', 'Search', 'Downloads', 'Settings'];
 
   @override
   void initState() {
@@ -109,8 +111,10 @@ class _BzHomeState extends ConsumerState<BzHome> {
         index: _index,
         children: const [
           HomeScreen(),
-          SearchScreen(),
+          BrowseScreen(),
+          RadioScreen(),
           LibraryScreen(),
+          SearchScreen(),
           DownloadsScreen(),
           SettingsScreen(),
         ],
@@ -227,6 +231,8 @@ class _TabBar extends StatelessWidget {
       blur: 16,
       child: Padding(
         padding: const EdgeInsets.all(6),
+        child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
