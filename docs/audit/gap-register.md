@@ -124,8 +124,9 @@ regression coverage, exit gates and the recommended implementation order.
 - Playback resolver operations have no request generation/cancellation
   guard, and the state machine does not accept a new start from several
   active states.
-- Search history persistence errors are caught as if they were provider
-  network errors.
+- Search history persistence errors were caught as if they were provider
+  network errors; the SearchScreen now treats history as best-effort and
+  continues the provider request when local persistence fails (test pending).
 - Radio is metadata/schedule UI only; stream playback is not implemented.
 - The inspected Prisma schema still contains
   `@@unique([userId, trackId])` on `RecentlyPlayed`; reconcile it with
