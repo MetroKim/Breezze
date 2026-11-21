@@ -33,9 +33,11 @@ export class AuthService {
   private async issueTokens(
     user: { id: string; email: string; displayName: string | null },
     refreshOverride?: string,
+    existingFamilyId?: string,
   ): Promise<AuthResult> {
+    const familyId = existingFamilyId ?? randomUUID();
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, email: user.email },
+      { sub: user.id, email: user.email, sid: familyId },
       { expiresIn: '15m' },
     );
     const refreshToken = refreshOverride ?? randomBytes(32).toString('hex');
@@ -43,7 +45,7 @@ export class AuthService {
       await this.prisma.refreshToken.create({
         data: {
           tokenHash: this.hashRefreshToken(refreshToken),
-          familyId: randomUUID(),
+          familyId,
           userId: user.id,
           expiresAt: this.refreshExpiry(),
         },
@@ -128,7 +130,7 @@ export class AuthService {
     });
     if (!consumed) throw new UnauthorizedException('REFRESH_REUSED_OR_INVALID');
 
-    return this.issueTokens(token.user, rotated);
+    return this.issueTokens(token.user, rotated, token.familyId);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -160,10 +162,15 @@ export class AuthService {
   }
 
   async revokeSession(userId: string, tokenId: string): Promise<void> {
-    const result = await this.prisma.refreshToken.updateMany({
+    const sessionToken = await this.prisma.refreshToken.findFirst({
       where: { id: tokenId, userId, revokedAt: null },
+      select: { familyId: true },
+    });
+    if (!sessionToken) throw new NotFoundException('SESSION_NOT_FOUND');
+
+    await this.prisma.refreshToken.updateMany({
+      where: { familyId: sessionToken.familyId, userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
-    if (result.count === 0) throw new NotFoundException('SESSION_NOT_FOUND');
   }
 }
