@@ -40,14 +40,14 @@ The complete Breezze quality workflow passed on that commit.
 - [ ] Repeat full CI after any subsequent source change; a green run applies only to the commit it tested.
 
 ### Remaining release blockers
-- [ ] The signer creates CDN URLs, but this repository has no media-delivery implementation. Verify the actual CDN origin, object authorization and signature validation end-to-end.
+- [x] Add Cloudflare R2 private object storage, a signed-upload/playback Worker gateway, byte-range reads, and an R2-backed quarantine/transcode staging path. Worker/API code is covered by CI; deployment, custom domain, R2 bucket/token provisioning, and live end-to-end validation remain operator tasks. Processed assets remain staged and are not playable until a moderated catalog publication maps them to canonical track IDs and rights grants.
 - [ ] Offline playback enforces stored owner and known rights expiry, but a device that remains fully offline cannot learn about a later takedown or rights revocation. Define a bounded offline licence lease and mandatory revalidation before the next online session.
 - [ ] Add device-level tests for local file playback, corrupted/missing assets, account switching during active downloads, and expired licence behavior.
 - [ ] Complete PlayerController lifecycle tests for engine detach/disposal, next/previous during pending loads, and scrobble tick/stop integration.
 - [ ] Add mobile radio request/widget tests and a station timezone contract. The current schema has no station timezone.
 - [ ] Add a real radio playback session contract only after stream rights, secure URL resolution, buffering/reconnect behavior and engine integration are designed.
 - [ ] No Prisma migration directory/history is present. Establish a safe baseline/migration strategy against the actual deployed database before deployment.
-- [ ] Audit and remediate npm dependency vulnerabilities (previous install reported 26: 3 low, 12 moderate, 11 high); do not run `npm audit fix --force` blindly.
+- [ ] Audit and remediate npm dependency vulnerabilities (previous install reported 26: 3 low, 12 moderate, 11 high); re-run `npm audit` after the AWS SDK addition and update vulnerable transitive dependencies without breaking Nest/Prisma compatibility.
 - [ ] Verify repeated-play semantics for `RecentlyPlayed` against deployed data before changing its current `@@unique([userId, trackId])` constraint.
 - [ ] Finish full artist/album/playlist detail routes, catalog-backed editorial feeds, account-isolation integration tests, accessibility/responsive checks and real-device audio validation.
 
