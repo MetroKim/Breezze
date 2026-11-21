@@ -275,7 +275,7 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
                               GridView.builder(
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
-                                itemCount: _stations.length.clamp(0, 6),
+                                itemCount: _stations.length.clamp(0, 6).toInt(),
                                 gridDelegate:
                                     const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2,
