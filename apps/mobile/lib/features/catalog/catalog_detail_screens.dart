@@ -156,11 +156,13 @@ class TrackDetailScreen extends ConsumerWidget {
                       label: const Text('Add to Library'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: () => ref.read(playerControllerProvider.notifier).playNext(
-                        TrackInfo(id: track.id, title: track.title, artist: track.artist, artworkUrl: track.artworkUrl, duration: track.duration),
-                        origin: origin,
-                        sourceContext: 'Song details',
-                      ),
+                      onPressed: track.id.startsWith('bz:')
+                          ? null
+                          : () => ref.read(playerControllerProvider.notifier).playNext(
+                                TrackInfo(id: track.id, title: track.title, artist: track.artist, artworkUrl: track.artworkUrl, duration: track.duration),
+                                origin: origin,
+                                sourceContext: 'Song details',
+                              ),
                       icon: const BzSvgIcon(name: 'list-music'),
                       label: const Text('Play Next'),
                     ),
