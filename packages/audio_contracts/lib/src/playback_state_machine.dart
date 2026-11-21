@@ -106,8 +106,7 @@ class PlaybackStateMachine {
     }
 
     if (e is SourceResolutionFailed) {
-      if (e.requestId != _activeRequestId ||
-          (s != PlaybackState.resolving && s != PlaybackState.loading)) {
+      if (e.requestId != _activeRequestId || s == PlaybackState.idle) {
         return s;
       }
       return PlaybackState.failed;
