@@ -37,7 +37,7 @@ export class AudiusAdapter implements ProviderAdapter {
   readonly providerId = 'audius';
   readonly displayName = 'Audius';
   readonly adapterVersion = '1.0.0';
-  readonly priority = 80;
+  readonly priority = 120;
   get enabled(): boolean {
     return process.env.AUDIUS_ENABLED !== 'false';
   }
