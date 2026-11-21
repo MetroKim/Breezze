@@ -1,0 +1,46 @@
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.keystore
+
+# Node / NestJS
+node_modules/
+**/node_modules/
+backend/api/dist/
+backend/api/coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/build/
+coverage/
+.flutter/
+.metadata
+
+# Local databases, media, caches and generated runtime data
+*.sqlite
+*.sqlite3
+*.db
+*.log
+media/
+downloads/
+tmp/
+.temp/
+.DS_Store
