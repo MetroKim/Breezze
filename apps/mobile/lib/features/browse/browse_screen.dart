@@ -602,12 +602,12 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                 itemBuilder: (_, __) => const BzSkeletonTrackRow(),
                               )
                             : _error != null
-                                ? _BrowseMessageState(
+                                ? _MessageState(
                                     icon: 'wifi-off', title: 'Music source unavailable',
                                     message: _error!, onRetry: () => _search(_selected),
                                   )
                                 : _tracks.isEmpty
-                                    ? _BrowseMessageState(
+                                    ? _MessageState(
                                         icon: 'music-note', title: 'No matches found',
                                         message: 'Try another selection or retry this search.',
                                         onRetry: () => _search(_selected),
