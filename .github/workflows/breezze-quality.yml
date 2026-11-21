@@ -116,6 +116,24 @@ jobs:
       - name: Build backend
         run: npm run build
 
+  cloudflare_api:
+    name: Cloudflare API Worker typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cloudflare/api-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install API Worker dependencies
+        run: npm install
+      - name: Typecheck API Worker
+        run: npm run check
+
   cloudflare_media:
     name: Cloudflare Worker typecheck
     runs-on: ubuntu-latest
