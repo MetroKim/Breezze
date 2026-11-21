@@ -79,6 +79,23 @@ jobs:
   backend:
     name: NestJS and Prisma validation
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: breezze_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d breezze_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/breezze_ci
+      INTEGRATION_DATABASE_URL: postgresql://ci:ci@localhost:5432/breezze_ci
     defaults:
       run:
         working-directory: backend/api
@@ -103,15 +120,19 @@ jobs:
         run: npx prisma generate
 
       - name: Validate Prisma schema
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/breezze_ci
         run: npx prisma validate
+
+      - name: Apply migrations to CI PostgreSQL
+        run: npx prisma migrate deploy
 
       - name: Typecheck backend
         run: npm run typecheck
 
       - name: Test backend
         run: npm test -- --runInBand
+
+      - name: Test PostgreSQL concurrency constraints
+        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts
 
       - name: Build backend
         run: npm run build
