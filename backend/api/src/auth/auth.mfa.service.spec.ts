@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma.service';
 import { AuthService } from './auth.service';
 import { encryptTotpSecret } from './totp';
 
+jest.mock('argon2', () => ({ hash: jest.fn(), verify: jest.fn() }));
+
 describe('AuthService TOTP enrollment and verification', () => {
   let service: AuthService;
   let prisma: any;
@@ -13,7 +15,7 @@ describe('AuthService TOTP enrollment and verification', () => {
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date(59_000));
-    jest.spyOn(argon2, 'verify').mockResolvedValue(true);
+    (argon2.verify as jest.Mock).mockResolvedValue(true);
     process.env.MFA_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64');
     const tx = {
       user: {
@@ -44,7 +46,7 @@ describe('AuthService TOTP enrollment and verification', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
