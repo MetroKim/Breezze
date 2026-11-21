@@ -204,7 +204,7 @@ class _ArtistPortalScreenState extends ConsumerState<ArtistPortalScreen> {
                     ListTile(
                       leading: const BzSvgIcon(name: 'disc-3'),
                       title: Text(release['title'] as String? ?? 'Untitled release'),
-                      subtitle: Text('\${release['trackCount'] ?? 0} tracks · \${release['status'] ?? 'submitted'}'),
+                      subtitle: Text('${release['trackCount'] ?? 0} tracks · ${release['status'] ?? 'submitted'}'),
                     ),
                 const SizedBox(height: 24),
                 Text('TOP TRACKS', style: theme.textTheme.labelLarge),
