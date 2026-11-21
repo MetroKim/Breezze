@@ -1,6 +1,7 @@
 name: Breezze Quality
 
 on:
+  workflow_call:
   push:
     branches:
       - feature/breezze-product-experience
