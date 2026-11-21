@@ -274,7 +274,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     ? _buildSongs(theme)
                     : _selected == 'Playlists'
                         ? _buildPlaylists(theme)
-                        : _buildEmptySection(theme, _selected),
+                        : _selected == 'Artists'
+                            ? _buildArtists(theme)
+                            : _buildEmptySection(theme, _selected),
           ),
         ],
       ),
@@ -355,6 +357,34 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
           trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
           onTap: () => _openPlaylist(playlist),
+        );
+      },
+    );
+  }
+
+  Widget _buildArtists(ThemeData theme) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    final grouped = <String, List<FavoriteTrack>>{};
+    for (final track in _favorites) {
+      grouped.putIfAbsent(track.artist.trim().isEmpty ? 'Unknown artist' : track.artist, () => []).add(track);
+    }
+    if (grouped.isEmpty) return _emptyState(theme, 'No artists yet', 'Save songs to build your artist library.');
+    final artists = grouped.entries.toList()..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 150),
+      itemCount: artists.length,
+      itemBuilder: (context, index) {
+        final entry = artists[index];
+        return ListTile(
+          leading: CircleAvatar(backgroundColor: theme.bzSurface2, child: BzSvgIcon(name: 'mic', color: theme.bzText1)),
+          title: Text(entry.key),
+          subtitle: Text('${entry.value.length} saved songs'),
+          onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
+            trackId: entry.value.first.id,
+            queue: [for (final track in entry.value) track.toTrackInfo()],
+            origin: 'library',
+            sourceContext: entry.key,
+          ),
         );
       },
     );
