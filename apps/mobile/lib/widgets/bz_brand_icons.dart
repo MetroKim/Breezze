@@ -40,6 +40,7 @@ class BzSvgIcon extends StatelessWidget {
     'lyrics': '<path d="M7 11h4v6H5v-6l3-5h3m6 5h4v6h-6v-6l3-5h3"/>',
     'share': '<path d="M12 15V3m-4 4 4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
     'queue': '<path d="M4 5h16M4 10h16M4 15h10M4 20h7m5-5 4 4 3-4"/>',
+    'star-filled': '<path d="M12 3.25 14.7 8.73l6.05.88-4.38 4.27 1.03 6.03L12 17.06l-5.4 2.85 1.03-6.03-4.38-4.27 6.05-.88L12 3.25Z" fill="currentColor" stroke="none"/>',
     'star': '<path d="m12 3.25 2.7 5.48 6.05.88-4.38 4.27 1.03 6.03L12 17.06l-5.4 2.85 1.03-6.03L3.25 9.61l6.05-.88L12 3.25Z"/>',
   };
 
