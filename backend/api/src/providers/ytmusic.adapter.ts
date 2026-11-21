@@ -5,6 +5,8 @@ import {
   ProviderAdapter,
   ProviderCapabilities,
   ProviderTrack,
+  ProviderPlaybackRequest,
+  ProviderPlaybackSource,
 } from './provider-adapter.interface';
 import { ProviderResult, providerError, providerOk, providerUnsupported } from './provider-result';
 
@@ -19,6 +21,10 @@ interface TrackPayload {
 @Injectable()
 export class YtMusicAdapter implements ProviderAdapter {
   readonly providerId = 'youtube_music';
+  readonly displayName = 'YouTube Music';
+  readonly adapterVersion = '1.0.0';
+  readonly priority = 100;
+  readonly enabled = true;
   readonly capabilities: ProviderCapabilities = {
     search: true,
     metadata: true,
@@ -157,5 +163,13 @@ export class YtMusicAdapter implements ProviderAdapter {
 
   async getAvailability(): Promise<ProviderResult<{ available: boolean }>> {
     return providerUnsupported('YouTube Music metadata access does not establish streaming rights or playback availability');
+  }
+
+  async resolvePlayback(
+    _request: ProviderPlaybackRequest,
+  ): Promise<ProviderResult<ProviderPlaybackSource>> {
+    return providerUnsupported(
+      'YouTube Music metadata access does not provide an authorized Breezze playback source',
+    );
   }
 }
