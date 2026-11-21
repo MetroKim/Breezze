@@ -49,11 +49,11 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
   @override
   String get adapterVersion => '1.0.0';
 
-  ProviderTrack _trackFromJson(Map value) {
+  ProviderTrack _trackFromJson(Map value, {String providerId = 'youtube_music'}) {
     final providerId = value['providerTrackId'] as String? ?? '';
     final duration = value['durationSec'];
     return ProviderTrack(
-      breezzeTrackId: 'bz:$providerId',
+      breezzeTrackId: 'bz:$providerId:${value['providerTrackId'] as String? ?? ''}',
       providerTrackId: providerId,
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
@@ -85,7 +85,10 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
       final rawExternal = data['externalTracks'];
       final rawLocal = data['tracks'];
       final externalTracks = rawExternal is List
-          ? rawExternal.whereType<Map>().map(_trackFromJson)
+          ? rawExternal.whereType<Map>().map((value) => _trackFromJson(
+              value,
+              providerId: value['providerId'] as String? ?? 'youtube_music',
+            ))
           : <ProviderTrack>[];
       final localTracks = rawLocal is List
           ? rawLocal.whereType<Map>().map(_localTrackFromJson)
@@ -114,7 +117,7 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
       if (data['kind'] != 'ok' || value is! Map) {
         return ProviderError('track_metadata_unavailable');
       }
-      return ProviderOk(_trackFromJson(value));
+      return ProviderOk(_trackFromJson(value, providerId: providerId));
     } catch (_) {
       return ProviderError('network_error');
     }
@@ -153,6 +156,23 @@ class LiveResolver implements PlaybackResolver {
     if (api.accessToken == null) return null;
 
     try {
+      if (track.id.startsWith('bz:audius:')) {
+        final providerTrackId = track.id.substring('bz:audius:'.length);
+        final result = await api.resolveProviderPlayback(
+          providerId: 'audius',
+          providerTrackId: providerTrackId,
+          territory: _ref.read(outboxTerritoryProvider),
+        );
+        final streamUrl = result['streamUrl'] as String?;
+        final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
+        if (streamUrl == null || expiresAt == null) return null;
+        return PlayableSource(
+          trackId: track.id,
+          streamUrl: streamUrl,
+          expiresAtUtc: expiresAt.toUtc(),
+          codec: result['codec'] as String?,
+        );
+      }
       final catalogId = await _resolveCatalogId(api, track);
       if (catalogId == null) return null;
 
