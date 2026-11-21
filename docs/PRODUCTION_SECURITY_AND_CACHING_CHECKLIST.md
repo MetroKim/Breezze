@@ -304,7 +304,7 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 ### Administrator TOTP MFA implementation (2026-11-21)
 - TOTP uses RFC 6238 / HMAC-SHA1, six digits, 30-second periods and a ±1-step clock-skew window.
 - TOTP secrets are encrypted at rest with AES-256-GCM using `MFA_ENCRYPTION_KEY` (32 random bytes, base64). Use one identical secret across API replicas via a secrets manager; never commit it.
-- Admin login responses expose `mfaRequired`; admins without enrollment also receive `mfaSetupRequired`. Call `POST /api/v1/auth/mfa/setup` to obtain a provisioning secret/URI, then `POST /api/v1/auth/mfa/setup/verify` with a six-digit code to complete enrollment. Enrolled admins use `POST /api/v1/auth/mfa/verify` after password login.
+- Admin login responses expose `mfaRequired`; admins without enrollment also receive `mfaSetupRequired`. MFA enrollment requires fresh password reauthentication at `POST /api/v1/auth/mfa/setup` before a provisioning secret/URI is issued, then `POST /api/v1/auth/mfa/setup/verify` with a six-digit code to complete enrollment. Enrolled admins use `POST /api/v1/auth/mfa/verify` after password login.
 - MFA setup and verification responses are marked `Cache-Control: private, no-store`.
 - Enrolled users call `POST /api/v1/auth/mfa/verify` after password login. The endpoint upgrades only the current refresh-token family and returns an MFA-verified access token.
 - Refresh-token records persist the MFA-verified state; refresh preserves it. AdminGuard rejects admin requests unless the access token carries the verified claim.
