@@ -1,4 +1,5 @@
 import re
+from threading import BoundedSemaphore
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
@@ -6,6 +7,9 @@ from ytmusicapi import YTMusic
 
 app = FastAPI(title="Breezze YouTube Music Metadata Adapter", version="1.0.0")
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
+# Each container replica admits at most eight simultaneous upstream requests.
+# Extra work is rejected quickly so the FastAPI thread pool cannot be exhausted.
+PROVIDER_SLOTS = BoundedSemaphore(8)
 
 
 def normalize_track(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -54,6 +58,12 @@ def search(
     q: str = Query(min_length=2, max_length=120),
     limit: int = Query(default=20, ge=1, le=25),
 ) -> dict[str, Any]:
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail="YTMUSIC_CAPACITY_EXCEEDED",
+            headers={"Retry-After": "2"},
+        )
     try:
         results = YTMusic().search(q.strip(), filter="songs", limit=limit)
         tracks = [track for item in results if (track := normalize_track(item))]
@@ -61,12 +71,20 @@ def search(
     except Exception as exc:
         # Do not leak provider request headers, cookies, or upstream payloads.
         raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()
 
 
 @app.get("/tracks/{video_id}")
 def get_track(video_id: str) -> dict[str, Any]:
     if not VIDEO_ID.fullmatch(video_id):
         raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_ID")
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail="YTMUSIC_CAPACITY_EXCEEDED",
+            headers={"Retry-After": "2"},
+        )
     try:
         song = YTMusic().get_song(video_id)
         details = song.get("videoDetails") or {}
@@ -102,3 +120,5 @@ def get_track(video_id: str) -> dict[str, Any]:
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()
