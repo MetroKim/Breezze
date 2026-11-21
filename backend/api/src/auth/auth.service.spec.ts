@@ -1,0 +1,106 @@
+import { UnauthorizedException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../prisma.service';
+import { AuthService } from './auth.service';
+
+describe('AuthService refresh-token rotation', () => {
+  let service: AuthService;
+  let prisma: any;
+  let jwt: Pick<JwtService, 'signAsync'>;
+  let transactionRefreshToken: {
+    updateMany: jest.Mock;
+    create: jest.Mock;
+  };
+
+  const user = {
+    id: 'user-1',
+    email: 'listener@example.com',
+    displayName: 'Listener',
+  };
+
+  const activeToken = () => ({
+    id: 'refresh-1',
+    familyId: 'family-1',
+    userId: user.id,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 60_000),
+    user,
+  });
+
+  beforeEach(() => {
+    transactionRefreshToken = {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      create: jest.fn().mockResolvedValue({ id: 'refresh-2' }),
+    };
+    prisma = {
+      refreshToken: {
+        findUnique: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      $transaction: jest.fn((callback: (tx: any) => unknown) =>
+        callback({ refreshToken: transactionRefreshToken }),
+      ),
+    };
+    jwt = { signAsync: jest.fn().mockResolvedValue('new-access-token') };
+    service = new AuthService(prisma as PrismaService, jwt as JwtService);
+  });
+
+  it('stores only a SHA-256 hash and rotates within the same token family', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue(activeToken());
+    const result = await service.refresh('presented-refresh-token');
+
+    const expectedLookupHash = createHash('sha256')
+      .update('presented-refresh-token', 'utf8')
+      .digest('hex');
+    expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
+      where: { tokenHash: expectedLookupHash },
+      include: { user: true },
+    });
+
+    const created = transactionRefreshToken.create.mock.calls[0][0].data;
+    expect(created.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(created.tokenHash).not.toBe(result.refreshToken);
+    expect(created.tokenHash).toBe(
+      createHash('sha256').update(result.refreshToken, 'utf8').digest('hex'),
+    );
+    expect(created.familyId).toBe('family-1');
+    expect(transactionRefreshToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'refresh-1', revokedAt: null },
+      }),
+    );
+  });
+
+  it('revokes the remaining family when a revoked token is replayed', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      ...activeToken(),
+      revokedAt: new Date(),
+    });
+
+    await expect(service.refresh('replayed-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { familyId: 'family-1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not issue a replacement when concurrent rotation already consumed the token', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue(activeToken());
+    transactionRefreshToken.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await expect(service.refresh('racing-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(transactionRefreshToken.create).not.toHaveBeenCalled();
+    expect(transactionRefreshToken.updateMany).toHaveBeenLastCalledWith({
+      where: { familyId: 'family-1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+});
