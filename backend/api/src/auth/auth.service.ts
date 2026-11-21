@@ -134,8 +134,14 @@ export class AuthService {
   }
 
   async logout(refreshToken: string): Promise<void> {
-    await this.prisma.refreshToken.updateMany({
+    const token = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: this.hashRefreshToken(refreshToken) },
+      select: { familyId: true, userId: true },
+    });
+    if (!token) return;
+
+    await this.prisma.refreshToken.updateMany({
+      where: { familyId: token.familyId, userId: token.userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
