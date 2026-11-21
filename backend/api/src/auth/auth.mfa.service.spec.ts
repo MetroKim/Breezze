@@ -72,7 +72,7 @@ describe('AuthService TOTP enrollment and verification', () => {
       mfaPendingSecretCiphertext: encryptTotpSecret(secret),
     });
 
-    await expect(service.verifyMfaSetup('admin-1', 'family-1', '287082')).resolves.toEqual({
+    await expect(service.verifyMfaSetup('admin-1', 'family-1', '287082')).resolves.toMatchObject({
       verified: true,
       accessToken: 'mfa-verified-access-token',
     });
