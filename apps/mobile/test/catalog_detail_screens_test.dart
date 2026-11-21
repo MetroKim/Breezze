@@ -29,7 +29,9 @@ void main() {
 
     expect(find.text('Test Artist'), findsWidgets);
     expect(find.text('Saved Song'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Essential Albums'), 260);
     expect(find.text('Essential Albums'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Upcoming Concerts'), 260);
     expect(find.text('Upcoming Concerts'), findsOneWidget);
     expect(
       find.textContaining('Verified artist catalog data is required'),
@@ -64,6 +66,7 @@ void main() {
 
     expect(find.text('Test Album'), findsOneWidget);
     expect(find.text('Opening Track'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Produced by Test Producer'), 260);
     expect(find.text('Produced by Test Producer'), findsOneWidget);
   });
 }
