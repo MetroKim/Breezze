@@ -195,6 +195,7 @@ returns, with a policy for expired or revoked leases.
 - Added an R2-backed media worker path: quarantine object download, FFmpeg validation/transcoding, and processed HLS output upload to R2 staging keys.
 - Added Cloudflare Worker TypeScript checking to the Breezze quality workflow.
 - Signed playback responses now use `Cache-Control: private, no-store`; browser/intermediary caches cannot keep a signed media response playable after its URL expires. Any future edge cache must include the signature in its cache key and cap TTL at the signature expiry.
+- Upload `userId` and `jobId` path segments are restricted to safe opaque identifiers before constructing R2 quarantine keys; encoded separators and path-like values are rejected.
 - Added a maximum 72-hour offline lease, capped by catalogue rights expiry, plus an authenticated online revalidation endpoint. Rights denial/takedown revokes the server download record and the mobile library removes the local asset on successful revalidation.
 - Important: processed outputs are staged under `processed/{jobId}`. A moderated publication step must map them to canonical `audio/{trackId}/{variant}` objects before playback URLs can resolve. No public R2 access is enabled.
 
