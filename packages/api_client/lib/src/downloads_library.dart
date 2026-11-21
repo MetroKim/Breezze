@@ -154,7 +154,10 @@ class DownloadsLibrary {
 
   int _totalBytesFromContentRange(String? value) {
     if (value == null) return -1;
-    final match = RegExp(r'^bytes \\d+-\\d+/(\\d+)
+    final match = RegExp(r'^bytes \d+-\d+/(\d+)$').firstMatch(value);
+    return match == null ? -1 : int.tryParse(match.group(1)!) ?? -1;
+  }
+
   Future<void> updateOfflineLease(String trackId, DateTime? expiresAtUtc) async {
     final metaFile = File('${_dirFor(trackId).path}/meta.json');
     if (!await metaFile.exists()) return;
