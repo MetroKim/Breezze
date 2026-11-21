@@ -44,6 +44,26 @@ jobs:
         working-directory: apps/mobile
         run: flutter test --reporter expanded
 
+      - name: Resolve API client dependencies
+        working-directory: packages/api_client
+        run: flutter pub get
+
+      - name: Analyze API client
+        working-directory: packages/api_client
+        run: flutter analyze --fatal-infos
+
+      - name: Test API client
+        working-directory: packages/api_client
+        run: flutter test --reporter expanded
+
+      - name: Resolve design system dependencies
+        working-directory: packages/design_system
+        run: flutter pub get
+
+      - name: Analyze design system
+        working-directory: packages/design_system
+        run: flutter analyze --fatal-infos
+
       - name: Resolve audio contracts dependencies
         working-directory: packages/audio_contracts
         run: flutter pub get
