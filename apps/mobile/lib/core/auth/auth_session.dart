@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/breezze_api.dart';
 
@@ -30,10 +31,12 @@ class AuthError extends AuthState {
   const AuthError(this.code);
 }
 
-/// Session controller: owns the API client instance, the tokens, and the
-/// auth state. Tokens are held in memory for now; secure storage lands
-/// with the Drift migration (plan §5.5).
+/// Session controller: access tokens remain memory-only; refresh tokens use
+/// iOS Keychain / Android Keystore-backed secure storage.
 class AuthSessionController extends Notifier<AuthState> {
+  static const _refreshTokenKey = 'breezze.refresh_token';
+  static const _secureStorage = FlutterSecureStorage();
+
   late final BreezzeApi _api = BreezzeApi(
     baseUrl: const String.fromEnvironment(
       'BREEZZE_API_URL',
@@ -47,6 +50,29 @@ class AuthSessionController extends Notifier<AuthState> {
   }
 
   BreezzeApi get api => _api;
+
+  Future<void> restoreSession() async {
+    try {
+      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+      if (refreshToken == null || refreshToken.isEmpty) {
+        state = const AuthSignedOut();
+        return;
+      }
+      final response = await _api.refresh(refreshToken);
+      await _secureStorage.write(key: _refreshTokenKey, value: response.refreshToken);
+      await _persistSession(response);
+    } catch (_) {
+      _api.accessToken = null;
+      await _secureStorage.delete(key: _refreshTokenKey);
+      state = const AuthSignedOut();
+    }
+  }
+
+  Future<void> _persistSession(AuthResponse response) async {
+    await _secureStorage.write(key: _refreshTokenKey, value: response.refreshToken);
+    _api.accessToken = response.accessToken;
+    state = AuthSignedIn(userId: response.userId, email: response.email);
+  }
 
   Future<void> register(
     String email,
@@ -80,7 +106,16 @@ class AuthSessionController extends Notifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    if (refreshToken != null) {
+      try {
+        await _api.logout(refreshToken);
+      } catch (_) {
+        // Local logout must still complete when the network is unavailable.
+      }
+    }
     _api.accessToken = null;
+    await _secureStorage.delete(key: _refreshTokenKey);
     state = const AuthSignedOut();
   }
 }
