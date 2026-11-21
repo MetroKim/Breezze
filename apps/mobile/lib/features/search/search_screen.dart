@@ -7,6 +7,7 @@ import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../app/search_history_store.dart';
 import '../../app/playlist_store.dart';
+import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
@@ -307,6 +308,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ref.read(downloadProgressProvider.notifier).download(track);
   }
 
+  void _openTrack(BzTrack track) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TrackDetailScreen(
+        track: track,
+        relatedTracks: _results,
+        origin: _searchLibrary ? 'library' : 'search',
+      ),
+    ));
+  }
+
   void _play(BzTrack track) {
     final queue = [
       for (final item in _results)
@@ -491,6 +502,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        IconButton(
+                                          tooltip: 'Play',
+                                          icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
+                                          onPressed: () => _play(track),
+                                        ),
                                         PopupMenuButton<String>(
                                           tooltip: 'Track actions',
                                           icon: BzSvgIcon(
@@ -568,7 +584,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               ),
                                       ],
                                     ),
-                                    onTap: () => _play(track),
+                                    onTap: () => _openTrack(track),
                                   );
                                 },
                               ),
