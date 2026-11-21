@@ -116,7 +116,7 @@ export class CloudflareAwareThrottlerGuard
       // MFA code endpoints get a stricter per-source quota to slow online TOTP guessing.
       if (
         req.method === 'POST' &&
-        (path.endsWith('/auth/mfa/verify') || path.endsWith('/auth/mfa/setup/verify'))
+        (path.endsWith('/auth/mfa/verify') || path.endsWith('/auth/mfa/setup/verify') || path.endsWith('/auth/mfa/recovery-codes/regenerate'))
       ) {
         const mfaBucket = Math.floor(Date.now() / this.mfaAttemptWindowMs);
         const [mfaCount, mfaTtl] = await this.increment(
