@@ -130,5 +130,16 @@ void main() {
       expect(m.state, PlaybackState.resolving);
     });
 
+    test('stop invalidates the active track and returns to idle', () {
+      final m = PlaybackStateMachine()
+        ..dispatch(StartRequested('t1', requestId: 1))
+        ..dispatch(SourceResolved('t1', 'url', requestId: 1));
+      m.dispatch(StopRequested(requestId: 2));
+      expect(m.state, PlaybackState.idle);
+      expect(m.activeTrackId, isNull);
+      m.dispatch(SourceResolved('t1', 'late-url', requestId: 1));
+      expect(m.state, PlaybackState.idle);
+    });
+
   });
 }
