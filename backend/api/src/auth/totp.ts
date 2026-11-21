@@ -87,15 +87,27 @@ export function generateTotpSecret(): string {
   return output;
 }
 
-export function verifyTotp(secret: string, candidate: string, now = Date.now()): boolean {
-  if (!/^\d{6}$/.test(candidate)) return false;
+export function getVerifiedTotpCounter(
+  secret: string,
+  candidate: string,
+  now = Date.now(),
+): number | null {
+  if (!/^\\d{6}$/.test(candidate)) return null;
   const counter = Math.floor(now / 1000 / STEP_SECONDS);
   const supplied = Buffer.from(candidate);
   for (let offset = -WINDOW; offset <= WINDOW; offset += 1) {
-    const expected = Buffer.from(codeForCounter(secret, counter + offset));
-    if (expected.length === supplied.length && timingSafeEqual(expected, supplied)) return true;
+    const candidateCounter = counter + offset;
+    if (candidateCounter < 0) continue;
+    const expected = Buffer.from(codeForCounter(secret, candidateCounter));
+    if (expected.length === supplied.length && timingSafeEqual(expected, supplied)) {
+      return candidateCounter;
+    }
   }
-  return false;
+  return null;
+}
+
+export function verifyTotp(secret: string, candidate: string, now = Date.now()): boolean {
+  return getVerifiedTotpCounter(secret, candidate, now) !== null;
 }
 
 export function totpProvisioningUri(secret: string, email: string): string {
