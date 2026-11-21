@@ -53,6 +53,17 @@ export class TotpCodeDto {
   code!: string;
 }
 
+export class MfaRecoveryRegenerationDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  password!: string;
+
+  @IsString()
+  @Matches(/^(?:\\d{6}|[A-Fa-f0-9]{4}(?:-?[A-Fa-f0-9]{4}){3})$/)
+  code!: string;
+}
+
 export class RefreshDto {
   @IsString()
   @MinLength(32)
@@ -103,6 +114,17 @@ export class AuthController {
     @Body() dto: TotpCodeDto,
   ) {
     return this.auth.verifyMfaSetup(userId, sessionId, dto.code);
+  }
+
+  @Post('mfa/recovery-codes/regenerate')
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(JwtAuthGuard)
+  regenerateMfaRecoveryCodes(
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
+    @Body() dto: MfaRecoveryRegenerationDto,
+  ) {
+    return this.auth.regenerateMfaRecoveryCodes(userId, sessionId, dto.password, dto.code);
   }
 
   @Post('mfa/verify')
