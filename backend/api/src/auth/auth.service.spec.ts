@@ -36,6 +36,7 @@ describe('AuthService refresh-token rotation', () => {
     prisma = {
       refreshToken: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn(),
       },
@@ -66,6 +67,10 @@ describe('AuthService refresh-token rotation', () => {
       createHash('sha256').update(result.refreshToken, 'utf8').digest('hex'),
     );
     expect(created.familyId).toBe('family-1');
+    expect(jwt.signAsync).toHaveBeenCalledWith(
+      { sub: user.id, email: user.email, sid: 'family-1' },
+      { expiresIn: '15m' },
+    );
     expect(transactionRefreshToken.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'refresh-1', revokedAt: null },
@@ -104,10 +109,38 @@ describe('AuthService refresh-token rotation', () => {
       data: { revokedAt: expect.any(Date) },
     });
   });
-  it('revokes only a session belonging to the authenticated user', async () => {
+  it('revokes every refresh token in the selected session family', async () => {
+    prisma.refreshToken.findFirst.mockResolvedValue({ familyId: 'family-1' });
+
     await service.revokeSession('user-1', 'session-owned-by-user-1');
-    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+
+    expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith({
       where: { id: 'session-owned-by-user-1', userId: 'user-1', revokedAt: null },
+      select: { familyId: true },
+    });
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { familyId: 'family-1', userId: 'user-1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+
+  it('does not revoke a session owned by another account', async () => {
+    prisma.refreshToken.findFirst.mockResolvedValue(null);
+    await expect(service.revokeSession('user-1', 'foreign-session'))
+      .rejects.toThrow('SESSION_NOT_FOUND');
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('revokes the complete family when logging out', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      familyId: 'family-1',
+      userId: 'user-1',
+    });
+
+    await service.logout('logout-refresh-token');
+
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { familyId: 'family-1', userId: 'user-1', revokedAt: null },
       data: { revokedAt: expect.any(Date) },
     });
   });
