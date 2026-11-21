@@ -91,7 +91,9 @@ class AuthSessionController extends Notifier<AuthState> {
       await _persistSession(response);
     } catch (_) {
       _api.accessToken = null;
-      await _secureStorage.delete(key: _refreshTokenKey);
+      try {
+        await _secureStorage.delete(key: _refreshTokenKey);
+      } catch (_) {}
       state = const AuthSignedOut();
     }
   }
