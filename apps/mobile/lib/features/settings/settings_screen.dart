@@ -117,7 +117,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ]),
           _section(theme, 'Audio Quality', [
             if (!_preferencesLoaded)
-              const ListTile(title: Text('Loading audio preferences…'))
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: BzSkeletonTrackRow(),
+              )
             else ...[
               ListTile(
                 title: const Text('Streaming quality'),
@@ -162,13 +165,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ]),
           _section(theme, 'Downloads', [
             if (!_preferencesLoaded)
-              const ListTile(
-                title: Text('Loading download preferences…'),
-                trailing: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: BzSkeletonTrackRow(),
               )
             else ...[
               SwitchListTile(
