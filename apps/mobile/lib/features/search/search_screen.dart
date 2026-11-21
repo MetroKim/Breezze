@@ -166,8 +166,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                             tooltip: 'Clear search',
                             icon: const Icon(Icons.close),
                             onPressed: () {
+                              _searchGeneration++;
                               _controller.clear();
                               setState(() {
+                                _loading = false;
                                 _searched = false;
                                 _results = [];
                                 _error = null;
