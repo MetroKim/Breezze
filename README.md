@@ -16,7 +16,7 @@ packages/design_system/    Breezze tokens, themes, Atmosphere materials, compone
 packages/audio_contracts/  Playback contracts — state machine, queue, engine adapter, LRC
 packages/api_client/      Provider + download library contracts
 backend/api/               NestJS modular monolith (PostgreSQL, Prisma, Redis, BullMQ)
-infra/cloudflare/          Cloudflare Worker + private R2 media gateway
+infra/cloudflare/          Cloudflare API edge, WAF and public metadata cache
 docs/audit/                Honest per-requirement status (gap register)
 ```
 
@@ -53,7 +53,7 @@ The API serves `http://localhost:3000/api/v1` (Swagger at `/api/docs`).
 ## Architecture documentation
 
 - [Integrated Design Engineering Architecture](docs/architecture/BREEZZE_INTEGRATED_DESIGN_ENGINEERING_ARCHITECTURE.md) — Flutter layers, Riverpod state, domain/data boundaries, screen-by-screen engineering, API contracts, playback, rights, testing and rollout order.
-- [Cloudflare-first infrastructure](infra/cloudflare/README.md) — Workers, private R2, CDN/cache, WAF, rate limiting, queues, Turnstile, security and deployment strategy.
-- [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md) — required screen hierarchy, section order, positions and interaction rules.
+- [Cloudflare-first infrastructure](infra/cloudflare/README.md) — Cloudflare API edge, WAF/rate limits, public metadata caching, provider resilience and one-million-active-listener load-test plan.
+- [One-million scaling plan](docs/architecture/BREEZZE_ONE_MILLION_SCALING_PLAN.md) — provider resilience, cache keys/TTLs, Cloudflare edge policy, backend capacity and staged load tests.\n- [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md) — required screen hierarchy, section order, positions and interaction rules.
 
 See `docs/audit/gap-register.md` for what is implemented and what is not.
