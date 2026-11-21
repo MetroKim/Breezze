@@ -7,6 +7,9 @@ import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
 import 'bootstrap.dart';
 
+/// Live transfer progress and queue state, keyed by track ID.
+final downloadJobStatusProvider = StateProvider<Map<String, String>>((ref) => {});
+
 /// Live download progress, keyed by track id: 0.0–1.0, removed on finish.
 final downloadProgressProvider =
     StateNotifierProvider<DownloadsController, Map<String, double>>(
@@ -19,9 +22,51 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   DownloadsController(this.ref) : super({});
 
   final Ref ref;
+  final Map<String, DownloadCancellation> _cancellations = {};
+  final Map<String, BzTrack> _tracks = {};
+
+  void _setStatus(String id, String status) {
+    if (!mounted) return;
+    final next = Map<String, String>.of(ref.read(downloadJobStatusProvider));
+    next[id] = status;
+    ref.read(downloadJobStatusProvider.notifier).state = next;
+  }
+
+  Future<void> pause(String trackId) async {
+    _setStatus(trackId, 'paused');
+    _cancellations[trackId]?.cancel();
+  }
+
+  Future<void> resume(String trackId) async {
+    final track = _tracks[trackId];
+    if (track != null) await download(track);
+  }
+
+  Future<void> retry(String trackId) async {
+    final track = _tracks[trackId];
+    if (track != null) await download(track);
+  }
+
+  Future<void> cancel(String trackId) async {
+    _setStatus(trackId, 'cancelled');
+    _cancellations[trackId]?.cancel();
+    final auth = ref.read(authSessionProvider);
+    if (auth is AuthSignedIn) {
+      final dir = await downloadsDirectory(userId: auth.userId);
+      await DownloadsLibrary(root: dir, lyrics: ref.read(lyricsProvider)).removePartial(trackId);
+    }
+    if (mounted) {
+      final next = Map<String, double>.of(state)..remove(trackId);
+      state = next;
+    }
+  }
 
   Future<void> download(BzTrack track) async {
-    if (state.containsKey(track.id)) return;
+    if (state.containsKey(track.id) || ref.read(downloadJobStatusProvider)[track.id] == 'downloading') return;
+    _tracks[track.id] = track;
+    final cancellation = DownloadCancellation();
+    _cancellations[track.id] = cancellation;
+    _setStatus(track.id, 'downloading');
 
     try {
       final auth = ref.read(authSessionProvider);
@@ -70,19 +115,21 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         ownerId: auth.userId,
         catalogTrackId: catalogId,
         rightsExpiresAtUtc: rightsExpiry,
+        cancellation: cancellation,
         onProgress: (progress) {
           if (mounted) state = {...state, track.id: progress};
         },
       );
 
-      if (!ok) {
-        // ignore: avoid_print
-        print('download_failed: ${track.title}');
+      if (ok) {
+        _setStatus(track.id, 'downloaded');
+      } else if (!cancellation.isCancelled) {
+        _setStatus(track.id, 'failed');
       }
     } catch (_) {
-      // ignore: avoid_print
-      print('download_failed: ${track.title}');
+      if (!cancellation.isCancelled) _setStatus(track.id, 'failed');
     } finally {
+      if (identical(_cancellations[track.id], cancellation)) _cancellations.remove(track.id);
       if (mounted) {
         final next = Map<String, double>.of(state)..remove(track.id);
         state = next;
