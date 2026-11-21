@@ -18,6 +18,7 @@ model User {
   mfaEnabled     Boolean          @default(false)
   mfaSecretCiphertext String?
   mfaPendingSecretCiphertext String?
+  mfaLastUsedStep BigInt?
   displayName    String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
