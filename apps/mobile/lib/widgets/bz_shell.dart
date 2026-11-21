@@ -1,5 +1,6 @@
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,18 +8,15 @@ import '../core/audio/audio_service_bridge.dart';
 import '../core/audio/background_audio.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/radio/radio_screen.dart';
-import '../features/downloads/downloads_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/player/now_playing_screen.dart';
 import '../features/player/player_controller.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
-import 'bz_brand_icons.dart';
 
-/// Main product shell. The application-level ProviderScope and its
-/// playback engine are owned by BreezzeAppRoot; rebuilding this widget
-/// must never create another provider container or audio engine.
+/// Breezze's five-destination shell. Downloads live inside Library and
+/// Settings are reached from the profile surface; neither is a top-level tab.
 class BreezzeShell extends StatelessWidget {
   const BreezzeShell({super.key});
 
@@ -73,13 +71,21 @@ class BzHome extends ConsumerStatefulWidget {
 class _BzHomeState extends ConsumerState<BzHome> {
   int _index = 0;
 
-  static const _tabs = ['Home', 'Browse', 'Radio', 'Library', 'Search', 'Downloads', 'Settings'];
+  static const _tabs = [
+    _TabDestination('Home', 'assets/icons/home.svg'),
+    _TabDestination('Browse', 'assets/icons/browse.svg'),
+    _TabDestination('Radio', 'assets/icons/radio.svg'),
+    _TabDestination('Library', 'assets/icons/library.svg'),
+    _TabDestination('Search', 'assets/icons/search.svg'),
+  ];
 
   @override
   void initState() {
     super.initState();
     ref.listenManual(homeTabHintProvider, (prev, next) {
-      if (next > 0) setState(() => _index = next);
+      if (next >= 0 && next < _tabs.length && next != _index) {
+        setState(() => _index = next);
+      }
     });
   }
 
@@ -96,19 +102,27 @@ class _BzHomeState extends ConsumerState<BzHome> {
           RadioScreen(),
           LibraryScreen(),
           SearchScreen(),
-          DownloadsScreen(),
-          SettingsScreen(),
         ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (player.playbackState != PlaybackState.idle)
-            _MiniPlayer(onTap: _openNowPlaying),
-          const SizedBox(height: 12),
-          _TabBar(index: _index, onChanged: (i) => setState(() => _index = i)),
-        ],
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (player.playbackState != PlaybackState.idle) ...[
+                _MiniPlayer(onTap: _openNowPlaying),
+                const SizedBox(height: 8),
+              ],
+              _TabBar(
+                index: _index,
+                tabs: _tabs,
+                onChanged: (i) => setState(() => _index = i),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -123,6 +137,12 @@ class _BzHomeState extends ConsumerState<BzHome> {
   }
 }
 
+class _TabDestination {
+  final String label;
+  final String asset;
+  const _TabDestination(this.label, this.asset);
+}
+
 class _MiniPlayer extends ConsumerWidget {
   final VoidCallback onTap;
 
@@ -135,64 +155,134 @@ class _MiniPlayer extends ConsumerWidget {
     final theme = Theme.of(context);
     final playing = player.playbackState == PlaybackState.playing;
     final track = player.currentTrack;
+    final progress = player.duration > Duration.zero
+        ? (player.position.inMilliseconds / player.duration.inMilliseconds)
+            .clamp(0.0, 1.0)
+        : 0.0;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: BzGlassContainer(
-        radius: BzRadius.capsule,
-        blur: 24,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              track?.artworkUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.network(
-                        track!.artworkUrl!,
-                        width: 36,
-                        height: 36,
-                        errorBuilder: (_, __, ___) =>
-                            BzBnoteMark(size: 36, color: theme.bzText1),
-                      ),
-                    )
-                  : BzBnoteMark(size: 36, color: theme.bzText1),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(BzRadius.card),
+        onTap: onTap,
+        child: BzGlassContainer(
+          radius: BzRadius.card,
+          blur: 18,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 8, 7),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
                   children: [
-                    Text(track?.title ?? 'Now Playing',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium),
-                    if (player.duration > Duration.zero)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: player.position.inMilliseconds /
-                              player.duration.inMilliseconds,
-                          minHeight: 2,
-                          backgroundColor: theme.bzSeparator,
-                          color: theme.bzText1,
-                        ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(BzRadius.artwork),
+                      child: track?.artworkUrl != null
+                          ? Image.network(
+                              track!.artworkUrl!,
+                              width: 42,
+                              height: 42,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  _MiniArtwork(color: theme.bzText2),
+                            )
+                          : _MiniArtwork(color: theme.bzText2),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            track?.title ?? 'Now Playing',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            track?.artist ?? 'Breezze',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: BzType.footnote,
+                              color: theme.bzText2,
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
+                    _PlayerIconButton(
+                      asset: playing
+                          ? 'assets/icons/pause.svg'
+                          : 'assets/icons/play.svg',
+                      label: playing ? 'Pause' : 'Play',
+                      onPressed: controller.togglePlayPause,
+                    ),
+                    _PlayerIconButton(
+                      asset: 'assets/icons/skip-next.svg',
+                      label: 'Next track',
+                      onPressed: controller.next,
+                    ),
                   ],
                 ),
-              ),
-              IconButton(
-                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                onPressed: controller.togglePlayPause,
-                color: theme.bzText1,
-              ),
-              IconButton(
-                icon: const Icon(Icons.skip_next),
-                onPressed: controller.next,
-                color: theme.bzText1,
-              ),
-            ],
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 2,
+                    backgroundColor: theme.bzSeparator,
+                    color: theme.bzAccent,
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniArtwork extends StatelessWidget {
+  final Color color;
+  const _MiniArtwork({required this.color});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 42,
+        height: 42,
+        child: Center(
+          child: Icon(Icons.music_note, color: color, size: 22),
+        ),
+      );
+}
+
+class _PlayerIconButton extends StatelessWidget {
+  final String asset;
+  final String label;
+  final VoidCallback onPressed;
+
+  const _PlayerIconButton({
+    required this.asset,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: label,
+      onPressed: onPressed,
+      icon: SvgPicture.asset(
+        asset,
+        width: 21,
+        height: 21,
+        colorFilter: ColorFilter.mode(
+          Theme.of(context).bzText1,
+          BlendMode.srcIn,
         ),
       ),
     );
@@ -201,66 +291,120 @@ class _MiniPlayer extends ConsumerWidget {
 
 class _TabBar extends StatelessWidget {
   final int index;
+  final List<_TabDestination> tabs;
   final ValueChanged<int> onChanged;
 
-  const _TabBar({required this.index, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return BzGlassContainer(
-      radius: BzRadius.capsule,
-      blur: 16,
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < _BzHomeState._tabs.length; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: _Tab(
-                    label: _BzHomeState._tabs[i],
-                    active: i == index,
-                    onTap: () => onChanged(i),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Tab extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _Tab({required this.label, required this.active, required this.onTap});
+  const _TabBar({
+    required this.index,
+    required this.tabs,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fg = active ? theme.bzBackground : theme.bzText2;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onLongPressStart: (details) => _selectFromGlobalX(
+            details.globalPosition.dx,
+            context,
+          ),
+          onLongPressMoveUpdate: (details) => _selectFromGlobalX(
+            details.globalPosition.dx,
+            context,
+          ),
+          child: BzGlassContainer(
+            radius: BzRadius.card,
+            blur: 18,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+              child: Row(
+                children: [
+                  for (var i = 0; i < tabs.length; i++)
+                    Expanded(
+                      child: _TabButton(
+                        destination: tabs[i],
+                        active: i == index,
+                        onTap: () => onChanged(i),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: BzMotion.fastMs),
-        curve: const Cubic(0.22, 1, 0.36, 1),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? theme.bzText1 : Colors.transparent,
-          borderRadius: BorderRadius.circular(BzRadius.capsule),
+  void _selectFromGlobalX(double globalX, BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width - 24;
+    final localX = (globalX - 12).clamp(0.0, width - 1);
+    final next = (localX / (width / tabs.length)).floor();
+    onChanged(next.clamp(0, tabs.length - 1));
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  final _TabDestination destination;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _TabButton({
+    required this.destination,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = active ? theme.bzAccent : theme.bzText2;
+
+    return Semantics(
+      button: true,
+      selected: active,
+      label: destination.label,
+      child: Tooltip(
+        message: destination.label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(BzRadius.control),
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: BzMotion.fastMs),
+              curve: const Cubic(0.22, 1, 0.36, 1),
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              decoration: BoxDecoration(
+                color: active ? theme.bzSurface2 : Colors.transparent,
+                borderRadius: BorderRadius.circular(BzRadius.control),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SvgPicture.asset(
+                    destination.asset,
+                    width: 22,
+                    height: 22,
+                    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    destination.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                      color: color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: BzType.subheadline,
-                fontWeight: FontWeight.w600,
-                color: fg)),
       ),
     );
   }
