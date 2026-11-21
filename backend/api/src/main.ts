@@ -63,7 +63,7 @@ async function bootstrap() {
   // Never reflect arbitrary browser origins while allowing credentials.
   // Native clients normally omit Origin and are unaffected by browser CORS.
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
