@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/playlist_store.dart';
 import '../../widgets/bz_brand_icons.dart';
-import 'player_controller.dart';
+import '../player/player_controller.dart';
 
 /// Detail view for a device-local Breezze playlist.
 class PlaylistDetailScreen extends ConsumerStatefulWidget {
