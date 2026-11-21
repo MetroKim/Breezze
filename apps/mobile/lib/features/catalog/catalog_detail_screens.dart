@@ -46,8 +46,8 @@ class TrackDetailScreen extends ConsumerWidget {
       if (!await favorites.isFavorite(track.id)) {
         await favorites.toggle(FavoriteTrack(
           id: track.id,
-          title: track.title,
-          artist: track.artist,
+          title: trackTitle,
+          artist: artistName,
           artworkUrl: track.artworkUrl,
           durationMs: track.duration.inMilliseconds,
         ));
@@ -145,7 +145,7 @@ class TrackDetailScreen extends ConsumerWidget {
                     trailing: const BzSvgIcon(name: 'chevron-right', size: 18),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => ArtistDetailScreen(
-                        artist: track.artist,
+                        artist: artistName,
                         savedTracks: const [],
                         searchTracks: [
                           for (final item in artistTracks)
@@ -170,7 +170,7 @@ class TrackDetailScreen extends ConsumerWidget {
                   title: 'Track information',
                   subtitle: 'Duration: ' + (track.duration > Duration.zero ? _formatDuration(track.duration) : 'Not provided'),
                   available: true,
-                  child: Text('Track ID: ' + track.id, style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                  child: Text('Metadata supplied by the connected catalog.', style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
                 ),
               ],
             ),
