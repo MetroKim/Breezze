@@ -10,6 +10,29 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
+
+  const edgeSecret = process.env.EDGE_SHARED_SECRET;
+  if (process.env.NODE_ENV === 'production' && (!edgeSecret || edgeSecret.length < 32)) {
+    throw new Error('EDGE_SHARED_SECRET must be configured with at least 32 characters in production');
+  }
+
+  // When configured, only the Cloudflare API Worker may reach the API.
+  // The Worker strips any client-supplied value and injects this secret.
+  if (edgeSecret) {
+    app.use((req: any, res: any, next: () => void) => {
+      const supplied = req.headers['x-breezze-edge-secret'];
+      const expectedBuffer = Buffer.from(edgeSecret);
+      const suppliedBuffer = Buffer.from(typeof supplied === 'string' ? supplied : '');
+      const valid = suppliedBuffer.length === expectedBuffer.length
+        && crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
+      if (!valid) {
+        res.status(403).json({ statusCode: 403, error: 'EDGE_ACCESS_DENIED' });
+        return;
+      }
+      next();
+    });
+  }
+
   app.use((req: any, res: any, next: () => void) => {
     req.requestId = crypto.randomUUID();
     res.setHeader('X-Request-Id', req.requestId);
