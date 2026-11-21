@@ -98,7 +98,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    if (selected.id.startsWith('bz:')) {
+    if ((selected.id.startsWith('bz:') && !selected.id.startsWith('bz:audius:'))) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
@@ -295,7 +295,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                           : IconButton(
                               tooltip: 'Download',
                               icon: const BzSvgIcon(name: 'download', size: 20),
-                              onPressed: track.id.startsWith('bz:')
+                              onPressed: (track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))
                                   ? null
                                   : () => ref.read(downloadProgressProvider.notifier).download(track),
                             ),
@@ -572,7 +572,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    if (selected.id.startsWith('bz:')) {
+    if ((selected.id.startsWith('bz:') && !selected.id.startsWith('bz:audius:'))) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
@@ -701,7 +701,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                                 : IconButton(
                                                     tooltip: 'Download',
                                                     icon: const BzSvgIcon(name: 'download', size: 20),
-                                                    onPressed: track.id.startsWith('bz:')
+                                                    onPressed: (track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))
                                                         ? null
                                                         : () => ref.read(downloadProgressProvider.notifier).download(track),
                                                   ),
