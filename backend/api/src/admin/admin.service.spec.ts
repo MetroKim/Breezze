@@ -14,6 +14,7 @@ describe('AdminService privileged audit trail', () => {
     playlist: { count: jest.fn() },
     contentTakedownCase: { count: jest.fn(), findMany: jest.fn() },
     adminAuditEvent: { findMany: jest.fn() },
+    adminAuditEvent: { findMany: jest.fn() },
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
   };
   const service = new AdminService(prisma as any);
@@ -81,9 +82,9 @@ describe('AdminService privileged audit trail', () => {
   });
 
   it('returns a bounded newest-first audit feed', async () => {
-    tx.adminAuditEvent.findMany.mockResolvedValue([]);
+    prisma.adminAuditEvent.findMany.mockResolvedValue([]);
     await service.listAuditEvents();
-    expect(tx.adminAuditEvent.findMany).toHaveBeenCalledWith({
+    expect(prisma.adminAuditEvent.findMany).toHaveBeenCalledWith({
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
