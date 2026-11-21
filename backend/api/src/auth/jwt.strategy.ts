@@ -31,6 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           },
         },
       },
+      select: { id: true, email: true, role: true, mfaEnabled: true },
     });
     if (!user) throw new UnauthorizedException('SESSION_INVALID');
     return { ...user, sessionId: payload.sid, mfaVerified: payload.mfaVerified === true };
