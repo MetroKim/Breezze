@@ -20,6 +20,7 @@ export interface AuthResult {
   accessToken: string;
   refreshToken: string;
   mfaRequired?: boolean;
+  mfaSetupRequired?: boolean;
   user: { id: string; email: string; displayName: string | null };
 }
 
@@ -69,11 +70,13 @@ export class AuthService {
         },
       });
     }
+    const mfaSetupRequired = user.role === 'admin' && user.mfaEnabled !== true;
     const mfaRequired = (user.role === 'admin' || user.mfaEnabled === true) && !mfaVerified;
     return {
       accessToken,
       refreshToken,
       ...(mfaRequired ? { mfaRequired: true } : {}),
+      ...(mfaSetupRequired ? { mfaSetupRequired: true } : {}),
       user: { id: user.id, email: user.email, displayName: user.displayName },
     };
   }
