@@ -98,6 +98,10 @@ jobs:
         working-directory: apps/mobile
         run: bash tool/generate_platform_targets.sh
 
+      - name: Keep third-party JSON deprecation warning non-fatal
+        working-directory: apps/mobile
+        run: sed -i '/add_subdirectory("flutter")/i add_compile_options(-Wno-error=deprecated-literal-operator)' linux/CMakeLists.txt
+
       - name: Resolve mobile dependencies
         working-directory: apps/mobile
         run: flutter pub get
