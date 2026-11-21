@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/auth/auth_session.dart';
@@ -98,48 +99,63 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authSessionProvider);
 
-    if (auth is AuthUninitialized) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    // Keep one MaterialApp/Navigator above every auth state. Previously the
+    // signed-out gate rendered AuthScreen before the shell's nested
+    // MaterialApp existed, leaving login/register without app navigation,
+    // theme and inherited Material widgets.
+    return MaterialApp(
+      title: 'Breezze',
+      debugShowCheckedModeBanner: false,
+      theme: bzLightTheme(),
+      darkTheme: bzDarkTheme(),
+      home: Builder(
+        builder: (context) {
+          if (auth is AuthUninitialized) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
 
-    if (auth is AuthSignedIn) {
-      final shell = KeyedSubtree(
-        key: _shellKey,
-        child: const BreezzeShell(),
-      );
-      if (_showOnboarding) {
-        return Stack(
-          children: [
-            shell,
-            Positioned.fill(
-              child: Scaffold(
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                body: Stack(
-                  children: [
-                    OnboardingFlow(onComplete: _dismissOnboarding),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: SafeArea(
-                        child: TextButton(
-                          onPressed: _dismissOnboarding,
-                          child: const Text('Skip'),
-                        ),
+          if (auth is AuthSignedIn) {
+            final shell = KeyedSubtree(
+              key: _shellKey,
+              child: const BreezzeShell(),
+            );
+            if (_showOnboarding) {
+              return Stack(
+                children: [
+                  shell,
+                  Positioned.fill(
+                    child: Scaffold(
+                      backgroundColor:
+                          Theme.of(context).scaffoldBackgroundColor,
+                      body: Stack(
+                        children: [
+                          OnboardingFlow(onComplete: _dismissOnboarding),
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: SafeArea(
+                              child: TextButton(
+                                onPressed: _dismissOnboarding,
+                                child: const Text('Skip'),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      }
-      return shell;
-    }
+                  ),
+                ],
+              );
+            }
+            return shell;
+          }
 
-    return const AuthScreen();
+          return const AuthScreen();
+        },
+      ),
+    );
   }
 
   void _dismissOnboarding() => setState(() => _showOnboarding = false);
