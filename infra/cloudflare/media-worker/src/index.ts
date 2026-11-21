@@ -96,6 +96,7 @@ async function upload(request: Request, url: URL, env: Env): Promise<Response> {
   const declaredLength = Number(request.headers.get('content-length'));
   if (declaredLength !== bytes) return error(413, 'CONTENT_LENGTH_MISMATCH');
   const key = `quarantine/${userId}/${jobId}/${filename}`;
+  if (!request.body) return error(400, 'UPLOAD_BODY_REQUIRED');
   await env.MEDIA_BUCKET.put(key, request.body, {
     httpMetadata: {
       contentType: request.headers.get('content-type') || 'application/octet-stream',
@@ -137,7 +138,7 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
     const end = match[2] ? Number(match[2]) : null;
     const head = await env.MEDIA_BUCKET.head(key);
     if (!head) return error(404, 'MEDIA_NOT_FOUND');
-    const offset = start ?? Math.max(0, head.size - (end ?? 0) - 1);
+    const offset = start ?? Math.max(0, head.size - (end ?? 0));
     const length = start !== null && end !== null
       ? end - start + 1
       : start !== null ? head.size - start : (end ?? 0) + 1;
