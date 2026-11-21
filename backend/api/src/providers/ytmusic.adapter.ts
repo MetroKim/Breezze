@@ -44,7 +44,7 @@ export class YtMusicAdapter implements ProviderAdapter {
       const url = new URL('/search', this.baseUrl);
       url.searchParams.set('q', q);
       url.searchParams.set('limit', '20');
-      const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
       if (!response.ok) {
         return providerError('YTMUSIC_SEARCH_FAILED', `Metadata provider returned HTTP ${response.status}`, response.status >= 500);
       }
@@ -69,7 +69,7 @@ export class YtMusicAdapter implements ProviderAdapter {
     if (cached) return cached;
     try {
       const url = new URL(`/tracks/${encodeURIComponent(providerTrackId)}`, this.baseUrl);
-      const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (response.status === 404) {
         return providerError('TRACK_NOT_FOUND', 'YouTube Music track metadata was not found', false);
       }
