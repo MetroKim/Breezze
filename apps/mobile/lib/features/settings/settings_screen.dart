@@ -6,6 +6,7 @@ import '../../app/download_preferences.dart';
 import '../../app/search_history_store.dart';
 import '../../core/auth/auth_session.dart';
 import 'account_screen.dart';
+import 'help_support_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -313,11 +314,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
           _section(theme, 'Help & Support', [
-            const ListTile(
-              leading: BzSvgIcon(name: 'bell'),
-              title: Text('Notifications'),
-              subtitle: Text('Manage Breezze notifications.'),
-              enabled: false,
+            ListTile(
+              leading: const BzSvgIcon(name: 'bell'),
+              title: const Text('Notifications'),
+              subtitle: const Text('Review account and service updates.'),
+              trailing: const BzSvgIcon(name: 'chevron-right'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+              ),
+            ),
+            ListTile(
+              leading: const BzSvgIcon(name: 'help-circle'),
+              title: const Text('Help centre'),
+              subtitle: const Text('Playback, downloads, account and privacy answers.'),
+              trailing: const BzSvgIcon(name: 'chevron-right'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+              ),
             ),
             const ListTile(
               leading: BzSvgIcon(name: 'share'),
