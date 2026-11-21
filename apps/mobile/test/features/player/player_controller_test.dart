@@ -13,9 +13,9 @@ void main() {
     final container = ProviderContainer(overrides: [
       playbackResolverProvider.overrideWithValue(resolver),
     ]);
-    addTearDown(() {
+    addTearDown(() async {
       container.dispose();
-      engine.dispose();
+      await engine.dispose();
     });
 
     final player = container.read(playerControllerProvider.notifier);
@@ -100,7 +100,7 @@ class _FakeResolver implements PlaybackResolver {
         expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
       );
     }
-    return sources[index.clamp(0, sources.length - 1)];
+    return sources[index.clamp(0, sources.length - 1).toInt()];
   }
 }
 
