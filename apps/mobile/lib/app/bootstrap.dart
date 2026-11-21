@@ -7,10 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
-import '../core/audio/just_audio_engine_adapter.dart';
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
-import '../features/player/player_controller.dart';
 
 /// Composition root — the real, working wiring at startup.
 ///
@@ -69,11 +67,6 @@ class LiveResolver implements PlaybackResolver {
 final liveResolverProvider = Provider<PlaybackResolver>(
     (ref) => LiveResolver(ref.watch(youtubeSourceProvider)));
 
-/// Attach the native engine to the global player.
-void attachPlaybackEngine(ProviderContainer container) {
-  final player = container.read(playerControllerProvider.notifier);
-  player.attachEngine(JustAudioEngineAdapter());
-}
 
 // ---------------------------------------------------------------------------
 // Storage (path_provider): app-private, survives restarts
