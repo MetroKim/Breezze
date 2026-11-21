@@ -28,7 +28,7 @@
 - [x] Refresh-token storage: SHA-256 hashes are stored; migration hashes existing values in place.
 - [~] Refresh-token reuse: replay of a revoked token can revoke its family; unit regression tests cover replay and concurrent rotation, but DB-backed integration tests remain.
 - [ ] MFA: TOTP and passkeys/WebAuthn; require MFA for administrators.
-- [~] Login protection: atomic Redis-backed per-IP quota plus hashed per-account login quota are shared across API replicas; progressive backoff and CAPTCHA escalation remain.
+- [~] Login protection: atomic Redis-backed per-IP quota plus hashed per-account-and-source-IP login quota are shared across API replicas; progressive backoff and CAPTCHA escalation remain.
 - [ ] Account recovery: single-use expiring links and generic responses that do not reveal whether an email exists.
 - [ ] Email verification: signed one-time verification before sensitive actions.
 - [ ] Social login: Google/Apple/GitHub OIDC and verified-email claim validation.
@@ -105,7 +105,7 @@
 - [x] Breezze currently has no payment/card feature. If payments are added, use hosted checkout and never store card numbers.
 
 ## 8. API security
-- [~] Atomic Redis quotas are shared across API replicas: global per-IP plus a separate per-account login bucket; per-user/per-key quotas and endpoint-specific policies remain.
+- [~] Atomic Redis quotas are shared across API replicas: global per-IP plus a separate per-account-and-source-IP login bucket; per-user/per-key quotas and endpoint-specific policies remain.
 - [~] Cloudflare WAF/rate rules are documented but production thresholds/rules must be configured and verified.
 - [~] Set explicit request body limits and request/upstream timeouts per route.
 - [~] Bounded pagination is a route-by-route task; cap every list endpoint.
@@ -235,7 +235,7 @@ Breezze currently has no user-facing LLM feature. These are mandatory gates befo
 - [ ] Latest CI green on exact release commit: Flutter, API typecheck/tests/build, Prisma validation and both Cloudflare Workers.
 - [ ] Refresh-token migration tested on fresh/existing DB; replay/concurrent-refresh tests pass.
 - [ ] Mobile refresh token stored only in OS secure storage; logout and revoke-all work.
-- [~] Shared Redis IP and per-account login rate limits are implemented and unit-tested; progressive backoff, CAPTCHA escalation and production Redis failure drills remain.
+- [~] Shared Redis IP and per-account-and-source-IP login rate limits are implemented and unit-tested; progressive backoff, CAPTCHA escalation and production Redis failure drills remain.
 - [~] Playlist and favorites ownership tests exist; complete ownership/role tests for every protected endpoint before release.
 - [ ] Secret scan passes current tree and Git history; exposed credentials rotated.
 - [ ] Production Cloudflare WAF/rate rules, TLS/HSTS/CSP/CORS and private-origin restrictions verified.
