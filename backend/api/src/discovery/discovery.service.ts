@@ -104,7 +104,7 @@ export class DiscoveryService {
   }
 
   async artistAlbums(artistId: string) {
-    if (!/^\\d{1,20}$/.test(artistId)) throw new Error('INVALID_APPLE_ARTIST_ID');
+    if (!/^\d{1,20}$/.test(artistId)) throw new Error('INVALID_APPLE_ARTIST_ID');
     const url = new URL('https://itunes.apple.com/lookup');
     url.searchParams.set('id', artistId);
     url.searchParams.set('entity', 'album');
@@ -133,7 +133,7 @@ export class DiscoveryService {
   }
 
   async albumTracks(albumId: string) {
-    if (!/^\\d{1,20}$/.test(albumId)) throw new Error('INVALID_APPLE_ALBUM_ID');
+    if (!/^\d{1,20}$/.test(albumId)) throw new Error('INVALID_APPLE_ALBUM_ID');
     const url = new URL('https://itunes.apple.com/lookup');
     url.searchParams.set('id', albumId);
     url.searchParams.set('entity', 'song');
@@ -165,7 +165,7 @@ export class DiscoveryService {
 
   async musicVideos(query = 'official music video') {
     const q = query.trim().slice(0, 100) || 'official music video';
-    const baseUrl = (process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000').replace(/\\/$/, '');
+    const baseUrl = (process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
     try {
       const url = new URL('/videos', baseUrl);
       url.searchParams.set('q', q);
