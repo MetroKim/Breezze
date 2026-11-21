@@ -826,7 +826,7 @@ class AlbumDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final queue = tracks;
+    final queue = tracks.where((track) => !track.id.startsWith('bz:')).toList();
 
     Future<void> playAt(int index, {bool shuffle = false}) async {
       if (queue.isEmpty || index < 0 || index >= queue.length) return;
@@ -851,11 +851,13 @@ class AlbumDetailScreen extends ConsumerWidget {
         }
         return;
       }
+      final queueIndex = queue.indexWhere((item) => item.id == track.id);
+      if (queueIndex < 0) return;
       final player = ref.read(playerControllerProvider.notifier);
       await player.playTrack(
         trackId: track.id,
         queue: queue,
-        startIndex: index,
+        startIndex: queueIndex,
         origin: 'album',
         sourceContext: canonicalAlbumId,
       );
