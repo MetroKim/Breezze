@@ -17,6 +17,12 @@ export class DiscoveryController {
     catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
   }
 
+  @Get('tracks/search')
+  async searchTracks(@Query('q') query = '') {
+    try { return await this.discovery.searchTracks(query); }
+    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple iTunes Search API' }); }
+  }
+
   @Get('artists/search')
   async searchArtists(@Query('q') query = '') {
     try { return await this.discovery.searchArtists(query); }
