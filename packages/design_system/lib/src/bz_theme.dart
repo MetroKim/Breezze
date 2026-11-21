@@ -199,6 +199,9 @@ extension BzThemeX on ThemeData {
   Color get bzText2 => bz.text2;
   Color get bzSeparator => bz.separator;
   Color get bzAccent => bz.accent;
+  Color get bzError => bz.error;
+  Color get bzSuccess => bz.success;
+  Color get bzWarning => bz.warning;
   Color get bzAtmoRegular => bz.atmoRegular;
   Color get bzAtmoClear => bz.atmoClear;
   Color get bzSoftDiffuse => bz.softDiffuse;
