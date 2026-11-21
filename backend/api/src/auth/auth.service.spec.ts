@@ -104,4 +104,12 @@ describe('AuthService refresh-token rotation', () => {
       data: { revokedAt: expect.any(Date) },
     });
   });
+  it('revokes only a session belonging to the authenticated user', async () => {
+    await service.revokeSession('user-1', 'session-owned-by-user-1');
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { id: 'session-owned-by-user-1', userId: 'user-1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+
 });
