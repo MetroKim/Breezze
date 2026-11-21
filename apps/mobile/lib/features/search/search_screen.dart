@@ -39,6 +39,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     'Browse by Genre': 'Afrobeats',
     'Moods & Activities': 'workout music',
     'Concerts': 'upcoming concerts',
+    'City Charts': 'top songs in Dar es Salaam',
   };
   int _searchGeneration = 0;
 
