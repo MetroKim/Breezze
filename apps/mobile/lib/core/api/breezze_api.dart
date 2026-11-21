@@ -237,6 +237,8 @@ class BreezzeApi {
   Future<Map<String, dynamic>> recordPlay(String trackId) =>
       _post('/home/plays', {'trackId': trackId});
 
+  Future<Map<String, dynamic>> replaySummary() => _get('/replay');
+
   Future<List<Map<String, dynamic>>> playlists() async =>
       _asMapList(await _get('/playlists'));
 
