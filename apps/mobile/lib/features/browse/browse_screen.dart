@@ -295,7 +295,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                           : IconButton(
                               tooltip: 'Download',
                               icon: const BzSvgIcon(name: 'download', size: 20),
-                              onPressed: (track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))
+                              onPressed: track.id.startsWith('bz:')
                                   ? null
                                   : () => ref.read(downloadProgressProvider.notifier).download(track),
                             ),
