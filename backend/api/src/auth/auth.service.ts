@@ -13,7 +13,7 @@ import {
   encryptTotpSecret,
   generateTotpSecret,
   totpProvisioningUri,
-  verifyTotp,
+  getVerifiedTotpCounter,
 } from './totp';
 
 export interface AuthResult {
@@ -187,9 +187,15 @@ export class AuthService {
     }
 
     const secret = decryptTotpSecret(user.mfaPendingSecretCiphertext);
-    if (!verifyTotp(secret, code)) throw new UnauthorizedException('MFA_CODE_INVALID');
+    const counter = getVerifiedTotpCounter(secret, code);
+    if (counter === null) throw new UnauthorizedException('MFA_CODE_INVALID');
 
     await this.prisma.$transaction(async (tx) => {
+      const accepted = await tx.user.updateMany({
+        where: { id: userId, OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: BigInt(counter) } }] },
+        data: { mfaLastUsedStep: BigInt(counter) },
+      });
+      if (accepted.count === 0) throw new UnauthorizedException('MFA_CODE_REPLAYED');
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -221,15 +227,21 @@ export class AuthService {
     if (!user.mfaEnabled || !user.mfaSecretCiphertext) {
       throw new UnauthorizedException('MFA_NOT_CONFIGURED');
     }
-    if (!verifyTotp(decryptTotpSecret(user.mfaSecretCiphertext), code)) {
-      throw new UnauthorizedException('MFA_CODE_INVALID');
-    }
+    const counter = getVerifiedTotpCounter(decryptTotpSecret(user.mfaSecretCiphertext), code);
+    if (counter === null) throw new UnauthorizedException('MFA_CODE_INVALID');
 
-    const updated = await this.prisma.refreshToken.updateMany({
-      where: { userId, familyId: sessionId, revokedAt: null, expiresAt: { gt: new Date() } },
-      data: { mfaVerified: true },
+    await this.prisma.$transaction(async (tx) => {
+      const accepted = await tx.user.updateMany({
+        where: { id: userId, OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: BigInt(counter) } }] },
+        data: { mfaLastUsedStep: BigInt(counter) },
+      });
+      if (accepted.count === 0) throw new UnauthorizedException('MFA_CODE_REPLAYED');
+      const updated = await tx.refreshToken.updateMany({
+        where: { userId, familyId: sessionId, revokedAt: null, expiresAt: { gt: new Date() } },
+        data: { mfaVerified: true },
+      });
+      if (updated.count === 0) throw new UnauthorizedException('SESSION_INVALID');
     });
-    if (updated.count === 0) throw new UnauthorizedException('SESSION_INVALID');
 
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, sid: sessionId, mfaVerified: true },
