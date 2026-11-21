@@ -1,5 +1,6 @@
 import 'bz_track.dart';
 import 'provider_adapter.dart';
+import 'youtube_source_adapter.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 
 /// Video search model — a music-video result from the live source.
@@ -35,13 +36,13 @@ class BzVideo {
 /// song search. Playback goes through the official embed player (the
 /// sanctioned route) — this adapter never extracts video stream URLs.
 extension VideoSearchX on YoutubeSourceAdapter {
-  /// Searches music videos: YouTube results filtered to video type.
+  /// Searches music videos. youtube_explode's search defaults to the
+  /// video filter (`TypeFilters.video`), so results are videos and the
+  /// query is enriched with the "music video" intent.
   Future<ProviderOp<List<BzVideo>>> searchVideos(String query) async {
     try {
-      final videos = await _client.search(
-        '$query music video',
-        filter: yt.Filters.video,
-      ).take(15).toList();
+      final videos =
+          await _client.search('$query music video').take(15).toList();
       final results = [
         for (final v in videos)
           BzVideo(
