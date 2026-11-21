@@ -27,6 +27,25 @@ export class PlaylistsService {
     return playlist;
   }
 
+  async rename(userId: string, playlistId: string, name: string) {
+    const updated = await this.prisma.playlist.updateMany({
+      where: { id: playlistId, userId },
+      data: { name },
+    });
+    if (updated.count !== 1) throw new NotFoundException('PLAYLIST_NOT_FOUND');
+    return this.prisma.playlist.findFirst({
+      where: { id: playlistId, userId },
+    });
+  }
+
+  async delete(userId: string, playlistId: string) {
+    const deleted = await this.prisma.playlist.deleteMany({
+      where: { id: playlistId, userId },
+    });
+    if (deleted.count !== 1) throw new NotFoundException('PLAYLIST_NOT_FOUND');
+    return { deleted: true };
+  }
+
   async addTrack(userId: string, playlistId: string, trackId: string) {
     await this.assertOwned(userId, playlistId);
     const count = await this.prisma.playlistItem.count({
