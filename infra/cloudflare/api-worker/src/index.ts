@@ -22,7 +22,8 @@ function isPublicCatalogRequest(request: Request, url: URL): boolean {
     && !request.headers.has('authorization')
     && !request.headers.has('cookie')
     && !request.headers.has('range')
-    && url.search.length <= 512;
+    && url.search.length === 0
+    && (request.headers.get('accept-language') ?? 'und').length <= 256;
 }
 
 function buildCacheKey(request: Request, url: URL): Request {
@@ -100,6 +101,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       || unsafeVary
       || /private|no-store|no-cache/i.test(upstream.headers.get('cache-control') ?? '')) {
       const passthrough = new Response(upstream.body, upstream);
+      passthrough.headers.delete('x-breezze-edge-secret');
       passthrough.headers.set('X-Breezze-Edge-Cache', 'BYPASS');
       return passthrough;
     }
@@ -132,9 +134,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const response = new Response(upstream.body, upstream);
   response.headers.delete('x-breezze-edge-secret');
   response.headers.set('X-Breezze-Edge-Cache', 'BYPASS');
-  if (request.method !== 'GET' || request.headers.has('authorization') || request.headers.has('cookie')) {
-    response.headers.set('Cache-Control', 'private, no-store');
-  }
+  response.headers.set('Cache-Control', 'private, no-store');
   return response;
 }
 
