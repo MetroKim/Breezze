@@ -48,14 +48,14 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   List<TrackInfo> _queue(UserPlaylist playlist) => [
         for (final item in playlist.tracks)
-          if (!item.id.startsWith('bz:')) item.toTrackInfo(),
+          if ((!(item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:')) || item.id.startsWith('bz:audius:'))) item.toTrackInfo(),
       ];
 
   Future<void> _playAll(UserPlaylist playlist) async {
     if (playlist.tracks.isEmpty) return;
-    final nativeIndex = playlist.tracks.indexWhere((item) => !item.id.startsWith('bz:'));
+    final nativeIndex = playlist.tracks.indexWhere((item) => (!(item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:')) || item.id.startsWith('bz:audius:')));
     if (nativeIndex >= 0) {
-      if (playlist.tracks.any((item) => item.id.startsWith('bz:')) && mounted) {
+      if (playlist.tracks.any((item) => (item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:'))) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
@@ -68,7 +68,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
     final track = playlist.tracks[index];
-    if (track.id.startsWith('bz:')) {
+    if ((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This playlist item has metadata only; native playback is unavailable.')),
