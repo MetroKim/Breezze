@@ -55,7 +55,7 @@
 - [ ] PostgreSQL RLS or equivalent tenant isolation; current schema is user-scoped, not a complete tenant/RLS implementation.
 - [x] Artist claim uniqueness: one claim per account/artist plus a partial unique index allowing only one approved claimant per artist. CI applies migrations to PostgreSQL and runs concurrent insert tests for both constraints. Before applying the migration to an existing database, check for duplicate `(userId, artistId)` pairs and multiple approved claims per artist and reconcile them; the migration intentionally fails rather than deleting claim records.
 - [~] Admin routes require persisted admin role; separate hostname/network boundary, MFA, privileged audit trail and just-in-time access remain.
-- [x] Media upload completion is retry-safe after queue insertion/network failures: owner-scoped state checks plus deterministic BullMQ job IDs prevent duplicate pipeline work.
+- [x] Media upload completion is retry-safe after queue insertion/network failures: owner-scoped state checks plus deterministic BullMQ job IDs prevent duplicate pipeline work. Terminal failed jobs can now be retried by their owner; retry removes a retained failed BullMQ job before reusing its deterministic ID and restores the DB state if enqueue fails.
 - [~] Least privilege: separate DB users and service identities; deployment examples still use shared development credentials.
 - [~] Account deletion now requires password reauthentication; email change, artist ownership transfer and other sensitive-action reauthentication remain.
 
@@ -228,7 +228,7 @@ Breezze currently has no user-facing LLM feature. These are mandatory gates befo
 - [x] Identical provider metadata misses coalesce per API process.
 - [x] Provider circuit breaker opens after 5 retryable failures for 30 seconds with one half-open probe per process.
 - [ ] Distributed provider budgets/breaker across replicas; current controls are process/container local.
-- [ ] BullMQ retry caps, dead-letter queues, idempotency and replay operations.
+- [~] BullMQ retry caps and deterministic idempotency are configured for media jobs; owner-scoped retry of terminal failures is implemented. A formal dead-letter queue, operational replay tooling and alerting remain.
 - [ ] Graceful shutdown: drain work and close Prisma/Redis/HTTP clients.
 - [ ] k6/Locust load tests for realistic mix, hot keys, cache-miss storms, provider failures and regional traffic.
 - [ ] No one-million-concurrent-user claim until repeatable load tests, saturation metrics and cost model are approved.
