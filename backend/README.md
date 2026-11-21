@@ -7,10 +7,10 @@ Branch `breezze` · 24 modules · 31 schema models · media pipeline workers
 ```bash
 git clone -b breezze https://github.com/MetroKim/MetroMusic.git
 cd MetroMusic/backend
-docker compose up -d          # postgres, redis, api, worker
+docker compose up -d          # postgres, redis, api, ytmusicapi metadata service, worker
 ```
 
-The API is then at `http://localhost:3000/api/v1` (Swagger at `/api/docs`).
+The API is then at `http://localhost:3000/api/v1` (Swagger at `/api/docs`). The provider registry exposes `GET /api/v1/providers` and YouTube Music metadata search at `GET /api/v1/providers/youtube_music/search?q=...`. The sidecar is internal to the Compose network and is not published as a public port.
 
 ## First-time setup (migrations + client)
 
@@ -41,5 +41,7 @@ the schema and no paywall UI in the apps.
 
 - Admin RBAC role-gate pending
 - Search is contains-based (pg_trgm upgrade when measured)
+- YouTube Music adapter is metadata/discovery only; it does not supply playback URLs or streaming rights
+- Production Cloudflare routing requires matching `EDGE_SHARED_SECRET` in the API deployment and Worker secret store; see `infra/cloudflare/api-worker/README.md`
 - CI workflow file must be added manually (GitHub workflow-scope
   write is blocked for the agent)
