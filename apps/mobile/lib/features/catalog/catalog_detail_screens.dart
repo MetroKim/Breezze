@@ -7,6 +7,18 @@ import '../../app/bootstrap.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
+final _appleTrackMatchesProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
+  final data = await ref
+      .read(authSessionProvider.notifier)
+      .api
+      .discoveryTrackSearch(query);
+  final rawItems = data['items'];
+  if (rawItems is! List) return const [];
+  return rawItems.whereType<Map>().map((item) =>
+      item.map((key, value) => MapEntry(key.toString(), value))).toList();
+});
+
 /// Track details use only metadata returned by the active search source.
 /// The album relationship remains unavailable until a canonical album catalog is connected.
 class TrackDetailScreen extends ConsumerWidget {
@@ -26,6 +38,7 @@ class TrackDetailScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final artistName = track.artist ?? 'Unknown artist';
     final trackTitle = track.title ?? 'Unknown track';
+    final appleTrackMatches = ref.watch(_appleTrackMatchesProvider('$trackTitle $artistName'));
     final artistTracks = relatedTracks
         .where((item) => (item.artist ?? '').trim().toLowerCase() == artistName.trim().toLowerCase())
         .toList();
@@ -162,10 +175,68 @@ class TrackDetailScreen extends ConsumerWidget {
                     )),
                   ),
                 ),
-                _CatalogSection(
-                  title: 'Album',
-                  subtitle: 'The current search source does not provide a verified album relationship for this track. Album pages are not inferred from title or artist text.',
-                  available: false,
+                appleTrackMatches.when(
+                  loading: () => _CatalogSection(
+                    title: 'Album',
+                    subtitle: 'Checking the Apple catalog for an exact track-to-album relationship.',
+                    available: true,
+                    child: const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ),
+                  error: (_, __) => _CatalogSection(
+                    title: 'Album',
+                    subtitle: 'The Apple catalog could not verify an album relationship for this track.',
+                    available: false,
+                  ),
+                  data: (matches) {
+                    final exact = matches.where((item) {
+                      final title = item['title'];
+                      final artist = item['artist'];
+                      return title is String &&
+                          artist is String &&
+                          title.trim().toLowerCase() == trackTitle.trim().toLowerCase() &&
+                          artist.trim().toLowerCase() == artistName.trim().toLowerCase() &&
+                          item['albumId'] != null;
+                    }).toList();
+                    if (exact.isEmpty) {
+                      return _CatalogSection(
+                        title: 'Album',
+                        subtitle: 'No exact Apple catalog track match was found. Breezze will not infer an album from similar titles or artist names.',
+                        available: false,
+                      );
+                    }
+                    final album = exact.first;
+                    return _CatalogSection(
+                      title: 'Verified album relationship',
+                      subtitle: 'Exact title and artist match from Apple iTunes catalog metadata.',
+                      available: true,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: _TrackArtwork(
+                          url: album['artworkUrl'] as String?,
+                          size: 56,
+                        ),
+                        title: Text(album['albumTitle'] as String? ?? 'Unknown album'),
+                        subtitle: Text(
+                          [
+                            if (album['releaseDate'] is String)
+                              (album['releaseDate'] as String).split('T').first,
+                            'Apple catalog',
+                          ].join(' · '),
+                        ),
+                        trailing: const BzSvgIcon(name: 'arrow-up-right', size: 19),
+                        onTap: () async {
+                          final rawUrl = album['albumUrl'];
+                          final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
+                          if (uri != null && uri.scheme == 'https') {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                      ),
+                    );
+                  },
                 ),
                 _CatalogSection(
                   title: 'Track information',
