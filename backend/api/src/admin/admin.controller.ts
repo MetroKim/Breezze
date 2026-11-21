@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { IsIn, IsUUID } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AdminService } from './admin.service';
 
@@ -19,11 +20,9 @@ export class RoleDto {
   role!: string;
 }
 
-// NOTE: full admin RBAC (admin-only guard) lands with the AdminRole
-// model; today these endpoints are authenticated but not yet
-// role-gated. Track in the gap register.
+// All administrative operations require a persisted admin role.
 @Controller('admin')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
   constructor(private readonly admin: AdminService) {}
 
@@ -43,7 +42,7 @@ export class AdminController {
   }
 
   @Post('roles')
-  grantRole(@CurrentUser() actor: string, @Body() dto: RoleDto) {
+  grantRole(@Body() dto: RoleDto) {
     return this.admin.createUserRole(dto.userId, dto.role);
   }
 }
