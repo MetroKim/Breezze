@@ -17,7 +17,7 @@ export class RegisterDto {
   email!: string;
 
   @IsString()
-  @MinLength(10)
+  @MinLength(12)
   @MaxLength(128)
   password!: string;
 
@@ -38,6 +38,8 @@ export class LoginDto {
 
 export class RefreshDto {
   @IsString()
+  @MinLength(32)
+  @MaxLength(256)
   refreshToken!: string;
 }
 
