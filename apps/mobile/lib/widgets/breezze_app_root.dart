@@ -58,7 +58,8 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
   @override
   void dispose() {
     _container?.read(playerControllerProvider.notifier).detachEngine();
-    _audioEngine?.dispose();
+    final engine = _audioEngine;
+    if (engine != null) unawaited(engine.dispose());
     super.dispose();
   }
 
