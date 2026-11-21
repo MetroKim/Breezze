@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
 
 export interface AuthResult {
@@ -21,6 +21,10 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
   ) {}
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token, 'utf8').digest('hex');
+  }
 
   private refreshExpiry(): Date {
     return new Date(Date.now() + 30 * 24 * 3600 * 1000);
@@ -38,7 +42,7 @@ export class AuthService {
     if (!refreshOverride) {
       await this.prisma.refreshToken.create({
         data: {
-          token: refreshToken,
+          tokenHash: this.hashRefreshToken(refreshToken),
           familyId: randomUUID(),
           userId: user.id,
           expiresAt: this.refreshExpiry(),
@@ -62,6 +66,9 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(password, {
       type: argon2.argon2id,
+      memoryCost: 19456,
+      timeCost: 2,
+      parallelism: 1,
     });
     const user = await this.prisma.user.create({
       data: { email, passwordHash, displayName: displayName ?? null },
@@ -82,7 +89,7 @@ export class AuthService {
 
   async refresh(refreshToken: string): Promise<AuthResult> {
     const token = await this.prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
+      where: { tokenHash: this.hashRefreshToken(refreshToken) },
       include: { user: true },
     });
 
@@ -97,17 +104,36 @@ export class AuthService {
     }
 
     const rotated = randomBytes(32).toString('hex');
-    await this.prisma.refreshToken.update({
-      where: { token: refreshToken },
-      data: { token: rotated, expiresAt: this.refreshExpiry() },
+    const consumed = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.refreshToken.updateMany({
+        where: { id: token.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (result.count !== 1) {
+        await tx.refreshToken.updateMany({
+          where: { familyId: token.familyId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        return false;
+      }
+      await tx.refreshToken.create({
+        data: {
+          tokenHash: this.hashRefreshToken(rotated),
+          familyId: token.familyId,
+          userId: token.userId,
+          expiresAt: this.refreshExpiry(),
+        },
+      });
+      return true;
     });
+    if (!consumed) throw new UnauthorizedException('REFRESH_REUSED_OR_INVALID');
 
     return this.issueTokens(token.user, rotated);
   }
 
   async logout(refreshToken: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
-      where: { token: refreshToken },
+      where: { tokenHash: this.hashRefreshToken(refreshToken) },
       data: { revokedAt: new Date() },
     });
   }
