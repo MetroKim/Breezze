@@ -177,6 +177,54 @@ void main() {
         'track-b');
   });
 
+  test('automatically advances the queue when a track ends', () async {
+    final player = container.read(playerControllerProvider.notifier);
+    final queue = [
+      const TrackInfo(id: 'track-a', title: 'A'),
+      const TrackInfo(id: 'track-b', title: 'B'),
+    ];
+    final first = player.playTrack(
+      trackId: 'track-a',
+      queue: queue,
+    );
+    resolver.complete('track-a');
+    await first;
+
+    engine.states.add(PlaybackState.ended);
+    await Future<void>.delayed(Duration.zero);
+    expect(resolver.pending.containsKey('track-b'), isTrue);
+
+    resolver.complete('track-b');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(engine.prepared, ['track-a', 'track-b']);
+    expect(container.read(playerControllerProvider).currentTrack?.id, 'track-b');
+    expect(container.read(playerControllerProvider).playbackState,
+        PlaybackState.playing);
+  });
+
+  test('does not advance twice for duplicate ended events', () async {
+    final player = container.read(playerControllerProvider.notifier);
+    final request = player.playTrack(
+      trackId: 'track-a',
+      queue: const [
+        TrackInfo(id: 'track-a'),
+        TrackInfo(id: 'track-b'),
+        TrackInfo(id: 'track-c'),
+      ],
+    );
+    resolver.complete('track-a');
+    await request;
+
+    engine.states
+      ..add(PlaybackState.ended)
+      ..add(PlaybackState.ended);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(resolver.pending.containsKey('track-b'), isTrue);
+    expect(resolver.pending.containsKey('track-c'), isFalse);
+  });
+
   test('resolver failure leaves the controller in failed state', () async {
     final player = container.read(playerControllerProvider.notifier);
     final request = player.playTrack(trackId: 'missing');
