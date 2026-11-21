@@ -2,6 +2,7 @@ import { NotAcceptableException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from './media-signer.service';
+import { ProviderRegistry } from '../providers/provider-registry.service';
 import { PlaybackResolveService } from './playback-resolve.service';
 
 describe('PlaybackResolveService', () => {
@@ -21,6 +22,7 @@ describe('PlaybackResolveService', () => {
       {} as PrismaService,
       rights as unknown as RightsDecisionService,
       signer as unknown as MediaSigner,
+      { get: jest.fn() } as unknown as ProviderRegistry,
     );
   });
 
