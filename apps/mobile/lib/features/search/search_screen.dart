@@ -140,7 +140,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             final id = item['id'] as String? ?? '';
             final duration = item['durationSec'];
             return BzTrack(
-              id: 'bz:$id',
+              id: 'bzv:$id',
               title: item['title'] as String? ?? 'Untitled video',
               artist: item['artist'] as String? ?? 'Unknown artist',
               artworkUrl: item['artworkUrl'] as String?,
@@ -335,7 +335,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _download(BzTrack track) {
     // Metadata providers do not grant offline-download rights.
-    if (track.id.startsWith('bz:')) {
+    if (track.id.startsWith('bz:') || track.id.startsWith('bzv:')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Offline downloads are not available for this catalogue source.')),
       );
@@ -370,26 +370,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _play(BzTrack track) async {
-    // Metadata IDs are not playable media URLs. Use YouTube's official player.
+    // Only dedicated music-video results may open the official YouTube
+    // video player. Song metadata is not a native playback grant.
+    if (track.id.startsWith('bzv:')) {
+      final opened = await YoutubePlayerHandoff.openProviderTrackId(track.id.substring(4));
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the official music video player.')),
+        );
+      }
+      return;
+    }
     if (track.id.startsWith('bz:')) {
-      try {
-        final providerId = track.id.substring(3);
-        final launch = await ref.read(authSessionProvider.notifier).api
-            .getProviderPlaybackLaunch('youtube_music', providerId);
-        final descriptor = launch['value'];
-        final watchUrl = descriptor is Map ? descriptor['watchUrl'] as String? : null;
-        final opened = await YoutubePlayerHandoff.openBreezzeTrackId(track.id, watchUrl: watchUrl);
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open the official YouTube player.')),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('This YouTube track could not be opened.')),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
+        );
       }
       return;
     }
@@ -568,7 +564,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            track.id.startsWith('bz:')
+                                            (track.id.startsWith('bz:') || track.id.startsWith('bzv:'))
                                                 ? '${track.artist} · YouTube Music'
                                                 : track.artist,
                                             maxLines: 1,
@@ -621,7 +617,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             }
                                           },
                                           itemBuilder: (context) => [
-                                            if (!track.id.startsWith('bz:')) ...[
+                                            if (!track.id.startsWith('bz:') && !track.id.startsWith('bzv:')) ...[
                                               const PopupMenuItem(
                                                 value: 'play_next',
                                                 child: Text('Play Next'),
@@ -657,13 +653,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                   name: 'download',
                                                   color: theme.bzText1,
                                                 ),
-                                                onPressed: track.id.startsWith('bz:')
+                                                onPressed: (track.id.startsWith('bz:') || track.id.startsWith('bzv:'))
                                                     ? null
                                                     : () => _download(track),
                                               ),
                                       ],
                                     ),
-                                    onTap: () => _openTrack(track),
+                                    onTap: () => track.id.startsWith('bzv:') ? _play(track) : _openTrack(track),
                                   );
                                 },
                               ),
