@@ -21,7 +21,7 @@ export class AdminService {
   async createUserRole(userId: string, role: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('USER_NOT_FOUND');
-    return { userId, role, granted: true };
+    return this.prisma.user.update({ where: { id: userId }, data: { role }, select: { id: true, role: true } });
   }
 
   async listTakedowns() {
