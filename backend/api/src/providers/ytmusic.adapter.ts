@@ -126,7 +126,7 @@ export class YtMusicAdapter implements ProviderAdapter {
     const cacheKey = `provider:youtube_music:track:v1:${providerTrackId}`;
     const cached = await this.cache.get<ProviderResult<ProviderTrack>>(cacheKey);
     if (cached) return cached;
-    return this.coalesce(cacheKey, async () => {
+    return this.coalesce(cacheKey, () => this.withCircuit(async () => {
       try {
         const url = new URL(`/tracks/${encodeURIComponent(providerTrackId)}`, this.baseUrl);
         const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
