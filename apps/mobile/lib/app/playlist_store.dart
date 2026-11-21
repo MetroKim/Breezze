@@ -85,7 +85,7 @@ class PlaylistStore {
     }
   }
 
-  Future<void> create(String ownerId, String name) => _serialize(() async {
+  Future<void> create(String ownerId, String name, {String? id}) => _serialize(() async {
         final normalized = name.trim();
         if (normalized.isEmpty) {
           throw ArgumentError.value(name, 'name', 'must not be empty');
@@ -94,7 +94,7 @@ class PlaylistStore {
         playlists.insert(
           0,
           UserPlaylist(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            id: id ?? DateTime.now().microsecondsSinceEpoch.toString(),
             name: normalized,
             createdAt: DateTime.now().toUtc(),
             tracks: const [],
