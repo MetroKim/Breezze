@@ -26,8 +26,8 @@ void main() {
   });
 
   test('lists only assets owned by the requested account', () async {
-    final alice = Directory('${root.path}/bz:alice-track');
-    final bob = Directory('${root.path}/bz:bob-track');
+    final alice = Directory('${root.path}/bz_alice-track');
+    final bob = Directory('${root.path}/bz_bob-track');
     await alice.create();
     await bob.create();
 
@@ -58,7 +58,7 @@ void main() {
   });
 
   test('preserves rights expiry metadata for offline enforcement', () async {
-    final trackDir = Directory('${root.path}/bz:expiring-track');
+    final trackDir = Directory('${root.path}/bz_expiring-track');
     await trackDir.create();
     final expiry = DateTime.utc(2027, 1, 1);
     await File('${trackDir.path}/audio.m4a').writeAsBytes([1]);
