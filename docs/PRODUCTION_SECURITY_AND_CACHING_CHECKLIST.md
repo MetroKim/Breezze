@@ -57,7 +57,7 @@
 - [~] Admin routes require persisted admin role; separate hostname/network boundary, MFA, privileged audit trail and just-in-time access remain.
 - [x] Media upload completion is retry-safe after queue insertion/network failures: owner-scoped state checks plus deterministic BullMQ job IDs prevent duplicate pipeline work.
 - [~] Least privilege: separate DB users and service identities; deployment examples still use shared development credentials.
-- [ ] Re-authentication for email change, account deletion, artist ownership and other sensitive actions.
+- [~] Account deletion now requires password reauthentication; email change, artist ownership transfer and other sensitive-action reauthentication remain.
 
 ## 4. Input, output and common attacks
 - [x] SQL injection: Prisma parameterized query APIs are the persistence standard.
