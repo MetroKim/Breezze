@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,6 +14,7 @@ class SearchHistoryStore {
   static const String _fileName = 'breezze_search_history.json';
 
   final Future<File> Function() _fileProvider;
+  Future<void> _mutationQueue = Future<void>.value();
 
   static Future<File> _defaultFile() async {
     final directory = await getApplicationDocumentsDirectory();
@@ -20,6 +22,13 @@ class SearchHistoryStore {
   }
 
   Future<List<String>> load() async {
+    // Wait for queued mutations so callers never observe a partially written
+    // or stale snapshot while an add/remove/clear operation is in progress.
+    await _mutationQueue;
+    return _load();
+  }
+
+  Future<List<String>> _load() async {
     try {
       final file = await _fileProvider();
       if (!await file.exists()) return const [];
@@ -43,33 +52,44 @@ class SearchHistoryStore {
     }
   }
 
-  Future<List<String>> add(String query) async {
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final result = _mutationQueue.then((_) => operation());
+    // Keep the queue alive after a failed write while still returning the
+    // original error to the caller.
+    _mutationQueue = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return result;
+  }
+
+  Future<List<String>> add(String query) {
     final normalized = query.trim();
     if (normalized.isEmpty) return load();
 
-    final current = await load();
-    final next = [
-      normalized,
-      ...current.where(
-        (entry) => entry.toLowerCase() != normalized.toLowerCase(),
-      ),
-    ].take(maxEntries).toList(growable: false);
-    await _write(next);
-    return next;
+    return _serialize(() async {
+      final current = await _load();
+      final next = [
+        normalized,
+        ...current.where(
+          (entry) => entry.toLowerCase() != normalized.toLowerCase(),
+        ),
+      ].take(maxEntries).toList(growable: false);
+      await _write(next);
+      return next;
+    });
   }
 
-  Future<List<String>> remove(String query) async {
-    final current = await load();
-    final next = current
-        .where((entry) => entry.toLowerCase() != query.toLowerCase())
-        .toList(growable: false);
-    await _write(next);
-    return next;
-  }
+  Future<List<String>> remove(String query) => _serialize(() async {
+        final current = await _load();
+        final next = current
+            .where((entry) => entry.toLowerCase() != query.toLowerCase())
+            .toList(growable: false);
+        await _write(next);
+        return next;
+      });
 
-  Future<void> clear() async {
-    await _write(const []);
-  }
+  Future<void> clear() => _serialize(() => _write(const []));
 
   Future<void> _write(List<String> entries) async {
     final file = await _fileProvider();
