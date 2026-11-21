@@ -44,15 +44,25 @@ class DownloadPreferences {
         'quality': quality,
       };
 
-  factory DownloadPreferences.fromJson(Map<String, dynamic> json) =>
-      DownloadPreferences(
-        wifiOnly: json['wifiOnly'] as bool? ?? true,
-        allowCellular: json['allowCellular'] as bool? ?? false,
-        autoCleanup: json['autoCleanup'] as bool? ?? true,
-        minimumFreeSpaceGb:
-            (json['minimumFreeSpaceGb'] as num?)?.toInt() ?? 2,
-        quality: json['quality'] as String? ?? 'standard',
-      );
+  factory DownloadPreferences.fromJson(Map<String, dynamic> json) {
+    final requestedMinimum = (json['minimumFreeSpaceGb'] as num?)?.toInt();
+    final requestedQuality = json['quality'];
+    final allowCellular = json['allowCellular'] == true;
+    final wifiOnly = json['wifiOnly'] is bool
+        ? json['wifiOnly'] as bool
+        : !allowCellular;
+    return DownloadPreferences(
+      // Keep the two network flags mutually exclusive even when loading an
+      // older or hand-edited preferences file.
+      wifiOnly: wifiOnly && !allowCellular,
+      allowCellular: allowCellular,
+      autoCleanup: json['autoCleanup'] as bool? ?? true,
+      minimumFreeSpaceGb: const [1, 2, 5, 10].contains(requestedMinimum)
+          ? requestedMinimum!
+          : 2,
+      quality: requestedQuality == 'lossless' ? 'lossless' : 'standard',
+    );
+  }
 }
 
 class DownloadPreferencesStore {
