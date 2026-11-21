@@ -270,6 +270,62 @@ class PlayerController extends Notifier<PlayerState> {
     await _resolveAndPlay(info);
   }
 
+  /// Inserts a track directly after the current item.
+  void playNext(TrackInfo track, {
+    String origin = 'manual',
+    String sourceContext = 'Queue',
+  }) {
+    _trackInfos[track.id] = track;
+    if (state.currentTrack == null) {
+      unawaited(playTrack(
+        trackId: track.id,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        duration: track.duration,
+        origin: origin,
+        sourceContext: sourceContext,
+      ));
+      return;
+    }
+    _queue.playNext(QueueEntry(
+      entryId: 'qe-${DateTime.now().microsecondsSinceEpoch}',
+      trackId: track.id,
+      origin: origin,
+      sourceContext: sourceContext,
+      insertedAtMs: DateTime.now().millisecondsSinceEpoch,
+      trackVersion: 'v1',
+    ));
+  }
+
+  /// Appends a track to the end of the current queue.
+  void playLast(TrackInfo track, {
+    String origin = 'manual',
+    String sourceContext = 'Queue',
+  }) {
+    _trackInfos[track.id] = track;
+    if (state.currentTrack == null) {
+      unawaited(playTrack(
+        trackId: track.id,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        duration: track.duration,
+        origin: origin,
+        sourceContext: sourceContext,
+      ));
+      return;
+    }
+    _queue.playLast(QueueEntry(
+      entryId: 'qe-${DateTime.now().microsecondsSinceEpoch}',
+      trackId: track.id,
+      origin: origin,
+      sourceContext: sourceContext,
+      insertedAtMs: DateTime.now().millisecondsSinceEpoch,
+      trackVersion: 'v1',
+    ));
+  }
+
   /// Register a Last.fm/ListenBrainz-compatible scrobbling destination.
   void registerScrobbler(Scrobbler scrobbler) {
     _scrobbles.register(scrobbler);
