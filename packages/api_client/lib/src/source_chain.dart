@@ -1,4 +1,4 @@
-/// Breezze source chain — spec §52.7 fallback rule.
+/// Breezze provider chain — metadata discovery and authorized source selection.
 ///
 /// Primary: a BitChord-style pluggable module source (YouTube Music
 /// catalog adapter with lossless FLAC/ALAC variants).
@@ -29,7 +29,7 @@ class SourceChainUnavailable extends SourceChainResult {
   SourceChainUnavailable(this.reason, {this.alternativesShown = const []});
 }
 
-/// Ordered source chain: primary first, fallbacks after.
+/// Ordered provider chain: primary first, eligible fallbacks after.
 class SourceChain {
   final List<ProviderAdapter> sources;
 
@@ -58,7 +58,7 @@ class SourceChain {
     ]);
   }
 
-  /// Search across all sources, merged and de-duplicated by title+artist.
+  /// Search across registered metadata providers, merged and de-duplicated by title+artist.
   Future<List<BzTrack>> searchAll(String query) async {
     final results = <BzTrack>[];
     final seen = <String>{};
