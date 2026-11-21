@@ -71,7 +71,7 @@ class BzBnoteMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SvgPicture.asset(
-      'assets/icons/music-note.svg',
+      'assets/icons/b-note-mark.svg',
       width: size,
       height: size,
       colorFilter: ColorFilter.mode(
