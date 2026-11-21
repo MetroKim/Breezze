@@ -136,3 +136,14 @@ regression coverage, exit gates and the recommended implementation order.
 Do not treat these findings as fixed. The Flutter/backend validation suite
 has not been run in this environment. See the backlog for exact tests and
 release acceptance criteria.
+
+
+## P0 playback stabilization — implementation started
+
+| Defect | Status | Evidence | Remaining verification |
+|---|---|---|---|
+| ProviderContainer recreated during shell build | FIX APPLIED — tests pending | `main.dart` now provides one root ProviderScope; `BreezzeShell` no longer creates a private container; `BreezzeAppRoot` owns engine attach/dispose and the migration container | Widget test auth transitions/rebuilds and exactly-once engine disposal; analyzer/runtime verification |
+| Stale playback resolver responses | FIX APPLIED — tests added | `PlayerController` uses request generations and ignores stale resolver results | Execute fake-resolver tests; add detach and engine-error cases |
+| Native prepare operations racing | FIX APPLIED — tests added | PlayerController serializes prepare/play engine mutations and rechecks request generation before/after prepare | Execute delayed-prepare race test on CI and real device |
+| State machine rejects a new selection from active states | FIX APPLIED — tests added | `PlaybackStateMachine` treats each new start as superseding and rejects stale request IDs | Execute package tests and expand transition matrix |
+| Playback Future awaited for entire song | FIX APPLIED — test pending | Controller no longer awaits the long-lived just_audio play Future as if it meant “started” | Verify actual just_audio behavior on Android/iOS and ensure async engine errors surface |
