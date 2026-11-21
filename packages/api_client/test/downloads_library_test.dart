@@ -41,10 +41,10 @@ void main() {
     var receivedRange = '';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
-      receivedRange = request.headers.value(HttpHeaders.rangeHeader) ?? '';
+      receivedRange = request.headers.value('range') ?? '';
       request.response.statusCode = HttpStatus.partialContent;
       request.response.headers
-        ..set(HttpHeaders.contentRangeHeader, 'bytes 3-5/6')
+        ..set('content-range', 'bytes 3-5/6')
         ..contentLength = 3;
       request.response.add(utf8.encode('def'));
       await request.response.close();
