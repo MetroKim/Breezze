@@ -406,7 +406,7 @@ const _browseDestinations = <_BrowseDestination>[
   _BrowseDestination('Latest Songs', 'Recently added tracks from verified catalog sources.', 'music-note'),
   _BrowseDestination('New Releases', 'New albums and singles with confirmed release dates.', 'disc-3'),
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
-  _BrowseDestination('Daily Top 100', 'A verified daily chart with an explicit territory.', 'star'),
+  _BrowseDestination('Daily Top 100', 'Apple Music Daily Global Top 100 for the selected territory.', 'star'),
   _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
   _BrowseDestination('Music Videos', 'Music videos from channel owners verified by Breezze.', 'video'),
   _BrowseDestination('Charts', 'Global, regional and genre charts with source attribution.', 'grid'),
@@ -440,12 +440,12 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   String? _catalogTerritory;
   DateTime? _catalogFetchedAt;
 
-  bool get _appleChart => const ['Trending Songs', 'Daily Top 100', 'Charts']
-      .contains(widget.destination.title);
+  bool get _appleChart => widget.destination.title == 'Charts';
+  bool get _dailyChart => widget.destination.title == 'Daily Top 100';
   bool get _appleReleases => widget.destination.title == 'New Releases';
   bool get _videoFeed => widget.destination.title == 'Music Videos';
   bool get _concertFeed => widget.destination.title == 'Upcoming Concerts';
-  bool get _liveProviderCatalog => _appleChart || _appleReleases || _videoFeed || _concertFeed;
+  bool get _liveProviderCatalog => _appleChart || _dailyChart || _appleReleases || _videoFeed || _concertFeed;
 
   bool get _genre => widget.destination.title == 'Browse by Genre';
   bool get _mood => widget.destination.title == 'Moods & Activities';
@@ -479,9 +479,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       final territory = ref.read(outboxTerritoryProvider).toLowerCase();
       final data = _appleReleases
           ? await api.discoveryNewReleases(country: territory)
-          : _appleChart
-              ? await api.discoverySongsChart(country: territory)
-              : _videoFeed
+          : _dailyChart
+              ? await api.discoveryDailyTop100(country: territory)
+              : _appleChart
+                  ? await api.discoverySongsChart(country: territory)
+                  : _videoFeed
                   ? await api.discoveryMusicVideos()
                   : await api.discoveryConcerts(country: territory);
       if (!mounted || generation != _generation) return;
@@ -692,6 +694,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
 
   Widget _appleCatalogContent(ThemeData theme) {
     final isReleaseFeed = _appleReleases;
+    final isDailyChart = _dailyChart;
     final isVideoFeed = _videoFeed;
     final isConcertFeed = _concertFeed;
     return Column(
@@ -707,7 +710,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
               Text(
                 isReleaseFeed
                     ? 'Newly released albums from Apple Music'
-                    : isVideoFeed
+                    : isDailyChart
+                        ? 'Apple Music Daily Global Top 100'
+                        : isVideoFeed
                         ? 'Music videos from channel IDs approved by Breezze'
                         : isConcertFeed
                             ? 'Upcoming live events from JamBase Data'
