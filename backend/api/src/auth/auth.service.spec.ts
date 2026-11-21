@@ -37,6 +37,7 @@ describe('AuthService refresh-token rotation', () => {
       refreshToken: {
         findUnique: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findMany: jest.fn(),
       },
       $transaction: jest.fn((callback: (tx: any) => unknown) =>
         callback({ refreshToken: transactionRefreshToken }),
