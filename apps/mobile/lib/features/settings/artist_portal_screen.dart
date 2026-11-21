@@ -13,6 +13,10 @@ class ArtistPortalScreen extends ConsumerStatefulWidget {
 
 class _ArtistPortalScreenState extends ConsumerState<ArtistPortalScreen> {
   final _artistId = TextEditingController();
+  final _releaseTitle = TextEditingController();
+  final _trackCount = TextEditingController(text: '1');
+  List<Map<String, dynamic>> _releases = const [];
+  bool _submittingRelease = false;
   Map<String, dynamic> _dashboard = const {};
   Map<String, dynamic> _analytics = const {};
   List<Map<String, dynamic>> _claims = const [];
@@ -29,6 +33,8 @@ class _ArtistPortalScreenState extends ConsumerState<ArtistPortalScreen> {
   @override
   void dispose() {
     _artistId.dispose();
+    _releaseTitle.dispose();
+    _trackCount.dispose();
     super.dispose();
   }
 
@@ -43,12 +49,14 @@ class _ArtistPortalScreenState extends ConsumerState<ArtistPortalScreen> {
         api.artistDashboard(),
         api.artistAnalytics(),
         api.artistClaims(),
+        api.artistReleases(),
       ]);
       if (!mounted) return;
       setState(() {
         _dashboard = results[0] as Map<String, dynamic>;
         _analytics = results[1] as Map<String, dynamic>;
         _claims = results[2] as List<Map<String, dynamic>>;
+        _releases = results[3] as List<Map<String, dynamic>>;
         _loading = false;
       });
     } catch (_) {
@@ -75,6 +83,33 @@ class _ArtistPortalScreenState extends ConsumerState<ArtistPortalScreen> {
       if (mounted) setState(() => _error = 'Claim could not be submitted. Check the artist ID and whether it is already claimed.');
     } finally {
       if (mounted) setState(() => _claiming = false);
+    }
+  }
+
+  Future<void> _submitRelease() async {
+    final title = _releaseTitle.text.trim();
+    final artistId = _artistId.text.trim();
+    final count = int.tryParse(_trackCount.text.trim());
+    if (title.isEmpty || artistId.isEmpty || count == null || count < 1) {
+      setState(() => _error = 'Enter a release title, approved artist ID and a valid track count.');
+      return;
+    }
+    setState(() { _submittingRelease = true; _error = null; });
+    try {
+      await ref.read(authSessionProvider.notifier).api.submitArtistRelease(
+        title: title,
+        artistId: artistId,
+        trackCount: count,
+      );
+      _releaseTitle.clear();
+      _trackCount.text = '1';
+      await _load();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Release submission requires an approved artist claim. Check the artist ID and try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _submittingRelease = false);
     }
   }
 
@@ -140,6 +175,37 @@ class _ArtistPortalScreenState extends ConsumerState<ArtistPortalScreen> {
                   onPressed: _claiming ? null : _claim,
                   child: Text(_claiming ? 'Submitting…' : 'Submit claim'),
                 ),
+                const SizedBox(height: 24),
+                Text('SUBMIT A RELEASE', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 8),
+                const Text('Only approved artist claims can submit releases. Audio and artwork are uploaded through the secure distributor workflow after submission.'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _releaseTitle,
+                  decoration: const InputDecoration(labelText: 'Release title'),
+                ),
+                TextField(
+                  controller: _trackCount,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Number of tracks'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: _submittingRelease ? null : _submitRelease,
+                  child: Text(_submittingRelease ? 'Submitting…' : 'Submit release'),
+                ),
+                const SizedBox(height: 20),
+                Text('YOUR RELEASES', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 8),
+                if (_releases.isEmpty)
+                  const ListTile(title: Text('No release submissions yet'))
+                else
+                  for (final release in _releases)
+                    ListTile(
+                      leading: const BzSvgIcon(name: 'disc-3'),
+                      title: Text(release['title'] as String? ?? 'Untitled release'),
+                      subtitle: Text('\${release['trackCount'] ?? 0} tracks · \${release['status'] ?? 'submitted'}'),
+                    ),
                 const SizedBox(height: 24),
                 Text('TOP TRACKS', style: theme.textTheme.labelLarge),
                 const SizedBox(height: 8),
