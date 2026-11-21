@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
+import { AudiusAdapter } from './audius.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
 
 // Plan §7.5 — the registry owns provider identity, capability
@@ -11,9 +12,10 @@ import { ProviderAdapter } from './provider-adapter.interface';
 export class ProviderRegistry {
   private readonly adapters = new Map<string, ProviderAdapter>();
 
-  constructor(internal: InternalCatalogAdapter, youtubeMusic: YtMusicAdapter) {
+  constructor(internal: InternalCatalogAdapter, youtubeMusic: YtMusicAdapter, audius: AudiusAdapter) {
     this.register(internal);
     this.register(youtubeMusic);
+    this.register(audius);
   }
 
   register(adapter: ProviderAdapter) {
