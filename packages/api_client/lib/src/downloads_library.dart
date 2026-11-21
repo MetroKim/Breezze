@@ -112,8 +112,7 @@ class DownloadsLibrary {
         await lyricsFile.writeAsString(result.bestLrc);
       }
 
-      // 4. Ownership and licence metadata are stored beside the encrypted
-      // app-private asset. Downloads are listed only for their owner and
+      // 4. Ownership and licence metadata are stored beside the app-private asset. Downloads are listed only for their owner and
       // are blocked locally after an explicit rights end time.
       final metaFile = File('${dir.path}/meta.json');
       await metaFile.writeAsString(jsonEncode({
@@ -147,7 +146,9 @@ class DownloadsLibrary {
         final title = raw['title'] as String? ?? 'Unknown';
         final artist = raw['artist'] as String? ?? 'Unknown';
         final catalogTrackId = raw['catalogTrackId'] as String?;
-        if (catalogTrackId == null || catalogTrackId.isEmpty) continue;
+        final audioPath = '${entry.path}/audio.m4a';
+        if (catalogTrackId == null || catalogTrackId.isEmpty ||
+            !await File(audioPath).exists()) continue;
         final expiryRaw = raw['rightsExpiresAtUtc'] as String?;
         final expiry = expiryRaw == null ? null : DateTime.tryParse(expiryRaw);
         tracks.add(DownloadedTrack(
@@ -157,7 +158,7 @@ class DownloadsLibrary {
           rightsExpiresAtUtc: expiry?.toUtc(),
           title: title.isNotEmpty ? title : 'Unknown',
           artist: artist,
-          audioPath: '${entry.path}/audio.m4a',
+          audioPath: audioPath,
           coverPath: await File('${entry.path}/cover.jpg').exists()
               ? '${entry.path}/cover.jpg'
               : null,
