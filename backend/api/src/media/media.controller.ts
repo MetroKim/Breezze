@@ -6,7 +6,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsInt, IsString, Min } from 'class-validator';
+import { IsInt, IsString, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { MediaService } from './media.service';
@@ -16,10 +16,12 @@ export class RegisterUploadDto {
   submissionId!: string;
 
   @IsString()
+  @MaxLength(120)
   originalFilename!: string;
 
   @IsInt()
   @Min(1)
+  @Max(104857600)
   bytes!: number;
 }
 
