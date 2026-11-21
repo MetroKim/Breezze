@@ -497,31 +497,66 @@ class _LyricsView extends StatelessWidget {
   }
 }
 
-class _FavoriteButton extends ConsumerWidget {
+class _FavoriteButton extends ConsumerStatefulWidget {
   final TrackInfo track;
 
   const _FavoriteButton({required this.track});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FavoriteButton> createState() => _FavoriteButtonState();
+}
+
+class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
+  bool _isFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavorite();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FavoriteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track.id != widget.track.id) _loadFavorite();
+  }
+
+  Future<void> _loadFavorite() async {
+    final value = await ref.read(favoritesStoreProvider).isFavorite(widget.track.id);
+    if (mounted) setState(() => _isFavorite = value);
+  }
+
+  Future<void> _toggleFavorite() async {
+    final track = widget.track;
+    final added = await ref.read(favoritesStoreProvider).toggle(
+          FavoriteTrack(
+            id: track.id,
+            title: track.title ?? '',
+            artist: track.artist ?? '',
+            artworkUrl: track.artworkUrl,
+            durationMs: track.duration.inMilliseconds,
+          ),
+        );
+    if (!mounted) return;
+    setState(() => _isFavorite = added);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(added ? 'Added to favorites' : 'Removed from favorites'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return IconButton(
-      icon: BzSvgIcon(name: 'favorite'),
-      onPressed: () async {
-        final added = await ref.read(favoritesStoreProvider).toggle(
-              FavoriteTrack(
-                id: track.id,
-                title: track.title ?? '',
-                artist: track.artist ?? '',
-                artworkUrl: track.artworkUrl,
-                durationMs: track.duration.inMilliseconds,
-              ),
-            );
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content:
-                  Text(added ? 'Added to favorites' : 'Removed from favorites')));
-        }
-      },
+      tooltip: _isFavorite ? 'Remove favorite' : 'Add favorite',
+      icon: BzSvgIcon(
+        name: _isFavorite ? 'star-filled' : 'star',
+        color: _isFavorite ? theme.bzWarning : theme.bzText2,
+        size: 23,
+      ),
+      onPressed: _toggleFavorite,
     );
   }
 }
