@@ -5,8 +5,8 @@
 Breezze is an independent product. It is not affiliated with, endorsed by, or
 connected to YouTube, Google, Spotify, Apple, or any streaming platform.
 
-> This branch (`breezze`) is the active project. The `main` branch holds the
-> retired Kotlin Multiplatform prototype (Chordline) and is kept for history.
+> The `main` branch is the active Breezze project. The earlier Kotlin Multiplatform
+> Chordline prototype has been retired.
 
 ## Repository layout
 
