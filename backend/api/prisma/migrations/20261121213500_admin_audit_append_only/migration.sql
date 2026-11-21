@@ -11,6 +11,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS "AdminAuditEvent_append_only" ON "AdminAuditEvent";
 CREATE TRIGGER "AdminAuditEvent_append_only"
 BEFORE UPDATE OR DELETE ON "AdminAuditEvent"
 FOR EACH ROW
