@@ -23,7 +23,7 @@ void main() {
       ),
     );
 
-    expect(find.byType(BzSkeleton), findsNWidgets(3));
+    expect(find.byType(BzSkeleton), findsNWidgets(4));
     expect(tester.takeException(), isNull);
   });
 
