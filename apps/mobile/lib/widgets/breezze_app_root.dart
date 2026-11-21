@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,8 +9,8 @@ import '../../core/api/breezze_api.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
 import '../../core/database/migrate_to_drift.dart';
-import '../../features/player/player_controller.dart';
 import '../../core/database/outbox_sync_service.dart';
+import '../../features/player/player_controller.dart';
 import '../../features/authentication/auth_screen.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import 'bz_shell.dart';
@@ -71,6 +71,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
             'Authorization': 'Bearer ${api.accessToken}',
         },
       );
+      if (!mounted) return;
 
       if (res.statusCode == 404 || res.statusCode == 204) {
         // No saved preferences: first-time user.
