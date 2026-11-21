@@ -39,7 +39,11 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
 
   Future<void> resume(String trackId) async {
     final track = _tracks[trackId];
-    if (track != null) await download(track);
+    if (track != null) {
+      final next = Map<String, double>.of(state)..remove(trackId);
+      state = next;
+      await download(track);
+    }
   }
 
   Future<void> retry(String trackId) async {
