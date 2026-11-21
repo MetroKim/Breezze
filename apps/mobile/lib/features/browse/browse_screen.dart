@@ -100,22 +100,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
     if (selected.id.startsWith('bz:')) {
-      try {
-        final opened = await YoutubePlayerHandoff.openFromApi(
-          ref.read(authSessionProvider.notifier).api,
-          selected.id,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
         );
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open the official YouTube player.')),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
-          );
-        }
       }
       return;
     }
@@ -584,22 +572,10 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
     if (selected.id.startsWith('bz:')) {
-      try {
-        final opened = await YoutubePlayerHandoff.openFromApi(
-          ref.read(authSessionProvider.notifier).api,
-          selected.id,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
         );
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open the official YouTube player.')),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
-          );
-        }
       }
       return;
     }
