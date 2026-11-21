@@ -30,10 +30,15 @@ export class PlaybackResolveService {
       throw new NotAcceptableException('PREVIEW_ONLY');
     }
     const variant = decision.qualityRestriction ?? dto.requestedQuality ?? 'AAC_256';
+    const signed = this.signer.createPlaybackUrl(
+      dto.trackId,
+      variant,
+      decision.expiresAt,
+    );
     return {
       trackId: dto.trackId,
-      streamUrl: this.signer.signPlaybackUrl(dto.trackId, variant),
-      expiresAt: new Date(Date.now() + 6 * 3600 * 1000),
+      streamUrl: signed.url,
+      expiresAt: signed.expiresAt,
       codec: variant === 'LOSSLESS' || variant === 'HI_RES' ? 'flac' : 'aac',
       attribution: decision.attribution,
       previewOnly: decision.previewOnly,
