@@ -8,6 +8,10 @@ import { PlaybackResolveService } from './playback-resolve.service';
 describe('PlaybackResolveService', () => {
   const rights = { decide: jest.fn() };
   const signer = { createPlaybackUrl: jest.fn() };
+  const prisma = {
+    track: { findUnique: jest.fn() },
+    contentTakedownCase: { findFirst: jest.fn() },
+  };
   const providers = { get: jest.fn() };
   let service: PlaybackResolveService;
 
@@ -20,7 +24,7 @@ describe('PlaybackResolveService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new PlaybackResolveService(
-      {} as PrismaService,
+      prisma as unknown as PrismaService,
       rights as unknown as RightsDecisionService,
       signer as unknown as MediaSigner,
       providers as unknown as ProviderRegistry,
@@ -83,6 +87,12 @@ describe('PlaybackResolveService', () => {
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });
   it('resolves an enabled provider source without accepting a client-supplied URL', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
     const adapter = {
       capabilities: { playback: true },
       resolvePlayback: jest.fn().mockResolvedValue({
@@ -100,6 +110,7 @@ describe('PlaybackResolveService', () => {
     await expect(service.resolveProvider({
       providerId: 'audius',
       providerTrackId: 'track123',
+      canonicalTrackId: 'canonical-1',
       territory: 'TZ',
     })).resolves.toMatchObject({
       providerId: 'audius',
