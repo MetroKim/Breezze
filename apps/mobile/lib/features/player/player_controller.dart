@@ -107,6 +107,10 @@ class PlayerController extends Notifier<PlayerState> {
     _engine = null;
   }
 
+  bool _isMetadataOnlyProviderTrack(String id) =>
+      id.startsWith('bzv:') ||
+      (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
+
   // ----------------------------------------------------------------
   // Commands
   // ----------------------------------------------------------------
@@ -125,8 +129,8 @@ class PlayerController extends Notifier<PlayerState> {
   }) async {
     // YouTube Music search results are catalogue metadata, not native
     // playback grants. Never put them into Breezze's native queue.
-    if (((trackId.startsWith('bz:') || trackId.startsWith('bzv:')) && localFilePath == null) ||
-        queue.any((item) => (item.id.startsWith('bz:') || item.id.startsWith('bzv:')) && item.localFilePath == null)) {
+    if ((_isMetadataOnlyProviderTrack(trackId) && localFilePath == null) ||
+        queue.any((item) => _isMetadataOnlyProviderTrack(item.id) && item.localFilePath == null)) {
       return;
     }
     if (queue.isNotEmpty) {
@@ -281,7 +285,7 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Queue',
   }) {
-    if ((track.id.startsWith('bz:') || track.id.startsWith('bzv:')) && track.localFilePath == null) return;
+    if (_isMetadataOnlyProviderTrack(track.id) && track.localFilePath == null) return;
     _trackInfos[track.id] = track;
     if (state.currentTrack == null) {
       unawaited(playTrack(
@@ -363,7 +367,7 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> _resolveAndPlay(TrackInfo info) async {
     // Defensive check for restored or stale queue entries created before the
     // metadata-only provider capability was enforced.
-    if ((info.id.startsWith('bz:') || info.id.startsWith('bzv:')) && info.localFilePath == null) return;
+    if (_isMetadataOnlyProviderTrack(info.id) && info.localFilePath == null) return;
     final previousTrackId = state.currentTrack?.id;
     if (previousTrackId != null && previousTrackId != info.id) {
       _scrobbles.onStop(previousTrackId);
