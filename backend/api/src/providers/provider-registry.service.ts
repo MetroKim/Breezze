@@ -24,10 +24,28 @@ export class ProviderRegistry {
     return this.adapters.get(providerId);
   }
 
-  list(): { providerId: string; capabilities: ProviderAdapter['capabilities'] }[] {
-    return [...this.adapters.values()].map((a) => ({
-      providerId: a.providerId,
-      capabilities: a.capabilities,
-    }));
+  list() {
+    return [...this.adapters.values()]
+      .filter((adapter) => adapter.enabled !== false)
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+      .map((adapter) => ({
+        providerId: adapter.providerId,
+        displayName: adapter.displayName ?? adapter.providerId,
+        adapterVersion: adapter.adapterVersion ?? 'unknown',
+        priority: adapter.priority ?? 0,
+        enabled: adapter.enabled !== false,
+        capabilities: adapter.capabilities,
+      }));
+  }
+
+  /** Only providers explicitly enabled for playback may enter the resolver. */
+  getPlaybackCandidates(): ProviderAdapter[] {
+    return [...this.adapters.values()]
+      .filter((adapter) =>
+        adapter.enabled !== false &&
+        adapter.capabilities.playback === true &&
+        typeof adapter.resolvePlayback === 'function',
+      )
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   }
 }
