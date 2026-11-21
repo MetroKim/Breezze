@@ -69,7 +69,7 @@ export class DownloadsService {
       where: { userId, trackId, status: 'active' },
       select: { id: true },
     });
-    if (!existing) throw new NotFoundException('DOWNLOAD_NOT_FOUND');
+    if (!existing) return { allowed: false, reason: 'DOWNLOAD_NOT_FOUND' };
 
     const decision = await this.rights.decide({
       userId, trackId, action: 'download', territory,
@@ -98,7 +98,7 @@ export class DownloadsService {
 
   async list(userId: string) {
     return this.prisma.downloadRecord.findMany({
-      where: { userId },
+      where: { userId, status: 'active' },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
