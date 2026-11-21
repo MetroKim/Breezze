@@ -17,6 +17,28 @@ export class DiscoveryController {
     catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
   }
 
+  @Get('videos')
+  async musicVideos(@Query('q') query = '') {
+    try { return await this.discovery.musicVideos(query); }
+    catch (error) {
+      if (error instanceof Error && error.message.endsWith('_NOT_CONFIGURED')) {
+        throw new ServiceUnavailableException({ code: 'PROVIDER_NOT_CONFIGURED', provider: 'YouTube Data API' });
+      }
+      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'YouTube Data API' });
+    }
+  }
+
+  @Get('concerts')
+  async concerts(@Query('country') country = 'TZ', @Query('city') city?: string) {
+    try { return await this.discovery.concerts(country, city); }
+    catch (error) {
+      if (error instanceof Error && error.message.endsWith('_NOT_CONFIGURED')) {
+        throw new ServiceUnavailableException({ code: 'PROVIDER_NOT_CONFIGURED', provider: 'JamBase Data' });
+      }
+      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'JamBase Data' });
+    }
+  }
+
   @Get('tracks/search')
   async searchTracks(@Query('q') query = '') {
     try { return await this.discovery.searchTracks(query); }
