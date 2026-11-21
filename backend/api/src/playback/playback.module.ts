@@ -17,5 +17,6 @@ import { MediaSignerFactory } from './media-signer.factory';
       inject: [MediaSignerFactory],
     },
   ],
+  exports: [MediaSigner],
 })
 export class PlaybackModule {}
