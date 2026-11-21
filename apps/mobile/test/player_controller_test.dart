@@ -32,11 +32,14 @@ class _FakeEngine implements AudioEngineAdapter {
       StreamController<PlaybackState>.broadcast();
   final List<String> prepared = [];
   int playCount = 0;
+  bool failPrepare = false;
+  bool failPlay = false;
   Completer<void>? firstPrepare;
 
   @override
   Future<void> prepare(PlayableSource source) async {
     prepared.add(source.trackId);
+    if (failPrepare) throw StateError('prepare failed');
     if (prepared.length == 1 && firstPrepare != null) {
       await firstPrepare!.future;
     }
@@ -44,6 +47,7 @@ class _FakeEngine implements AudioEngineAdapter {
 
   @override
   Future<void> play() async {
+    if (failPlay) throw StateError('play failed');
     playCount++;
     states.add(PlaybackState.playing);
   }
@@ -156,4 +160,45 @@ void main() {
         PlaybackState.failed);
     expect(engine.prepared, isEmpty);
   });
+
+  test('stop invalidates an in-flight resolver and clears the player', () async {
+    final player = container.read(playerControllerProvider.notifier);
+    final request = player.playTrack(trackId: 'track-a');
+
+    await player.stop();
+    resolver.complete('track-a');
+    await request;
+
+    final state = container.read(playerControllerProvider);
+    expect(state.playbackState, PlaybackState.idle);
+    expect(state.currentTrack, isNull);
+    expect(engine.prepared, isEmpty);
+  });
+
+  test('engine prepare failure is surfaced as failed playback', () async {
+    engine.failPrepare = true;
+    final player = container.read(playerControllerProvider.notifier);
+    final request = player.playTrack(trackId: 'track-a');
+
+    resolver.complete('track-a');
+    await request;
+
+    expect(container.read(playerControllerProvider).playbackState,
+        PlaybackState.failed);
+    expect(engine.playCount, 0);
+  });
+
+  test('engine play failure is surfaced after play is requested', () async {
+    engine.failPlay = true;
+    final player = container.read(playerControllerProvider.notifier);
+    final request = player.playTrack(trackId: 'track-a');
+
+    resolver.complete('track-a');
+    await request;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(playerControllerProvider).playbackState,
+        PlaybackState.failed);
+  });
+
 }
