@@ -42,9 +42,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _loadHistory() async {
-    final history = await _history.load();
-    if (!mounted) return;
-    setState(() => _recentSearches = history);
+    try {
+      final history = await _history.load();
+      if (!mounted) return;
+      setState(() => _recentSearches = history);
+    } catch (_) {
+      // Search must remain usable when local history storage is unavailable.
+    }
   }
 
   Future<void> _search(String query) async {
@@ -58,12 +62,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       _error = null;
     });
 
+    // Search history is best-effort local UI state. A disk failure must not
+    // prevent the actual catalogue search or masquerade as a provider outage.
     try {
       final history = await _history.add(normalized);
       if (mounted && generation == _searchGeneration) {
         setState(() => _recentSearches = history);
       }
+    } catch (_) {
+      // Continue with the music-source request even if persistence fails.
+    }
 
+    try {
       final op = await ref.read(youtubeSourceProvider).search(normalized);
       if (!mounted || generation != _searchGeneration) return;
 
