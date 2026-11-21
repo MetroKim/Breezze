@@ -114,5 +114,12 @@ class BzBreakpoints {
   static const double wide = 1600;
   static const double contentMaxWidth = 1440;
 
+  /// Bottom clearance reserved for the persistent mini-player/navigation.
+  /// Desktop places playback in the shell footer, so content needs less room.
+  static double bottomClearance(
+    BuildContext context, {
+    double compact = 180,
+  }) => MediaQuery.sizeOf(context).width >= medium ? 24 : compact;
+
   const BzBreakpoints._();
 }

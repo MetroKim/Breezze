@@ -580,7 +580,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   Widget _buildRecentSearches(ThemeData theme) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 180),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, BzBreakpoints.bottomClearance(context, compact: 180)),
       children: [
         if (_recentSearches.isNotEmpty) ...[
           Row(

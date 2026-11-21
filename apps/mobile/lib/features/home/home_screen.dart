@@ -120,7 +120,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 220),
+        padding: EdgeInsets.fromLTRB(16, 24, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
         children: [
           Row(
             children: [

@@ -203,7 +203,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                             onRetry: () => _loadGenre(_selectedGenre),
                           )
                         : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(0, 8, 0, 220),
+                            padding: EdgeInsets.fromLTRB(0, 8, 0, BzBreakpoints.bottomClearance(context, compact: 220)),
                             itemCount: _tracks.length,
                             itemBuilder: (context, index) {
                               final track = _tracks[index];

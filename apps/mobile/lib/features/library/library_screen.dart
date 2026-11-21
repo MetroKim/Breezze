@@ -325,7 +325,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 150),
+      padding: EdgeInsets.fromLTRB(8, 4, 8, BzBreakpoints.bottomClearance(context, compact: 150)),
       itemCount: _playlists.length,
       itemBuilder: (context, index) {
         final playlist = _playlists[index];
@@ -449,7 +449,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         ),
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 150),
+            padding: EdgeInsets.fromLTRB(8, 0, 8, BzBreakpoints.bottomClearance(context, compact: 150)),
             itemCount: _favorites.length,
             itemBuilder: (context, i) {
               final fav = _favorites[i];

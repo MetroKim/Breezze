@@ -256,7 +256,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                     itemBuilder: (_, __) => const BzSkeletonTrackRow(),
                   )
                 : ListView(
-                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 220),
+                    padding: EdgeInsets.fromLTRB(0, 8, 0, BzBreakpoints.bottomClearance(context, compact: 220)),
                     children: [
                       // In-progress section (live)
                       for (final entry in inProgress)
