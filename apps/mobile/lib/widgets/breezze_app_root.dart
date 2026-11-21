@@ -41,6 +41,9 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
     _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
     unawaited(migrateJsonStoresToDrift(_container!));
     ref.listenManual(authSessionProvider, (prev, next) {
+      if (prev is AuthSignedIn && next is AuthSignedOut) {
+        unawaited(ref.read(playerControllerProvider.notifier).stop());
+      }
       if (next is AuthSignedIn && prev is! AuthSignedIn) {
         // Replay offline ops now that a session exists.
         ref.read(outboxSyncProvider).drainIfSignedIn();
