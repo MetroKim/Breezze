@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/api/breezze_api.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -45,7 +46,32 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       root: dir,
       lyrics: ref.read(lyricsProvider),
     );
-    final tracks = await library.list(ownerId: auth.userId);
+    var tracks = await library.list(ownerId: auth.userId);
+
+    // Whenever the account is online, ask the backend to re-check takedowns,
+    // territory and current download rights before extending each local lease.
+    final api = ref.read(authSessionProvider.notifier).api;
+    if (api.accessToken != null) {
+      for (final track in tracks) {
+        try {
+          final lease = await api.revalidateOfflineLease(
+            trackId: track.catalogTrackId,
+            territory: ref.read(outboxTerritoryProvider),
+          );
+          if (lease['allowed'] != true) {
+            await library.remove(track.trackId);
+            continue;
+          }
+          final rawExpiry = lease['offlineLeaseExpiresAt'] as String?;
+          final expiry = rawExpiry == null ? null : DateTime.tryParse(rawExpiry);
+          if (rawExpiry != null && expiry == null) continue;
+          await library.updateOfflineLease(track.trackId, expiry);
+        } catch (_) {
+          // A transient network failure does not erase a still-valid offline lease.
+        }
+      }
+      tracks = await library.list(ownerId: auth.userId);
+    }
     if (!mounted) return;
     final latestAuth = ref.read(authSessionProvider);
     if (latestAuth is! AuthSignedIn || latestAuth.userId != auth.userId) {
