@@ -14,6 +14,8 @@ import {
   generateTotpSecret,
   totpProvisioningUri,
   getVerifiedTotpCounter,
+  generateRecoveryCodes,
+  hashRecoveryCode,
 } from './totp';
 
 export interface AuthResult {
@@ -192,6 +194,7 @@ export class AuthService {
     const secret = decryptTotpSecret(user.mfaPendingSecretCiphertext);
     const counter = getVerifiedTotpCounter(secret, code);
     if (counter === null) throw new UnauthorizedException('MFA_CODE_INVALID');
+    const recoveryCodes = generateRecoveryCodes();
 
     await this.prisma.$transaction(async (tx) => {
       const accepted = await tx.user.updateMany({
@@ -207,6 +210,9 @@ export class AuthService {
           mfaPendingSecretCiphertext: null,
         },
       });
+      await tx.mfaRecoveryCode.createMany({
+        data: recoveryCodes.map((codeHash) => ({ userId, codeHash: hashRecoveryCode(codeHash) })),
+      });
       const verified = await tx.refreshToken.updateMany({
         where: { userId, familyId: sessionId, revokedAt: null, expiresAt: { gt: new Date() } },
         data: { mfaVerified: true },
@@ -219,7 +225,7 @@ export class AuthService {
             action: 'admin.mfa.enabled',
             targetType: 'user',
             targetId: userId,
-            metadata: { method: 'totp' },
+            metadata: { method },
           },
         });
       }
@@ -229,7 +235,7 @@ export class AuthService {
       { sub: user.id, email: user.email, sid: sessionId, mfaVerified: true },
       { expiresIn: '15m' },
     );
-    return { verified: true, accessToken };
+    return { verified: true, accessToken, recoveryCodes };
   }
 
   async verifyMfa(userId: string, sessionId: string, code: string) {
@@ -242,14 +248,30 @@ export class AuthService {
       throw new UnauthorizedException('MFA_NOT_CONFIGURED');
     }
     const counter = getVerifiedTotpCounter(decryptTotpSecret(user.mfaSecretCiphertext), code);
-    if (counter === null) throw new UnauthorizedException('MFA_CODE_INVALID');
+    const method = counter === null ? 'recovery_code' : 'totp';
 
     await this.prisma.$transaction(async (tx) => {
-      const accepted = await tx.user.updateMany({
-        where: { id: userId, OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: BigInt(counter) } }] },
-        data: { mfaLastUsedStep: BigInt(counter) },
-      });
-      if (accepted.count === 0) throw new UnauthorizedException('MFA_CODE_REPLAYED');
+      if (counter !== null) {
+        const accepted = await tx.user.updateMany({
+          where: { id: userId, OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: BigInt(counter) } }] },
+          data: { mfaLastUsedStep: BigInt(counter) },
+        });
+        if (accepted.count === 0) throw new UnauthorizedException('MFA_CODE_REPLAYED');
+      } else {
+        if (!/^[A-Fa-f0-9]{4}(?:-?[A-Fa-f0-9]{4}){3}$/.test(code)) {
+          throw new UnauthorizedException('MFA_CODE_INVALID');
+        }
+        const recovery = await tx.mfaRecoveryCode.findFirst({
+          where: { userId, codeHash: hashRecoveryCode(code), consumedAt: null },
+          select: { id: true },
+        });
+        if (!recovery) throw new UnauthorizedException('MFA_CODE_INVALID');
+        const consumed = await tx.mfaRecoveryCode.updateMany({
+          where: { id: recovery.id, userId, consumedAt: null },
+          data: { consumedAt: new Date() },
+        });
+        if (consumed.count === 0) throw new UnauthorizedException('MFA_RECOVERY_CODE_USED');
+      }
       const updated = await tx.refreshToken.updateMany({
         where: { userId, familyId: sessionId, revokedAt: null, expiresAt: { gt: new Date() } },
         data: { mfaVerified: true },
