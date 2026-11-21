@@ -6,9 +6,24 @@ import {
   Patch,
   UseGuards,
 } from '@nestjs/common';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { UsersService } from './users.service';
+
+export class UpdateMeDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  displayName?: string;
+}
+
+export class DeleteAccountDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  password!: string;
+}
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -23,13 +38,13 @@ export class UsersController {
   @Patch('me')
   patchMe(
     @CurrentUser() userId: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: UpdateMeDto,
   ) {
     return this.users.update(userId, body);
   }
 
   @Delete('me')
-  deleteMe(@CurrentUser() userId: string) {
-    return this.users.delete(userId);
+  deleteMe(@CurrentUser() userId: string, @Body() dto: DeleteAccountDto) {
+    return this.users.delete(userId, dto.password);
   }
 }
