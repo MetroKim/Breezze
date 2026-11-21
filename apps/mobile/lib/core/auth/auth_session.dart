@@ -26,6 +26,34 @@ class AuthSignedIn extends AuthState {
   const AuthSignedIn({required this.userId, required this.email});
 }
 
+class AuthMfaRequired extends AuthState {
+  final String userId;
+  final String email;
+  final bool setupRequired;
+  final String? secret;
+  final String? provisioningUri;
+
+  const AuthMfaRequired({
+    required this.userId,
+    required this.email,
+    required this.setupRequired,
+    this.secret,
+    this.provisioningUri,
+  });
+}
+
+class AuthMfaRecoveryCodes extends AuthState {
+  final String userId;
+  final String email;
+  final List<String> codes;
+
+  const AuthMfaRecoveryCodes({
+    required this.userId,
+    required this.email,
+    required this.codes,
+  });
+}
+
 class AuthError extends AuthState {
   final String code;
   const AuthError(this.code);
@@ -101,7 +129,15 @@ class AuthSessionController extends Notifier<AuthState> {
   Future<void> _persistSession(AuthResponse response) async {
     await _secureStorage.write(key: _refreshTokenKey, value: response.refreshToken);
     _api.accessToken = response.accessToken;
-    state = AuthSignedIn(userId: response.userId, email: response.email);
+    if (response.mfaRequired) {
+      state = AuthMfaRequired(
+        userId: response.userId,
+        email: response.email,
+        setupRequired: response.mfaSetupRequired,
+      );
+    } else {
+      state = AuthSignedIn(userId: response.userId, email: response.email);
+    }
   }
 
   Future<void> register(
@@ -130,6 +166,58 @@ class AuthSessionController extends Notifier<AuthState> {
       state = AuthError(e.code);
     } catch (_) {
       state = const AuthError('NETWORK_ERROR');
+    }
+  }
+
+
+  Future<void> beginMfaSetup(String password) async {
+    final current = state;
+    if (current is! AuthMfaRequired || !current.setupRequired) return;
+    final result = await _api.beginMfaSetup(password);
+    state = AuthMfaRequired(
+      userId: current.userId,
+      email: current.email,
+      setupRequired: true,
+      secret: result['secret'] as String?,
+      provisioningUri: result['provisioningUri'] as String?,
+    );
+  }
+
+  Future<void> verifyMfaSetup(String code) async {
+    final current = state;
+    if (current is! AuthMfaRequired || !current.setupRequired) return;
+    final result = await _api.verifyMfaSetup(code);
+    final token = result['accessToken'];
+    if (token is! String || token.isEmpty) {
+      throw const BreezzeApiException(code: 'MFA_TOKEN_MISSING', message: 'MFA verification did not return a session token');
+    }
+    _api.accessToken = token;
+    final codes = (result['recoveryCodes'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    state = AuthMfaRecoveryCodes(
+      userId: current.userId,
+      email: current.email,
+      codes: codes,
+    );
+  }
+
+  Future<void> verifyMfa(String code) async {
+    final current = state;
+    if (current is! AuthMfaRequired || current.setupRequired) return;
+    final result = await _api.verifyMfa(code);
+    final token = result['accessToken'];
+    if (token is! String || token.isEmpty) {
+      throw const BreezzeApiException(code: 'MFA_TOKEN_MISSING', message: 'MFA verification did not return a session token');
+    }
+    _api.accessToken = token;
+    state = AuthSignedIn(userId: current.userId, email: current.email);
+  }
+
+  void completeMfaEnrollment() {
+    final current = state;
+    if (current is AuthMfaRecoveryCodes) {
+      state = AuthSignedIn(userId: current.userId, email: current.email);
     }
   }
 
