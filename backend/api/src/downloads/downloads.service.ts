@@ -22,8 +22,12 @@ export class DownloadsService {
       territory: dto.territory,
     });
 
-    if (!decision.allowed) {
-      return { allowed: false, reason: decision.reason, url: null };
+    if (!decision.allowed || decision.previewOnly) {
+      return {
+        allowed: false,
+        reason: decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason,
+        url: null,
+      };
     }
 
     const record = await this.prisma.downloadRecord.upsert({
