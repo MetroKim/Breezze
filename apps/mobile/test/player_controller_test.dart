@@ -34,6 +34,7 @@ class _FakeEngine implements AudioEngineAdapter {
   int playCount = 0;
   bool failPrepare = false;
   bool failPlay = false;
+  bool failSeek = false;
   Completer<void>? firstPrepare;
 
   @override
@@ -58,7 +59,9 @@ class _FakeEngine implements AudioEngineAdapter {
   }
 
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(Duration position) async {
+    if (failSeek) throw StateError('seek failed');
+  }
 
   @override
   Future<void> stop() async {}
@@ -186,6 +189,20 @@ void main() {
     expect(container.read(playerControllerProvider).playbackState,
         PlaybackState.failed);
     expect(engine.playCount, 0);
+  });
+
+  test('engine seek failure leaves the player in failed state', () async {
+    final player = container.read(playerControllerProvider.notifier);
+    final request = player.playTrack(trackId: 'track-a');
+
+    resolver.complete('track-a');
+    await request;
+    engine.failSeek = true;
+
+    await player.seekTo(const Duration(seconds: 20));
+
+    expect(container.read(playerControllerProvider).playbackState,
+        PlaybackState.failed);
   });
 
   test('engine play failure is surfaced after play is requested', () async {
