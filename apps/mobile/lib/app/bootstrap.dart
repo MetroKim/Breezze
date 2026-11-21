@@ -50,11 +50,11 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
   String get adapterVersion => '1.0.0';
 
   ProviderTrack _trackFromJson(Map value, {String providerId = 'youtube_music'}) {
-    final providerId = value['providerTrackId'] as String? ?? '';
+    final trackId = value['providerTrackId'] as String? ?? '';
     final duration = value['durationSec'];
     return ProviderTrack(
-      breezzeTrackId: 'bz:$providerId:${value['providerTrackId'] as String? ?? ''}',
-      providerTrackId: providerId,
+      breezzeTrackId: 'bz:$providerId:$trackId',
+      providerTrackId: trackId,
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
       artworkUrl: value['artworkUrl'] as String?,
