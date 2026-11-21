@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../core/api/breezze_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
@@ -21,17 +25,77 @@ final downloadProgressProvider =
 /// Provider metadata/search adapters are never allowed to grant download
 /// rights or expose a raw stream URL.
 class DownloadsController extends StateNotifier<Map<String, double>> {
-  DownloadsController(this.ref) : super({});
+  DownloadsController(this.ref) : super({}) { _restoreJobs(); }
 
   final Ref ref;
   final Map<String, DownloadCancellation> _cancellations = {};
   final Map<String, BzTrack> _tracks = {};
+
+  Future<File> _jobsFile() async {
+    final dir = await getApplicationSupportDirectory();
+    final folder = Directory('${dir.path}/Breezze/Downloads');
+    await folder.create(recursive: true);
+    return File('${folder.path}/jobs.json');
+  }
+
+  Future<void> _persistJobs() async {
+    try {
+      final file = await _jobsFile();
+      final records = <String, Object?>{};
+      final statuses = ref.read(downloadJobStatusProvider);
+      for (final entry in _tracks.entries) {
+        final track = entry.value;
+        records[entry.key] = {
+          'title': track.title,
+          'artist': track.artist,
+          'album': track.album,
+          'artworkUrl': track.artworkUrl,
+          'durationMs': track.duration.inMilliseconds,
+          'explicit': track.explicit,
+          'status': statuses[entry.key] ?? 'queued',
+        };
+      }
+      final temp = File('${file.path}.tmp');
+      await temp.writeAsString(jsonEncode(records), flush: true);
+      if (await file.exists()) await file.delete();
+      await temp.rename(file.path);
+    } catch (_) {}
+  }
+
+  Future<void> _restoreJobs() async {
+    try {
+      final file = await _jobsFile();
+      if (!await file.exists()) return;
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map<String, dynamic>) return;
+      final statuses = <String, String>{};
+      for (final entry in decoded.entries) {
+        final raw = entry.value;
+        if (raw is! Map) continue;
+        final item = raw.cast<String, dynamic>();
+        final track = BzTrack(
+          id: entry.key,
+          title: item['title'] as String? ?? 'Unknown track',
+          artist: item['artist'] as String? ?? 'Unknown artist',
+          album: item['album'] as String?,
+          artworkUrl: item['artworkUrl'] as String?,
+          duration: Duration(milliseconds: (item['durationMs'] as num?)?.toInt() ?? 0),
+          explicit: item['explicit'] == true,
+        );
+        _tracks[entry.key] = track;
+        final saved = item['status'] as String? ?? 'failed';
+        statuses[entry.key] = saved == 'downloading' ? 'paused' : saved;
+      }
+      if (mounted) ref.read(downloadJobStatusProvider.notifier).state = statuses;
+    } catch (_) {}
+  }
 
   void _setStatus(String id, String status) {
     if (!mounted) return;
     final next = Map<String, String>.of(ref.read(downloadJobStatusProvider));
     next[id] = status;
     ref.read(downloadJobStatusProvider.notifier).state = next;
+    _persistJobs();
   }
 
   Future<void> pause(String trackId) async {
@@ -91,23 +155,26 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       }
 
       final api = ref.read(authSessionProvider.notifier).api;
-      if (api.accessToken == null) return;
+      if (api.accessToken == null) { _setStatus(track.id, 'failed'); return; }
 
       final catalogId = await _resolveCatalogId(api, track);
-      if (catalogId == null) return;
+      if (cancellation.isCancelled) return;
+      if (catalogId == null) { _setStatus(track.id, 'failed'); return; }
 
       final authorization = await api.authorizeDownload(
         trackId: catalogId,
         territory: ref.read(outboxTerritoryProvider),
       );
+      if (cancellation.isCancelled) return;
       if (authorization['allowed'] != true) {
+        _setStatus(track.id, 'failed');
         // ignore: avoid_print
         print('download_not_authorized: ${authorization['reason']}');
         return;
       }
 
       final downloadUrl = authorization['url'] as String?;
-      if (downloadUrl == null || downloadUrl.isEmpty) return;
+      if (downloadUrl == null || downloadUrl.isEmpty) { _setStatus(track.id, 'failed'); return; }
       // The server issues a bounded offline lease, capped by the actual rights end.
       // Keep the effective expiry in the local metadata so a device offline for
       // longer than the lease cannot continue playing indefinitely.
