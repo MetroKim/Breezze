@@ -106,7 +106,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
           if (_recentlyPlayed.isEmpty && _favorites.isEmpty)
             _FirstRunCard(
-              onSearch: () => ref.read(homeTabHintProvider.notifier).state = 1,
+              onSearch: () => ref.read(homeTabHintProvider.notifier).state = 4,
             ),
         ],
       ),
