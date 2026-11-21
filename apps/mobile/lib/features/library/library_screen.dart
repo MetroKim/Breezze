@@ -190,6 +190,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
+    ref.listen<int>(playlistRefreshSignalProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
     final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
