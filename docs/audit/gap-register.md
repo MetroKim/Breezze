@@ -166,7 +166,7 @@ statements above for the exact commit tested below.
 | Scrobble listening-time ticks and session cleanup | IMPLEMENTED IN CODE | Position stream ticks only while player is playing; stop/track-change/end/detach/dispose and playback failures remove pending sessions | Add deterministic controller integration tests for 30-second threshold and pause behavior |
 | Download account isolation | IMPLEMENTED + API-client tests passed | Per-user storage directories; owner ID persisted; owner-filtered library; legacy ownerless records hidden; library refreshes on auth changes and stale account results are discarded | Device-level account-switch-during-download tests |
 | Offline local-file playback | IMPLEMENTED IN CODE + mobile tests passed | Local `PlayableSource`, `setFilePath`, resolver bypass test | Real-device codec/container validation and corrupted-file recovery |
-| Offline licence expiry | IMPLEMENTED IN CODE + metadata tests passed | Rights end time persisted and checked before local playback | Define bounded offline licence leases and online takedown/revocation revalidation |
+| Offline licence expiry | BOUNDED LEASE + ONLINE REVALIDATION IMPLEMENTED IN CODE | Server issues a maximum 72-hour offline lease capped by the underlying rights end; mobile persists it, checks it before playback, and revalidates current territory/rights/takedowns when online. Revoked downloads are removed from the local library. | Run full CI, add device-level offline/online/revocation tests, and verify policy with rights holders |
 | Download storage path safety | IMPLEMENTED IN CODE | User IDs and track storage keys sanitized | Add adversarial path test cases |
 | Full CI | PASSED | Run 44910820541: Drift codegen, mobile/API-client/design-system/audio-contracts checks, Prisma generation/validation, backend typecheck/tests/build | Re-run after any subsequent code changes |
 
@@ -181,8 +181,20 @@ returns, with a policy for expired or revoked leases.
 
 ### Still not implemented
 
-- CDN/media delivery and end-to-end signature validation.
+- Cloudflare R2 deployment, custom-domain configuration and live end-to-end signature validation (code and CI checks are implemented; account provisioning is pending).
 - Radio streaming sessions and player-engine support.
 - Prisma migration baseline/history against the deployed database.
 - Artist, album and playlist detail routes and catalog-backed editorial feeds.
 - Full tenant-isolation integration tests, accessibility/responsive audits and real-device audio/download validation.
+
+
+## Cloudflare R2 + offline licence implementation update — 2026-11-21
+
+- Added `infra/cloudflare/media-worker`: HMAC verification, expiring signed playback URLs, byte-range requests, and size-bound signed uploads to a private R2 bucket.
+- Added NestJS signed upload registration and owner-scoped upload completion. Uploads are queued only after completion.
+- Added an R2-backed media worker path: quarantine object download, FFmpeg validation/transcoding, and processed HLS output upload to R2 staging keys.
+- Added Cloudflare Worker TypeScript checking to the Breezze quality workflow.
+- Added a maximum 72-hour offline lease, capped by catalogue rights expiry, plus an authenticated online revalidation endpoint. Rights denial/takedown revokes the server download record and the mobile library removes the local asset on successful revalidation.
+- Important: processed outputs are staged under `processed/{jobId}`. A moderated publication step must map them to canonical `audio/{trackId}/{variant}` objects before playback URLs can resolve. No public R2 access is enabled.
+
+Operator setup remains: create the bucket and scoped R2 token; deploy the Worker; attach a custom domain; set the same `MEDIA_SIGNING_KEY` on Worker and API; configure the backend media worker's R2 credentials; and run live upload/range/playback tests. These account-side actions have not been performed by repository commits.
