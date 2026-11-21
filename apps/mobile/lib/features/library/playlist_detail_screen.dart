@@ -39,9 +39,9 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     final playlists = await _store.load(widget.ownerId);
     if (!mounted) return;
     setState(() {
-      _playlist = playlists
-          .where((item) => item.id == widget.playlistId)
-          .firstOrNull;
+      final matches =
+          playlists.where((item) => item.id == widget.playlistId).toList();
+      _playlist = matches.isEmpty ? null : matches.first;
       _loading = false;
     });
   }
@@ -150,10 +150,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       );
     }
 
-    final artwork = playlist.tracks
+    final artworks = playlist.tracks
         .where((item) => item.artworkUrl != null)
         .map((item) => item.artworkUrl!)
-        .firstOrNull;
+        .toList();
+    final artwork = artworks.isEmpty ? null : artworks.first;
 
     return Scaffold(
       backgroundColor: theme.bzBackground,
