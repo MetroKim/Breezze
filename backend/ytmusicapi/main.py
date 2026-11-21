@@ -75,6 +75,76 @@ def search(
         PROVIDER_SLOTS.release()
 
 
+
+def normalize_video(item: dict[str, Any]) -> dict[str, Any] | None:
+    video_id = item.get("videoId")
+    title = item.get("title")
+    video_type = item.get("videoType")
+    # YouTube Music distinguishes original music videos from user uploads.
+    # Do not present UGC or audio-with-static-artwork as an official video.
+    if video_type != "MUSIC_VIDEO_TYPE_OMV":
+        return None
+    if not isinstance(video_id, str) or not VIDEO_ID.fullmatch(video_id):
+        return None
+    if not isinstance(title, str) or not title.strip():
+        return None
+
+    artists = item.get("artists") or []
+    artist_names = [
+        artist.get("name", "").strip()
+        for artist in artists
+        if isinstance(artist, dict) and isinstance(artist.get("name"), str)
+    ]
+    thumbnails = item.get("thumbnails") or []
+    artwork_url = None
+    if thumbnails and isinstance(thumbnails[-1], dict):
+        candidate = thumbnails[-1].get("url")
+        if isinstance(candidate, str) and candidate.startswith("https://"):
+            artwork_url = candidate
+
+    raw_duration = item.get("duration_seconds")
+    try:
+        duration = int(raw_duration) if raw_duration is not None else None
+    except (TypeError, ValueError):
+        duration = None
+
+    return {
+        "videoId": video_id,
+        "title": title.strip(),
+        "artist": ", ".join(artist_names) or "Unknown artist",
+        "artworkUrl": artwork_url,
+        "durationSec": duration,
+        "videoType": "MUSIC_VIDEO_TYPE_OMV",
+        "classification": "youtube_music_original_music_video",
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+    }
+
+@app.get("/videos")
+def search_videos(
+    q: str = Query(min_length=2, max_length=120),
+    limit: int = Query(default=20, ge=1, le=25),
+) -> dict[str, Any]:
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail="YTMUSIC_CAPACITY_EXCEEDED",
+            headers={"Retry-After": "2"},
+        )
+    try:
+        results = YTMusic().search(q.strip(), filter="videos", limit=limit)
+        videos = [video for item in results if (video := normalize_video(item))]
+        return {
+            "source": "YouTube Music via ytmusicapi",
+            "classification": "Only MUSIC_VIDEO_TYPE_OMV results are returned",
+            "videos": videos,
+        }
+    except Exception as exc:
+        # Do not leak provider request headers, cookies, or upstream payloads.
+        raise HTTPException(status_code=502, detail="YTMUSIC_VIDEO_SEARCH_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()
+
+
 @app.get("/tracks/{video_id}")
 def get_track(video_id: str) -> dict[str, Any]:
     if not VIDEO_ID.fullmatch(video_id):
