@@ -1,4 +1,4 @@
-import 'package:audio_service/audio_service.dart';
+import 'package:audio_service/audio_service.dart' as audio;
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,11 +10,11 @@ import 'background_audio.dart';
 /// Lock-screen/notification media controls dispatch commands straight to
 /// the global PlayerController — the controller stays the single
 /// playback authority (§53.1); this handler is only the OS surface.
-class AudioServiceBridge extends BaseAudioHandler
+class audio.AudioServiceBridge extends audio.BaseAudioHandler
     implements BackgroundAudioBridge {
   final ProviderContainer container;
 
-  AudioServiceBridge(this.container);
+  audio.AudioServiceBridge(this.container);
 
   PlayerController get _player =>
       container.read(playerControllerProvider.notifier);
@@ -49,28 +49,28 @@ class AudioServiceBridge extends BaseAudioHandler
   }) async {
     final state = container.read(playerControllerProvider);
 
-    playbackState.add(PlaybackState(
+    playbackState.add(audio.PlaybackState(
       controls: [
-        MediaControl.skipToPrevious,
-        playing ? MediaControl.pause : MediaControl.play,
-        MediaControl.skipToNext,
+        audio.MediaControl.skipToPrevious,
+        playing ? audio.MediaControl.pause : audio.MediaControl.play,
+        audio.MediaControl.skipToNext,
       ],
       systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
+        audio.MediaAction.seek,
+        audio.MediaAction.seekForward,
+        audio.MediaAction.seekBackward,
       },
       androidCompactActionIndices: const [0, 1, 2],
       processingState: playing
-          ? AudioProcessingState.ready
-          : AudioProcessingState.idle,
+          ? audio.AudioProcessingState.ready
+          : audio.AudioProcessingState.idle,
       playing: playing,
       updatePosition: state.position,
       bufferedPosition: state.position,
       speed: 1.0,
     ));
 
-    mediaItem.add(MediaItem(
+    mediaItem.add(audio.MediaItem(
       id: state.currentTrack?.id ?? 'current',
       title: title,
       artist: artist,
@@ -85,11 +85,11 @@ class AudioServiceBridge extends BaseAudioHandler
 
 /// Starts audio_service with our handler; call once from bootstrap
 /// before the first frame.
-Future<AudioServiceBridge> startBackgroundAudio(
+Future<audio.AudioServiceBridge> startBackgroundAudio(
     ProviderContainer container) async {
-  final bridge = await AudioService.init(
-    builder: () => AudioServiceBridge(container),
-    config: const AudioServiceConfig(
+  final bridge = await audio.AudioService.init(
+    builder: () => audio.AudioServiceBridge(container),
+    config: const audio.audio.AudioServiceConfig(
       androidNotificationChannelName: 'Breezze playback',
       androidNotificationChannelDescription:
           'Playback controls for Breezze',
@@ -97,5 +97,5 @@ Future<AudioServiceBridge> startBackgroundAudio(
       androidStopForegroundOnPause: true,
     ),
   );
-  return bridge as AudioServiceBridge;
+  return bridge as audio.AudioServiceBridge;
 }
