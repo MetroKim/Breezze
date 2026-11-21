@@ -129,6 +129,12 @@ class BreezzeApi {
   Future<Map<String, dynamic>> discoveryNewReleases({String country = 'us'}) =>
       _get('/discovery/releases/albums?country=${Uri.encodeQueryComponent(country)}');
 
+  Future<Map<String, dynamic>> discoveryMusicVideos({String query = 'official music video'}) =>
+      _get('/discovery/videos?q=${Uri.encodeQueryComponent(query)}');
+
+  Future<Map<String, dynamic>> discoveryConcerts({String country = 'TZ', String? city}) =>
+      _get('/discovery/concerts?country=${Uri.encodeQueryComponent(country)}${city == null || city.trim().isEmpty ? '' : '&city=${Uri.encodeQueryComponent(city)}'}');
+
   Future<Map<String, dynamic>> discoveryTrackSearch(String query) =>
       _get('/discovery/tracks/search?q=${Uri.encodeQueryComponent(query)}');
 
