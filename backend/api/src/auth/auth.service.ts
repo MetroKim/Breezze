@@ -225,7 +225,7 @@ export class AuthService {
             action: 'admin.mfa.enabled',
             targetType: 'user',
             targetId: userId,
-            metadata: { method },
+            metadata: { method: 'totp' },
           },
         });
       }
@@ -284,7 +284,7 @@ export class AuthService {
             action: 'admin.mfa.verified',
             targetType: 'user',
             targetId: userId,
-            metadata: { method: 'totp' },
+            metadata: { method },
           },
         });
       }
