@@ -45,7 +45,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           theme: bzLightTheme(),
-          home: const TrackDetailScreen(
+          home: TrackDetailScreen(
             track: BzTrack(
               id: 'bz:track-1',
               title: 'Search Result Song',
