@@ -109,3 +109,29 @@ Browse search results are provider search results for the selected genre. They a
 not presented as official charts, editorial playlists, or platform-curated
 rankings. Radio station cards show the backend's live flag but do not expose a
 play action until station playback is supported by the audio engine.
+
+
+## Engineering completion backlog — 2026-11-21
+
+The prioritized completion plan and critical defect register now live in
+`docs/ROADMAP_AND_BUG_BACKLOG.md`. It separates confirmed code defects from
+items that require migration/runtime verification and defines P0/P1/P2 work,
+regression coverage, exit gates and the recommended implementation order.
+
+**New release blockers identified during source inspection:**
+- ProviderContainer/audio-engine ownership currently occurs inside
+  `BreezzeShell.build()`; lifecycle ownership must be stabilized.
+- Playback resolver operations have no request generation/cancellation
+  guard, and the state machine does not accept a new start from several
+  active states.
+- Search history persistence errors are caught as if they were provider
+  network errors.
+- Radio is metadata/schedule UI only; stream playback is not implemented.
+- The inspected Prisma schema still contains
+  `@@unique([userId, trackId])` on `RecentlyPlayed`; reconcile it with
+  the migration history and intended repeated-play semantics before
+  changing the schema.
+
+Do not treat these findings as fixed. The Flutter/backend validation suite
+has not been run in this environment. See the backlog for exact tests and
+release acceptance criteria.
