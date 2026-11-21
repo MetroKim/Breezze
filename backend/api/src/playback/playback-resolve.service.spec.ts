@@ -8,6 +8,7 @@ import { PlaybackResolveService } from './playback-resolve.service';
 describe('PlaybackResolveService', () => {
   const rights = { decide: jest.fn() };
   const signer = { createPlaybackUrl: jest.fn() };
+  const providers = { get: jest.fn() };
   let service: PlaybackResolveService;
 
   const request = {
@@ -22,7 +23,7 @@ describe('PlaybackResolveService', () => {
       {} as PrismaService,
       rights as unknown as RightsDecisionService,
       signer as unknown as MediaSigner,
-      { get: jest.fn() } as unknown as ProviderRegistry,
+      providers as unknown as ProviderRegistry,
     );
   });
 
@@ -81,4 +82,31 @@ describe('PlaybackResolveService', () => {
     });
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });
+  it('resolves an enabled provider source without accepting a client-supplied URL', async () => {
+    const adapter = {
+      capabilities: { playback: true },
+      resolvePlayback: jest.fn().mockResolvedValue({
+        kind: 'ok',
+        value: {
+          url: 'https://api.audius.co/v1/tracks/track123/stream',
+          expiresAt: new Date(Date.now() + 600_000),
+          mimeType: 'audio/mpeg',
+        },
+        attribution: 'Audius public catalogue',
+      }),
+    };
+    providers.get.mockReturnValue(adapter);
+
+    await expect(service.resolveProvider({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      territory: 'TZ',
+    })).resolves.toMatchObject({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
+    });
+    expect(adapter.resolvePlayback).toHaveBeenCalled();
+  });
+
 });
