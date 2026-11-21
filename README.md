@@ -50,4 +50,10 @@ The API serves `http://localhost:3000/api/v1` (Swagger at `/api/docs`).
 - **Server-side authorization** for everything protected.
 - **Free** — no payments, no paywalls, no subscription tables.
 
+## Architecture documentation
+
+- [Integrated Design Engineering Architecture](docs/architecture/BREEZZE_INTEGRATED_DESIGN_ENGINEERING_ARCHITECTURE.md) — Flutter layers, Riverpod state, domain/data boundaries, screen-by-screen engineering, API contracts, playback, rights, testing and rollout order.
+- [Cloudflare-first infrastructure](infra/cloudflare/README.md) — Workers, private R2, CDN/cache, WAF, rate limiting, queues, Turnstile, security and deployment strategy.
+- [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md) — required screen hierarchy, section order, positions and interaction rules.
+
 See `docs/audit/gap-register.md` for what is implemented and what is not.
