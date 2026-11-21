@@ -132,7 +132,10 @@ class AuthSessionController extends Notifier<AuthState> {
   }
 
   Future<void> signOut() async {
-    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    String? refreshToken;
+    try {
+      refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    } catch (_) {}
     if (refreshToken != null) {
       try {
         await _api.logout(refreshToken);
@@ -141,7 +144,9 @@ class AuthSessionController extends Notifier<AuthState> {
       }
     }
     _api.accessToken = null;
-    await _secureStorage.delete(key: _refreshTokenKey);
+    try {
+      await _secureStorage.delete(key: _refreshTokenKey);
+    } catch (_) {}
     state = const AuthSignedOut();
   }
 }
