@@ -407,7 +407,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 trailing: IconButton(
                   tooltip: 'Remove from favorites',
                   icon: SvgPicture.asset(
-                    'assets/icons/star.svg',
+                    'assets/icons/star-filled.svg',
                     width: 20,
                     height: 20,
                     colorFilter: ColorFilter.mode(
