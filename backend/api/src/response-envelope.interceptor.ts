@@ -14,7 +14,7 @@ export class ResponseEnvelopeInterceptor implements NestInterceptor {
       map((data) => ({
         data,
         meta: {
-          request_id: req.requestId,
+          request_id: cacheableCatalogRead ? null : req.requestId,
           next_cursor: null,
         },
       })),
