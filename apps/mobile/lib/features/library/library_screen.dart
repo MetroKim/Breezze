@@ -48,15 +48,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Future<void> _refresh() async {
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final results = await Future.wait([
-      ref.read(favoritesStoreProvider).load(),
-      _playlistStore.load(ownerId),
-    ]);
+    final favorites = await ref.read(favoritesStoreProvider).load();
+    var playlists = await _playlistStore.load(ownerId);
+    if (auth is AuthSignedIn) {
+      try {
+        final remote = await ref.read(authSessionProvider.notifier).api.playlists();
+        await _playlistStore.mergeRemote(ownerId, remote);
+        playlists = await _playlistStore.load(ownerId);
+      } catch (_) {
+        // Local cache remains usable while offline; cloud changes sync next refresh.
+      }
+    }
     if (!mounted) return;
     setState(() {
       _ownerId = ownerId;
-      _favorites = results[0] as List<FavoriteTrack>;
-      _playlists = results[1] as List<UserPlaylist>;
+      _favorites = favorites;
+      _playlists = playlists;
       _loading = false;
     });
   }
