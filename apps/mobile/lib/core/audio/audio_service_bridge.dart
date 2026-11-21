@@ -22,10 +22,10 @@ class AudioServiceBridge extends BaseAudioHandler
   // ---- Lock-screen commands → PlayerController ---------------------
 
   @override
-  Future<void> play() => _player.togglePlayPause();
+  Future<void> play() => _player.resume();
 
   @override
-  Future<void> pause() => _player.togglePlayPause();
+  Future<void> pause() => _player.pause();
 
   @override
   Future<void> skipToNext() => _player.next();
