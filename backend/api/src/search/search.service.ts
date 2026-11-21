@@ -26,7 +26,7 @@ export class SearchService {
     // search. A provider's playback capability is deliberately irrelevant
     // here: metadata results must never be treated as playable queue items.
     const searchableProviders = this.providers.list()
-      .filter((provider) => provider.capabilities.search)
+      .filter((provider) => provider.capabilities.search && provider.providerId !== 'breezze_internal')
       .map((provider) => this.providers.get(provider.providerId))
       .filter((provider) => provider !== undefined);
 
