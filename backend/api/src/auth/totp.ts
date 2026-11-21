@@ -2,6 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   createHmac,
+  createHash,
   randomBytes,
   timingSafeEqual,
 } from 'node:crypto';
@@ -114,4 +115,17 @@ export function totpProvisioningUri(secret: string, email: string): string {
   const label = encodeURIComponent(`Breezze:${email}`);
   const issuer = encodeURIComponent('Breezze');
   return `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=${STEP_SECONDS}`;
+}
+
+export function generateRecoveryCodes(count = 10): string[] {
+  return Array.from({ length: count }, () => {
+    const raw = randomBytes(8).toString('hex').toUpperCase();
+    return raw.match(/.{1,4}/g)!.join('-');
+  });
+}
+
+export function hashRecoveryCode(code: string): string {
+  return createHash('sha256')
+    .update(code.replace(/-/g, '').trim().toUpperCase(), 'utf8')
+    .digest('hex');
 }
