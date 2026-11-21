@@ -49,6 +49,24 @@ void main() {
     expect(await store.load(), isEmpty);
   });
 
+  test('serializes concurrent adds without losing updates', () async {
+    await Future.wait([
+      for (var i = 0; i < 20; i++) store.add('query $i'),
+    ]);
+
+    final history = await store.load();
+    expect(history, hasLength(10));
+    expect(history.first, 'query 19');
+    expect(history.last, 'query 10');
+  });
+
+  test('trims whitespace and preserves Unicode search terms', () async {
+    await store.add('  Beyoncé  ');
+    await store.add('   ');
+
+    expect(await store.load(), ['Beyoncé']);
+  });
+
   test('ignores malformed history data', () async {
     final file = File('${directory.path}/history.json');
     await file.writeAsString('{not-json');
