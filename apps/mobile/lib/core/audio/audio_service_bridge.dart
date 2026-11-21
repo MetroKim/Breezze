@@ -10,11 +10,11 @@ import 'background_audio.dart';
 /// Lock-screen/notification media controls dispatch commands straight to
 /// the global PlayerController — the controller stays the single
 /// playback authority (§53.1); this handler is only the OS surface.
-class audio.AudioServiceBridge extends audio.BaseAudioHandler
+class AudioServiceBridge extends audio.BaseAudioHandler
     implements BackgroundAudioBridge {
   final ProviderContainer container;
 
-  audio.AudioServiceBridge(this.container);
+  AudioServiceBridge(this.container);
 
   PlayerController get _player =>
       container.read(playerControllerProvider.notifier);
@@ -85,11 +85,11 @@ class audio.AudioServiceBridge extends audio.BaseAudioHandler
 
 /// Starts audio_service with our handler; call once from bootstrap
 /// before the first frame.
-Future<audio.AudioServiceBridge> startBackgroundAudio(
+Future<AudioServiceBridge> startBackgroundAudio(
     ProviderContainer container) async {
   final bridge = await audio.AudioService.init(
-    builder: () => audio.AudioServiceBridge(container),
-    config: const audio.audio.AudioServiceConfig(
+    builder: () => AudioServiceBridge(container),
+    config: const audio.AudioServiceConfig(
       androidNotificationChannelName: 'Breezze playback',
       androidNotificationChannelDescription:
           'Playback controls for Breezze',
@@ -97,5 +97,5 @@ Future<audio.AudioServiceBridge> startBackgroundAudio(
       androidStopForegroundOnPause: true,
     ),
   );
-  return bridge as audio.AudioServiceBridge;
+  return bridge;
 }
