@@ -27,7 +27,7 @@
 - [x] Refresh-token rotation: consumed token row is revoked and a new token is created in the same family.
 - [x] Refresh-token storage: SHA-256 hashes are stored; migration hashes existing values in place.
 - [~] Refresh-token reuse: replay of a revoked token can revoke its family; unit regression tests cover replay and concurrent rotation, but DB-backed integration tests remain.
-- [~] Administrator MFA: TOTP is enforced for admin routes, secrets are AES-256-GCM encrypted, accepted time-steps are replay-protected, and ten one-time recovery codes are stored as hashes. Verification is Redis-rate-limited. Passkeys/WebAuthn, recovery-code regeneration, secure reset and delegated recovery controls remain.
+- [~] Administrator MFA: TOTP is enforced for admin routes, secrets are AES-256-GCM encrypted, accepted time-steps are replay-protected, and ten one-time recovery codes are stored as hashes. Password + fresh TOTP/recovery-code step-up can rotate the full recovery set; the action is audited and Redis-rate-limited. Passkeys/WebAuthn, secure reset and delegated recovery controls remain.
 - [~] Login protection: atomic Redis-backed per-IP quota plus hashed per-account-and-source-IP login quota are shared across API replicas; progressive backoff and CAPTCHA escalation remain.
 - [ ] Account recovery: single-use expiring links and generic responses that do not reveal whether an email exists.
 - [ ] Email verification: signed one-time verification before sensitive actions.
@@ -143,7 +143,7 @@
 ## 11. Logging, audit and detection
 - [~] API generates request IDs and returns X-Request-Id.
 - [~] pino-http dependency exists; verify JSON output and redaction of sensitive headers/body.
-- [~] Admin role changes, takedown resolutions and moderation report decisions now write actor/action/target/time/metadata audit events in the same database transaction; authenticated admins can inspect the newest 100 events. Login/MFA changes, exports and deletions still need coverage.
+- [~] Admin role changes, takedown resolutions, moderation report decisions and administrator MFA enrollment/verification/recovery-code rotation now write actor/action/target/time/metadata audit events in the same database transaction; authenticated admins can inspect the newest 100 events. Login changes, exports and deletions still need coverage.
 - [~] PostgreSQL migration installs a trigger that rejects UPDATE/DELETE on audit rows for ordinary runtime credentials; database owners/superusers can still disable triggers. Keep schema-owner credentials out of the API runtime and ship events to centralized tamper-resistant write-once storage.
 - [ ] Alerts for login spikes, 401/403 anomalies, unusual downloads, new admins, provider failures and cache-origin surges.
 - [ ] Legal retention/deletion schedule.
@@ -272,7 +272,7 @@ This checklist intentionally leaves operational controls unchecked until evidenc
 UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 ```
 
-- [ ] Require MFA for every administrator before public launch; MFA is not implemented by this change.
+- [x] Require TOTP MFA for every administrator before protected admin routes are accessible; setup and verification are implemented.
 - [ ] Add immutable audit events for role grants/revocations and all administrative actions.
 - [ ] Add integration tests proving regular users receive HTTP 403 on every admin/moderation route.
 
@@ -313,6 +313,7 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 - MFA verification endpoints have a stricter Redis-backed per-source limit (default five attempts per 15 minutes); tune via `MFA_ATTEMPT_RATE_LIMIT` and `MFA_ATTEMPT_RATE_WINDOW_MS`.
 - Accepted TOTP counters are stored atomically per account to prevent replay of a previously accepted time-step.
 - Ten one-time recovery codes are issued once at enrollment; only SHA-256 hashes are persisted, and successful use atomically consumes the code. Admin audit events record whether TOTP or a recovery code was used.
+- `POST /api/v1/auth/mfa/recovery-codes/regenerate` requires the current password, a fresh TOTP or unused recovery code, and an active MFA-verified session. It atomically consumes the step-up factor, invalidates all previous recovery codes, creates ten replacement hashes and writes an audit event. The replacement plaintext codes are returned once and must be stored offline.
 - Production API startup refuses to run without a valid 32-byte base64 MFA encryption key.
 - Configure `MFA_ENCRYPTION_KEY` before enabling MFA. Rotate it only through a planned re-encryption migration; changing it directly makes stored secrets undecryptable.
-- Administrator MFA enrollment and successful verification are added to the privileged audit trail. Ten one-time recovery codes are now generated at enrollment, stored only as SHA-256 hashes and returned once. Secure MFA reset, recovery-code regeneration, backup factor enrollment, email/security notifications and admin recovery procedures remain mandatory before broad production rollout.
+- Administrator MFA enrollment, successful verification and recovery-code regeneration are added to the privileged audit trail. Ten one-time recovery codes are generated at enrollment or regeneration, stored only as SHA-256 hashes and returned once. Secure MFA reset, backup factor enrollment, email/security notifications and delegated admin recovery procedures remain mandatory before broad production rollout.
