@@ -1,6 +1,7 @@
 import { ProviderRegistry } from './provider-registry.service';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
+import { AudiusAdapter } from './audius.adapter';
 
 describe('ProviderRegistry', () => {
   const internal = {
@@ -28,14 +29,22 @@ describe('ProviderRegistry', () => {
     resolvePlayback: jest.fn(),
   };
 
+  const audius = {
+    providerId: 'audius', displayName: 'Audius', adapterVersion: '1.0.0',
+    priority: 80, enabled: true,
+    capabilities: { search: true, metadata: true, availability: true, playback: true, download: false },
+    search: jest.fn(), getTrack: jest.fn(), getAvailability: jest.fn(), resolvePlayback: jest.fn(),
+  };
+
   const registry = () => new ProviderRegistry(
     internal as unknown as InternalCatalogAdapter,
     youtube as unknown as YtMusicAdapter,
+    audius as unknown as AudiusAdapter,
   );
 
   it('lists enabled providers in priority order with their declared capabilities', () => {
     expect(registry().list().map((provider) => provider.providerId))
-      .toEqual(['youtube_music', 'breezze_internal']);
+      .toEqual(['youtube_music', 'audius', 'breezze_internal']);
     expect(registry().list()[0].capabilities.playback).toBe(false);
   });
 
