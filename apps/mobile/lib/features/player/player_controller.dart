@@ -104,6 +104,7 @@ class PlayerController extends Notifier<PlayerState> {
     String? title,
     String? artist,
     String? artworkUrl,
+    String? localFilePath,
     Duration duration = Duration.zero,
     List<TrackInfo> queue = const [],
     int startIndex = 0,
@@ -144,6 +145,7 @@ class PlayerController extends Notifier<PlayerState> {
             title: title,
             artist: artist,
             artworkUrl: artworkUrl,
+            localFilePath: localFilePath,
             duration: duration,
           )
         : queue[startIndex.clamp(0, queue.length - 1)];
@@ -278,8 +280,14 @@ class PlayerController extends Notifier<PlayerState> {
     _machine.dispatch(StartRequested(info.id, requestId: requestId));
 
     try {
-      final source =
-          await ref.read(playbackResolverProvider).resolve(info);
+      final source = info.localFilePath != null
+          ? PlayableSource(
+              trackId: info.id,
+              streamUrl: info.localFilePath!,
+              expiresAtUtc: DateTime.utc(9999),
+              isLocal: true,
+            )
+          : await ref.read(playbackResolverProvider).resolve(info);
       if (!_isCurrentRequest(requestId)) return;
 
       if (source == null) {
@@ -369,6 +377,7 @@ class TrackInfo {
   final String? title;
   final String? artist;
   final String? artworkUrl;
+  final String? localFilePath;
   final Duration duration;
 
   const TrackInfo({
@@ -376,6 +385,7 @@ class TrackInfo {
     this.title,
     this.artist,
     this.artworkUrl,
+    this.localFilePath,
     this.duration = Duration.zero,
   });
 }
