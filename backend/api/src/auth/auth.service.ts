@@ -74,7 +74,7 @@ export class AuthService {
       });
     }
     const mfaSetupRequired = user.role === 'admin' && user.mfaEnabled !== true;
-    const mfaRequired = user.role === 'admin' && !mfaVerified;
+    const mfaRequired = user.role === 'admin' && (user.mfaEnabled !== true || !mfaVerified);
     return {
       accessToken,
       refreshToken,
