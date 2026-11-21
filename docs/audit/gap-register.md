@@ -93,3 +93,19 @@ npx prisma generate
 npm run typecheck
 npm test -- --runInBand
 ```
+
+### Additional navigation and discovery work — 2026-11-21
+
+| Requirement | Status | Evidence | Remaining work |
+|---|---|---|---|
+| Browse destination | UI + live genre search added — verification pending | `features/browse/browse_screen.dart` uses the existing keyless source adapter and global PlayerController | Add widget tests; add curated backend editorial/chart/genre feeds when available |
+| Genre discovery | UI + provider integration added — verification pending | Afrobeats, Bongo Flava, Amapiano, Gospel, Hip-Hop, R&B, Jazz and Electronic search categories | Add backend-owned genre taxonomy and browse analytics |
+| Radio station directory | API-connected UI added — verification pending | `features/radio/radio_screen.dart` reads the existing public `/radio/stations` endpoint | Add widget tests and real station artwork |
+| Radio program details | API-connected UI added — verification pending | Station detail reads `/radio/stations/:id` and renders returned programs | Add schedule timezone formatting and pagination |
+| Radio playback | NOT IMPLEMENTED | Current PlayerController resolves catalog track IDs, not radio station stream sessions | Add a separate authorized radio playback contract and engine session type |
+| Primary navigation | Browse and Radio added to IndexedStack shell | `widgets/bz_shell.dart` | Validate small-screen horizontal tab navigation and wide layouts |
+
+Browse search results are provider search results for the selected genre. They are
+not presented as official charts, editorial playlists, or platform-curated
+rankings. Radio station cards show the backend's live flag but do not expose a
+play action until station playback is supported by the audio engine.
