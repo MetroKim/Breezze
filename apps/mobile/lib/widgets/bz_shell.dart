@@ -232,20 +232,21 @@ class _TabBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(6),
         child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < _BzHomeState._tabs.length; i++)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: _Tab(
-                  label: _BzHomeState._tabs[i],
-                  active: i == index,
-                  onTap: () => onChanged(i),
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < _BzHomeState._tabs.length; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: _Tab(
+                    label: _BzHomeState._tabs[i],
+                    active: i == index,
+                    onTap: () => onChanged(i),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
