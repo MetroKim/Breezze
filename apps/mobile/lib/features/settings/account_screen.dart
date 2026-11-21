@@ -13,7 +13,6 @@ class AccountScreen extends ConsumerStatefulWidget {
 
 class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _name = TextEditingController();
-  final _password = TextEditingController();
   List<Map<String, dynamic>> _sessions = const [];
   bool _loading = true;
   bool _saving = false;
@@ -29,7 +28,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   void dispose() {
     _name.dispose();
-    _password.dispose();
     super.dispose();
   }
 
@@ -179,7 +177,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   for (final session in _sessions)
                     ListTile(
                       leading: const BzSvgIcon(name: 'smartphone'),
-                      title: Text('Session ${(session['id'] as String? ?? '').substring(0, (session['id'] as String? ?? '').length.clamp(0, 8))}'),
+                      title: Text('Session ${(session['id'] as String? ?? '').substring(0, (session['id'] as String? ?? '').length.clamp(0, 8).toInt())}'),
                       subtitle: Text('Created ${session['createdAt'] ?? 'Unknown'} · Expires ${session['expiresAt'] ?? 'Unknown'}'),
                       trailing: TextButton(
                         onPressed: _saving ? null : () => _revoke(session['id'] as String),
