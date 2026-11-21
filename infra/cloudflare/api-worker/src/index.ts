@@ -1,5 +1,6 @@
 export interface Env {
   API_ORIGIN: string;
+  EDGE_SHARED_SECRET: string;
 }
 
 const PUBLIC_CATALOG_PATH =
@@ -33,9 +34,11 @@ function buildCacheKey(request: Request, url: URL): Request {
   return new Request(key.toString(), { method: 'GET' });
 }
 
-function makeOriginRequest(url: string, request: Request): Request {
+function makeOriginRequest(url: string, request: Request, edgeSecret: string): Request {
   const headers = new Headers(request.headers);
   headers.delete('host');
+  headers.delete('x-breezze-edge-secret');
+  headers.set('x-breezze-edge-secret', edgeSecret);
   const init: RequestInit = {
     method: request.method,
     headers,
@@ -49,9 +52,21 @@ function makeOriginRequest(url: string, request: Request): Request {
 
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!env.API_ORIGIN) return jsonError(503, 'API_ORIGIN_NOT_CONFIGURED');
+  if (!env.EDGE_SHARED_SECRET || env.EDGE_SHARED_SECRET.length < 32) {
+    return jsonError(503, 'EDGE_SHARED_SECRET_NOT_CONFIGURED');
+  }
 
   const incoming = new URL(request.url);
-  const origin = new URL(env.API_ORIGIN);
+  let origin: URL;
+  try {
+    origin = new URL(env.API_ORIGIN);
+  } catch {
+    return jsonError(503, 'API_ORIGIN_INVALID');
+  }
+  if (origin.username || origin.password || origin.search || origin.hash
+    || (origin.pathname !== '/' && origin.pathname !== '')) {
+    return jsonError(503, 'API_ORIGIN_MUST_BE_ORIGIN_ONLY');
+  }
   const path = incoming.pathname;
   const target = new URL(path + incoming.search, origin);
 
@@ -70,11 +85,16 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return hit;
     }
 
-    const originRequest = makeOriginRequest(target.toString(), request);
-    const upstream = await fetch(originRequest);
+    const originRequest = makeOriginRequest(target.toString(), request, env.EDGE_SHARED_SECRET);
+    let upstream: Response;
+    try {
+      upstream = await fetch(originRequest);
+    } catch {
+      return jsonError(502, 'API_ORIGIN_UNAVAILABLE');
+    }
     const vary = (upstream.headers.get('vary') ?? '').toLowerCase();
     const unsafeVary = vary === '*' || vary.split(',').map((name) => name.trim())
-      .some((name) => name !== '' && !['accept-language', 'accept-encoding'].includes(name));
+      .some((name) => name !== '' && name !== 'accept-language');
     if (upstream.status !== 200
       || upstream.headers.has('set-cookie')
       || unsafeVary
@@ -87,6 +107,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const headers = new Headers(upstream.headers);
     headers.delete('set-cookie');
     headers.delete('x-request-id');
+    headers.delete('x-breezze-edge-secret');
     headers.set(
       'Cache-Control',
       `public, max-age=0, s-maxage=${EDGE_TTL_SECONDS}, stale-while-revalidate=${STALE_TTL_SECONDS}`,
@@ -101,9 +122,15 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     return response;
   }
 
-  const upstreamRequest = makeOriginRequest(target.toString(), request);
-  const upstream = await fetch(upstreamRequest);
+  const upstreamRequest = makeOriginRequest(target.toString(), request, env.EDGE_SHARED_SECRET);
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamRequest);
+  } catch {
+    return jsonError(502, 'API_ORIGIN_UNAVAILABLE');
+  }
   const response = new Response(upstream.body, upstream);
+  response.headers.delete('x-breezze-edge-secret');
   response.headers.set('X-Breezze-Edge-Cache', 'BYPASS');
   if (request.method !== 'GET' || request.headers.has('authorization') || request.headers.has('cookie')) {
     response.headers.set('Cache-Control', 'private, no-store');
