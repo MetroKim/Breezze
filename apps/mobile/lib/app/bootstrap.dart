@@ -35,9 +35,85 @@ class HttpLyrics implements LyricsHttp {
   }
 }
 
+/// Backend-backed YouTube Music metadata adapter. Search metadata comes
+/// from Breezze's ytmusicapi sidecar; playback remains rights-gated by the API.
+class BackendYoutubeSourceAdapter implements ProviderAdapter {
+  BackendYoutubeSourceAdapter(this._ref);
+
+  final Ref _ref;
+
+  @override
+  String get providerId => 'youtube_music';
+
+  @override
+  String get adapterVersion => '1.0.0';
+
+  @override
+  bool get supportsPlayback => false;
+
+  ProviderTrack _trackFromJson(Map value) {
+    final providerId = value['providerTrackId'] as String? ?? '';
+    final duration = value['durationSec'];
+    return ProviderTrack(
+      breezzeTrackId: 'bz:$providerId',
+      providerTrackId: providerId,
+      title: value['title'] as String? ?? '',
+      artist: value['artist'] as String? ?? 'Unknown artist',
+      artworkUrl: value['artworkUrl'] as String?,
+      duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+    );
+  }
+
+  @override
+  Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
+    try {
+      final data = await _ref.read(authSessionProvider.notifier).api.searchMusic(query);
+      final rawTracks = data['externalTracks'];
+      if (rawTracks is! List) return ProviderError('invalid_response');
+      final tracks = rawTracks
+          .whereType<Map>()
+          .map(_trackFromJson)
+          .where((track) => track.providerTrackId.isNotEmpty && track.title.isNotEmpty)
+          .toList();
+      if (tracks.isEmpty) return ProviderError('empty_result');
+      return ProviderOk(tracks);
+    } catch (_) {
+      return ProviderError('network_error');
+    }
+  }
+
+  @override
+  Future<ProviderOp<ProviderTrack>> getTrack(String providerTrackId) async {
+    try {
+      final data = await _ref.read(authSessionProvider.notifier).api
+          .getProviderTrack(providerId, providerTrackId);
+      final value = data['value'];
+      if (data['kind'] != 'ok' || value is! Map) {
+        return ProviderError('track_metadata_unavailable');
+      }
+      return ProviderOk(_trackFromJson(value));
+    } catch (_) {
+      return ProviderError('network_error');
+    }
+  }
+
+  @override
+  Future<ProviderOp<String>> resolvePlayback(
+    String providerTrackId,
+    ProviderUserContext userContext,
+  ) async =>
+      ProviderUnsupported('BACKEND_RIGHTS_CHECK_REQUIRED');
+
+  @override
+  Future<ProviderOp<String>> getAttributionRequirements(
+    String providerTrackId,
+  ) async =>
+      ProviderOk('YouTube Music metadata via ytmusicapi');
+}
+
 /// The app-wide metadata/search adapter; it is not a playback authority.
 final youtubeSourceProvider =
-    Provider<YoutubeSourceAdapter>((ref) => YoutubeSourceAdapter());
+    Provider<ProviderAdapter>((ref) => BackendYoutubeSourceAdapter(ref));
 
 /// The lyrics provider.
 final lyricsProvider =
@@ -106,7 +182,7 @@ class LiveResolver implements PlaybackResolver {
 
     final resolved = await api.resolveCatalogTrack(
       externalId: track.id,
-      source: 'youtube',
+      source: 'youtube_music',
       title: title,
       artistName: artist,
       durationSec: track.duration.inSeconds.clamp(1, 86400).toInt(),
