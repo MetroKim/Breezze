@@ -102,6 +102,61 @@ export class MediaService implements OnModuleInit {
     return { jobId, status: 'uploaded', queued: true };
   }
 
+
+  async retryFailedUpload(userId: string, jobId: string) {
+    const claimed = await this.prisma.mediaJob.updateMany({
+      where: { id: jobId, userId, status: 'failed' },
+      data: { status: 'uploaded' },
+    });
+    const job = await this.prisma.mediaJob.findFirst({ where: { id: jobId, userId } });
+    if (!job) throw new NotFoundException('UPLOAD_JOB_NOT_FOUND');
+
+    if (claimed.count === 0) {
+      if (['uploaded', 'validating', 'processing', 'processed'].includes(job.status)) {
+        return { jobId, status: job.status, queued: true };
+      }
+      throw new NotFoundException('UPLOAD_JOB_NOT_RETRYABLE');
+    }
+    if (!this.queue) throw new Error('MEDIA_QUEUE_UNAVAILABLE');
+
+    const queueJobId = `media_${job.id}`;
+    const existing = await this.queue.getJob(queueJobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'failed' || state === 'completed') {
+        await existing.remove();
+      } else {
+        return { jobId, status: 'uploaded', queued: true };
+      }
+    }
+
+    try {
+      await this.queue.add(
+        'pipeline',
+        {
+          jobId: job.id,
+          submissionId: job.submissionId,
+          inputPath: `quarantine/${userId}/${job.id}/${job.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)}`,
+        } satisfies MediaJobData,
+        {
+          jobId: queueJobId,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: 5_000,
+        },
+      );
+    } catch (error) {
+      await this.prisma.mediaJob.updateMany({
+        where: { id: job.id, userId, status: 'uploaded' },
+        data: { status: 'failed' },
+      });
+      throw error;
+    }
+
+    return { jobId, status: 'uploaded', queued: true };
+  }
+
   async listJobs(userId: string) {
     return this.prisma.mediaJob.findMany({
       where: { userId },
