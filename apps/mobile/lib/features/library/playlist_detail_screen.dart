@@ -3,6 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/playlist_store.dart';
+import '../../core/auth/auth_session.dart';
+import '../../core/audio/youtube_player_handoff.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -50,19 +52,35 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         for (final item in playlist.tracks) item.toTrackInfo(),
       ];
 
-  void _playAll(UserPlaylist playlist) {
+  Future<void> _playAll(UserPlaylist playlist) async {
     if (playlist.tracks.isEmpty) return;
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: playlist.tracks.first.id,
-          queue: _queue(playlist),
-          origin: 'playlist',
-          sourceContext: playlist.name,
-        );
+    await _playTrack(playlist, 0);
   }
 
-  void _playTrack(UserPlaylist playlist, int index) {
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: playlist.tracks[index].id,
+  Future<void> _playTrack(UserPlaylist playlist, int index) async {
+    final track = playlist.tracks[index];
+    if (track.id.startsWith('bz:')) {
+      try {
+        final opened = await YoutubePlayerHandoff.openFromApi(
+          ref.read(authSessionProvider.notifier).api,
+          track.id,
+        );
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open the official YouTube player.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
+          );
+        }
+      }
+      return;
+    }
+    await ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: track.id,
           queue: _queue(playlist),
           startIndex: index,
           origin: 'playlist',
