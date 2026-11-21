@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
+import '../../core/auth/auth_session.dart';
+import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -30,14 +32,55 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   Future<void> _refresh() async {
-    final dir = await downloadsDirectory();
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) {
+      if (!mounted) return;
+      setState(() {
+        _tracks = [];
+        _loading = false;
+      });
+      return;
+    }
+    final dir = await downloadsDirectory(userId: auth.userId);
     final library = DownloadsLibrary(
       root: dir,
-      source: ref.read(youtubeSourceProvider),
       lyrics: ref.read(lyricsProvider),
     );
-    final tracks = await library.list();
+    var tracks = await library.list(ownerId: auth.userId);
+
+    // Whenever the account is online, ask the backend to re-check takedowns,
+    // territory and current download rights before extending each local lease.
+    final api = ref.read(authSessionProvider.notifier).api;
+    if (api.accessToken != null) {
+      for (final track in tracks) {
+        try {
+          final lease = await api.revalidateOfflineLease(
+            trackId: track.catalogTrackId,
+            territory: ref.read(outboxTerritoryProvider),
+          );
+          if (lease['allowed'] != true) {
+            await library.remove(track.trackId);
+            continue;
+          }
+          final rawExpiry = lease['offlineLeaseExpiresAt'] as String?;
+          final expiry = rawExpiry == null ? null : DateTime.tryParse(rawExpiry);
+          if (rawExpiry != null && expiry == null) continue;
+          await library.updateOfflineLease(track.trackId, expiry);
+        } catch (_) {
+          // A transient network failure does not erase a still-valid offline lease.
+        }
+      }
+      tracks = await library.list(ownerId: auth.userId);
+    }
     if (!mounted) return;
+    final latestAuth = ref.read(authSessionProvider);
+    if (latestAuth is! AuthSignedIn || latestAuth.userId != auth.userId) {
+      setState(() {
+        _tracks = [];
+        _loading = false;
+      });
+      return;
+    }
     setState(() {
       _tracks = tracks;
       _loading = false;
@@ -45,20 +88,33 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   void _play(DownloadedTrack track) {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || auth.userId != track.ownerId) return;
+    final expiry = track.rightsExpiresAtUtc;
+    if (expiry != null && !expiry.isAfter(DateTime.now().toUtc())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This download has expired. Connect to the internet and download it again.'),
+        ),
+      );
+      return;
+    }
     ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: track.trackId,
+          trackId: track.catalogTrackId,
           title: track.title,
           artist: track.artist,
+          localFilePath: track.audioPath,
           origin: 'downloads',
           sourceContext: 'Downloads',
         );
   }
 
   Future<void> _remove(DownloadedTrack track) async {
-    final dir = await downloadsDirectory();
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || auth.userId != track.ownerId) return;
+    final dir = await downloadsDirectory(userId: auth.userId);
     await DownloadsLibrary(
       root: dir,
-      source: ref.read(youtubeSourceProvider),
       lyrics: ref.read(lyricsProvider),
     ).remove(track.trackId);
     _refresh();
@@ -66,6 +122,9 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      _refresh();
+    });
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
     final inProgress = progress.entries.toList();

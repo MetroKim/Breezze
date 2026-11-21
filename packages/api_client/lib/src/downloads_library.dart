@@ -1,8 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'bz_track.dart';
 import 'lyrics_provider.dart';
-import 'youtube_source_adapter.dart';
 
 /// Downloads library — offline tracks with lyrics and cover art stored
 /// alongside each track (§54.3).
@@ -14,16 +14,20 @@ import 'youtube_source_adapter.dart';
 ///   <downloadsDir>/<trackId>/meta.json
 class DownloadsLibrary {
   final Directory root;
-  final YoutubeSourceAdapter source;
   final LyricsProvider lyrics;
 
   DownloadsLibrary({
     required this.root,
-    required this.source,
     required this.lyrics,
   });
 
-  Directory _dirFor(String trackId) => Directory('${root.path}/$trackId');
+  Directory _dirFor(String trackId) {
+    final safeTrackId = trackId.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    if (safeTrackId.isEmpty || safeTrackId == '.' || safeTrackId == '..') {
+      throw ArgumentError.value(trackId, 'trackId', 'invalid storage key');
+    }
+    return Directory('${root.path}/$safeTrackId');
+  }
 
   /// Downloads audio + cover art + lyrics for one track.
   ///
@@ -31,29 +35,57 @@ class DownloadsLibrary {
   /// dominant cost); lyrics and art are near-instant.
   Future<bool> download(
     BzTrack track, {
+    required String downloadUrl,
+    required String ownerId,
+    required String catalogTrackId,
+    DateTime? rightsExpiresAtUtc,
     void Function(double progress)? onProgress,
   }) async {
     final dir = _dirFor(track.id);
-    final videoId =
-        track.id.startsWith('bz:') ? track.id.substring(3) : track.id;
-
     try {
       await dir.create(recursive: true);
 
-      // 1. Audio (with byte-accurate progress)
+      // 1. Fetch only the short-lived URL issued by the backend after its
+      // download-rights decision. Never extract media directly from a
+      // metadata/search provider in the client.
       final audioFile = File('${dir.path}/audio.m4a');
       if (!await audioFile.exists()) {
-        final sink = audioFile.openWrite();
+        final partialFile = File('${dir.path}/audio.part');
+        final client = HttpClient();
         try {
-          await for (final chunk in source.audioBytes(
-            videoId,
-            onProgress: onProgress,
-          )) {
-            sink.add(chunk);
+          final request = await client.getUrl(Uri.parse(downloadUrl));
+          final response = await request.close();
+          if (response.statusCode != HttpStatus.ok) {
+            throw HttpException(
+              'authorized_download_${response.statusCode}',
+              uri: Uri.parse(downloadUrl),
+            );
           }
-          await sink.flush();
+
+          final sink = partialFile.openWrite();
+          var received = 0;
+          try {
+            await for (final chunk in response) {
+              sink.add(chunk);
+              received += chunk.length;
+              if (response.contentLength > 0) {
+                onProgress?.call(
+                  (received / response.contentLength).clamp(0.0, 1.0),
+                );
+              }
+            }
+            await sink.flush();
+          } finally {
+            await sink.close();
+          }
+          await partialFile.rename(audioFile.path);
+        } catch (_) {
+          if (await partialFile.exists()) {
+            await partialFile.delete();
+          }
+          rethrow;
         } finally {
-          await sink.close();
+          client.close(force: true);
         }
       }
       onProgress?.call(1.0);
@@ -80,10 +112,16 @@ class DownloadsLibrary {
         await lyricsFile.writeAsString(result.bestLrc);
       }
 
-      // 4. Metadata
+      // 4. Ownership and licence metadata are stored beside the app-private asset. Downloads are listed only for their owner and
+      // are blocked locally after an explicit rights end time.
       final metaFile = File('${dir.path}/meta.json');
-      await metaFile.writeAsString(
-          '{"title":${_jsonEncode(track.title)},"artist":${_jsonEncode(track.artist)}}');
+      await metaFile.writeAsString(jsonEncode({
+        'title': track.title,
+        'artist': track.artist,
+        'ownerId': ownerId,
+        'catalogTrackId': catalogTrackId,
+        'rightsExpiresAtUtc': rightsExpiresAtUtc?.toUtc().toIso8601String(),
+      }));
 
       return true;
     } catch (_) {
@@ -91,17 +129,19 @@ class DownloadsLibrary {
     }
   }
 
-  /// Minimal JSON string escaping for the metadata file.
-  String _jsonEncode(String value) {
-    final escaped = value
-        .replaceAll('\\', '\\\\')
-        .replaceAll('"', '\\"')
-        .replaceAll('\n', '\\n');
-    return '"$escaped"';
+  /// Updates the effective server-issued offline lease for an owned asset.
+  Future<void> updateOfflineLease(String trackId, DateTime? expiresAtUtc) async {
+    final metaFile = File('${_dirFor(trackId).path}/meta.json');
+    if (!await metaFile.exists()) return;
+    final raw = jsonDecode(await metaFile.readAsString());
+    if (raw is! Map<String, dynamic>) return;
+    raw['rightsExpiresAtUtc'] = expiresAtUtc?.toUtc().toIso8601String();
+    await metaFile.writeAsString(jsonEncode(raw));
   }
 
-  /// All downloaded tracks with their local assets resolved.
-  Future<List<DownloadedTrack>> list() async {
+  /// Lists only assets owned by [ownerId]. A legacy file without owner
+  /// metadata is deliberately hidden rather than exposed across sessions.
+  Future<List<DownloadedTrack>> list({required String ownerId}) async {
     final tracks = <DownloadedTrack>[];
     if (!await root.exists()) return tracks;
     await for (final entry in root.list()) {
@@ -109,24 +149,26 @@ class DownloadsLibrary {
       final metaFile = File('${entry.path}/meta.json');
       if (!await metaFile.exists()) continue;
       try {
-        final raw = await metaFile.readAsString();
-        final title = RegExp(r'"title"\s*:\s*"((?:[^"\\]|\\.)*)"')
-            .firstMatch(raw)
-            ?.group(1)
-            ?.replaceAll('\\\\"', '"')
-            .replaceAll('\\\\n', '\n')
-            .replaceAll('\\\\', '\\');
-        final artist = RegExp(r'"artist"\s*:\s*"((?:[^"\\]|\\.)*)"')
-            .firstMatch(raw)
-            ?.group(1)
-            ?.replaceAll('\\\\"', '"')
-            .replaceAll('\\\\n', '\n')
-            .replaceAll('\\\\', '\\');
+        final raw = jsonDecode(await metaFile.readAsString());
+        if (raw is! Map<String, dynamic> || raw['ownerId'] != ownerId) {
+          continue;
+        }
+        final title = raw['title'] as String? ?? 'Unknown';
+        final artist = raw['artist'] as String? ?? 'Unknown';
+        final catalogTrackId = raw['catalogTrackId'] as String?;
+        final audioPath = '${entry.path}/audio.m4a';
+        if (catalogTrackId == null || catalogTrackId.isEmpty ||
+            !await File(audioPath).exists()) continue;
+        final expiryRaw = raw['rightsExpiresAtUtc'] as String?;
+        final expiry = expiryRaw == null ? null : DateTime.tryParse(expiryRaw);
         tracks.add(DownloadedTrack(
           trackId: entry.uri.pathSegments.last,
-          title: (title ?? 'Unknown').isNotEmpty ? title! : 'Unknown',
-          artist: artist ?? 'Unknown',
-          audioPath: '${entry.path}/audio.m4a',
+          catalogTrackId: catalogTrackId,
+          ownerId: ownerId,
+          rightsExpiresAtUtc: expiry?.toUtc(),
+          title: title.isNotEmpty ? title : 'Unknown',
+          artist: artist,
+          audioPath: audioPath,
           coverPath: await File('${entry.path}/cover.jpg').exists()
               ? '${entry.path}/cover.jpg'
               : null,
@@ -151,7 +193,11 @@ class DownloadsLibrary {
 
 /// A downloaded track with its local file paths.
 class DownloadedTrack {
+  /// Storage key used to remove this local asset.
   final String trackId;
+  final String catalogTrackId;
+  final String ownerId;
+  final DateTime? rightsExpiresAtUtc;
   final String title;
   final String artist;
   final String audioPath;
@@ -160,6 +206,9 @@ class DownloadedTrack {
 
   const DownloadedTrack({
     required this.trackId,
+    required this.catalogTrackId,
+    required this.ownerId,
+    required this.rightsExpiresAtUtc,
     required this.title,
     required this.artist,
     required this.audioPath,

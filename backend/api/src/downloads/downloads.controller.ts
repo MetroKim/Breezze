@@ -12,6 +12,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { DownloadsService } from './downloads.service';
 
+export class RevalidateDownloadDto {
+  @IsString()
+  territory!: string;
+}
+
 export class AuthorizeDownloadDto {
   @IsString()
   trackId!: string;
@@ -31,6 +36,15 @@ export class DownloadsController {
     @Body() dto: AuthorizeDownloadDto,
   ) {
     return this.downloads.authorizeAndRecord(userId, dto);
+  }
+
+  @Post(':trackId/revalidate')
+  revalidate(
+    @CurrentUser() userId: string,
+    @Param('trackId') trackId: string,
+    @Body() dto: RevalidateDownloadDto,
+  ) {
+    return this.downloads.revalidateOfflineLease(userId, trackId, dto.territory);
   }
 
   @Get()

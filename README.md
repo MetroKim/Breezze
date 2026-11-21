@@ -16,6 +16,7 @@ packages/design_system/    Breezze tokens, themes, Atmosphere materials, compone
 packages/audio_contracts/  Playback contracts — state machine, queue, engine adapter, LRC
 packages/api_client/      Provider + download library contracts
 backend/api/               NestJS modular monolith (PostgreSQL, Prisma, Redis, BullMQ)
+infra/cloudflare/          Cloudflare Worker + private R2 media gateway
 docs/audit/                Honest per-requirement status (gap register)
 ```
 
