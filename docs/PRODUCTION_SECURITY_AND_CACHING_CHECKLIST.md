@@ -141,8 +141,8 @@
 ## 11. Logging, audit and detection
 - [~] API generates request IDs and returns X-Request-Id.
 - [~] pino-http dependency exists; verify JSON output and redaction of sensitive headers/body.
-- [ ] Audit login success/failure, password/MFA changes, permission changes, admin actions, exports and deletions.
-- [ ] Centralized tamper-resistant logs with write-once retention.
+- [~] Admin role changes and takedown resolutions now write actor/action/target/time/metadata audit events in the same database transaction; authenticated admins can inspect the newest 100 events. Login/MFA changes, moderation report decisions, exports and deletions still need coverage.
+- [~] Audit table is append-only by application convention only; enforce INSERT-only database permissions or a database trigger, and ship events to centralized tamper-resistant write-once storage before claiming immutability.
 - [ ] Alerts for login spikes, 401/403 anomalies, unusual downloads, new admins, provider failures and cache-origin surges.
 - [ ] Legal retention/deletion schedule.
 - [ ] Incident runbook: severity, contacts, containment, credential rotation, evidence preservation and postmortem.
@@ -284,3 +284,12 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 - [x] Prisma unique-constraint race recovery re-reads the winning owner; a different owner receives a conflict, while the same owner may safely update metadata.
 - [x] Unit tests cover cross-account rejection, owner-scoped updates, first registration and both outcomes of a simulated P2002 race.
 - [~] Add a PostgreSQL-backed concurrency integration test with simultaneous requests; unit tests simulate the unique-constraint race but do not replace a real DB race test.
+
+
+### Admin audit trail implementation note (2026-11-21)
+- Prisma model: `AdminAuditEvent`; migration: `20261121213000_admin_audit_events`.
+- Role changes record the acting admin, target user, previous role and new role.
+- Takedown resolutions record the acting admin, case ID and resulting status.
+- Audit insertion and the associated state change share a Prisma transaction: if audit insertion fails, the administrative mutation rolls back.
+- `GET /api/v1/admin/audit-events` is protected by the controller's JWT and persisted-admin guards and returns at most 100 newest events.
+- This is an application-level audit trail, not yet cryptographically immutable. Production DB credentials must not have UPDATE/DELETE rights on the audit table; add a restricted writer role/trigger and external WORM retention.
