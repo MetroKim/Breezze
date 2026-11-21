@@ -39,6 +39,8 @@ class PlayerController extends Notifier<PlayerState> {
   PlayerState build() {
     ref.onDispose(() {
       _requestGeneration++;
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
       _positionSub?.cancel();
       _engineStateSub?.cancel();
       _engine = null;
@@ -57,6 +59,11 @@ class PlayerController extends Notifier<PlayerState> {
     _positionSub = engine.positionStream.listen((pos) {
       if (!identical(_engine, engine)) return;
       state = state.copyWith(position: pos, duration: engine.duration);
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null &&
+          state.playbackState == PlaybackState.playing) {
+        _scrobbles.onTick(currentTrackId, DateTime.now().toUtc());
+      }
     });
     _engineStateSub = engine.engineStateStream.listen((engineState) {
       if (!identical(_engine, engine)) return;
@@ -74,6 +81,8 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   void detachEngine() {
+    final currentTrackId = state.currentTrack?.id;
+    if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
     _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
@@ -144,6 +153,8 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> stop() async {
     final requestId = ++_requestGeneration;
     final engine = _engine;
+    final currentTrackId = state.currentTrack?.id;
+    if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
     _queue.clear(keepCurrent: false);
     _trackInfos.clear();
     _machine.dispatch(StopRequested(requestId: requestId));
@@ -200,8 +211,15 @@ class PlayerController extends Notifier<PlayerState> {
       return;
     }
     _machine.dispatch(SeekRequested(position));
-    await _serializeEngineOperation(() => engine.seek(position));
-    _machine.dispatch(SeekCompleted());
+    try {
+      await _serializeEngineOperation(() => engine.seek(position));
+      _machine.dispatch(SeekCompleted());
+    } catch (_) {
+      _machine.dispatch(SourceResolutionFailed(
+        'SEEK_FAILED',
+        requestId: _machine.activeRequestId,
+      ));
+    }
   }
 
   Future<void> next() async {
@@ -216,6 +234,11 @@ class PlayerController extends Notifier<PlayerState> {
     if (entry == null) return;
     final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
     await _resolveAndPlay(info);
+  }
+
+  /// Register a Last.fm/ListenBrainz-compatible scrobbling destination.
+  void registerScrobbler(Scrobbler scrobbler) {
+    _scrobbles.register(scrobbler);
   }
 
   void toggleShuffle() => _queue.toggleShuffle();
@@ -237,6 +260,10 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> _resolveAndPlay(TrackInfo info) async {
+    final previousTrackId = state.currentTrack?.id;
+    if (previousTrackId != null && previousTrackId != info.id) {
+      _scrobbles.onStop(previousTrackId);
+    }
     final requestId = ++_requestGeneration;
     _trackInfos[info.id] = info;
     state = state.copyWith(
