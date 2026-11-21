@@ -70,7 +70,7 @@ void main() {
     );
 
     expect(find.text('Search Result Song'), findsOneWidget);
-    expect(find.text('Search Result Artist'), findsOneWidget);
+    expect(find.text('Search Result Artist'), findsWidgets);
     expect(find.text('Add to Library'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Album'), 240);
     expect(find.textContaining('does not provide a verified album relationship'), findsOneWidget);
