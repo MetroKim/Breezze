@@ -74,15 +74,15 @@ class _BzHomeState extends ConsumerState<BzHome> {
   @override
   void initState() {
     super.initState();
-    ref.listenManual(homeTabHintProvider, (prev, next) {
-      if (next >= 0 && next < _tabs.length && next != _index) {
-        setState(() => _index = next);
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(homeTabHintProvider, (previous, next) {
+      if (next >= 0 && next < _tabs.length && next != _index) {
+        setState(() => _index = next);
+      }
+    });
     final player = ref.watch(playerControllerProvider);
 
     return Scaffold(
