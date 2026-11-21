@@ -9,8 +9,12 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   final AudioPlayer _player = AudioPlayer();
   final StreamController<PlaybackState> _states =
       StreamController<PlaybackState>.broadcast();
+  late final StreamSubscription<PlayerException> _errorSubscription;
 
   JustAudioEngineAdapter() {
+    _errorSubscription = _player.errorStream.listen((_) {
+      _states.add(PlaybackState.failed);
+    });
     _player.playerStateStream.listen((state) {
       PlaybackState mapped;
       final processing = state.processingState;
@@ -68,8 +72,9 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   @override
   Stream<PlaybackState> get engineStateStream => _states.stream;
 
-  void dispose() {
-    _states.close();
-    _player.dispose();
+  Future<void> dispose() async {
+    await _errorSubscription.cancel();
+    await _states.close();
+    await _player.dispose();
   }
 }
