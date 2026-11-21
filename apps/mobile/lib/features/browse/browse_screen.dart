@@ -117,208 +117,181 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
-
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
+      child: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Browse', style: theme.textTheme.displayMedium),
-                const SizedBox(height: 6),
-                Text('Explore music by genre.',
-                    style: theme.textTheme.bodyMedium),
-                const SizedBox(height: 18),
-                SizedBox(
-                  height: 42,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _genres.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final genre = _genres[index];
-                      final selected = genre == _selectedGenre;
-                      return ChoiceChip(
-                        label: Text(genre),
-                        selected: selected,
-                        onSelected: (_) => _loadGenre(genre),
-                        selectedColor: theme.bzText1,
-                        backgroundColor: theme.bzSurface1,
-                        labelStyle: TextStyle(
-                          color: selected ? theme.bzBackground : theme.bzText1,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        side: BorderSide(color: theme.bzSeparator),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text('Discover', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 10),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final columns = constraints.maxWidth >= 1080
-                        ? 4
-                        : constraints.maxWidth >= 620
-                            ? 3
-                            : 2;
-                    return GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _browseDestinations.length,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 2.45,
-                      ),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Browse', style: theme.textTheme.displayMedium),
+                  const SizedBox(height: 6),
+                  Text('Explore music and discovery collections.', style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 18),
+                  Text('Explore by genre', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 42,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _genres.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
-                        final destination = _browseDestinations[index];
-                        return Material(
-                          color: theme.bzSurface1,
-                          borderRadius: BorderRadius.circular(BzRadius.card),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(BzRadius.card),
-                            onTap: () => _openCollection(destination),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(BzRadius.card),
-                                border: Border.all(color: theme.bzSeparator),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: theme.bzSurface2,
-                                      borderRadius: BorderRadius.circular(11),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: BzSvgIcon(
-                                      name: destination.icon,
-                                      size: 19,
-                                      color: theme.bzAccent,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          destination.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.labelLarge,
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          destination.description,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: theme.bzText2,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                        final genre = _genres[index];
+                        final selected = genre == _selectedGenre;
+                        return ChoiceChip(
+                          label: Text(genre),
+                          selected: selected,
+                          onSelected: (_) => _loadGenre(genre),
+                          selectedColor: theme.bzText1,
+                          backgroundColor: theme.bzSurface1,
+                          labelStyle: TextStyle(
+                            color: selected ? theme.bzBackground : theme.bzText1,
+                            fontWeight: FontWeight.w600,
                           ),
+                          side: BorderSide(color: theme.bzSeparator),
                         );
                       },
-                    );
-                  },
-                ),
-              ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Text('Discover', style: theme.textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                ],
+              ),
             ),
           ),
-          Expanded(
-            child: _loading
-                ? ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: 7,
-                    separatorBuilder: (_, __) => const SizedBox(height: 14),
-                    itemBuilder: (_, __) => const BzSkeletonTrackRow(),
-                  )
-                : _error != null
-                    ? _MessageState(
-                        icon: 'wifi-off',
-                        title: 'Music is unavailable',
-                        message: _error!,
-                        onRetry: () => _loadGenre(_selectedGenre),
-                      )
-                    : _tracks.isEmpty
-                        ? _MessageState(
-                            icon: 'music-note',
-                            title: 'No tracks found',
-                            message: 'Try another genre or search for an artist.',
-                            onRetry: () => _loadGenre(_selectedGenre),
-                          )
-                        : ListView.builder(
-                            padding: EdgeInsets.fromLTRB(0, 8, 0, BzBreakpoints.bottomClearance(context, compact: 220)),
-                            itemCount: _tracks.length,
-                            itemBuilder: (context, index) {
-                              final track = _tracks[index];
-                              final download = progress[track.id];
-                              return ListTile(
-                                leading: track.artworkUrl == null
-                                    ? BzBnoteMark(
-                                        size: 48, color: theme.bzText2)
-                                    : ClipRRect(
-                                        borderRadius: BorderRadius.circular(
-                                            BzRadius.artwork),
-                                        child: Image.network(
-                                          track.artworkUrl!,
-                                          width: 48,
-                                          height: 48,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              BzBnoteMark(
-                                            size: 48,
-                                            color: theme.bzText2,
-                                          ),
-                                        ),
-                                      ),
-                                title: Text(track.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                subtitle: Text(track.artist,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                trailing: download != null
-                                    ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : IconButton(
-                                        tooltip: 'Download',
-                                        icon: BzSvgIcon(name: 'download', size: 20),
-                                        onPressed: () => ref
-                                            .read(downloadProgressProvider
-                                                .notifier)
-                                            .download(track),
-                                      ),
-                                onTap: () => _play(index),
-                              );
-                            },
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.crossAxisExtent;
+                final columns = width >= 1080 ? 4 : width >= 620 ? 3 : 2;
+                return SliverGrid(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final destination = _browseDestinations[index];
+                      return Material(
+                        color: theme.bzSurface1,
+                        borderRadius: BorderRadius.circular(BzRadius.card),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          onTap: () => _openCollection(destination),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(BzRadius.card),
+                              border: Border.all(color: theme.bzSeparator),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: theme.bzSurface2,
+                                    borderRadius: BorderRadius.circular(11),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: BzSvgIcon(name: destination.icon, size: 19, color: theme.bzAccent),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(destination.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge),
+                                      const SizedBox(height: 3),
+                                      Text(destination.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2, fontSize: 10)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                        ),
+                      );
+                    },
+                    childCount: _browseDestinations.length,
+                  ),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: width < 380 ? 2.0 : 2.35,
+                  ),
+                );
+              },
+            ),
           ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 10),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  Expanded(child: Text(_selectedGenre + ' discovery', style: theme.textTheme.titleLarge)),
+                  if (!_loading && _tracks.isNotEmpty)
+                    Text(_tracks.length.toString() + ' matches', style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                ],
+              ),
+            ),
+          ),
+          if (_loading)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (_, __) => const Padding(padding: EdgeInsets.only(bottom: 14), child: BzSkeletonTrackRow()),
+                  childCount: 6,
+                ),
+              ),
+            )
+          else if (_error != null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _MessageState(icon: 'wifi-off', title: 'Music is unavailable', message: _error!, onRetry: () => _loadGenre(_selectedGenre)),
+            )
+          else if (_tracks.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _MessageState(icon: 'music-note', title: 'No tracks found', message: 'Try another genre or search for an artist.', onRetry: () => _loadGenre(_selectedGenre)),
+            )
+          else
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(0, 0, 0, BzBreakpoints.bottomClearance(context, compact: 220)),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final track = _tracks[index];
+                    final download = progress[track.id];
+                    return ListTile(
+                      leading: track.artworkUrl == null
+                          ? BzBnoteMark(size: 48, color: theme.bzText2)
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(BzRadius.artwork),
+                              child: Image.network(track.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => BzBnoteMark(size: 48, color: theme.bzText2)),
+                            ),
+                      title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: download != null
+                          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                          : IconButton(
+                              tooltip: 'Download',
+                              icon: const BzSvgIcon(name: 'download', size: 20),
+                              onPressed: () => ref.read(downloadProgressProvider.notifier).download(track),
+                            ),
+                      onTap: () => _play(index),
+                    );
+                  },
+                  childCount: _tracks.length,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -692,18 +665,6 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
             ],
           ),
         ),
-        const SizedBox(height: 24),
-        Text('What belongs in this section', style: theme.textTheme.titleLarge),
-        const SizedBox(height: 10),
-        for (final item in destination.previewSections)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(children: [
-              BzSvgIcon(name: 'check', size: 17, color: theme.bzText2),
-              const SizedBox(width: 10),
-              Expanded(child: Text(item, style: theme.textTheme.bodyMedium)),
-            ]),
-          ),
         if (destination.previewSections.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text('What belongs in this section', style: theme.textTheme.titleLarge),
