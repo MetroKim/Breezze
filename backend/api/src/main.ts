@@ -16,6 +16,11 @@ async function bootstrap() {
     throw new Error('JWT_SECRET must be configured with at least 32 bytes in production');
   }
 
+  const mfaEncryptionKey = Buffer.from(process.env.MFA_ENCRYPTION_KEY ?? '', 'base64');
+  if (process.env.NODE_ENV === 'production' && mfaEncryptionKey.length !== 32) {
+    throw new Error('MFA_ENCRYPTION_KEY must be configured as base64-encoded 32 random bytes in production');
+  }
+
   const edgeSecret = process.env.EDGE_SHARED_SECRET;
   if (process.env.NODE_ENV === 'production' && (!edgeSecret || edgeSecret.length < 32)) {
     throw new Error('EDGE_SHARED_SECRET must be configured with at least 32 characters in production');
