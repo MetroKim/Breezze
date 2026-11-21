@@ -408,12 +408,12 @@ const _browseDestinations = <_BrowseDestination>[
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
   _BrowseDestination('Daily Top 100', 'A verified daily chart with an explicit territory.', 'star'),
   _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
-  _BrowseDestination('Music Videos', 'Official music videos from authorized video sources.', 'video'),
+  _BrowseDestination('Music Videos', 'Music videos from channel owners verified by Breezze.', 'video'),
   _BrowseDestination('Charts', 'Global, regional and genre charts with source attribution.', 'grid'),
   _BrowseDestination('Browse by Genre', 'Explore catalog music by genre and subgenre.', 'compass'),
   _BrowseDestination('Moods & Activities', 'Curated listening collections for moods and activities.', 'favorite'),
   _BrowseDestination('City Charts', 'City-level charts backed by verified regional data.', 'globe'),
-  _BrowseDestination('Upcoming Concerts', 'Artist events with confirmed venue and ticket details.', 'calendar'),
+  _BrowseDestination('Upcoming Concerts', 'Upcoming concerts and festivals with source-linked event details.', 'calendar'),
   _BrowseDestination('Seasonal Collections', 'Time-limited music collections and seasonal features.', 'disc-3'),
   _BrowseDestination('Artist Spotlight', 'Editorial artist features backed by catalog metadata.', 'user-round'),
 ];
@@ -443,7 +443,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   bool get _appleChart => const ['Trending Songs', 'Daily Top 100', 'Charts']
       .contains(widget.destination.title);
   bool get _appleReleases => widget.destination.title == 'New Releases';
-  bool get _appleCatalog => _appleChart || _appleReleases;
+  bool get _videoFeed => widget.destination.title == 'Music Videos';
+  bool get _concertFeed => widget.destination.title == 'Upcoming Concerts';
+  bool get _liveProviderCatalog => _appleChart || _appleReleases || _videoFeed || _concertFeed;
 
   bool get _genre => widget.destination.title == 'Browse by Genre';
   bool get _mood => widget.destination.title == 'Moods & Activities';
@@ -458,14 +460,14 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _search(_selected);
       });
-    } else if (_appleCatalog) {
+    } else if (_liveProviderCatalog) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _loadAppleCatalog();
+        if (mounted) _loadCatalog();
       });
     }
   }
 
-  Future<void> _loadAppleCatalog() async {
+  Future<void> _loadCatalog() async {
     final generation = ++_generation;
     setState(() {
       _loading = true;
@@ -477,7 +479,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       final territory = ref.read(outboxTerritoryProvider).toLowerCase();
       final data = _appleReleases
           ? await api.discoveryNewReleases(country: territory)
-          : await api.discoverySongsChart(country: territory);
+          : _appleChart
+              ? await api.discoverySongsChart(country: territory)
+              : _videoFeed
+                  ? await api.discoveryMusicVideos()
+                  : await api.discoveryConcerts(country: territory);
       if (!mounted || generation != _generation) return;
       final rawItems = data['items'];
       setState(() {
@@ -577,7 +583,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
-            child: _appleCatalog
+            child: _liveProviderCatalog
                 ? _appleCatalogContent(theme)
                 : _searchable
                 ? Column(
@@ -685,6 +691,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
 
   Widget _appleCatalogContent(ThemeData theme) {
     final isReleaseFeed = _appleReleases;
+    final isVideoFeed = _videoFeed;
+    final isConcertFeed = _concertFeed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -698,7 +706,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
               Text(
                 isReleaseFeed
                     ? 'Newly released albums from Apple Music'
-                    : 'Apple Music most-played songs chart',
+                    : isVideoFeed
+                        ? 'Music videos from channel IDs approved by Breezze'
+                        : isConcertFeed
+                            ? 'Upcoming live events from JamBase Data'
+                            : 'Apple Music most-played songs chart',
                 style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
               ),
               if (_catalogSource != null || _catalogTerritory != null) ...[
@@ -724,7 +736,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; open an item in Apple Music. Breezze playback remains subject to its own provider rights checks.',
+                        isVideoFeed
+                            ? 'Video results are restricted to channel IDs approved in Breezze server configuration. Videos open on YouTube; Breezze does not rehost or relay them.'
+                            : isConcertFeed
+                                ? 'Event listings are supplied by JamBase. Dates and ticket availability can change; verify details with the event and ticket provider before attending.'
+                                : 'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; open an item in Apple Music. Breezze playback remains subject to its own provider rights checks.',
                         style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
                       ),
                     ),
@@ -747,14 +763,14 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                       icon: 'wifi-off',
                       title: 'Catalog unavailable',
                       message: _catalogError!,
-                      onRetry: _loadAppleCatalog,
+                      onRetry: _loadCatalog,
                     )
                   : _catalogItems.isEmpty
                       ? _MessageState(
                           icon: 'music-note',
                           title: 'No catalog entries',
                           message: 'The source returned no entries for this territory.',
-                          onRetry: _loadAppleCatalog,
+                          onRetry: _loadCatalog,
                         )
                       : ListView.separated(
                           padding: EdgeInsets.fromLTRB(12, 4, 12, BzBreakpoints.bottomClearance(context, compact: 220)),
@@ -766,6 +782,17 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                             final title = item['title'] as String? ?? 'Untitled';
                             final artist = item['artist'] as String? ?? 'Unknown artist';
                             final rank = item['rank'];
+                            final meta = isReleaseFeed
+                                ? (item['releaseDate'] ?? 'Release date not supplied').toString()
+                                : isVideoFeed
+                                    ? (item['publishedAt'] ?? 'Publication date not supplied').toString()
+                                    : isConcertFeed
+                                        ? [
+                                            if (item['date'] is String) item['date'],
+                                            if (item['venue'] is String) item['venue'],
+                                            if (item['city'] is String) item['city'],
+                                          ].join(' · ')
+                                        : '';
                             return ListTile(
                               leading: SizedBox(
                                 width: 52,
@@ -796,14 +823,22 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                               ),
                               title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
                               subtitle: Text(
-                                isReleaseFeed
-                                    ? '$artist • ${item['releaseDate'] ?? 'Release date not supplied'}'
-                                    : artist,
-                                maxLines: 1,
+                                isConcertFeed
+                                    ? (meta.isEmpty ? artist : meta)
+                                    : isVideoFeed
+                                        ? '$artist • $meta'
+                                        : isReleaseFeed
+                                            ? '$artist • $meta'
+                                            : artist,
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               trailing: IconButton(
-                                tooltip: 'Open in Apple Music',
+                                tooltip: isVideoFeed
+                                    ? 'Open on YouTube'
+                                    : isConcertFeed
+                                        ? 'Open event details'
+                                        : 'Open in Apple Music',
                                 icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
                                 onPressed: () => _openExternalCatalogItem(item),
                               ),
