@@ -53,36 +53,59 @@ class DownloadsLibrary {
         final partialFile = File('${dir.path}/audio.part');
         final client = HttpClient();
         try {
+          final existingBytes =
+              await partialFile.exists() ? await partialFile.length() : 0;
           final request = await client.getUrl(Uri.parse(downloadUrl));
+          if (existingBytes > 0) {
+            request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existingBytes-');
+          }
           final response = await request.close();
-          if (response.statusCode != HttpStatus.ok) {
+          final resumes = existingBytes > 0 &&
+              response.statusCode == HttpStatus.partialContent;
+          if (response.statusCode != HttpStatus.ok && !resumes) {
             throw HttpException(
               'authorized_download_${response.statusCode}',
               uri: Uri.parse(downloadUrl),
             );
           }
+          if (resumes) {
+            final contentRange = response.headers.value(HttpHeaders.contentRangeHeader);
+            if (contentRange == null ||
+                !contentRange.startsWith('bytes $existingBytes-')) {
+              throw const HttpException('invalid_resume_content_range');
+            }
+          }
 
-          final sink = partialFile.openWrite();
-          var received = 0;
+          // A server that ignores Range returns 200. Start over rather than
+          // appending a second copy of the complete asset.
+          final sink = partialFile.openWrite(
+            mode: resumes ? FileMode.append : FileMode.write,
+          );
+          var received = resumes ? existingBytes : 0;
+          final totalBytes = resumes
+              ? _totalBytesFromContentRange(
+                  response.headers.value(HttpHeaders.contentRangeHeader),
+                )
+              : response.contentLength;
           try {
             await for (final chunk in response) {
               sink.add(chunk);
               received += chunk.length;
-              if (response.contentLength > 0) {
-                onProgress?.call(
-                  (received / response.contentLength).clamp(0.0, 1.0),
-                );
+              if (totalBytes > 0) {
+                onProgress?.call((received / totalBytes).clamp(0.0, 1.0));
               }
             }
             await sink.flush();
           } finally {
             await sink.close();
           }
+          if (totalBytes > 0 && received != totalBytes) {
+            throw const HttpException('authorized_download_incomplete');
+          }
           await partialFile.rename(audioFile.path);
         } catch (_) {
-          if (await partialFile.exists()) {
-            await partialFile.delete();
-          }
+          // Keep the partial asset. The next authorized attempt can request
+          // the remaining byte range instead of downloading from zero.
           rethrow;
         } finally {
           client.close(force: true);
@@ -127,6 +150,99 @@ class DownloadsLibrary {
     } catch (_) {
       return false;
     }
+  }
+
+  int _totalBytesFromContentRange(String? value) {
+    if (value == null) return -1;
+    final match = RegExp(r'^bytes \\d+-\\d+/(\\d+)
+  Future<void> updateOfflineLease(String trackId, DateTime? expiresAtUtc) async {
+    final metaFile = File('${_dirFor(trackId).path}/meta.json');
+    if (!await metaFile.exists()) return;
+    final raw = jsonDecode(await metaFile.readAsString());
+    if (raw is! Map<String, dynamic>) return;
+    raw['rightsExpiresAtUtc'] = expiresAtUtc?.toUtc().toIso8601String();
+    await metaFile.writeAsString(jsonEncode(raw));
+  }
+
+  /// Lists only assets owned by [ownerId]. A legacy file without owner
+  /// metadata is deliberately hidden rather than exposed across sessions.
+  Future<List<DownloadedTrack>> list({required String ownerId}) async {
+    final tracks = <DownloadedTrack>[];
+    if (!await root.exists()) return tracks;
+    await for (final entry in root.list()) {
+      if (entry is! Directory) continue;
+      final metaFile = File('${entry.path}/meta.json');
+      if (!await metaFile.exists()) continue;
+      try {
+        final raw = jsonDecode(await metaFile.readAsString());
+        if (raw is! Map<String, dynamic> || raw['ownerId'] != ownerId) {
+          continue;
+        }
+        final title = raw['title'] as String? ?? 'Unknown';
+        final artist = raw['artist'] as String? ?? 'Unknown';
+        final catalogTrackId = raw['catalogTrackId'] as String?;
+        final audioPath = '${entry.path}/audio.m4a';
+        if (catalogTrackId == null || catalogTrackId.isEmpty ||
+            !await File(audioPath).exists()) continue;
+        final expiryRaw = raw['rightsExpiresAtUtc'] as String?;
+        final expiry = expiryRaw == null ? null : DateTime.tryParse(expiryRaw);
+        tracks.add(DownloadedTrack(
+          trackId: entry.uri.pathSegments.last,
+          catalogTrackId: catalogTrackId,
+          ownerId: ownerId,
+          rightsExpiresAtUtc: expiry?.toUtc(),
+          title: title.isNotEmpty ? title : 'Unknown',
+          artist: artist,
+          audioPath: audioPath,
+          coverPath: await File('${entry.path}/cover.jpg').exists()
+              ? '${entry.path}/cover.jpg'
+              : null,
+          lyricsPath: await File('${entry.path}/lyrics.lrc').exists()
+              ? '${entry.path}/lyrics.lrc'
+              : null,
+        ));
+      } catch (_) {
+        continue;
+      }
+    }
+    return tracks;
+  }
+
+  Future<void> remove(String trackId) async {
+    final dir = _dirFor(trackId);
+    if (await dir.exists()) {
+      await dir.delete(recursive: true);
+    }
+  }
+}
+
+/// A downloaded track with its local file paths.
+class DownloadedTrack {
+  /// Storage key used to remove this local asset.
+  final String trackId;
+  final String catalogTrackId;
+  final String ownerId;
+  final DateTime? rightsExpiresAtUtc;
+  final String title;
+  final String artist;
+  final String audioPath;
+  final String? coverPath;
+  final String? lyricsPath;
+
+  const DownloadedTrack({
+    required this.trackId,
+    required this.catalogTrackId,
+    required this.ownerId,
+    required this.rightsExpiresAtUtc,
+    required this.title,
+    required this.artist,
+    required this.audioPath,
+    this.coverPath,
+    this.lyricsPath,
+  });
+}
+).firstMatch(value);
+    return match == null ? -1 : int.tryParse(match.group(1)!) ?? -1;
   }
 
   /// Updates the effective server-issued offline lease for an owned asset.
