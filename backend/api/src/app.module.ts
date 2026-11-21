@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -27,6 +27,7 @@ import { ModerationModule } from './moderation/moderation.module';
 import { ArtistPortalModule } from './artist_portal/artist-portal.module';
 import { DistributorModule } from './distributor/distributor.module';
 import { MediaModule } from './media/media.module';
+import { CloudflareAwareThrottlerGuard } from './cloudflare-aware-throttler.guard';
 
 @Module({
   imports: [
@@ -58,6 +59,6 @@ import { MediaModule } from './media/media.module';
     DistributorModule,
     MediaModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [{ provide: APP_GUARD, useClass: CloudflareAwareThrottlerGuard }],
 })
 export class AppModule {}
