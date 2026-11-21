@@ -8,12 +8,28 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
+import {
+  decryptTotpSecret,
+  encryptTotpSecret,
+  generateTotpSecret,
+  totpProvisioningUri,
+  verifyTotp,
+} from './totp';
 
 export interface AuthResult {
   accessToken: string;
   refreshToken: string;
+  mfaRequired?: boolean;
   user: { id: string; email: string; displayName: string | null };
 }
+
+type AuthUser = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  role?: string;
+  mfaEnabled?: boolean;
+};
 
 @Injectable()
 export class AuthService {
@@ -31,13 +47,14 @@ export class AuthService {
   }
 
   private async issueTokens(
-    user: { id: string; email: string; displayName: string | null },
+    user: AuthUser,
     refreshOverride?: string,
     existingFamilyId?: string,
+    mfaVerified = false,
   ): Promise<AuthResult> {
     const familyId = existingFamilyId ?? randomUUID();
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, email: user.email, sid: familyId },
+      { sub: user.id, email: user.email, sid: familyId, mfaVerified },
       { expiresIn: '15m' },
     );
     const refreshToken = refreshOverride ?? randomBytes(32).toString('hex');
@@ -48,12 +65,15 @@ export class AuthService {
           familyId,
           userId: user.id,
           expiresAt: this.refreshExpiry(),
+          mfaVerified,
         },
       });
     }
+    const mfaRequired = (user.role === 'admin' || user.mfaEnabled === true) && !mfaVerified;
     return {
       accessToken,
       refreshToken,
+      ...(mfaRequired ? { mfaRequired: true } : {}),
       user: { id: user.id, email: user.email, displayName: user.displayName },
     };
   }
@@ -124,13 +144,98 @@ export class AuthService {
           familyId: token.familyId,
           userId: token.userId,
           expiresAt: this.refreshExpiry(),
+          mfaVerified: token.mfaVerified,
         },
       });
       return true;
     });
     if (!consumed) throw new UnauthorizedException('REFRESH_REUSED_OR_INVALID');
 
-    return this.issueTokens(token.user, rotated, token.familyId);
+    return this.issueTokens(token.user, rotated, token.familyId, token.mfaVerified);
+  }
+
+  async beginMfaSetup(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, mfaEnabled: true },
+    });
+    if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (user.mfaEnabled) throw new ConflictException('MFA_ALREADY_ENABLED');
+
+    const secret = generateTotpSecret();
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { mfaPendingSecretCiphertext: encryptTotpSecret(secret) },
+    });
+    return {
+      secret,
+      provisioningUri: totpProvisioningUri(secret, user.email),
+      algorithm: 'SHA1',
+      digits: 6,
+      periodSeconds: 30,
+    };
+  }
+
+  async verifyMfaSetup(userId: string, sessionId: string, code: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, displayName: true, role: true, mfaEnabled: true, mfaPendingSecretCiphertext: true },
+    });
+    if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (user.mfaEnabled || !user.mfaPendingSecretCiphertext) {
+      throw new ConflictException('MFA_SETUP_NOT_PENDING');
+    }
+
+    const secret = decryptTotpSecret(user.mfaPendingSecretCiphertext);
+    if (!verifyTotp(secret, code)) throw new UnauthorizedException('MFA_CODE_INVALID');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          mfaEnabled: true,
+          mfaSecretCiphertext: user.mfaPendingSecretCiphertext,
+          mfaPendingSecretCiphertext: null,
+        },
+      });
+      const verified = await tx.refreshToken.updateMany({
+        where: { userId, familyId: sessionId, revokedAt: null, expiresAt: { gt: new Date() } },
+        data: { mfaVerified: true },
+      });
+      if (verified.count === 0) throw new UnauthorizedException('SESSION_INVALID');
+    });
+
+    const accessToken = await this.jwt.signAsync(
+      { sub: user.id, email: user.email, sid: sessionId, mfaVerified: true },
+      { expiresIn: '15m' },
+    );
+    return { verified: true, accessToken };
+  }
+
+  async verifyMfa(userId: string, sessionId: string, code: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, mfaEnabled: true, mfaSecretCiphertext: true },
+    });
+    if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (!user.mfaEnabled || !user.mfaSecretCiphertext) {
+      throw new UnauthorizedException('MFA_NOT_CONFIGURED');
+    }
+    if (!verifyTotp(decryptTotpSecret(user.mfaSecretCiphertext), code)) {
+      throw new UnauthorizedException('MFA_CODE_INVALID');
+    }
+
+    const updated = await this.prisma.refreshToken.updateMany({
+      where: { userId, familyId: sessionId, revokedAt: null, expiresAt: { gt: new Date() } },
+      data: { mfaVerified: true },
+    });
+    if (updated.count === 0) throw new UnauthorizedException('SESSION_INVALID');
+
+    const accessToken = await this.jwt.signAsync(
+      { sub: user.id, email: user.email, sid: sessionId, mfaVerified: true },
+      { expiresIn: '15m' },
+    );
+    return { verified: true, accessToken };
   }
 
   async logout(refreshToken: string): Promise<void> {
