@@ -168,12 +168,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     hintText: 'Songs, artists and more',
-                    prefixIcon: const Icon(Icons.search),
+                    prefixIcon: BzSvgIcon(name: 'search', color: theme.bzText2),
                     suffixIcon: _controller.text.isEmpty
                         ? null
                         : IconButton(
                             tooltip: 'Clear search',
-                            icon: const Icon(Icons.close),
+                            icon: BzSvgIcon(name: 'close', color: theme.bzText2),
                             onPressed: () {
                               _searchGeneration++;
                               _controller.clear();
@@ -337,7 +337,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         for (final query in _recentSearches)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.history, color: theme.bzText2),
+            leading: BzSvgIcon(name: 'history', color: theme.bzText2),
             title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: () => _reuseSearch(query),
             trailing: IconButton(
