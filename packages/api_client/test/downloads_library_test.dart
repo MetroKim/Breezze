@@ -33,9 +33,9 @@ void main() {
       artist: 'Artist',
       duration: const Duration(minutes: 3),
     );
-    final trackDir = Directory('\${root.path}/catalog-resume');
+    final trackDir = Directory('${root.path}/catalog-resume');
     await trackDir.create();
-    final partial = File('\${trackDir.path}/audio.part');
+    final partial = File('${trackDir.path}/audio.part');
     await partial.writeAsBytes(utf8.encode('abc'));
 
     var receivedRange = '';
@@ -53,14 +53,14 @@ void main() {
 
     final ok = await library.download(
       track,
-      downloadUrl: 'http://\${server.address.address}:\${server.port}/audio',
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
       ownerId: 'user-1',
       catalogTrackId: 'catalog-resume',
     );
 
     expect(ok, isTrue);
     expect(receivedRange, 'bytes=3-');
-    expect(await File('\${trackDir.path}/audio.m4a').readAsString(), 'abcdef');
+    expect(await File('${trackDir.path}/audio.m4a').readAsString(), 'abcdef');
     expect(await partial.exists(), isFalse);
   });
 
