@@ -21,6 +21,11 @@ enum PlaybackState {
 
 sealed class PlaybackEvent {}
 
+class StopRequested extends PlaybackEvent {
+  final int requestId;
+  StopRequested({this.requestId = 0});
+}
+
 class StartRequested extends PlaybackEvent {
   final String trackId;
   final int requestId;
@@ -92,6 +97,12 @@ class PlaybackStateMachine {
   PlaybackState _reduce(PlaybackState s, PlaybackEvent e) {
     // Selecting a new track supersedes any previous operation, regardless
     // of whether the old track was playing, paused, buffering or resolving.
+    if (e is StopRequested) {
+      _activeRequestId = e.requestId;
+      _activeTrackId = null;
+      return PlaybackState.idle;
+    }
+
     if (e is StartRequested) {
       _activeRequestId = e.requestId;
       _activeTrackId = e.trackId;
