@@ -26,6 +26,7 @@ describe('AuthService refresh-token rotation', () => {
     revokedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
     user,
+    mfaVerified: false,
   });
 
   beforeEach(() => {
@@ -68,7 +69,7 @@ describe('AuthService refresh-token rotation', () => {
     );
     expect(created.familyId).toBe('family-1');
     expect(jwt.signAsync).toHaveBeenCalledWith(
-      { sub: user.id, email: user.email, sid: 'family-1' },
+      { sub: user.id, email: user.email, sid: 'family-1', mfaVerified: false },
       { expiresIn: '15m' },
     );
     expect(transactionRefreshToken.updateMany).toHaveBeenCalledWith(
