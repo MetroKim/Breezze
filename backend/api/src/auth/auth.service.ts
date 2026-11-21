@@ -325,7 +325,10 @@ export class AuthService {
     const now = new Date();
 
     await this.prisma.$transaction(async (tx) => {
-      const session = await tx.refreshToken.findFirst({
+      // Conditional update both validates and locks the active, MFA-verified
+      // session row until this transaction commits, preventing a concurrent logout
+      // from racing the recovery-code rotation.
+      const session = await tx.refreshToken.updateMany({
         where: {
           userId,
           familyId: sessionId,
@@ -333,9 +336,9 @@ export class AuthService {
           expiresAt: { gt: now },
           mfaVerified: true,
         },
-        select: { id: true },
+        data: { mfaVerified: true },
       });
-      if (!session) throw new UnauthorizedException('SESSION_INVALID');
+      if (session.count === 0) throw new UnauthorizedException('SESSION_INVALID');
 
       if (totpCounter !== null) {
         const accepted = await tx.user.updateMany({
