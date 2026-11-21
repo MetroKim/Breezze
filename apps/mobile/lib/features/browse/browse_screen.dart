@@ -153,7 +153,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 7,
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                  )
                 : _error != null
                     ? _MessageState(
                         icon: 'wifi-off',

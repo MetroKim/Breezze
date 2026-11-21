@@ -236,7 +236,10 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SingleChildScrollView(
+                    padding: EdgeInsets.all(16),
+                    child: BzSkeletonArtworkGrid(itemCount: 6),
+                  )
                 : _error != null
                     ? Center(
                         child: Padding(

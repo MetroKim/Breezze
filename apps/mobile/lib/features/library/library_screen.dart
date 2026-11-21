@@ -284,7 +284,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Widget _buildPlaylists(ThemeData theme) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+    );
     if (_playlists.isEmpty) {
       return Center(
         child: Padding(

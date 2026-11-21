@@ -411,7 +411,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 7,
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                  )
                 : !_searched
                     ? _buildRecentSearches(theme)
                     : _error != null

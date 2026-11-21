@@ -104,3 +104,15 @@ class BzType {
   static const double footnote = 12;
   static const double caption = 11;
 }
+
+
+/// Shared responsive breakpoints for the adaptive Flutter shell.
+class BzBreakpoints {
+  static const double compact = 600;
+  static const double medium = 840;
+  static const double expanded = 1200;
+  static const double wide = 1600;
+  static const double contentMaxWidth = 1440;
+
+  const BzBreakpoints._();
+}

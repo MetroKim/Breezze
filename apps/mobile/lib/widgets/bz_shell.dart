@@ -84,38 +84,79 @@ class _BzHomeState extends ConsumerState<BzHome> {
       }
     });
     final player = ref.watch(playerControllerProvider);
+    final hasPlayer = player.playbackState != PlaybackState.idle;
+
+    final pages = IndexedStack(
+      index: _index,
+      children: const [
+        HomeScreen(),
+        BrowseScreen(),
+        RadioScreen(),
+        LibraryScreen(),
+        SearchScreen(),
+      ],
+    );
 
     return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: const [
-          HomeScreen(),
-          BrowseScreen(),
-          RadioScreen(),
-          LibraryScreen(),
-          SearchScreen(),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final expanded = constraints.maxWidth >= BzBreakpoints.medium;
+          if (!expanded) return pages;
+
+          return Row(
             children: [
-              if (player.playbackState != PlaybackState.idle) ...[
-                _MiniPlayer(onTap: _openNowPlaying),
-                const SizedBox(height: 8),
-              ],
-              _TabBar(
+              _DesktopNavigation(
                 index: _index,
                 tabs: _tabs,
                 onChanged: (i) => setState(() => _index = i),
               ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: BzBreakpoints.contentMaxWidth,
+                          ),
+                          child: pages,
+                        ),
+                      ),
+                    ),
+                    if (hasPlayer)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
+                        child: _MiniPlayer(onTap: _openNowPlaying),
+                      ),
+                  ],
+                ),
+              ),
             ],
-          ),
-        ),
+          );
+        },
       ),
+      bottomNavigationBar: MediaQuery.sizeOf(context).width >= BzBreakpoints.medium
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasPlayer) ...[
+                      _MiniPlayer(onTap: _openNowPlaying),
+                      const SizedBox(height: 8),
+                    ],
+                    _TabBar(
+                      index: _index,
+                      tabs: _tabs,
+                      onChanged: (i) => setState(() => _index = i),
+                    ),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -124,6 +165,136 @@ class _BzHomeState extends ConsumerState<BzHome> {
       MaterialPageRoute(
         builder: (_) => const NowPlayingScreen(),
         fullscreenDialog: true,
+      ),
+    );
+  }
+}
+
+class _DesktopNavigation extends StatelessWidget {
+  final int index;
+  final List<_TabDestination> tabs;
+  final ValueChanged<int> onChanged;
+
+  const _DesktopNavigation({
+    required this.index,
+    required this.tabs,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 224,
+      decoration: BoxDecoration(
+        color: theme.bzSurface1,
+        border: Border(
+          right: BorderSide(color: theme.bzSeparator, width: 0.7),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 12, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 28),
+                child: Row(
+                  children: [
+                    BzBnoteMark(size: 30, color: theme.bzText1),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Breezze',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              for (var i = 0; i < tabs.length; i++)
+                _DesktopTabButton(
+                  destination: tabs[i],
+                  active: index == i,
+                  onTap: () => onChanged(i),
+                ),
+              const Spacer(),
+              Text(
+                'YOUR MUSIC. YOUR SPACE.',
+                style: TextStyle(
+                  color: theme.bzText2,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopTabButton extends StatelessWidget {
+  final _TabDestination destination;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _DesktopTabButton({
+    required this.destination,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = active ? theme.bzAccent : theme.bzText2;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Semantics(
+        button: true,
+        selected: active,
+        label: destination.label,
+        child: Tooltip(
+          message: destination.label,
+          child: Material(
+            color: active ? theme.bzSurface2 : Colors.transparent,
+            borderRadius: BorderRadius.circular(BzRadius.button),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(BzRadius.button),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 13,
+                ),
+                child: Row(
+                  children: [
+                    SvgPicture.asset(
+                      destination.asset,
+                      width: 21,
+                      height: 21,
+                      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                    ),
+                    const SizedBox(width: 13),
+                    Text(
+                      destination.label,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
