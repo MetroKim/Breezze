@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 // Plan §13.2 — templates, delivery (stub now, real push later),
@@ -81,10 +81,11 @@ export class NotificationsService {
   }
 
   async markRead(userId: string, notificationId: string) {
-    await this.prisma.notification.updateMany({
+    const updated = await this.prisma.notification.updateMany({
       where: { id: notificationId, userId },
       data: { readAt: new Date() },
     });
+    if (updated.count === 0) throw new NotFoundException('NOTIFICATION_NOT_FOUND');
     return { read: true };
   }
 }
