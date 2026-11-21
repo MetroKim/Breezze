@@ -828,17 +828,41 @@ class AlbumDetailScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final queue = tracks;
 
-    Future<void> play({bool shuffle = false}) async {
-      if (queue.isEmpty) return;
+    Future<void> playAt(int index, {bool shuffle = false}) async {
+      if (queue.isEmpty || index < 0 || index >= queue.length) return;
+      final track = queue[index];
+      if (track.id.startsWith('bz:')) {
+        try {
+          final opened = await YoutubePlayerHandoff.openFromApi(
+            ref.read(authSessionProvider.notifier).api,
+            track.id,
+          );
+          if (!opened && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not open the official YouTube player.')),
+            );
+          }
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
+            );
+          }
+        }
+        return;
+      }
       final player = ref.read(playerControllerProvider.notifier);
       await player.playTrack(
-        trackId: queue.first.id,
+        trackId: track.id,
         queue: queue,
+        startIndex: index,
         origin: 'album',
         sourceContext: canonicalAlbumId,
       );
       if (shuffle) player.toggleShuffle();
     }
+
+    Future<void> play({bool shuffle = false}) => playAt(0, shuffle: shuffle);
 
     return Scaffold(
       backgroundColor: theme.bzBackground,
@@ -930,13 +954,7 @@ class AlbumDetailScreen extends ConsumerWidget {
                             _duration(tracks[i].duration),
                             style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
                           ),
-                          onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
-                            trackId: tracks[i].id,
-                            queue: queue,
-                            startIndex: i,
-                            origin: 'album',
-                            sourceContext: canonicalAlbumId,
-                          ),
+                          onTap: () => playAt(i),
                         ),
                     ],
                   ),
