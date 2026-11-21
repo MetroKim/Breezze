@@ -4,8 +4,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../../app/playlist_store.dart';
+import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../downloads/downloads_screen.dart';
+import 'playlist_detail_screen.dart';
 import '../player/player_controller.dart';
 
 /// Library navigation follows the user's requested section order. Only
@@ -29,7 +32,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   ];
 
   Set<String> _visibleSections = {'Playlists', 'Artists', 'Albums', 'Songs'};
-  String _selected = 'Songs';
+  String _selected = 'Playlists';
+  final _playlistStore = PlaylistStore();
+  String _ownerId = 'guest';
+  List<UserPlaylist> _playlists = [];
   List<FavoriteTrack> _favorites = [];
   var _loading = true;
 
@@ -40,12 +46,64 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _refresh() async {
-    final favorites = await ref.read(favoritesStoreProvider).load();
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final results = await Future.wait([
+      ref.read(favoritesStoreProvider).load(),
+      _playlistStore.load(ownerId),
+    ]);
     if (!mounted) return;
     setState(() {
-      _favorites = favorites;
+      _ownerId = ownerId;
+      _favorites = results[0] as List<FavoriteTrack>;
+      _playlists = results[1] as List<UserPlaylist>;
       _loading = false;
     });
+  }
+
+  Future<void> _createPlaylist() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Playlist'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Playlist name'),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.trim().isEmpty) return;
+    await _playlistStore.create(_ownerId, name);
+    if (!mounted) return;
+    setState(() => _selected = 'Playlists');
+    await _refresh();
+  }
+
+  void _openPlaylist(UserPlaylist playlist) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlaylistDetailScreen(
+          ownerId: _ownerId,
+          playlistId: playlist.id,
+          onChanged: _refresh,
+        ),
+      ),
+    );
   }
 
   List<TrackInfo> _queue() => [
@@ -131,6 +189,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
     final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
@@ -145,6 +204,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 Expanded(
                   child: Text('Library', style: theme.textTheme.displayMedium),
                 ),
+                if (_selected == 'Playlists')
+                  IconButton(
+                    tooltip: 'Create playlist',
+                    onPressed: _createPlaylist,
+                    icon: BzSvgIcon(name: 'plus', color: theme.bzAccent),
+                  ),
                 TextButton(
                   onPressed: _editSections,
                   child: const Text('Edit'),
@@ -189,6 +254,85 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPlaylists(ThemeData theme) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_playlists.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BzBnoteMark(size: 58, color: theme.bzText2),
+              const SizedBox(height: 16),
+              Text('Create your first playlist',
+                  style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(
+                'Build collections of songs and keep them on this device.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.bzText2),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _createPlaylist,
+                icon: BzSvgIcon(
+                  name: 'plus',
+                  color: theme.bzBackground,
+                  size: 18,
+                ),
+                label: const Text('New Playlist'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 150),
+      itemCount: _playlists.length,
+      itemBuilder: (context, index) {
+        final playlist = _playlists[index];
+        final artwork = playlist.tracks
+            .where((track) => track.artworkUrl != null)
+            .map((track) => track.artworkUrl!)
+            .toList();
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(BzRadius.artwork),
+            child: artwork.isEmpty
+                ? Container(
+                    width: 54,
+                    height: 54,
+                    color: theme.bzSurface1,
+                    alignment: Alignment.center,
+                    child: BzBnoteMark(size: 28, color: theme.bzText2),
+                  )
+                : Image.network(
+                    artwork.first,
+                    width: 54,
+                    height: 54,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        BzBnoteMark(size: 54, color: theme.bzText2),
+                  ),
+          ),
+          title: Text(playlist.name,
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            '${playlist.tracks.length} songs · On this device',
+            style: TextStyle(color: theme.bzText2),
+          ),
+          trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
+          onTap: () => _openPlaylist(playlist),
+        );
+      },
     );
   }
 
