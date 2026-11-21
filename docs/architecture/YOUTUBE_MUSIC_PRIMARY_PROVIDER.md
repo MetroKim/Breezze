@@ -52,3 +52,38 @@ Success result:
 ```
 
 Only validated YouTube video IDs are accepted. The response is a launch descriptor, never a playable stream URL.
+
+## Playback entry-point coverage
+
+All app surfaces that can start a YouTube Music-backed track now use the same
+validated official-player handoff:
+
+- Unified Search and Track details.
+- Browse genre feeds and Browse collection feeds.
+- Verified canonical album detail track rows and Play action, when their track
+  IDs are YouTube Music-backed.
+- User playlist Play and individual song selection.
+- Library saved-song Play All and individual song selection.
+
+Non-YouTube tracks continue through Breezze's native, rights-checked playback
+resolver. The handoff helper obtains the descriptor from the backend, checks
+that it is an official YouTube watch URL for the requested provider ID, and
+then launches it externally.
+
+### Queue limitation (intentional)
+
+An external YouTube player session is not part of Breezze's native audio
+session. Therefore, a YouTube Music item cannot be promised as a playable item
+inside Breezze's native queue. Selecting a YouTube-backed song opens YouTube
+directly; it does not provide background playback, native next/previous,
+crossfade, gapless playback, or queue synchronization. Mixed playlists do not
+gain those capabilities merely because the metadata is stored in Breezze.
+
+## Web database support
+
+The local Drift database now selects its executor using a conditional import:
+native targets use NativeDatabase, while Flutter Web uses Drift's
+WasmDatabase backed by browser storage. Before a Web build, run
+'bash tool/prepare_web_database.sh' from 'apps/mobile' to fetch the pinned Drift
+WebAssembly module and worker into 'web/'. CI runs this preparation before
+'flutter build web --release'.
