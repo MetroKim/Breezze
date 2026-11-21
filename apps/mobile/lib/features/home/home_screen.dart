@@ -1,11 +1,13 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/recent_store.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
+import '../settings/settings_screen.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
 ///
@@ -67,6 +69,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Row(
             children: [
               BzRibbonLogo(width: 96, color: theme.bzText1),
+              const Spacer(),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SettingsScreen(),
+                    ),
+                  ),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: theme.bzSurface1,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: theme.bzSeparator),
+                    ),
+                    alignment: Alignment.center,
+                    child: SvgPicture.asset(
+                      'assets/icons/profile.svg',
+                      width: 21,
+                      height: 21,
+                      colorFilter: ColorFilter.mode(
+                        theme.bzText1,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 24),
