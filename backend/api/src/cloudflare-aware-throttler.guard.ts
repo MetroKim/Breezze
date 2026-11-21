@@ -23,6 +23,8 @@ export class CloudflareAwareThrottlerGuard
   private readonly loginAccountWindowMs = Number(
     process.env.LOGIN_ACCOUNT_RATE_WINDOW_MS ?? 900_000,
   );
+  private readonly mfaAttemptLimit = Number(process.env.MFA_ATTEMPT_RATE_LIMIT ?? 5);
+  private readonly mfaAttemptWindowMs = Number(process.env.MFA_ATTEMPT_RATE_WINDOW_MS ?? 900_000);
 
   private static readonly incrementScript = `
     local count = redis.call('INCR', KEYS[1])
@@ -108,6 +110,19 @@ export class CloudflareAwareThrottlerGuard
         this.windowMs,
       );
       if (ipCount > this.limit) this.reject(ipTtl, res);
+
+      // MFA code endpoints get a stricter per-source quota to slow online TOTP guessing.
+      if (
+        req.method === 'POST' &&
+        (path.endsWith('/auth/mfa/verify') || path.endsWith('/auth/mfa/setup/verify'))
+      ) {
+        const mfaBucket = Math.floor(Date.now() / this.mfaAttemptWindowMs);
+        const [mfaCount, mfaTtl] = await this.increment(
+          'breezze:ratelimit:v1:mfa:' + ipDigest + ':' + mfaBucket,
+          this.mfaAttemptWindowMs,
+        );
+        if (mfaCount > this.mfaAttemptLimit) this.reject(mfaTtl, res);
+      }
 
       // Add a second independent bucket for login attempts against one account.
       // Hash the normalized identifier so Redis keys never contain email addresses.
