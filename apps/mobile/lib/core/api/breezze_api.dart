@@ -281,6 +281,20 @@ class BreezzeApi {
   Future<Map<String, dynamic>> claimArtist(String artistId) =>
       _post('/artist-portal/claims', {'artistId': artistId});
 
+  Future<Map<String, dynamic>> submitArtistRelease({
+    required String title,
+    required String artistId,
+    required int trackCount,
+  }) =>
+      _post('/artist-portal/releases', {
+        'title': title,
+        'artistId': artistId,
+        'trackCount': trackCount,
+      });
+
+  Future<List<Map<String, dynamic>>> artistReleases() async =>
+      _asMapList(await _get('/artist-portal/releases'));
+
   Future<Map<String, dynamic>> artistDashboard() =>
       _get('/artist-portal/dashboard');
 
