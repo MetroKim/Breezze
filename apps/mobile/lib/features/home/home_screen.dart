@@ -90,7 +90,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (name == null || name.trim().isEmpty) return;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    await PlaylistStore().create(ownerId, name);
+    String? remoteId;
+    if (auth is AuthSignedIn) {
+      try {
+        final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name.trim());
+        remoteId = remote['id'] as String?;
+      } catch (_) {}
+    }
+    await PlaylistStore().create(ownerId, name, id: remoteId);
     if (!mounted) return;
     ref.read(homeTabHintProvider.notifier).state = 3;
     ref.read(playlistRefreshSignalProvider.notifier).state++;
