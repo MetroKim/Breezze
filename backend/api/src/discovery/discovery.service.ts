@@ -164,49 +164,84 @@ export class DiscoveryService {
 
 
   async musicVideos(query = 'official music video') {
-    const apiKey = process.env.YOUTUBE_DATA_API_KEY;
-    const approvedChannels = (process.env.YOUTUBE_OFFICIAL_CHANNEL_IDS ?? '')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (!apiKey || approvedChannels.length === 0) {
-      throw new Error('YOUTUBE_VIDEO_PROVIDER_NOT_CONFIGURED');
+    const q = query.trim().slice(0, 100) || 'official music video';
+    const baseUrl = (process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000').replace(/\\/$/, '');
+    try {
+      const url = new URL('/videos', baseUrl);
+      url.searchParams.set('q', q);
+      url.searchParams.set('limit', '25');
+      const response = await fetch(url, { signal: AbortSignal.timeout(4500) });
+      if (!response.ok) throw new Error(`YTMUSIC_VIDEO_HTTP_${response.status}`);
+      const payload = await response.json() as {
+        source?: string;
+        videos?: {
+          videoId?: string; title?: string; artist?: string; artworkUrl?: string;
+          durationSec?: number | null; videoType?: string; classification?: string; url?: string;
+        }[];
+      };
+      if (!Array.isArray(payload.videos)) throw new Error('YTMUSIC_VIDEO_INVALID_RESPONSE');
+      return {
+        source: payload.source ?? 'YouTube Music via ytmusicapi',
+        classification: 'YouTube Music Original Music Video (OMV)',
+        fetchedAt: new Date().toISOString(),
+        items: payload.videos.map((video) => ({
+          id: video.videoId ?? null,
+          title: video.title ?? 'Untitled video',
+          artist: video.artist ?? 'Unknown artist',
+          artworkUrl: video.artworkUrl ?? null,
+          durationSec: video.durationSec ?? null,
+          videoType: video.videoType ?? null,
+          classification: video.classification ?? null,
+          url: video.url ?? null,
+          playback: 'external_youtube_only',
+        })),
+      };
+    } catch (ytMusicError) {
+      // Optional fallback: the official Data API is used only when an API key
+      // and manually reviewed channel allowlist have both been configured.
+      const apiKey = process.env.YOUTUBE_DATA_API_KEY;
+      const approvedChannels = (process.env.YOUTUBE_OFFICIAL_CHANNEL_IDS ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (!apiKey || approvedChannels.length === 0) throw ytMusicError;
+
+      const url = new URL('https://www.googleapis.com/youtube/v3/search');
+      url.searchParams.set('part', 'snippet');
+      url.searchParams.set('type', 'video');
+      url.searchParams.set('videoCategoryId', '10');
+      url.searchParams.set('videoEmbeddable', 'true');
+      url.searchParams.set('order', 'viewCount');
+      url.searchParams.set('maxResults', '50');
+      url.searchParams.set('q', q);
+      url.searchParams.set('key', apiKey);
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error(`YOUTUBE_DATA_HTTP_${response.status}`);
+      const payload = await response.json() as {
+        items?: { id?: { videoId?: string }; snippet?: {
+          title?: string; channelId?: string; channelTitle?: string;
+          publishedAt?: string; thumbnails?: { high?: { url?: string }; medium?: { url?: string } };
+        } }[];
+      };
+      const items = (payload.items ?? []).filter((item) =>
+        item.snippet?.channelId && approvedChannels.includes(item.snippet.channelId),
+      );
+      return {
+        source: 'YouTube Data API fallback',
+        verifiedChannelPolicy: 'Only channel IDs configured in YOUTUBE_OFFICIAL_CHANNEL_IDS are shown.',
+        fetchedAt: new Date().toISOString(),
+        items: items.map((item) => ({
+          id: item.id?.videoId ?? null,
+          title: item.snippet?.title ?? 'Untitled video',
+          artist: item.snippet?.channelTitle ?? 'Verified channel',
+          channelId: item.snippet?.channelId ?? null,
+          publishedAt: item.snippet?.publishedAt ?? null,
+          artworkUrl: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url ?? null,
+          url: item.id?.videoId ? `https://www.youtube.com/watch?v=${item.id.videoId}` : null,
+          playback: 'external_youtube_only',
+        })),
+      };
     }
-    const url = new URL('https://www.googleapis.com/youtube/v3/search');
-    url.searchParams.set('part', 'snippet');
-    url.searchParams.set('type', 'video');
-    url.searchParams.set('videoCategoryId', '10');
-    url.searchParams.set('videoEmbeddable', 'true');
-    url.searchParams.set('order', 'viewCount');
-    url.searchParams.set('maxResults', '50');
-    url.searchParams.set('q', query.trim().slice(0, 100) || 'official music video');
-    url.searchParams.set('key', apiKey);
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error(`YOUTUBE_DATA_HTTP_${response.status}`);
-    const payload = await response.json() as {
-      items?: { id?: { videoId?: string }; snippet?: {
-        title?: string; channelId?: string; channelTitle?: string;
-        publishedAt?: string; thumbnails?: { high?: { url?: string }; medium?: { url?: string } };
-      } }[];
-    };
-    const items = (payload.items ?? []).filter((item) =>
-      item.snippet?.channelId && approvedChannels.includes(item.snippet.channelId),
-    );
-    return {
-      source: 'YouTube Data API',
-      verifiedChannelPolicy: 'Only channel IDs configured in YOUTUBE_OFFICIAL_CHANNEL_IDS are shown.',
-      fetchedAt: new Date().toISOString(),
-      items: items.map((item) => ({
-        id: item.id?.videoId ?? null,
-        title: item.snippet?.title ?? 'Untitled video',
-        artist: item.snippet?.channelTitle ?? 'Verified channel',
-        channelId: item.snippet?.channelId ?? null,
-        publishedAt: item.snippet?.publishedAt ?? null,
-        artworkUrl: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url ?? null,
-        url: item.id?.videoId ? `https://www.youtube.com/watch?v=${item.id.videoId}` : null,
-        playback: 'external_youtube_only',
-      })),
-    };
   }
 
   async concerts(country = 'TZ', city?: string) {
