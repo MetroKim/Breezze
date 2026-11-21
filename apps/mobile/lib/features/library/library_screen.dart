@@ -130,7 +130,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   List<TrackInfo> _queue() => [
-        for (final f in _favorites) f.toTrackInfo(),
+        for (final f in _favorites)
+          if (!f.id.startsWith('bz:')) f.toTrackInfo(),
       ];
 
   Future<void> _playAll() async {
@@ -160,10 +161,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       }
       return;
     }
+    final queue = _queue();
+    final queueIndex = queue.indexWhere((item) => item.id == track.id);
+    if (queueIndex < 0) return;
     await ref.read(playerControllerProvider.notifier).playTrack(
           trackId: track.id,
-          queue: _queue(),
-          startIndex: index,
+          queue: queue,
+          startIndex: queueIndex,
           origin: 'library',
           sourceContext: 'Songs',
         );
