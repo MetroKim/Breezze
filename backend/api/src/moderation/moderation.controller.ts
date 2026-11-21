@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { IsIn, IsString, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ModerationService } from './moderation.service';
 
@@ -38,11 +39,13 @@ export class ModerationController {
     return this.moderation.fileReport(userId, dto);
   }
 
+  @UseGuards(AdminGuard)
   @Get('reports')
   listOpen() {
     return this.moderation.listOpen();
   }
 
+  @UseGuards(AdminGuard)
   @Post('reports/:id/resolve')
   resolve(
     @Param('id') id: string,
