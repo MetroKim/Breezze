@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
+import '../features/player/player_controller.dart';
 
 /// Composition root — the real, working wiring at startup.
 ///
