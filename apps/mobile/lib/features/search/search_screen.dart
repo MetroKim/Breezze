@@ -339,7 +339,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // Metadata IDs are not playable media URLs. Use YouTube's official player.
     if (track.id.startsWith('bz:')) {
       try {
-        final opened = await YoutubePlayerHandoff.openBreezzeTrackId(track.id);
+        final providerId = track.id.substring(3);
+        final launch = await ref.read(authSessionProvider.notifier).api
+            .getProviderPlaybackLaunch('youtube_music', providerId);
+        final descriptor = launch['value'];
+        final watchUrl = descriptor is Map ? descriptor['watchUrl'] as String? : null;
+        final opened = await YoutubePlayerHandoff.openBreezzeTrackId(track.id, watchUrl: watchUrl);
         if (!opened && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Could not open the official YouTube player.')),
