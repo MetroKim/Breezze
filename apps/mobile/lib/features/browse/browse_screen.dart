@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/audio/youtube_player_handoff.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
@@ -95,8 +96,29 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     );
   }
 
-  void _play(int index) {
+  Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
+    final selected = _tracks[index];
+    if (selected.id.startsWith('bz:')) {
+      try {
+        final opened = await YoutubePlayerHandoff.openFromApi(
+          ref.read(authSessionProvider.notifier).api,
+          selected.id,
+        );
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open the official YouTube player.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
+          );
+        }
+      }
+      return;
+    }
     final queue = [
       for (final track in _tracks)
         TrackInfo(
@@ -107,8 +129,8 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
           duration: track.duration,
         ),
     ];
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: _tracks[index].id,
+    await ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: selected.id,
           queue: queue,
           startIndex: index,
           origin: 'browse',
@@ -558,14 +580,35 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     }
   }
 
-  void _play(int index) {
+  Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
+    final selected = _tracks[index];
+    if (selected.id.startsWith('bz:')) {
+      try {
+        final opened = await YoutubePlayerHandoff.openFromApi(
+          ref.read(authSessionProvider.notifier).api,
+          selected.id,
+        );
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open the official YouTube player.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
+          );
+        }
+      }
+      return;
+    }
     final queue = [for (final track in _tracks) TrackInfo(
       id: track.id, title: track.title, artist: track.artist,
       artworkUrl: track.artworkUrl, duration: track.duration,
     )];
-    ref.read(playerControllerProvider.notifier).playTrack(
-      trackId: _tracks[index].id,
+    await ref.read(playerControllerProvider.notifier).playTrack(
+      trackId: selected.id,
       queue: queue,
       startIndex: index,
       origin: 'browse',
