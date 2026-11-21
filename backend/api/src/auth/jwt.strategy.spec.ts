@@ -8,7 +8,7 @@ describe('JwtStrategy session and MFA claims', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('requires an active, unexpired refresh-token family and carries MFA state from the signed JWT', async () => {
-    const user = { id: 'user-1', email: 'listener@example.com', role: 'admin' };
+    const user = { id: 'user-1', email: 'listener@example.com', role: 'admin', mfaEnabled: true };
     prisma.user.findFirst.mockResolvedValue(user);
 
     await expect(strategy.validate({
@@ -31,11 +31,12 @@ describe('JwtStrategy session and MFA claims', () => {
           },
         },
       },
+      select: { id: true, email: true, role: true, mfaEnabled: true },
     });
   });
 
   it('marks an otherwise valid session as not MFA verified when claim is absent', async () => {
-    prisma.user.findFirst.mockResolvedValue({ id: 'user-1', role: 'admin' });
+    prisma.user.findFirst.mockResolvedValue({ id: 'user-1', role: 'admin', mfaEnabled: true });
     await expect(strategy.validate({ sub: 'user-1', sid: 'family-1' }))
       .resolves.toMatchObject({ sessionId: 'family-1', mfaVerified: false });
   });
