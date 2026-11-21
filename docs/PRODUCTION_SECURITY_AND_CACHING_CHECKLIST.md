@@ -40,16 +40,16 @@
 - [~] Long passphrases accepted up to 128 characters; verify UI does not trim or normalize passwords.
 - [ ] Breached-password checks using HIBP k-anonymity or equivalent.
 - [ ] Password change: current-password re-authentication, session-family revocation and notification.
-- [~] Server-side refresh-token rows, session listing and per-session revoke service exist; controller revoke endpoint and integration tests remain.
+- [~] Server-side refresh-token rows, session listing and owner-scoped per-session revoke endpoint exist; access JWTs remain valid until their 15-minute expiry unless broader token-version/revocation checks are added.
 - [ ] Browser cookies: HttpOnly, Secure, SameSite and __Host- prefix if a browser session frontend is added.
 - [ ] CSRF tokens for cookie-authenticated state-changing browser requests.
 - [x] Mobile access token is memory-only; refresh token is persisted through OS secure storage (Keychain/Keystore).
-- [~] Logout attempts server revocation and clears OS secure storage; logout-all-devices and revoke-all endpoint remain.
+- [~] Logout attempts server revocation and clears OS secure storage; logout-all-devices and revoke-all endpoint remain. Per-session refresh-token revocation does not immediately invalidate already-issued access JWTs.
 
 ## 3. Authorization
 - [~] Deny by default: guards exist on parts of API; audit every controller and route.
 - [~] Server-side permission checks exist in selected services; require a route-by-route authorization matrix and tests.
-- [~] Object-level/IDOR checks: playlist and favorites ownership regression tests cover cross-account query scoping; expand adversarial tests to every resource ID and role.
+- [~] Object-level/IDOR checks: playlist and favorites ownership regression tests cover cross-account query scoping; push-token registration now rejects cross-account token reassignment with regression tests; expand adversarial tests to every resource ID and role.
 - [~] Persisted admin RBAC now protects admin and moderation-review routes; full resource-level RBAC and ABAC for territory/rights/resource context remain.
 - [ ] PostgreSQL RLS or equivalent tenant isolation; current schema is user-scoped, not a complete tenant/RLS implementation.
 - [~] Admin routes require persisted admin role; separate hostname/network boundary, MFA, privileged audit trail and just-in-time access remain.
@@ -274,3 +274,10 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 - [ ] Add integration tests proving regular users receive HTTP 403 on every admin/moderation route.
 
 **Important:** Do not expose a public bootstrap-admin endpoint. Keep the first promotion as a controlled database operation, verify the resulting admin account, then revoke the temporary DB access.
+
+
+## 16. Push-token ownership isolation (added 2026-11-21)
+- [x] Registering a device token already associated with a different account returns a conflict instead of silently transferring ownership.
+- [x] Existing token owners may refresh platform metadata without changing the stored owner.
+- [x] Unit tests cover cross-account rejection and owner-preserving updates.
+- [~] Add a database-backed concurrency test for simultaneous first registration of the same token by different accounts; enforce unique-token ownership under races before production push delivery.
