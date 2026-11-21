@@ -34,6 +34,7 @@ class AuthError extends AuthState {
 /// Session controller: access tokens remain memory-only; refresh tokens use
 /// iOS Keychain / Android Keystore-backed secure storage.
 class AuthSessionController extends Notifier<AuthState> {
+  Future<bool>? _refreshInFlight;
   static const _refreshTokenKey = 'breezze.refresh_token';
   static const _secureStorage = FlutterSecureStorage();
 
@@ -42,7 +43,7 @@ class AuthSessionController extends Notifier<AuthState> {
       'BREEZZE_API_URL',
       defaultValue: 'http://localhost:3000',
     ),
-  );
+  )..onUnauthorized = _refreshAccessToken;
 
   @override
   AuthState build() {
@@ -51,6 +52,34 @@ class AuthSessionController extends Notifier<AuthState> {
 
   BreezzeApi get api => _api;
 
+  Future<bool> _refreshAccessToken() async {
+    final active = _refreshInFlight;
+    if (active != null) return active;
+    final pending = _performRefresh();
+    _refreshInFlight = pending;
+    try {
+      return await pending;
+    } finally {
+      _refreshInFlight = null;
+    }
+  }
+
+  Future<bool> _performRefresh() async {
+    try {
+      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+      if (refreshToken == null || refreshToken.isEmpty) return false;
+      final response = await _api.refresh(refreshToken);
+      await _persistSession(response);
+      return true;
+    } catch (_) {
+      _api.accessToken = null;
+      try {
+        await _secureStorage.delete(key: _refreshTokenKey);
+      } catch (_) {}
+      state = const AuthSignedOut();
+      return false;
+    }
+  }
   Future<void> restoreSession() async {
     try {
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
