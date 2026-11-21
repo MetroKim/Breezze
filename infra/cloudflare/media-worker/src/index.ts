@@ -168,7 +168,10 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
       ? 'audio/flac' : 'audio/mp4');
   const headers = new Headers({
     'Accept-Ranges': 'bytes',
-    'Cache-Control': rangeHeader ? 'private, no-store' : 'public, max-age=60, s-maxage=60',
+    // Signed URLs must not be retained by browsers or intermediary caches: a cached
+    // response could remain playable after the signature's expiry. Add edge caching
+    // only with a cache key that includes the signature and a TTL capped by `expires`.
+    'Cache-Control': 'private, no-store',
     'Content-Type': contentType,
     'ETag': object.httpEtag,
     'X-Content-Type-Options': 'nosniff',
