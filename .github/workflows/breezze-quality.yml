@@ -100,7 +100,7 @@ jobs:
 
       - name: Keep third-party JSON deprecation warning non-fatal
         working-directory: apps/mobile
-        run: sed -i '/add_subdirectory("flutter")/i add_compile_options(-Wno-error=deprecated-literal-operator)' linux/CMakeLists.txt
+        run: sed -i 's/target_compile_options(${TARGET} PRIVATE -Wall -Werror)/target_compile_options(${TARGET} PRIVATE -Wall -Werror -Wno-error=deprecated-literal-operator)/' linux/CMakeLists.txt
 
       - name: Resolve mobile dependencies
         working-directory: apps/mobile
