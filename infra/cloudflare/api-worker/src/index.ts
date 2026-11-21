@@ -73,10 +73,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const originRequest = makeOriginRequest(target.toString(), request);
     const upstream = await fetch(originRequest);
     const vary = (upstream.headers.get('vary') ?? '').toLowerCase();
+    const unsafeVary = vary === '*' || vary.split(',').map((name) => name.trim())
+      .some((name) => name !== '' && !['accept-language', 'accept-encoding'].includes(name));
     if (upstream.status !== 200
       || upstream.headers.has('set-cookie')
-      || vary === '*'
-      || /(?:^|,)\\s*(?:authorization|cookie)(?:\\s*,|$)/.test(vary)
+      || unsafeVary
       || /private|no-store|no-cache/i.test(upstream.headers.get('cache-control') ?? '')) {
       const passthrough = new Response(upstream.body, upstream);
       passthrough.headers.set('X-Breezze-Edge-Cache', 'BYPASS');
