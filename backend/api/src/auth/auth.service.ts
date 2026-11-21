@@ -209,6 +209,17 @@ export class AuthService {
         data: { mfaVerified: true },
       });
       if (verified.count === 0) throw new UnauthorizedException('SESSION_INVALID');
+      if (user.role === 'admin') {
+        await tx.adminAuditEvent.create({
+          data: {
+            actorId: userId,
+            action: 'admin.mfa.enabled',
+            targetType: 'user',
+            targetId: userId,
+            metadata: { method: 'totp' },
+          },
+        });
+      }
     });
 
     const accessToken = await this.jwt.signAsync(
@@ -221,7 +232,7 @@ export class AuthService {
   async verifyMfa(userId: string, sessionId: string, code: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, mfaEnabled: true, mfaSecretCiphertext: true },
+      select: { id: true, email: true, role: true, mfaEnabled: true, mfaSecretCiphertext: true },
     });
     if (!user) throw new NotFoundException('USER_NOT_FOUND');
     if (!user.mfaEnabled || !user.mfaSecretCiphertext) {
@@ -241,6 +252,17 @@ export class AuthService {
         data: { mfaVerified: true },
       });
       if (updated.count === 0) throw new UnauthorizedException('SESSION_INVALID');
+      if (user.role === 'admin') {
+        await tx.adminAuditEvent.create({
+          data: {
+            actorId: userId,
+            action: 'admin.mfa.verified',
+            targetType: 'user',
+            targetId: userId,
+            metadata: { method: 'totp' },
+          },
+        });
+      }
     });
 
     const accessToken = await this.jwt.signAsync(
