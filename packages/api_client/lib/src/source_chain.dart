@@ -24,7 +24,7 @@ class SourceChain {
           final key = '${track.title}|${track.artist}'.toLowerCase();
           if (seen.add(key)) {
             results.add(BzTrack(
-              id: track.breezzTrackId,
+              id: track.breezzeTrackId,
               title: track.title,
               artist: track.artist,
               artworkUrl: track.artworkUrl,
