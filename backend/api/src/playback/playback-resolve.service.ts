@@ -24,6 +24,11 @@ export class PlaybackResolveService {
     if (!decision.allowed) {
       throw new NotAcceptableException(decision.reason);
     }
+    // This endpoint creates a full-track URL. A preview grant is not a
+    // full-stream entitlement; preview playback needs its own bounded URL.
+    if (decision.previewOnly) {
+      throw new NotAcceptableException('PREVIEW_ONLY');
+    }
     const variant = decision.qualityRestriction ?? dto.requestedQuality ?? 'AAC_256';
     return {
       trackId: dto.trackId,
