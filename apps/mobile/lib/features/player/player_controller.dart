@@ -46,6 +46,7 @@ class PlayerController extends Notifier<PlayerState> {
       _positionSub?.cancel();
       _engineStateSub?.cancel();
       _engine = null;
+      _activeSource = null;
     });
     return PlayerState.initial();
   }
