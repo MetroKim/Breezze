@@ -57,7 +57,7 @@ class DownloadsLibrary {
               await partialFile.exists() ? await partialFile.length() : 0;
           final request = await client.getUrl(Uri.parse(downloadUrl));
           if (existingBytes > 0) {
-            request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existingBytes-');
+            request.headers.set('range', 'bytes=$existingBytes-');
           }
           final response = await request.close();
           final resumes = existingBytes > 0 &&
@@ -69,7 +69,7 @@ class DownloadsLibrary {
             );
           }
           if (resumes) {
-            final contentRange = response.headers.value(HttpHeaders.contentRangeHeader);
+            final contentRange = response.headers.value('content-range');
             if (contentRange == null ||
                 !contentRange.startsWith('bytes $existingBytes-')) {
               throw const HttpException('invalid_resume_content_range');
@@ -84,7 +84,7 @@ class DownloadsLibrary {
           var received = resumes ? existingBytes : 0;
           final totalBytes = resumes
               ? _totalBytesFromContentRange(
-                  response.headers.value(HttpHeaders.contentRangeHeader),
+                  response.headers.value('content-range'),
                 )
               : response.contentLength;
           try {
