@@ -41,6 +41,7 @@
 - [ ] Breached-password checks using HIBP k-anonymity or equivalent.
 - [ ] Password change: current-password re-authentication, session-family revocation and notification.
 - [x] Access JWTs carry a session-family identifier; JWT validation requires an unrevoked, unexpired refresh-token family, so revoking that family invalidates its access JWTs on the next API request.
+- [~] Rollout note: access JWTs issued before the `sid` claim change are rejected; force clients to refresh/re-authenticate during deployment and verify mobile refresh handling.
 - [ ] Browser cookies: HttpOnly, Secure, SameSite and __Host- prefix if a browser session frontend is added.
 - [ ] CSRF tokens for cookie-authenticated state-changing browser requests.
 - [x] Mobile access token is memory-only; refresh token is persisted through OS secure storage (Keychain/Keystore).
