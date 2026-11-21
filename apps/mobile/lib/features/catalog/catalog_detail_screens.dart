@@ -759,9 +759,9 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                                 : 'Duration not supplied',
                           ),
                           trailing: IconButton(
-                            tooltip: 'Open preview',
+                            tooltip: 'Open track in Apple Music',
                             icon: const BzSvgIcon(name: 'arrow-up-right', size: 18),
-                            onPressed: () => _open(items[i]['previewUrl'] as String? ?? items[i]['url'] as String?),
+                            onPressed: () => _open(items[i]['url'] as String?),
                           ),
                         ),
                   ],
