@@ -106,8 +106,11 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       }
       return;
     }
+    final playableTracks = _tracks
+        .where((track) => !((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:')) || track.id.startsWith('bzv:')))
+        .toList();
     final queue = [
-      for (final track in _tracks)
+      for (final track in playableTracks)
         TrackInfo(
           id: track.id,
           title: track.title,
@@ -116,10 +119,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
           duration: track.duration,
         ),
     ];
+    final queueIndex = playableTracks.indexWhere((track) => track.id == selected.id);
+    if (queueIndex < 0) return;
     await ref.read(playerControllerProvider.notifier).playTrack(
           trackId: selected.id,
           queue: queue,
-          startIndex: index,
+          startIndex: queueIndex,
           origin: 'browse',
           sourceContext: _selectedGenre,
         );
@@ -580,14 +585,19 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       }
       return;
     }
-    final queue = [for (final track in _tracks) TrackInfo(
+    final playableTracks = _tracks
+        .where((track) => !((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:')) || track.id.startsWith('bzv:')))
+        .toList();
+    final queue = [for (final track in playableTracks) TrackInfo(
       id: track.id, title: track.title, artist: track.artist,
       artworkUrl: track.artworkUrl, duration: track.duration,
     )];
+    final queueIndex = playableTracks.indexWhere((track) => track.id == selected.id);
+    if (queueIndex < 0) return;
     await ref.read(playerControllerProvider.notifier).playTrack(
       trackId: selected.id,
       queue: queue,
-      startIndex: index,
+      startIndex: queueIndex,
       origin: 'browse',
       sourceContext: widget.destination.title + ': ' + _selected,
     );
