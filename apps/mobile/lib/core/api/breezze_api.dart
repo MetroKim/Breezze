@@ -116,6 +116,12 @@ class BreezzeApi {
         'territory': territory,
       });
 
+  Future<Map<String, dynamic>> revalidateOfflineLease({
+    required String trackId,
+    required String territory,
+  }) =>
+      _post('/downloads/$trackId/revalidate', {'territory': territory});
+
   Future<AuthResponse> refresh(String refreshToken) async {
     final data = await _post('/auth/refresh', {
       'refreshToken': refreshToken,
