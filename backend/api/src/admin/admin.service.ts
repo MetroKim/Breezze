@@ -18,10 +18,28 @@ export class AdminService {
     return { users, tracks, albums, artists, playlists, activeTakedowns: takedowns };
   }
 
-  async createUserRole(userId: string, role: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('USER_NOT_FOUND');
-    return this.prisma.user.update({ where: { id: userId }, data: { role }, select: { id: true, role: true } });
+  async createUserRole(actorId: string, userId: string, role: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });
+      if (!user) throw new NotFoundException('USER_NOT_FOUND');
+
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: { role },
+        select: { id: true, role: true },
+      });
+
+      await tx.adminAuditEvent.create({
+        data: {
+          actorId,
+          action: 'user.role.updated',
+          targetType: 'user',
+          targetId: userId,
+          metadata: { previousRole: user.role, newRole: role },
+        },
+      });
+      return updated;
+    });
   }
 
   async listTakedowns() {
@@ -31,14 +49,33 @@ export class AdminService {
     });
   }
 
-  async resolveTakedown(caseId: string) {
-    const resolved = await this.prisma.contentTakedownCase.updateMany({
-      where: { id: caseId },
-      data: { status: 'resolved' },
+  async resolveTakedown(actorId: string, caseId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const resolved = await tx.contentTakedownCase.updateMany({
+        where: { id: caseId, status: 'active' },
+        data: { status: 'resolved' },
+      });
+      if (resolved.count === 0) {
+        throw new NotFoundException('CASE_NOT_FOUND_OR_RESOLVED');
+      }
+
+      await tx.adminAuditEvent.create({
+        data: {
+          actorId,
+          action: 'takedown.resolved',
+          targetType: 'content_takedown_case',
+          targetId: caseId,
+          metadata: { newStatus: 'resolved' },
+        },
+      });
+      return { resolved: true };
     });
-    if (resolved.count === 0) {
-      throw new NotFoundException('CASE_NOT_FOUND');
-    }
-    return { resolved: true };
+  }
+
+  async listAuditEvents() {
+    return this.prisma.adminAuditEvent.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
   }
 }
