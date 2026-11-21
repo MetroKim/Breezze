@@ -27,7 +27,7 @@
 - [x] Refresh-token rotation: consumed token row is revoked and a new token is created in the same family.
 - [x] Refresh-token storage: SHA-256 hashes are stored; migration hashes existing values in place.
 - [~] Refresh-token reuse: replay of a revoked token can revoke its family; unit regression tests cover replay and concurrent rotation, but DB-backed integration tests remain.
-- [ ] MFA: TOTP and passkeys/WebAuthn; require MFA for administrators.
+- [~] Administrator MFA: TOTP is enforced for admin routes, secrets are AES-256-GCM encrypted, accepted time-steps are replay-protected, and ten one-time recovery codes are stored as hashes. Verification is Redis-rate-limited. Passkeys/WebAuthn, recovery-code regeneration, secure reset and delegated recovery controls remain.
 - [~] Login protection: atomic Redis-backed per-IP quota plus hashed per-account-and-source-IP login quota are shared across API replicas; progressive backoff and CAPTCHA escalation remain.
 - [ ] Account recovery: single-use expiring links and generic responses that do not reveal whether an email exists.
 - [ ] Email verification: signed one-time verification before sensitive actions.
