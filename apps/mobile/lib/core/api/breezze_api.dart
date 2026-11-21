@@ -107,6 +107,15 @@ class BreezzeApi {
         if (requestedQuality != null) 'requestedQuality': requestedQuality,
       });
 
+  Future<Map<String, dynamic>> authorizeDownload({
+    required String trackId,
+    required String territory,
+  }) =>
+      _post('/downloads', {
+        'trackId': trackId,
+        'territory': territory,
+      });
+
   Future<AuthResponse> refresh(String refreshToken) async {
     final data = await _post('/auth/refresh', {
       'refreshToken': refreshToken,
