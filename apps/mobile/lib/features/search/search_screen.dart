@@ -286,8 +286,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                           )
                                         : IconButton(
                                             tooltip: 'Download',
-                                            icon: const Icon(
-                                                Icons.download_outlined),
+                                            icon: BzSvgIcon(name: 'download', color: theme.bzText1),
                                             onPressed: () => _download(track),
                                           ),
                                     onTap: () => _play(track),
@@ -342,7 +341,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             onTap: () => _reuseSearch(query),
             trailing: IconButton(
               tooltip: 'Remove search',
-              icon: const Icon(Icons.close),
+              icon: BzSvgIcon(name: 'close', color: theme.bzText2),
               onPressed: () => _removeHistory(query),
             ),
           ),
