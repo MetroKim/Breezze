@@ -8,6 +8,7 @@ on:
       - breezze
   pull_request:
     branches:
+      - main
       - breezze
   workflow_dispatch:
 
