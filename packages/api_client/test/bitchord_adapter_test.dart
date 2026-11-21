@@ -43,6 +43,8 @@ void main() {
       final tracks = (result as ProviderOk<List<ProviderTrack>>).value;
       expect(tracks.first.title, 'Nightcall');
       expect(tracks.first.providerTrackId, 'abc123');
+      expect(tracks.first.artist, 'Kavinsky');
+      expect(tracks.first.duration, const Duration(minutes: 4, seconds: 14));
     });
 
     test('metadata adapter refuses playback without backend rights authorization',
