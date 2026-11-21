@@ -62,23 +62,42 @@ export class MediaService implements OnModuleInit {
   }
 
   async completeUpload(userId: string, jobId: string) {
-    const result = await this.prisma.mediaJob.updateMany({
+    const claimed = await this.prisma.mediaJob.updateMany({
       where: { id: jobId, userId, status: 'quarantined' },
       data: { status: 'uploaded' },
     });
-    if (result.count === 0) throw new NotFoundException('UPLOAD_JOB_NOT_FOUND');
 
+    // Read through the owner-scoped predicate even when the state transition
+    // lost a race. A retry after a queue/network failure may safely re-enqueue
+    // an already-uploaded record using the deterministic BullMQ job ID.
     const job = await this.prisma.mediaJob.findFirst({
       where: { id: jobId, userId },
     });
     if (!job) throw new NotFoundException('UPLOAD_JOB_NOT_FOUND');
 
+    if (claimed.count === 0 && job.status !== 'uploaded') {
+      if (['validating', 'processing', 'processed'].includes(job.status)) {
+        return { jobId, status: job.status, queued: true };
+      }
+      throw new NotFoundException('UPLOAD_JOB_NOT_READY');
+    }
+
     if (!this.queue) throw new Error('MEDIA_QUEUE_UNAVAILABLE');
-    await this.queue.add('pipeline', {
-      jobId: job.id,
-      submissionId: job.submissionId,
-      inputPath: `quarantine/${userId}/${job.id}/${job.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)}`,
-    } satisfies MediaJobData);
+    await this.queue.add(
+      'pipeline',
+      {
+        jobId: job.id,
+        submissionId: job.submissionId,
+        inputPath: `quarantine/${userId}/${job.id}/${job.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)}`,
+      } satisfies MediaJobData,
+      {
+        jobId: `media_${job.id}`,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 1_000 },
+        removeOnComplete: 1_000,
+        removeOnFail: 5_000,
+      },
+    );
 
     return { jobId, status: 'uploaded', queued: true };
   }
