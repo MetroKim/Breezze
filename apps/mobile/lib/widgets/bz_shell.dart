@@ -14,7 +14,6 @@ import '../features/library/library_screen.dart';
 import '../features/player/now_playing_screen.dart';
 import '../features/player/player_controller.dart';
 import '../features/search/search_screen.dart';
-import '../features/settings/settings_screen.dart';
 
 /// Breezze's five-destination shell. Downloads live inside Library and
 /// Settings are reached from the profile surface; neither is a top-level tab.
@@ -405,7 +404,7 @@ class _TabButton extends StatelessWidget {
                     height: 42,
                     decoration: BoxDecoration(
                       color: active ? theme.bzSurface2 : Colors.transparent,
-                      borderRadius: BorderRadius.circular(BzRadius.control),
+                      borderRadius: BorderRadius.circular(BzRadius.button),
                     ),
                     alignment: Alignment.center,
                     child: SvgPicture.asset(
