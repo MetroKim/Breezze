@@ -45,27 +45,23 @@ void main() {
       expect(tracks.first.providerTrackId, 'abc123');
     });
 
-    test('playback resolves when URL present, attaches poToken when supplied',
+    test('metadata adapter refuses playback without backend rights authorization',
         () async {
-      final withoutToken = BitChordAdapter(http: _FakeBackend());
-      final result = await withoutToken.resolvePlayback(
+      final adapter = BitChordAdapter(http: _FakeBackend());
+      final result = await adapter.resolvePlayback(
         'abc123',
         ProviderUserContext(
-            userId: 'u', territory: 'IN', subscriptionTier: 'premium'),
+          userId: 'u',
+          territory: 'TZ',
+          subscriptionTier: 'free',
+        ),
       );
-      expect(result, isA<ProviderOk<String>>());
 
-      final withToken = BitChordAdapter(
-        http: _FakeBackend(),
-        poTokenProvider: _FixedPoToken('MintsABotguardToken=='),
+      expect(result, isA<ProviderUnsupported>());
+      expect(
+        (result as ProviderUnsupported).reason,
+        'BACKEND_RIGHTS_CHECK_REQUIRED',
       );
-      final withResult = await withToken.resolvePlayback(
-        'abc123',
-        ProviderUserContext(
-            userId: 'u', territory: 'IN', subscriptionTier: 'premium'),
-      );
-      expect((withResult as ProviderOk<String>).value,
-          contains('pot=MintsABotguardToken=='));
     });
 
     test('playability gate maps to honest unsupported', () async {
@@ -176,10 +172,3 @@ class _UnplayableBackend implements BackendHttp {
   Future<String> getText(String url) async => fakeHomepage;
 }
 
-class _FixedPoToken implements PoTokenProvider {
-  final String value;
-  _FixedPoToken(this.value);
-
-  @override
-  Future<String?> token() async => value;
-}
