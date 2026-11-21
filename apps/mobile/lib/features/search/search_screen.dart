@@ -25,7 +25,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   List<String> _recentSearches = [];
   var _loading = false;
   var _searched = false;
+  var _searchLibrary = false;
   String? _error;
+
+  static const _suggestedSearches = <String, String>{
+    'Latest Songs': 'new songs',
+    'New Releases': 'new music releases',
+    'Trending Songs': 'trending songs',
+    'Daily Top 100': 'top 100 songs',
+    'Coming Soon': 'upcoming albums',
+    'Music Videos': 'music videos',
+    'Charts': 'top music charts',
+    'Browse by Genre': 'Afrobeats',
+    'Moods & Activities': 'workout music',
+    'Concerts': 'upcoming concerts',
+  };
   int _searchGeneration = 0;
 
   @override
@@ -70,6 +84,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
     } catch (_) {
       // Continue with the music-source request even if persistence fails.
+    }
+
+    if (_searchLibrary) {
+      try {
+        final favorites = await ref.read(favoritesStoreProvider).load();
+        if (!mounted || generation != _searchGeneration) return;
+        final needle = normalized.toLowerCase();
+        final matches = favorites.where((item) =>
+            item.title.toLowerCase().contains(needle) ||
+            item.artist.toLowerCase().contains(needle));
+        setState(() {
+          _loading = false;
+          _results = [
+            for (final item in matches)
+              BzTrack(
+                id: item.id,
+                title: item.title,
+                artist: item.artist,
+                artworkUrl: item.artworkUrl,
+                duration: Duration(milliseconds: item.durationMs),
+              ),
+          ];
+        });
+      } catch (_) {
+        if (!mounted || generation != _searchGeneration) return;
+        setState(() {
+          _loading = false;
+          _results = [];
+          _error = 'Your library could not be searched right now.';
+        });
+      }
+      return;
     }
 
     try {
@@ -198,6 +244,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Breezze'),
+                      selected: !_searchLibrary,
+                      onSelected: (_) {
+                        setState(() => _searchLibrary = false);
+                        if (_controller.text.trim().isNotEmpty) {
+                          _search(_controller.text);
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Your Library'),
+                      selected: _searchLibrary,
+                      onSelected: (_) {
+                        setState(() => _searchLibrary = true);
+                        if (_controller.text.trim().isNotEmpty) {
+                          _search(_controller.text);
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -300,52 +372,73 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildRecentSearches(ThemeData theme) {
-    if (_recentSearches.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            BzBnoteMark(size: 64, color: theme.bzText2),
-            const SizedBox(height: 16),
-            Text('Find something to play',
-                style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('Search songs and artists from the music source.',
-                style: theme.textTheme.bodyMedium),
-          ],
-        ),
-      );
-    }
-
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 220),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 180),
       children: [
-        Row(
+        if (_recentSearches.isNotEmpty) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Text('Recent Searches',
+                    style: theme.textTheme.titleLarge),
+              ),
+              TextButton(
+                onPressed: _clearHistory,
+                child: const Text('Clear'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final query in _recentSearches)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: BzSvgIcon(name: 'history', color: theme.bzText2),
+              title: Text(query,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => _reuseSearch(query),
+              trailing: IconButton(
+                tooltip: 'Remove search',
+                icon: BzSvgIcon(name: 'close', color: theme.bzText2),
+                onPressed: () => _removeHistory(query),
+              ),
+            ),
+          const SizedBox(height: 20),
+        ],
+        Text('Suggested searches', style: theme.textTheme.titleLarge),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 2.35,
           children: [
-            Expanded(
-              child: Text('Recent Searches',
-                  style: theme.textTheme.titleLarge),
-            ),
-            TextButton(
-              onPressed: _clearHistory,
-              child: const Text('Clear'),
-            ),
+            for (final item in _suggestedSearches.entries)
+              Material(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(BzRadius.card),
+                  onTap: () => _reuseSearch(item.value),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(BzRadius.card),
+                      border: Border.all(color: theme.bzSeparator),
+                    ),
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      item.key,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
-        const SizedBox(height: 8),
-        for (final query in _recentSearches)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: BzSvgIcon(name: 'history', color: theme.bzText2),
-            title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis),
-            onTap: () => _reuseSearch(query),
-            trailing: IconButton(
-              tooltip: 'Remove search',
-              icon: BzSvgIcon(name: 'close', color: theme.bzText2),
-              onPressed: () => _removeHistory(query),
-            ),
-          ),
       ],
     );
-  }
-}
+  }}
