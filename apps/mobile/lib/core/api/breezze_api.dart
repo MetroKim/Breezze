@@ -37,6 +37,7 @@ class BreezzeApi {
         path != '/auth/refresh' &&
         path != '/auth/login' &&
         path != '/auth/register' &&
+        !path.startsWith('/auth/mfa/') &&
         onUnauthorized != null &&
         await onUnauthorized!()) {
       response = await send();
