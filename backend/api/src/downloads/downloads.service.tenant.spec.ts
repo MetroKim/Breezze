@@ -21,7 +21,7 @@ describe('DownloadsService tenant isolation', () => {
     prisma.downloadRecord.findMany.mockResolvedValue([]);
     await service.list('user-a');
     expect(prisma.downloadRecord.findMany).toHaveBeenCalledWith({
-      where: { userId: 'user-a' },
+      where: { userId: 'user-a', status: 'active' },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
