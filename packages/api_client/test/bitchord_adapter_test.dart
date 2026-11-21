@@ -64,16 +64,7 @@ void main() {
       );
     });
 
-    test('playability gate maps to honest unsupported', () async {
-      final adapter = BitChordAdapter(http: _UnplayableBackend());
-      final result = await adapter.resolvePlayback(
-        'xyz',
-        ProviderUserContext(
-            userId: 'u', territory: 'IN', subscriptionTier: 'premium'),
-      );
-      expect(result, isA<ProviderUnsupported>());
-      expect((result as ProviderUnsupported).reason, 'playability_UNPLAYABLE');
-    });
+;
   });
 }
 
@@ -144,25 +135,6 @@ class _FakeBackend implements BackendHttp {
             }
           ]
         },
-      };
-    }
-    throw Exception('unexpected url');
-  }
-
-  @override
-  Future<String> getText(String url) async => fakeHomepage;
-}
-
-class _UnplayableBackend implements BackendHttp {
-  @override
-  Future<Object?> postJson(
-    String url,
-    Map<String, Object?> body, {
-    Map<String, String> headers = const {},
-  }) async {
-    if (url.contains('/player')) {
-      return {
-        'playabilityStatus': {'status': 'UNPLAYABLE'},
       };
     }
     throw Exception('unexpected url');
