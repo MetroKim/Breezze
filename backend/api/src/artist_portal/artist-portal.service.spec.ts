@@ -6,10 +6,46 @@ describe('ArtistPortalService tenant isolation', () => {
     artistClaim: { findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn() },
     track: { findMany: jest.fn() },
     listeningEvent: { findMany: jest.fn() },
+    releaseSubmission: { create: jest.fn(), findMany: jest.fn() },
   };
   const service = new ArtistPortalService(prisma as any);
 
   beforeEach(() => jest.clearAllMocks());
+
+  it('requires an approved artist claim before accepting a release', async () => {
+    prisma.artistClaim.findFirst.mockResolvedValue(null);
+    await expect(service.submitRelease('user-a', {
+      title: 'First release', artistId: 'artist-1', trackCount: 8,
+    })).rejects.toThrow('APPROVED_ARTIST_CLAIM_REQUIRED');
+    expect(prisma.releaseSubmission.create).not.toHaveBeenCalled();
+  });
+
+  it('creates release submissions only for the approved artist and account', async () => {
+    prisma.artistClaim.findFirst.mockResolvedValue({ id: 'claim-1' });
+    prisma.releaseSubmission.create.mockResolvedValue({ id: 'release-1' });
+    await service.submitRelease('user-a', {
+      title: ' First release ', artistId: 'artist-1', trackCount: 8,
+    });
+    expect(prisma.artistClaim.findFirst).toHaveBeenCalledWith({
+      where: { userId: 'user-a', artistId: 'artist-1', status: 'approved' },
+      select: { id: true },
+    });
+    expect(prisma.releaseSubmission.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-a', artistId: 'artist-1',
+        title: 'First release', trackCount: 8, status: 'submitted',
+      },
+    });
+  });
+
+  it('lists release submissions only for their owner', async () => {
+    prisma.releaseSubmission.findMany.mockResolvedValue([]);
+    await service.myReleases('user-a');
+    expect(prisma.releaseSubmission.findMany).toHaveBeenCalledWith({
+      where: { userId: 'user-a' },
+      orderBy: { createdAt: 'desc' },
+    });
+  });
 
   it('creates an artist claim for the authenticated account only', async () => {
     prisma.artist.findUnique.mockResolvedValue({ id: 'artist-1' });
