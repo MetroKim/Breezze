@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_session.dart';
@@ -146,7 +147,20 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? ListView(
+              padding: const EdgeInsets.all(24),
+              children: const [
+                Center(child: BzSkeleton(width: 96, height: 96, radius: 48, circle: true)),
+                SizedBox(height: 24),
+                BzSkeleton(width: 180, height: 14, radius: 5),
+                SizedBox(height: 14),
+                BzSkeleton(width: double.infinity, height: 52, radius: 10),
+                SizedBox(height: 28),
+                BzSkeletonTrackRow(),
+                SizedBox(height: 14),
+                BzSkeletonTrackRow(),
+              ],
+            )
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
@@ -155,6 +169,34 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
                   ),
+                Center(
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 96,
+                        height: 96,
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        alignment: Alignment.center,
+                        child: BzBnoteMark(size: 42, color: theme.bzText2),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Profile photo',
+                        style: theme.textTheme.labelLarge,
+                      ),
+                      Text(
+                        'Photo editing will be available when profile media support is connected.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
                 Text(_email ?? '', style: theme.textTheme.bodyMedium),
                 const SizedBox(height: 16),
                 TextField(

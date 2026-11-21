@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/download_preferences.dart';
+import '../../app/search_history_store.dart';
 import '../../core/auth/auth_session.dart';
 import 'account_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -40,6 +41,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveDownloadPreferences(DownloadPreferences value) async {
     setState(() => _downloads = value);
     await _store.save(value);
+  }
+
+  Future<void> _clearSearchHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear search history?'),
+        content: const Text('Recent searches saved on this device will be removed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear history'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await SearchHistoryStore().clear();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Search history cleared')),
+    );
   }
 
   @override
@@ -227,6 +254,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+          ]),
+          _section(theme, 'Playback', [
+            const ListTile(
+              leading: BzSvgIcon(name: 'repeat'),
+              title: Text('Gapless playback'),
+              subtitle: Text('Requires an audio-engine capability that is not available yet.'),
+              enabled: false,
+            ),
+            const ListTile(
+              leading: BzSvgIcon(name: 'volume-2'),
+              title: Text('Crossfade and volume normalization'),
+              subtitle: Text('Playback transitions and normalization are not exposed by the current engine.'),
+              enabled: false,
+            ),
+            const ListTile(
+              leading: BzSvgIcon(name: 'infinity'),
+              title: Text('Autoplay similar music'),
+              subtitle: Text('Available when Breezze recommendations are connected.'),
+              enabled: false,
+            ),
+            const ListTile(
+              leading: BzSvgIcon(name: 'clock'),
+              title: Text('Sleep timer'),
+              subtitle: Text('A playback timer will be added with the player controls.'),
+              enabled: false,
+            ),
+          ]),
+          _section(theme, 'Appearance & Accessibility', [
+            ListTile(
+              leading: const BzSvgIcon(name: 'moon'),
+              title: const Text('Appearance'),
+              subtitle: const Text('Follows your device light or dark theme.'),
+            ),
+            ListTile(
+              leading: const BzSvgIcon(name: 'settings'),
+              title: const Text('Motion and transparency'),
+              subtitle: const Text('Breezze respects system reduced-motion and high-contrast settings.'),
+            ),
+            ListTile(
+              leading: const BzSvgIcon(name: 'globe'),
+              title: const Text('App language'),
+              subtitle: const Text('Uses your device language until localized translations are available.'),
+            ),
+          ]),
+          _section(theme, 'Privacy & Data', [
+            ListTile(
+              leading: const BzSvgIcon(name: 'history'),
+              title: const Text('Clear search history'),
+              subtitle: const Text('Remove recent searches stored on this device.'),
+              trailing: const BzSvgIcon(name: 'chevron-right'),
+              onTap: _clearSearchHistory,
+            ),
+            const ListTile(
+              leading: BzSvgIcon(name: 'trash'),
+              title: Text('Cache management'),
+              subtitle: Text('Artwork cache controls are not available yet.'),
+              enabled: false,
+            ),
+          ]),
+          _section(theme, 'Help & Support', [
+            const ListTile(
+              leading: BzSvgIcon(name: 'bell'),
+              title: Text('Notifications'),
+              subtitle: Text('Manage Breezze notifications.'),
+              enabled: false,
+            ),
+            const ListTile(
+              leading: BzSvgIcon(name: 'share'),
+              title: Text('Send feedback'),
+              subtitle: Text('In-app feedback will be connected in a later release.'),
+              enabled: false,
+            ),
           ]),
         ],
       ),

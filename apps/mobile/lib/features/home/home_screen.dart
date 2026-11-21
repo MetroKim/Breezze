@@ -10,6 +10,7 @@ import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_screen.dart';
+import '../settings/account_screen.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
 ///
@@ -169,7 +170,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   customBorder: const CircleBorder(),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => const SettingsScreen(),
+                      builder: (_) => const AccountScreen(),
                     ),
                   ),
                   child: Container(
