@@ -804,7 +804,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                               ),
                               trailing: IconButton(
                                 tooltip: 'Open in Apple Music',
-                                icon: const BzSvgIcon(name: 'external-link', size: 19),
+                                icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
                                 onPressed: () => _openExternalCatalogItem(item),
                               ),
                               onTap: () => _openExternalCatalogItem(item),
