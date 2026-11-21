@@ -40,6 +40,13 @@ export class LoginDto {
   password!: string;
 }
 
+export class PasswordReauthDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  password!: string;
+}
+
 export class TotpCodeDto {
   @IsString()
   @Matches(/^(?:\d{6}|[A-Fa-f0-9]{4}(?:-?[A-Fa-f0-9]{4}){3})$/)
@@ -83,8 +90,8 @@ export class AuthController {
   @Post('mfa/setup')
   @Header('Cache-Control', 'private, no-store')
   @UseGuards(JwtAuthGuard)
-  beginMfaSetup(@CurrentUser() userId: string) {
-    return this.auth.beginMfaSetup(userId);
+  beginMfaSetup(@CurrentUser() userId: string, @Body() dto: PasswordReauthDto) {
+    return this.auth.beginMfaSetup(userId, dto.password);
   }
 
   @Post('mfa/setup/verify')
