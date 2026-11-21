@@ -6,7 +6,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/bootstrap.dart';
 import '../../core/auth/auth_session.dart';
 import '../../features/player/player_controller.dart';
-import '../../core/audio/youtube_player_handoff.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 final _appleTrackMatchesProvider =
