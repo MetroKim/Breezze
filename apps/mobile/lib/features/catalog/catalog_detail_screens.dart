@@ -8,6 +8,10 @@ import '../../core/auth/auth_session.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
+bool _isMetadataOnlySourceTrack(String id) =>
+    id.startsWith('bzv:') ||
+    (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
+
 final _appleTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
   final data = await ref
@@ -53,7 +57,7 @@ class TrackDetailScreen extends ConsumerWidget {
         .toList();
     final queueTracks = (relatedTracks.isEmpty ? [track] : relatedTracks)
         .where((item) =>
-            !item.id.startsWith('bz:') && !item.id.startsWith('bzv:'))
+            !_isMetadataOnlySourceTrack(item.id))
         .toList();
     final queue = [
       for (final item in queueTracks)
@@ -126,7 +130,7 @@ class TrackDetailScreen extends ConsumerWidget {
                   runSpacing: 10,
                   children: [
                     FilledButton.icon(
-                      onPressed: track.id.startsWith('bz:')
+                      onPressed: _isMetadataOnlySourceTrack(track.id)
                           ? null
                           : () async {
                         await ref.read(playerControllerProvider.notifier).playTrack(
@@ -138,7 +142,7 @@ class TrackDetailScreen extends ConsumerWidget {
                         );
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
-                      label: Text(track.id.startsWith('bz:') ? 'Playback unavailable' : 'Play'),
+                      label: Text(_isMetadataOnlySourceTrack(track.id) ? 'Playback unavailable' : 'Play'),
                     ),
                     OutlinedButton.icon(
                       onPressed: saveToLibrary,
@@ -818,12 +822,12 @@ class AlbumDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final queue = tracks.where((track) => !track.id.startsWith('bz:')).toList();
+    final queue = tracks.where((track) => !_isMetadataOnlySourceTrack(track.id)).toList();
 
     Future<void> playAt(int index, {bool shuffle = false}) async {
       if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
       final track = tracks[index];
-      if (track.id.startsWith('bz:')) {
+      if (_isMetadataOnlySourceTrack(track.id)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
         );
@@ -844,7 +848,7 @@ class AlbumDetailScreen extends ConsumerWidget {
 
     Future<void> play({bool shuffle = false}) async {
       if (tracks.isEmpty) return;
-      final nativeIndex = tracks.indexWhere((item) => !item.id.startsWith('bz:'));
+      final nativeIndex = tracks.indexWhere((item) => !_isMetadataOnlySourceTrack(item.id));
       if (nativeIndex >= 0) {
         await playAt(nativeIndex, shuffle: shuffle);
       } else {
