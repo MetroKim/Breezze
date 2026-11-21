@@ -27,6 +27,7 @@ class PlayerController extends Notifier<PlayerState> {
   final RecentStore _recent = RecentStore();
 
   AudioEngineAdapter? _engine;
+  PlayableSource? _activeSource;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlaybackState>? _engineStateSub;
   int _requestGeneration = 0;
@@ -105,6 +106,7 @@ class PlayerController extends Notifier<PlayerState> {
     _positionSub = null;
     _engineStateSub = null;
     _engine = null;
+    _activeSource = null;
   }
 
   bool _isMetadataOnlyProviderTrack(String id) =>
@@ -185,6 +187,7 @@ class PlayerController extends Notifier<PlayerState> {
     if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
     _queue.clear(keepCurrent: false);
     _trackInfos.clear();
+    _activeSource = null;
     _machine.dispatch(StopRequested(requestId: requestId));
     state = state.copyWith(
       clearCurrentTrack: true,
@@ -215,6 +218,14 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> resume() async {
     final engine = _engine;
     if (engine == null || state.playbackState != PlaybackState.paused) return;
+    final activeSource = _activeSource;
+    final currentTrack = state.currentTrack;
+    if (activeSource != null && activeSource.isExpired && currentTrack != null) {
+      // Provider grants are short-lived. Resolve a fresh grant instead of
+      // attempting to resume a stale URL after a long pause/background.
+      await _resolveAndPlay(currentTrack);
+      return;
+    }
     _machine.dispatch(PlayPressed());
     try {
       await _serializeEngineOperation(() async {
@@ -394,6 +405,7 @@ class PlayerController extends Notifier<PlayerState> {
       if (!_isCurrentRequest(requestId)) return;
 
       if (source == null) {
+        _activeSource = null;
         _machine.dispatch(SourceResolutionFailed(
           'NOT_AVAILABLE',
           requestId: requestId,
@@ -401,6 +413,7 @@ class PlayerController extends Notifier<PlayerState> {
         return;
       }
 
+      _activeSource = source;
       _machine.dispatch(SourceResolved(
         info.id,
         source.streamUrl,
