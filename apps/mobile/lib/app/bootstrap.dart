@@ -5,80 +5,250 @@ import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
-import '../core/audio/just_audio_engine_adapter.dart';
+import '../core/api/breezze_api.dart';
+import '../core/auth/auth_session.dart';
+import '../core/database/database_providers.dart';
+import '../core/database/outbox_sync_service.dart';
+import '../core/database/db_instance.dart';
+import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
 
-/// Composition root — constructs the real backend wiring at startup.
+/// Composition root for Breezze app services.
 ///
-/// API key comes from the environment (--dart-define=BITCHORD_API_KEY=...),
-/// never from source or assets.
-const String _apiKey =
-    String.fromEnvironment('BITCHORD_API_KEY', defaultValue: '');
+/// YouTube is used for metadata discovery only. Full playback and downloads
+/// are resolved through backend rights checks and signed CDN URLs. Lyrics
+/// lookup remains keyless through LRCLIB.
 
-/// package:http implementation of the backend HTTP seam.
-class HttpBackend implements BackendHttp {
+/// package:http impl of the lyrics HTTP seam.
+class HttpLyrics implements LyricsHttp {
   final http.Client _client = http.Client();
 
   @override
-  Future<Object?> postJson(
-    String url,
-    Map<String, Object?> body, {
-    Map<String, String> headers = const {},
-  }) async {
-    final response = await _client.post(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json', ...headers},
-      body: jsonEncode(body),
-    );
+  Future<String> getText(String url) async {
+    final response = await _client.get(Uri.parse(url));
     if (response.statusCode != 200) {
-      throw HttpException('backend_${response.statusCode}');
+      throw HttpException('lyrics_${response.statusCode}');
     }
-    return jsonDecode(response.body);
+    return response.body;
   }
 }
 
-/// Builds the BitChord-primary source chain.
-SourceChain buildSourceChain() => SourceChain([
-      BitChordAdapter(http: HttpBackend(), apiKey: _apiKey, signer: null),
-    ]);
+/// The app-wide metadata/search adapter; it is not a playback authority.
+final youtubeSourceProvider =
+    Provider<YoutubeSourceAdapter>((ref) => YoutubeSourceAdapter());
 
-/// App-wide providers.
-final sourceChainProvider =
-    Provider<SourceChain>((ref) => buildSourceChain());
+/// The lyrics provider.
+final lyricsProvider =
+    Provider<LyricsProvider>((ref) => LyricsProvider(HttpLyrics()));
 
-/// The playback resolver: resolves through the source chain.
-class SourceChainResolver implements PlaybackResolver {
-  final SourceChain chain;
+/// Metadata search chain. No source in this chain grants playback rights.
+final sourceChainProvider = Provider<SourceChain>((ref) => SourceChain([
+      ref.watch(youtubeSourceProvider),
+    ]));
 
-  SourceChainResolver(this.chain);
+/// The playback resolver. Catalog metadata is converged to a canonical
+/// backend track ID, then full-stream playback is authorized by the backend.
+/// The mobile client never turns a YouTube metadata result directly into a
+/// playable stream URL.
+class LiveResolver implements PlaybackResolver {
+  final Ref _ref;
+
+  LiveResolver(this._ref);
 
   @override
-  Future<PlayableSource?> resolve(String trackId) async {
-    final result = await chain.resolve(
-      trackId,
-      ProviderUserContext(
-        userId: 'local',
-        territory: Platform.localeName.split('_').last,
-        subscriptionTier: 'premium',
-      ),
+  Future<PlayableSource?> resolve(TrackInfo track) async {
+    final auth = _ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return null;
+
+    final api = _ref.read(authSessionProvider.notifier).api;
+    if (api.accessToken == null) return null;
+
+    try {
+      final catalogId = await _resolveCatalogId(api, track);
+      if (catalogId == null) return null;
+
+      final result = await api.resolvePlayback(
+        trackId: catalogId,
+        territory: _ref.read(outboxTerritoryProvider),
+      );
+      final streamUrl = result['streamUrl'] as String?;
+      final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
+      if (streamUrl == null || expiresAt == null) return null;
+
+      return PlayableSource(
+        trackId: track.id,
+        streamUrl: streamUrl,
+        expiresAtUtc: expiresAt.toUtc(),
+        codec: result['codec'] as String?,
+      );
+    } catch (_) {
+      // Rights denials and backend/network failures are unavailable playback,
+      // not permission to fall back to an unlicensed provider URL.
+      return null;
+    }
+  }
+
+  Future<String?> _resolveCatalogId(BreezzeApi api, TrackInfo track) async {
+    if (!track.id.startsWith('bz:')) return track.id;
+
+    final mapDao = _ref.read(catalogIdMapDaoProvider);
+    final cached = await mapDao.lookup(track.id);
+    if (cached != null) return cached;
+
+    final title = track.title;
+    final artist = track.artist;
+    if (title == null || title.trim().isEmpty ||
+        artist == null || artist.trim().isEmpty) {
+      return null;
+    }
+
+    final resolved = await api.resolveCatalogTrack(
+      externalId: track.id,
+      source: 'youtube',
+      title: title,
+      artistName: artist,
+      durationSec: track.duration.inSeconds.clamp(1, 86400).toInt(),
     );
-    if (result is! SourceChainOk) return null;
-    return PlayableSource(
-      trackId: trackId,
-      streamUrl: result.streamUrl,
-      expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 6)),
-    );
+    final catalogId = resolved['id'] as String?;
+    if (catalogId == null || catalogId.isEmpty) return null;
+    await mapDao.save(track.id, catalogId);
+    return catalogId;
   }
 }
 
-/// The resolver override applied once at app start via ProviderScope.
+/// Resolver override applied in main() via ProviderScope.
 final liveResolverProvider =
-    Provider<PlaybackResolver>((ref) => SourceChainResolver(buildSourceChain()));
+    Provider<PlaybackResolver>((ref) => LiveResolver(ref));
 
-/// Called from main() to attach the native engine to the global player.
-void attachPlaybackEngine(ProviderContainer container) {
-  final player =
-      container.read(playerControllerProvider.notifier);
-  player.attachEngine(JustAudioEngineAdapter());
+// ---------------------------------------------------------------------------
+// Storage (path_provider): app-private, survives restarts
+// ---------------------------------------------------------------------------
+
+/// App-private downloads directory — the real per-track offline library.
+Future<Directory> downloadsDirectory({required String userId}) async {
+  // Scope local media by authenticated account. Never share one account's
+  // downloaded catalogue with another account on the same device.
+  final safeUserId = userId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+  if (safeUserId.isEmpty) {
+    throw ArgumentError.value(userId, 'userId', 'must be non-empty');
+  }
+  final base = await getApplicationDocumentsDirectory();
+  final dir = Directory('${base.path}/downloads/$safeUserId');
+  await dir.create(recursive: true);
+  return dir;
 }
+
+// ---------------------------------------------------------------------------
+// Favorites — drift-backed store, JSON kept only as the legacy import
+// source for the one-shot migration.
+// ---------------------------------------------------------------------------
+
+/// A favorited track with its display info.
+class FavoriteTrack {
+  final String id;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final int durationMs;
+
+  const FavoriteTrack({
+    required this.id,
+    required this.title,
+    required this.artist,
+    this.artworkUrl,
+    this.durationMs = 0,
+  });
+
+  TrackInfo toTrackInfo() => TrackInfo(
+        id: id,
+        title: title,
+        artist: artist,
+        artworkUrl: artworkUrl,
+        duration: Duration(milliseconds: durationMs),
+      );
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'title': title,
+        'artist': artist,
+        'artworkUrl': artworkUrl,
+        'durationMs': durationMs,
+      };
+
+  static FavoriteTrack fromJson(Map<String, Object?> json) => FavoriteTrack(
+        id: json['id'] as String,
+        title: json['title'] as String? ?? '',
+        artist: json['artist'] as String? ?? '',
+        artworkUrl: json['artworkUrl'] as String?,
+        durationMs: json['durationMs'] as int? ?? 0,
+      );
+}
+
+/// Legacy JSON favorites reader — used ONLY by the one-shot migration.
+class LegacyFavoritesJson {
+  static const _fileName = 'breezze_favorites.json';
+
+  Future<File> _file() async {
+    final base = await getApplicationDocumentsDirectory();
+    return File('${base.path}/$_fileName');
+  }
+
+  Future<List<FavoriteTrack>> load() async {
+    try {
+      final file = await _file();
+      if (!await file.exists()) return [];
+      final raw = jsonDecode(await file.readAsString());
+      if (raw is! List) return [];
+      return [
+        for (final item in raw)
+          if (item is Map) FavoriteTrack.fromJson(item.cast<String, Object?>())
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+}
+
+/// Favorites store — drift-backed (SQLite). Same public API as the
+/// JSON version (load / toggle / isFavorite), so screens are unchanged.
+class FavoritesStore {
+  final FavoritesDao _dao = FavoritesDao(breezzeDb);
+
+  Future<List<FavoriteTrack>> load() async {
+    final rows = await _dao.list();
+    return [
+      for (final r in rows)
+        FavoriteTrack(
+          id: r.id.value,
+          title: r.title.value,
+          artist: r.artist.value,
+          artworkUrl: r.artworkUrl.value,
+          durationMs: r.durationMs.value,
+        )
+    ];
+  }
+
+  /// Returns true when the track was added, false when removed.
+  Future<bool> toggle(FavoriteTrack track) async {
+    if (await _dao.contains(track.id)) {
+      await _dao.remove(track.id);
+      return false;
+    }
+    await _dao.add(
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      artworkUrl: track.artworkUrl,
+      durationMs: track.durationMs,
+    );
+    return true;
+  }
+
+  Future<bool> isFavorite(String id) => _dao.contains(id);
+}
+
+/// App-wide favorites store provider.
+final favoritesStoreProvider =
+    Provider<FavoritesStore>((ref) => FavoritesStore());

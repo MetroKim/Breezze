@@ -1,64 +1,209 @@
 # Breezze Gap Register — spec §50.4
 
-Requirement-by-requirement status against the §49 matrix. A line is
-IMPLEMENTED only with real behavior + passing tests (§50.6 evidence
-standard). Screenshots alone are not evidence.
+A line is IMPLEMENTED only with real behavior + passing tests (§50.6).
 
-| Req ID | Requirement | Priority | Status | Evidence / path | Next action |
-|---|---|---|---|---|---|
-| **A. Product identity and design** | | | | |
-| A-01 | Breezze logo, icon, wordmark | P0 | IMPLEMENTED | `assets/icons/*.svg` + `bz_brand_icons.dart` | Launcher icon exports |
-| A-02 | Black/white-first tokens, light+dark | P0 | IMPLEMENTED | `design_system/src/tokens.dart` (verified vs §21.1) | — |
-| A-03 | Atmosphere materials | P0 | PARTIAL | atmo colors in theme; blur widget pending | `BzGlass` widget |
-| A-04 | SVG icons, no emoji | P0 | PARTIAL | Brand marks vector; nav uses Material icons | Original nav icon set |
-| A-05 | Type/spacing/radius/elevation tokens | P0 | IMPLEMENTED | `tokens.dart` | — |
-| A-06 | Components + variants | P1 | PARTIAL | Tab bar, mini-player, rows, cards; tab bar now navigates | Variant specs |
-| **B. Flutter application quality** | | | | |
-| B-01 | Feature-first architecture | P0 | IMPLEMENTED | `features/player, home, downloads, settings` | Remaining features |
-| B-02 | One state approach (Riverpod) | P0 | IMPLEMENTED | `player_controller.dart` global provider | — |
-| B-03 | Typed navigation | P0 | PARTIAL | IndexedStack shell navigation; go_router pending | Router + deep links |
-| B-04 | Screens do not own player state | P0 | IMPLEMENTED | All commands via `PlayerController` | — |
-| B-05 | Responsive layouts | P1 | NOT STARTED | — | Breakpoint helpers |
-| **C. Catalog and providers** | | | | |
-| C-01 | Canonical IDs, provider mappings | P0 | IMPLEMENTED | `provider_adapter.dart`, `bz_track.dart` | — |
-| C-02 | Provider credentials server-side | P0 | BLOCKED | Signer seam defined (`SignerService`); real backend missing | NestJS API |
-| C-03 | Playable sources rights-verified | P0 | IMPLEMENTED | `SourceChain` primary→fallback w/ tests | Backend resolver |
-| **D. Player and media** | | | | |
-| D-01 | One global player | P0 | IMPLEMENTED | `PlayerController` + `AudioEngineAdapter` | — |
-| D-02 | Playback state machine | P0 | IMPLEMENTED | `playback_state_machine.dart` + 7 tests | — |
-| D-03 | Queue, shuffle, repeat | P0 | IMPLEMENTED | `queue_manager.dart` + 11 tests | — |
-| D-04 | Background playback | P0 | BLOCKED | Platform engine plugin needed | audio_service spike |
-| D-05 | Crossfade | P1 | IMPLEMENTED | `crossfade_controller.dart` | Engine fade |
-| D-06 | Scrobbling | P1 | IMPLEMENTED | `scrobble_bus.dart` + 2 tests | Real sinks |
-| D-07 | Lyrics engine | P1 | IMPLEMENTED | `lrc_parser.dart` + 5 tests | Lyrics UI |
-| D-08 | AutoMix | P2 | **IMPLEMENTED** | `automix.dart` + 4 tests (ported, closes D-08) | Engine tempo factor |
-| D-09 | Quality tiers incl. lossless/Hi-Res | P0 | **IMPLEMENTED** | `audio_quality.dart` honest labels, no upsample | Server gating |
-| **E. Library and offline** | | | | |
-| E-01 | Favorites, library persist | P0 | NOT STARTED | — | Drift store |
-| E-02 | Offline downloads | P1 | **IMPLEMENTED (core)** | `download_manager.dart` + Downloads UI; eligibility, retry, remove | Engine file sink |
-| E-03 | Sync without silent loss | P1 | NOT STARTED | — | Outbox |
-| **F. Backend and operations** | | | | |
-| F-01..04 | /api/v1, Postgres, auth, observability | P0 | NOT STARTED | — | NestJS scaffold |
-| **G. Privacy and security** | | | | |
-| G-01 | No client-side secrets | P0 | IMPLEMENTED | Signer + resolver are server-side contracts | — |
-| G-02 | History controls, deletion | P1 | NOT STARTED | — | Privacy screens |
-| **H. Premium & monetization** | | | | |
-| H-01 | Membership tiers + entitlements | P1 | IMPLEMENTED (client domain) | `membership.dart` tiers, `Entitlement` snapshot | Server billing |
-| H-02 | Settings: quality/playback/downloads | P1 | IMPLEMENTED | `settings_screen.dart` sections | Persist via prefs |
-| H-03 | Premium gating (lossless/Hi-Res/AutoMix) | P1 | IMPLEMENTED (hints) | settings + entitlement model; server decides | Billing provider |
+## Compiler-cascade root cause (found and fixed)
 
-## Fixed this pass
+`packages/design_system/lib/src/bz_theme.dart` was **never committed**
+(an earlier write silently failed) while the barrel exported it and all
+seven screens + shell consumed its tokens. One missing file made the
+entire design_system package fail to resolve, cascading hundreds of
+analyzer errors into every screen.
 
-- Dead tab-bar navigation → real IndexedStack switching (A-06).
-- AutoMix D-08 → ported with 4 tests.
-- Design-system barrel missing → `breezze_design_system.dart` added.
-- audio_contracts pubspec invalid trailing section → removed.
-- Downloads + Settings + open-source README added.
+Fixes applied:
 
-## Repair order (§50.5)
+- Added `bz_theme.dart` (light/dark themes + BzThemeColors extension +
+  `theme.bzText1`-style aliases every screen uses).
+- Corrected the package barrel: it pointed at a wrong path
+  (`bz_theme.dart` instead of `src/bz_theme.dart`) and did not export
+  `tokens.dart` (BzType/BzRadius/BzMotion/BzSpacing) at all.
+- Verified every consumed API against its real source file, line by
+  line: QueueManager.replaceWith(startIndex:), PlaybackStateMachine
+  events, AudioEngineAdapter.prepare(PlayableSource), ScrobbleBus.onPlay,
+  LrcParser.parse/activeLineIndex/activeWordIndex, ProviderOp types,
+  ProviderUserContext, brand icons. All match.
 
-1. ✅ Source chain, downloads, membership, quality, AutoMix.
-2. ⬜ BzGlass material widget (A-03).
-3. ⬜ go_router + deep links (B-03).
-4. ⬜ Drift local store (E-01) → wire Downloads list to real jobs.
-5. ⬜ NestJS API scaffold (F-01) with auth + resolver.
+| Req ID | Requirement | Status | Evidence |
+|---|---|---|---|
+| A-01 | Brand marks | IMPLEMENTED | `assets/icons/`, `bz_brand_icons.dart` |
+| A-02 | Tokens light+dark, exact hex | IMPLEMENTED | `tokens.dart` (verified) |
+| A-03 | Atmosphere materials in theme | IMPLEMENTED | `bz_theme.dart` |
+| A-05 | Type/spacing/radius/elevation | IMPLEMENTED | `tokens.dart` |
+| B-01..04 | Architecture, Riverpod, one player, navigation | IMPLEMENTED | `features/*`, shell |
+| C-01/03 | Real keyless source, honest results | IMPLEMENTED | `youtube_source_adapter.dart` |
+| D-01..03 | Player, state machine, queue | IMPLEMENTED | + tests |
+| D-04 | Native playback engine | IMPLEMENTED | `just_audio_engine_adapter.dart` |
+| D-05/06/08 | Crossfade, scrobble, AutoMix | IMPLEMENTED | ports + tests |
+| D-07 | Lyrics engine + provider | IMPLEMENTED | `lrc_parser.dart` + LRCLIB |
+| D-09 | Quality tiers | IMPLEMENTED | `audio_quality.dart` |
+| D-10 | Now Playing, word-synced lyrics | IMPLEMENTED | `now_playing_screen.dart` |
+| D-11 | Background audio | IMPLEMENTED | `audio_service_bridge.dart` |
+| E-01 | Favorites persistence | IMPLEMENTED | `FavoritesStore` |
+| E-02 | Downloads w/ lyrics + art | IMPLEMENTED | `downloads_library.dart` |
+| E-03 | Live download progress | IMPLEMENTED | `DownloadsController` |
+| E-04 | Recently played rails | IMPLEMENTED | `RecentStore` |
+| G-01 | No client secrets | IMPLEMENTED | keyless sources |
+| H-01..03 | Tiers, settings, gating | IMPLEMENTED | `membership.dart` |
+
+## Remaining
+
+- One local verification run: `flutter create . && flutter pub get &&
+  flutter analyze`. The design-system cascade is fixed at the source; any
+  remaining output should now be a short, copyable list.
+- Android manifest entries for background audio (documented in README).
+
+## Product experience rollout — 2026-11-21
+
+The full target information architecture and UX behavior are documented in
+`docs/PRODUCT_EXPERIENCE.md`. This rollout deliberately builds on the
+existing `breezze` branch implementation rather than duplicating the
+screens that already exist there.
+
+| Requirement | Status | Evidence | Remaining work |
+|---|---|---|---|
+| Local recent-search history | IMPLEMENTATION ADDED — tests pending | `app/search_history_store.dart`, `features/search/search_screen.dart` | Run Flutter tests/analyze; then mark implemented |
+| Search history deduplication and cap | IMPLEMENTATION ADDED — tests pending | Store caps at 10 and deduplicates case-insensitively | Verify tests |
+| Remove one recent search / clear all | IMPLEMENTATION ADDED — tests pending | Search screen actions + store methods | Verify UI and persistence tests |
+| Stale search response protection | IMPLEMENTED IN CODE — tests pending | Search generation token in SearchScreen | Add widget test for out-of-order results |
+| Search failure vs no-results state | IMPLEMENTED IN CODE — tests pending | Provider/network error state separated from empty results | Add provider failure widget tests |
+| Catalog result groups | PARTIAL | Existing keyless source returns track results; backend has catalog/search modules | Add canonical catalog-backed album/artist/playlist/video/station results |
+| Browse editorial/charts/genres/moods | BACKEND/UI INTEGRATION PENDING | Backend Catalog and Recommendations modules exist | Connect typed client repositories and real feeds |
+| Radio stations and programs | BACKEND/UI INTEGRATION PENDING | Radio backend module exists | Connect client repository, station detail, and playback rights |
+| Album/artist/playlist detail | PARTIAL | Catalog models and backend read endpoints exist | Add detail routes and complete track/entity UI |
+| Responsive desktop/tablet shell | NOT VERIFIED | Existing Flutter shell is phone-first | Implement and test responsive layouts |
+| Accessibility/reduced motion | NOT AUDITED | Existing design-system motion/tokens and semantic controls | Run accessibility and reduced-motion audit |
+
+### Verification gate
+
+Do not promote the new search-history rows to IMPLEMENTED until these pass
+from `apps/mobile`:
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+```
+
+Backend verification remains separate:
+
+```bash
+cd backend/api
+npm install
+npx prisma generate
+npm run typecheck
+npm test -- --runInBand
+```
+
+### Additional navigation and discovery work — 2026-11-21
+
+| Requirement | Status | Evidence | Remaining work |
+|---|---|---|---|
+| Browse destination | UI + live genre search added — verification pending | `features/browse/browse_screen.dart` uses the existing keyless source adapter and global PlayerController | Add widget tests; add curated backend editorial/chart/genre feeds when available |
+| Genre discovery | UI + provider integration added — verification pending | Afrobeats, Bongo Flava, Amapiano, Gospel, Hip-Hop, R&B, Jazz and Electronic search categories | Add backend-owned genre taxonomy and browse analytics |
+| Radio station directory | API-connected UI added — verification pending | `features/radio/radio_screen.dart` reads the existing public `/radio/stations` endpoint | Add widget tests and real station artwork |
+| Radio program details | API-connected UI added — verification pending | Station detail reads `/radio/stations/:id` and renders returned programs | Add schedule timezone formatting and pagination |
+| Radio playback | NOT IMPLEMENTED | Current PlayerController resolves catalog track IDs, not radio station stream sessions | Add a separate authorized radio playback contract and engine session type |
+| Primary navigation | Browse and Radio added to IndexedStack shell | `widgets/bz_shell.dart` | Validate small-screen horizontal tab navigation and wide layouts |
+
+Browse search results are provider search results for the selected genre. They are
+not presented as official charts, editorial playlists, or platform-curated
+rankings. Radio station cards show the backend's live flag but do not expose a
+play action until station playback is supported by the audio engine.
+
+
+## Engineering completion backlog — 2026-11-21
+
+The prioritized completion plan and critical defect register now live in
+`docs/ROADMAP_AND_BUG_BACKLOG.md`. It separates confirmed code defects from
+items that require migration/runtime verification and defines P0/P1/P2 work,
+regression coverage, exit gates and the recommended implementation order.
+
+**New release blockers identified during source inspection:**
+- ProviderContainer/audio-engine ownership currently occurs inside
+  `BreezzeShell.build()`; lifecycle ownership must be stabilized.
+- Playback resolver operations have no request generation/cancellation
+  guard, and the state machine does not accept a new start from several
+  active states.
+- Search history persistence errors were caught as if they were provider
+  network errors; the SearchScreen now treats history as best-effort and
+  continues the provider request when local persistence fails (test pending).
+- Radio is metadata/schedule UI only; stream playback is not implemented.
+- The inspected Prisma schema still contains
+  `@@unique([userId, trackId])` on `RecentlyPlayed`; reconcile it with
+  the migration history and intended repeated-play semantics before
+  changing the schema.
+
+Do not treat these findings as fixed. The Flutter/backend validation suite
+has not been run in this environment. See the backlog for exact tests and
+release acceptance criteria.
+
+
+## P0 playback stabilization — implementation started
+
+| Defect | Status | Evidence | Remaining verification |
+|---|---|---|---|
+| ProviderContainer recreated during shell build | FIX APPLIED — tests pending | `main.dart` now provides one root ProviderScope; `BreezzeShell` no longer creates a private container; `BreezzeAppRoot` owns engine attach/dispose and the migration container | Widget test auth transitions/rebuilds and exactly-once engine disposal; analyzer/runtime verification |
+| Stale playback resolver responses | FIX APPLIED — tests added | `PlayerController` uses request generations and ignores stale resolver results | Execute fake-resolver tests; add detach and engine-error cases |
+| Native prepare operations racing | FIX APPLIED — tests added | PlayerController serializes prepare/play engine mutations and rechecks request generation before/after prepare | Execute delayed-prepare race test on CI and real device |
+| State machine rejects a new selection from active states | FIX APPLIED — tests added | `PlaybackStateMachine` treats each new start as superseding and rejects stale request IDs | Execute package tests and expand transition matrix |
+| Playback Future awaited for entire song | FIX APPLIED — test pending | Controller no longer awaits the long-lived just_audio play Future as if it meant “started” | Verify actual just_audio behavior on Android/iOS and ensure async engine errors surface |
+
+
+## Verified implementation update — 2026-11-21
+
+This section supersedes older "verification pending" and "suite not run"
+statements above for the exact commit tested below.
+
+**Verified commit:** `f919323173156b0494fe49c5dc23d2c4f8f3f12d`  
+**CI run:** [44911197349 — all jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/44911197349)
+
+| Requirement | Current status | Evidence | Remaining work |
+|---|---|---|---|
+| Search-history persistence, deduplication, cap, remove and clear | IMPLEMENTED + tests passed | `apps/mobile/test/search_history_store_test.dart`; full mobile test suite passed | Add widget-level coverage for visual actions and storage failure |
+| Browse and Radio directories | IMPLEMENTED + app analysis/tests passed | Browse genre search and Radio API integration | Widget tests; curated editorial feeds; radio playback remains separate |
+| Playback request races and serialized prepare | IMPLEMENTED + tests passed | `player_controller_test.dart` | Device-level Android/iOS validation and detach lifecycle tests |
+| Native seek failure handling | IMPLEMENTED + regression test passed | PlayerController dispatches `SEEK_FAILED` | Verify on real devices |
+| Scrobble listening-time ticks and session cleanup | IMPLEMENTED IN CODE | Position stream ticks only while player is playing; stop/track-change/end/detach/dispose and playback failures remove pending sessions | Add deterministic controller integration tests for 30-second threshold and pause behavior |
+| Download account isolation | IMPLEMENTED + API-client tests passed | Per-user storage directories; owner ID persisted; owner-filtered library; legacy ownerless records hidden; library refreshes on auth changes and stale account results are discarded | Device-level account-switch-during-download tests |
+| Offline local-file playback | IMPLEMENTED IN CODE + mobile tests passed | Local `PlayableSource`, `setFilePath`, resolver bypass test | Real-device codec/container validation and corrupted-file recovery |
+| Offline licence expiry | BOUNDED LEASE + ONLINE REVALIDATION IMPLEMENTED IN CODE | Server issues a maximum 72-hour offline lease capped by the underlying rights end; mobile persists it, checks it before playback, and revalidates current territory/rights/takedowns when online. Revoked downloads are removed from the local library. | Run full CI, add device-level offline/online/revocation tests, and verify policy with rights holders |
+| Download storage path safety | IMPLEMENTED IN CODE | User IDs and track storage keys sanitized | Add adversarial path test cases |
+| Full CI | PASSED | Run 44910820541: Drift codegen, mobile/API-client/design-system/audio-contracts checks, Prisma generation/validation, backend typecheck/tests/build | Re-run after any subsequent code changes |
+
+### Offline-rights limitation
+
+A fully offline device cannot learn that a rights holder has issued a new takedown
+or revoked a licence after the last successful authorization. Local playback
+currently enforces the stored rights end time and account owner; it does not
+provide instantaneous offline revocation. Production release requires a
+bounded offline licence lease and mandatory revalidation when connectivity
+returns, with a policy for expired or revoked leases.
+
+### Still not implemented
+
+- Cloudflare R2 deployment, custom-domain configuration and live end-to-end signature validation (code and CI checks are implemented; account provisioning is pending).
+- Radio streaming sessions and player-engine support.
+- Prisma migration baseline/history against the deployed database.
+- Artist, album and playlist detail routes and catalog-backed editorial feeds.
+- Full tenant-isolation integration tests, accessibility/responsive audits and real-device audio/download validation.
+
+
+## Cloudflare R2 + offline licence implementation update — 2026-11-21
+
+- Added `infra/cloudflare/media-worker`: HMAC verification, expiring signed playback URLs, byte-range requests, and size-bound signed uploads to a private R2 bucket.
+- Added NestJS signed upload registration and owner-scoped upload completion. Uploads are queued only after completion.
+- Added an R2-backed media worker path: quarantine object download, FFmpeg validation/transcoding, and processed HLS output upload to R2 staging keys.
+- Added Cloudflare Worker TypeScript checking to the Breezze quality workflow.
+- Added a maximum 72-hour offline lease, capped by catalogue rights expiry, plus an authenticated online revalidation endpoint. Rights denial/takedown revokes the server download record and the mobile library removes the local asset on successful revalidation.
+- Important: processed outputs are staged under `processed/{jobId}`. A moderated publication step must map them to canonical `audio/{trackId}/{variant}` objects before playback URLs can resolve. No public R2 access is enabled.
+
+Operator setup remains: create the bucket and scoped R2 token; deploy the Worker; attach a custom domain; set the same `MEDIA_SIGNING_KEY` on Worker and API; configure the backend media worker's R2 credentials; and run live upload/range/playback tests. These account-side actions have not been performed by repository commits.
+
+
+## Dependency audit + framework upgrade — 2026-11-21
+
+- Upgraded the API from NestJS 10 to patched NestJS 11.2.11 packages, with compatible Config 4.0.4, Swagger 11.2.7, Throttler 6.8.0, Passport 11.0.5 and JWT 11.0.2 integrations.
+- Added patched `glob` 14.0.2 and `minimatch` 11.0.1 overrides for the Nest CLI dependency chain.
+- Upgraded the Cloudflare Worker to Wrangler 4.166.0 and matching `@cloudflare/workers-types` 5.20261121.1; Worker CI uses Node 22.
+- Full CI workflow `44913618622` passed backend typecheck/tests/build, Flutter analysis/tests and API client/audio contract checks, plus Cloudflare Worker typechecking.
+- `npm audit` reports 0 vulnerabilities for both the backend and Cloudflare Worker dependency trees.

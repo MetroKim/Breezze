@@ -20,6 +20,9 @@ class PlayableSource {
   final int? sampleRateHz;
   final int? bitDepth;
 
+  /// Local app-private media is exempt from signed-URL expiry checks.
+  final bool isLocal;
+
   PlayableSource({
     required this.trackId,
     required this.streamUrl,
@@ -27,9 +30,11 @@ class PlayableSource {
     this.codec,
     this.sampleRateHz,
     this.bitDepth,
+    this.isLocal = false,
   });
 
-  bool get isExpired => DateTime.now().toUtc().isAfter(expiresAtUtc);
+  bool get isExpired =>
+      !isLocal && DateTime.now().toUtc().isAfter(expiresAtUtc);
 }
 
 /// Commands the global PlayerController can issue to the engine.

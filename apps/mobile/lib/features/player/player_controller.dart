@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/recent_store.dart';
+
 /// Global PlayerController — spec §51.3, §53.1.
 ///
 /// THE one application-wide playback authority. All screens dispatch
@@ -11,137 +13,408 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class PlayerController extends Notifier<PlayerState> {
   late final PlaybackStateMachine _machine = PlaybackStateMachine(
     onTransition: (prev, next) {
-      final s = state;
-      state = s.copyWith(playbackState: next);
+      state = state.copyWith(playbackState: next);
     },
   );
 
   late final QueueManager _queue = QueueManager(
     onQueueChanged: () {
-      final s = state;
-      state = s.copyWith(queueVersion: s.queueVersion + 1);
+      state = state.copyWith(queueVersion: state.queueVersion + 1);
     },
   );
 
   late final ScrobbleBus _scrobbles = ScrobbleBus();
+  final RecentStore _recent = RecentStore();
 
   AudioEngineAdapter? _engine;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlaybackState>? _engineStateSub;
+  int _requestGeneration = 0;
+  Future<void> _engineOperations = Future<void>.value();
+
+  /// Track info remembered for the current queue, keyed by track id.
+  final Map<String, TrackInfo> _trackInfos = {};
 
   @override
-  PlayerState build() => PlayerState.initial();
+  PlayerState build() {
+    ref.onDispose(() {
+      _requestGeneration++;
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      _positionSub?.cancel();
+      _engineStateSub?.cancel();
+      _engine = null;
+    });
+    return PlayerState.initial();
+  }
 
   QueueManager get queue => _queue;
 
   void attachEngine(AudioEngineAdapter engine) {
-    _engine = engine;
+    _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
+    _engine = engine;
+
     _positionSub = engine.positionStream.listen((pos) {
-      final s = state;
-      // Isolate high-frequency updates (§51.6): screens select only what
-      // they need from this state.
-      state = s.copyWith(position: pos);
+      if (!identical(_engine, engine)) return;
+      state = state.copyWith(position: pos, duration: engine.duration);
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null &&
+          state.playbackState == PlaybackState.playing) {
+        _scrobbles.onTick(currentTrackId, DateTime.now().toUtc());
+      }
     });
-    _engineStateSub = engine.engineStateStream.listen((st) {
-      final s = state;
-      state = s.copyWith(playbackState: st);
+    _engineStateSub = engine.engineStateStream.listen((engineState) {
+      if (!identical(_engine, engine)) return;
+
+      // Ignore events emitted by the previous media item while the new
+      // source is being resolved/prepared.
+      if (state.playbackState == PlaybackState.idle ||
+          state.playbackState == PlaybackState.resolving ||
+          state.playbackState == PlaybackState.loading ||
+          state.playbackState == PlaybackState.transitioning) {
+        return;
+      }
+      state = state.copyWith(playbackState: engineState);
+      if (engineState == PlaybackState.ended ||
+          engineState == PlaybackState.failed) {
+        final currentTrackId = state.currentTrack?.id;
+        if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      }
     });
   }
 
   void detachEngine() {
+    final currentTrackId = state.currentTrack?.id;
+    if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+    _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
+    _positionSub = null;
+    _engineStateSub = null;
     _engine = null;
   }
 
   // ----------------------------------------------------------------
-  // Commands (every command goes through the state machine, §53.2)
+  // Commands
   // ----------------------------------------------------------------
 
   Future<void> playTrack({
     required String trackId,
+    String? title,
+    String? artist,
+    String? artworkUrl,
+    String? localFilePath,
+    Duration duration = Duration.zero,
+    List<TrackInfo> queue = const [],
+    int startIndex = 0,
     String origin = 'manual',
     String sourceContext = 'Breezze',
-    String? sourceCollectionId,
   }) async {
-    final entry = QueueEntry(
-      entryId: 'qe-${DateTime.now().microsecondsSinceEpoch}',
-      trackId: trackId,
-      origin: origin,
-      sourceContext: sourceContext,
-      sourceCollectionId: sourceCollectionId,
-      insertedAtMs: DateTime.now().millisecondsSinceEpoch,
-      trackVersion: 'v1',
+    if (queue.isNotEmpty) {
+      final entries = [
+        for (var i = 0; i < queue.length; i++)
+          QueueEntry(
+            entryId: 'qe-$trackId-$i-${DateTime.now().microsecondsSinceEpoch}',
+            trackId: queue[i].id,
+            origin: origin,
+            sourceContext: sourceContext,
+            insertedAtMs: DateTime.now().millisecondsSinceEpoch,
+            trackVersion: 'v1',
+          ),
+      ];
+      _queue.replaceWith(entries, startIndex: startIndex);
+      for (final item in queue) {
+        _trackInfos[item.id] = item;
+      }
+    } else {
+      final entry = QueueEntry(
+        entryId: 'qe-${DateTime.now().microsecondsSinceEpoch}',
+        trackId: trackId,
+        origin: origin,
+        sourceContext: sourceContext,
+        insertedAtMs: DateTime.now().millisecondsSinceEpoch,
+        trackVersion: 'v1',
+      );
+      _queue.replaceWith([entry]);
+    }
+
+    final info = queue.isEmpty
+        ? TrackInfo(
+            id: trackId,
+            title: title,
+            artist: artist,
+            artworkUrl: artworkUrl,
+            localFilePath: localFilePath,
+            duration: duration,
+          )
+        : queue[startIndex.clamp(0, queue.length - 1)];
+
+    await _resolveAndPlay(info);
+  }
+
+  /// Stops playback and clears the current queue. Used on explicit user stop
+  /// and account sign-out so one user's media cannot continue into another
+  /// account session.
+  Future<void> stop() async {
+    final requestId = ++_requestGeneration;
+    final engine = _engine;
+    final currentTrackId = state.currentTrack?.id;
+    if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+    _queue.clear(keepCurrent: false);
+    _trackInfos.clear();
+    _machine.dispatch(StopRequested(requestId: requestId));
+    state = state.copyWith(
+      clearCurrentTrack: true,
+      position: Duration.zero,
+      duration: Duration.zero,
     );
-    _queue.replaceWith([entry]);
-    await _resolveAndPrepare(entry);
+    if (engine == null) return;
+    try {
+      await _serializeEngineOperation(() => engine.stop());
+    } catch (_) {
+      // The logical player is already idle; native stop is best-effort.
+    }
+  }
+
+  Future<void> pause() async {
+    final engine = _engine;
+    if (engine == null || state.playbackState != PlaybackState.playing) return;
+    _machine.dispatch(PausePressed());
+    try {
+      await _serializeEngineOperation(() => engine.pause());
+    } catch (_) {
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      _machine.dispatch(SourceResolutionFailed('PAUSE_FAILED', requestId: _machine.activeRequestId));
+    }
+  }
+
+  Future<void> resume() async {
+    final engine = _engine;
+    if (engine == null || state.playbackState != PlaybackState.paused) return;
     _machine.dispatch(PlayPressed());
-    await _engine?.play();
-    _scrobbles.onPlay(trackId, DateTime.now().toUtc());
+    try {
+      await _serializeEngineOperation(() async {
+        unawaited(engine.play().catchError(
+          (Object error, StackTrace stackTrace) {
+            final currentTrackId = state.currentTrack?.id;
+            if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+            _machine.dispatch(SourceResolutionFailed(
+              'RESUME_FAILED',
+              requestId: _machine.activeRequestId,
+            ));
+          },
+        ));
+      });
+    } catch (_) {
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      _machine.dispatch(SourceResolutionFailed(
+        'RESUME_FAILED',
+        requestId: _machine.activeRequestId,
+      ));
+    }
   }
 
   Future<void> togglePlayPause() async {
     if (state.playbackState == PlaybackState.playing) {
-      _machine.dispatch(PausePressed());
-      await _engine?.pause();
-    } else {
-      _machine.dispatch(PlayPressed());
-      await _engine?.play();
+      await pause();
+    } else if (state.playbackState == PlaybackState.paused) {
+      await resume();
     }
   }
 
   Future<void> seekTo(Duration position) async {
+    final engine = _engine;
+    if (engine == null || state.playbackState != PlaybackState.playing) {
+      return;
+    }
     _machine.dispatch(SeekRequested(position));
-    await _engine?.seek(position);
-    _machine.dispatch(SeekCompleted());
+    try {
+      await _serializeEngineOperation(() => engine.seek(position));
+      _machine.dispatch(SeekCompleted());
+    } catch (_) {
+      final currentTrackId = state.currentTrack?.id;
+      if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      _machine.dispatch(SourceResolutionFailed(
+        'SEEK_FAILED',
+        requestId: _machine.activeRequestId,
+      ));
+    }
   }
 
   Future<void> next() async {
     final entry = _queue.advance();
     if (entry == null) return;
-    await _resolveAndPrepare(entry);
-    _machine.dispatch(TrackTransitioned(entry.trackId));
-    await _engine?.play();
+    final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
+    await _resolveAndPlay(info);
   }
 
   Future<void> previous() async {
     final entry = _queue.previous();
     if (entry == null) return;
-    await _resolveAndPrepare(entry);
-    await _engine?.play();
+    final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
+    await _resolveAndPlay(info);
+  }
+
+  /// Register a Last.fm/ListenBrainz-compatible scrobbling destination.
+  void registerScrobbler(Scrobbler scrobbler) {
+    _scrobbles.register(scrobbler);
   }
 
   void toggleShuffle() => _queue.toggleShuffle();
-
   void cycleRepeat() => _queue.cycleRepeat();
 
-  Future<void> _resolveAndPrepare(QueueEntry entry) async {
-    _machine.dispatch(StartRequested(entry.trackId));
-    // The PlaybackResolver (backend) supplies the authorized source; the
-    // client never constructs stream URLs itself (§29.9, §52.4).
-    final source =
-        await ref.read(playbackResolverProvider).resolve(entry.trackId);
-    if (source == null) {
-      _machine.dispatch(SourceResolutionFailed('NOT_AVAILABLE'));
-      return;
-    }
-    _machine.dispatch(SourceResolved(entry.trackId, source.streamUrl));
-    await _engine?.prepare(source);
-    _machine.dispatch(MediaReady());
+  TrackInfo? _trackInfoFor(String trackId) => _trackInfos[trackId];
+
+  bool _isCurrentRequest(int requestId) =>
+      requestId == _requestGeneration && _engine != null;
+
+  /// Serializes native engine mutations. Resolution remains concurrent, but
+  /// prepare/play operations execute in order so an older prepare cannot
+  /// finish after and overwrite a newer selected track.
+  Future<void> _serializeEngineOperation(
+      Future<void> Function() operation) {
+    final result = _engineOperations.then((_) => operation());
+    _engineOperations = result.catchError((_) {});
+    return result;
   }
+
+  Future<void> _resolveAndPlay(TrackInfo info) async {
+    final previousTrackId = state.currentTrack?.id;
+    if (previousTrackId != null && previousTrackId != info.id) {
+      _scrobbles.onStop(previousTrackId);
+    }
+    final requestId = ++_requestGeneration;
+    _trackInfos[info.id] = info;
+    state = state.copyWith(
+      currentTrack: info,
+      position: Duration.zero,
+      duration: info.duration,
+    );
+    _machine.dispatch(StartRequested(info.id, requestId: requestId));
+
+    try {
+      final source = info.localFilePath != null
+          ? PlayableSource(
+              trackId: info.id,
+              streamUrl: info.localFilePath!,
+              expiresAtUtc: DateTime.utc(9999),
+              isLocal: true,
+            )
+          : await ref.read(playbackResolverProvider).resolve(info);
+      if (!_isCurrentRequest(requestId)) return;
+
+      if (source == null) {
+        _machine.dispatch(SourceResolutionFailed(
+          'NOT_AVAILABLE',
+          requestId: requestId,
+        ));
+        return;
+      }
+
+      _machine.dispatch(SourceResolved(
+        info.id,
+        source.streamUrl,
+        requestId: requestId,
+      ));
+      if (_machine.state != PlaybackState.loading) return;
+
+      final engine = _engine;
+      if (engine == null) {
+        _machine.dispatch(SourceResolutionFailed(
+          'AUDIO_ENGINE_UNAVAILABLE',
+          requestId: requestId,
+        ));
+        return;
+      }
+
+      await _serializeEngineOperation(() async {
+        if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
+          return;
+        }
+
+        await engine.prepare(source);
+        if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
+          return;
+        }
+
+        _machine.dispatch(MediaReady(requestId: requestId));
+        if (_machine.state != PlaybackState.buffering) return;
+        _machine.dispatch(PlayPressed());
+        if (_machine.state != PlaybackState.playing) return;
+
+        // just_audio's play Future completes when playback stops, not when
+        // playback first starts. Do not await the whole song here.
+        unawaited(engine.play().catchError(
+          (Object error, StackTrace stackTrace) {
+            if (_isCurrentRequest(requestId)) {
+              _scrobbles.onStop(info.id);
+              _machine.dispatch(SourceResolutionFailed(
+                'PLAYBACK_FAILED',
+                requestId: requestId,
+              ));
+            }
+          },
+        ));
+      });
+
+      if (!_isCurrentRequest(requestId) ||
+          _machine.state != PlaybackState.playing) {
+        return;
+      }
+
+      if (info.title != null) {
+        unawaited(_recent
+            .record(
+              info.id,
+              info.title!,
+              info.artist ?? '',
+              info.artworkUrl,
+              info.duration,
+            )
+            .catchError((_) {}));
+      }
+      _scrobbles.onPlay(info.id, DateTime.now().toUtc());
+    } catch (_) {
+      if (_isCurrentRequest(requestId)) {
+        _machine.dispatch(SourceResolutionFailed(
+          'PLAYBACK_SETUP_FAILED',
+          requestId: requestId,
+        ));
+      }
+    }
+  }
+}
+
+/// Display info for a track — what Now Playing renders.
+class TrackInfo {
+  final String id;
+  final String? title;
+  final String? artist;
+  final String? artworkUrl;
+  final String? localFilePath;
+  final Duration duration;
+
+  const TrackInfo({
+    required this.id,
+    this.title,
+    this.artist,
+    this.artworkUrl,
+    this.localFilePath,
+    this.duration = Duration.zero,
+  });
 }
 
 /// The backend playback resolver contract — platform-agnostic.
 abstract interface class PlaybackResolver {
-  /// Returns an authorized, short-lived [PlayableSource] or null when the
-  /// track is unavailable in the user's territory/entitlement (§29.9).
-  Future<PlayableSource?> resolve(String trackId);
+  Future<PlayableSource?> resolve(TrackInfo track);
 }
 
 /// Provider for the resolver; overridden in bootstrap with the real
-/// API-backed implementation.
+/// implementation.
 final playbackResolverProvider = Provider<PlaybackResolver>((ref) {
   throw UnimplementedError('Overridden in bootstrap');
 });
@@ -151,6 +424,7 @@ class PlayerState {
   final PlaybackState playbackState;
   final Duration position;
   final Duration duration;
+  final TrackInfo? currentTrack;
 
   /// Bumped on queue mutations; UI listens to this to rebuild queue views.
   final int queueVersion;
@@ -159,6 +433,7 @@ class PlayerState {
     required this.playbackState,
     required this.position,
     required this.duration,
+    required this.currentTrack,
     required this.queueVersion,
   });
 
@@ -166,6 +441,7 @@ class PlayerState {
         playbackState: PlaybackState.idle,
         position: Duration.zero,
         duration: Duration.zero,
+        currentTrack: null,
         queueVersion: 0,
       );
 
@@ -173,12 +449,15 @@ class PlayerState {
     PlaybackState? playbackState,
     Duration? position,
     Duration? duration,
+    TrackInfo? currentTrack,
+    bool clearCurrentTrack = false,
     int? queueVersion,
   }) {
     return PlayerState(
       playbackState: playbackState ?? this.playbackState,
       position: position ?? this.position,
       duration: duration ?? this.duration,
+      currentTrack: clearCurrentTrack ? null : (currentTrack ?? this.currentTrack),
       queueVersion: queueVersion ?? this.queueVersion,
     );
   }
