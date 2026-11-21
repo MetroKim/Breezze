@@ -255,3 +255,22 @@ Breezze currently has no user-facing LLM feature. These are mandatory gates befo
 - CI: .github/workflows/breezze-quality.yml
 
 This checklist intentionally leaves operational controls unchecked until evidence exists in the real environment.
+
+
+## 15. Persisted administrator roles (added 2026-11-21)
+- [x] Persist a `role` column on users, defaulting to `user`; apply migration `20261121203000_user_roles` before deploying this code.
+- [x] Admin dashboard, takedown and role-management routes require both JWT authentication and the persisted `admin` role.
+- [x] Moderation report listing and resolution require the admin role; authenticated users may still file reports.
+- [x] Role assignment updates the database instead of returning a success-shaped placeholder.
+- [x] Unit tests cover admin guard allow/deny behavior and persisted role assignment.
+- [ ] Bootstrap the first administrator out-of-band after verifying the account owner. Example (run against the production DB through an approved secure SQL session, replacing the address):
+
+```sql
+UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
+```
+
+- [ ] Require MFA for every administrator before public launch; MFA is not implemented by this change.
+- [ ] Add immutable audit events for role grants/revocations and all administrative actions.
+- [ ] Add integration tests proving regular users receive HTTP 403 on every admin/moderation route.
+
+**Important:** Do not expose a public bootstrap-admin endpoint. Keep the first promotion as a controlled database operation, verify the resulting admin account, then revoke the temporary DB access.
