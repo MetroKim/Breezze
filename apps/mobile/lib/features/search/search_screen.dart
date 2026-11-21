@@ -41,7 +41,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     'Browse by Genre': 'Afrobeats',
     'Moods & Activities': 'workout music',
     'Concerts': 'upcoming concerts',
-    'City Charts': 'top songs in Dar es Salaam',
+    'City Charts': 'top city charts',
   };
   int _searchGeneration = 0;
 
@@ -278,15 +278,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _addFavorite(BzTrack track) async {
-    await ref.read(favoritesStoreProvider).toggle(
-          FavoriteTrack(
-            id: track.id,
-            title: track.title,
-            artist: track.artist,
-            artworkUrl: track.artworkUrl,
-            durationMs: track.duration.inMilliseconds,
-          ),
-        );
+    final favorites = ref.read(favoritesStoreProvider);
+    if (!await favorites.isFavorite(track.id)) {
+      await favorites.toggle(
+        FavoriteTrack(
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          artworkUrl: track.artworkUrl,
+          durationMs: track.duration.inMilliseconds,
+        ),
+      );
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Library updated')),
