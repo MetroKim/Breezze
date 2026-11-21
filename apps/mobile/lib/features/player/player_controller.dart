@@ -448,6 +448,9 @@ class PlayerController extends Notifier<PlayerState> {
             )
             .catchError((_) {}));
       }
+      unawaited(
+        ref.read(playHistoryReporterProvider)(info).catchError((_) {}),
+      );
       _scrobbles.onPlay(info.id, DateTime.now().toUtc());
     } catch (_) {
       if (_isCurrentRequest(requestId)) {
@@ -533,6 +536,14 @@ class PlayerState {
     );
   }
 }
+
+/// Reports successfully started plays to the backend for listening history
+/// and artist analytics. The default is a no-op for isolated player tests.
+typedef PlayHistoryReporter = Future<void> Function(TrackInfo track);
+
+final playHistoryReporterProvider = Provider<PlayHistoryReporter>(
+  (ref) => (track) async {},
+);
 
 /// The single global provider — one instance app-wide (§53.1).
 final playerControllerProvider =
