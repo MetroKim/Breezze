@@ -131,8 +131,10 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     } finally {
       if (identical(_cancellations[track.id], cancellation)) _cancellations.remove(track.id);
       if (mounted) {
-        final next = Map<String, double>.of(state)..remove(track.id);
-        state = next;
+        if (ref.read(downloadJobStatusProvider)[track.id] != 'paused') {
+          final next = Map<String, double>.of(state)..remove(track.id);
+          state = next;
+        }
       }
     }
   }
