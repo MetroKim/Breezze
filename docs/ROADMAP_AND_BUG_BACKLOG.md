@@ -51,7 +51,9 @@ The GitHub connector was used to inspect and edit source files, but it did not p
 
 ### Phase A — Stabilize the foundation (P0)
 
-- [ ] Fix BUG-001 through BUG-004.
+- [x] Fix BUG-001 through BUG-003 in source; tests added but not executed.
+- [x] Fix BUG-004 in source; widget test still pending.
+- [ ] Run Flutter analyzer/tests and add app-root lifecycle tests before closing Phase A.
 - [ ] Verify app startup, auth gate, onboarding, sign-out, and re-login do not leak providers, engines, subscriptions, or stale user state.
 - [ ] Verify the audio engine lifecycle on Android, iOS, desktop and web targets that the project actually supports. Do not claim an OS is supported until its plugin/runtime path is tested.
 - [ ] Define one typed error model across API client, provider adapter, playback resolver, and UI.
@@ -161,8 +163,9 @@ The GitHub connector was used to inspect and edit source files, but it did not p
 
 ## 4. Work order I will follow
 
-1. Stabilize ProviderContainer/audio-engine ownership and fix playback request/state-machine races.
-2. Add deterministic playback tests and correct search-history failure isolation.
+1. Complete lifecycle/widget regression tests for the root ProviderScope and audio engine.
+2. Execute the new deterministic playback tests, add remaining failure/detach coverage, and correct any analyzer/test failures.
+3. Finish the remaining playback error paths and search-history failure-isolation test.
 3. Reconcile RecentlyPlayed schema/migrations and verify backend history behavior.
 4. Move Radio to a typed repository, harden its API contract, and define authorized radio playback.
 5. Finish artist/album/playlist detail routes and real catalogue-backed Browse/Home feeds.
