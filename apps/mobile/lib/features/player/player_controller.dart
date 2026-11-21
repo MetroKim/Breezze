@@ -145,6 +145,7 @@ class PlayerController extends Notifier<PlayerState> {
     final requestId = ++_requestGeneration;
     final engine = _engine;
     _queue.clear(keepCurrent: false);
+    _trackInfos.clear();
     _machine.dispatch(StopRequested(requestId: requestId));
     state = state.copyWith(
       clearCurrentTrack: true,
