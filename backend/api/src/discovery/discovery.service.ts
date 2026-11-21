@@ -117,6 +117,38 @@ export class DiscoveryService {
     };
   }
 
+
+  async searchTracks(query: string) {
+    const q = query.trim().slice(0, 120);
+    if (q.length < 2) return { source: 'Apple iTunes Search API', items: [] };
+    const url = new URL('https://itunes.apple.com/search');
+    url.searchParams.set('term', q);
+    url.searchParams.set('entity', 'song');
+    url.searchParams.set('limit', '30');
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error(`ITUNES_TRACK_SEARCH_HTTP_${response.status}`);
+    const payload = await response.json() as { results?: Record<string, unknown>[] };
+    return {
+      source: 'Apple iTunes Search API',
+      items: (payload.results ?? []).map((track) => ({
+        id: track.trackId,
+        title: track.trackName,
+        artist: track.artistName,
+        artistId: track.artistId,
+        albumId: track.collectionId,
+        albumTitle: track.collectionName,
+        albumUrl: track.collectionViewUrl,
+        artworkUrl: track.artworkUrl100,
+        releaseDate: track.releaseDate,
+        durationMs: track.trackTimeMillis,
+        trackNumber: track.trackNumber,
+        url: track.trackViewUrl,
+        previewUrl: track.previewUrl,
+        playback: 'preview_only',
+      })),
+    };
+  }
+
   async searchArtists(query: string) {
     const q = query.trim().slice(0, 100);
     if (q.length < 2) return { source: 'Apple iTunes Search API', items: [] };
