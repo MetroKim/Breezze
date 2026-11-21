@@ -6,12 +6,188 @@ import '../../app/bootstrap.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
+/// Track details use only metadata returned by the active search source.
+/// The album relationship remains unavailable until a canonical album catalog is connected.
+class TrackDetailScreen extends ConsumerWidget {
+  final BzTrack track;
+  final List<BzTrack> relatedTracks;
+  final String origin;
+
+  const TrackDetailScreen({
+    super.key,
+    required this.track,
+    this.relatedTracks = const [],
+    this.origin = 'search',
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final artistTracks = relatedTracks
+        .where((item) => item.artist.trim().toLowerCase() == track.artist.trim().toLowerCase())
+        .toList();
+    final queueTracks = relatedTracks.isEmpty ? [track] : relatedTracks;
+    final queue = [
+      for (final item in queueTracks)
+        TrackInfo(
+          id: item.id,
+          title: item.title,
+          artist: item.artist,
+          artworkUrl: item.artworkUrl,
+          duration: item.duration,
+        ),
+    ];
+    final selectedIndex = queueTracks.indexWhere((item) => item.id == track.id);
+
+    Future<void> saveToLibrary() async {
+      await ref.read(favoritesStoreProvider).toggle(FavoriteTrack(
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        durationMs: track.duration.inMilliseconds,
+      ));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Library updated')),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Song'),
+        leading: IconButton(
+          tooltip: 'Back to search',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+              children: [
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    child: _TrackArtwork(url: track.artworkUrl, size: 260),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Text(track.title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 8),
+                Text(track.artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                const SizedBox(height: 6),
+                Text(
+                  track.id.startsWith('bz:')
+                      ? 'Track metadata from the connected music source'
+                      : 'Track from your Breezze library',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                ),
+                const SizedBox(height: 22),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => ref.read(playerControllerProvider.notifier).playTrack(
+                        trackId: track.id,
+                        queue: queue,
+                        startIndex: selectedIndex < 0 ? 0 : selectedIndex,
+                        origin: origin,
+                        sourceContext: 'Song details',
+                      ),
+                      icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
+                      label: const Text('Play'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: saveToLibrary,
+                      icon: const BzSvgIcon(name: 'plus'),
+                      label: const Text('Add to Library'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => ref.read(playerControllerProvider.notifier).playNext(
+                        TrackInfo(id: track.id, title: track.title, artist: track.artist, artworkUrl: track.artworkUrl, duration: track.duration),
+                        origin: origin,
+                        sourceContext: 'Song details',
+                      ),
+                      icon: const BzSvgIcon(name: 'list-plus'),
+                      label: const Text('Play Next'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 30),
+                _CatalogSection(
+                  title: 'Artist',
+                  subtitle: 'Artist metadata is supplied by the track search result. This is not a verified artist profile.',
+                  available: true,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(color: theme.bzSurface1, shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: BzSvgIcon(name: 'mic', color: theme.bzText2, size: 22),
+                    ),
+                    title: Text(track.artist),
+                    subtitle: const Text('Open artist page'),
+                    trailing: const BzSvgIcon(name: 'chevron-right', size: 18),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => ArtistDetailScreen(
+                        artist: track.artist,
+                        savedTracks: const [],
+                        searchTracks: [
+                          for (final item in artistTracks)
+                            FavoriteTrack(
+                              id: item.id,
+                              title: item.title,
+                              artist: item.artist,
+                              artworkUrl: item.artworkUrl,
+                              durationMs: item.duration.inMilliseconds,
+                            ),
+                        ],
+                      ),
+                    )),
+                  ),
+                ),
+                _CatalogSection(
+                  title: 'Album',
+                  subtitle: 'The current search source does not provide a verified album relationship for this track. Album pages are not inferred from title or artist text.',
+                  available: false,
+                ),
+                _CatalogSection(
+                  title: 'Track information',
+                  subtitle: 'Duration: ' + (track.duration > Duration.zero ? _formatDuration(track.duration) : 'Not provided'),
+                  available: true,
+                  child: Text('Track ID: ' + track.id, style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return duration.inMinutes.toString() + ':' + seconds;
+  }
+}
+
 /// Artist page for a saved artist. The page is useful immediately for a
 /// listener's saved tracks; catalog-only sections stay explicitly unavailable
 /// until a canonical artist provider supplies verified metadata.
 class ArtistDetailScreen extends ConsumerWidget {
   final String artist;
   final List<FavoriteTrack> savedTracks;
+  final List<FavoriteTrack> searchTracks;
   final String? canonicalArtistId;
   final String? portraitUrl;
 
@@ -19,6 +195,7 @@ class ArtistDetailScreen extends ConsumerWidget {
     super.key,
     required this.artist,
     required this.savedTracks,
+    this.searchTracks = const [],
     this.canonicalArtistId,
     this.portraitUrl,
   });
@@ -84,9 +261,11 @@ class ArtistDetailScreen extends ConsumerWidget {
                     style: theme.textTheme.headlineMedium),
                 const SizedBox(height: 6),
                 Text(
-                  canonicalArtistId == null
-                      ? 'Artist from your saved music'
-                      : 'Verified artist profile',
+                  canonicalArtistId != null
+                      ? 'Verified artist profile'
+                      : savedTracks.isNotEmpty
+                          ? 'Artist from your saved music'
+                          : 'Artist from track search · not verified',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.bzText2,
@@ -169,6 +348,30 @@ class ArtistDetailScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+                if (searchTracks.isNotEmpty)
+                  _CatalogSection(
+                    title: 'Tracks found in search',
+                    subtitle: 'Matching tracks from the current search results, not a verified complete discography.',
+                    available: true,
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < searchTracks.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: _TrackArtwork(url: searchTracks[i].artworkUrl, size: 48),
+                            title: Text(searchTracks[i].title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(searchTracks[i].artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
+                              trackId: searchTracks[i].id,
+                              queue: [for (final item in searchTracks) item.toTrackInfo()],
+                              startIndex: i,
+                              origin: 'search',
+                              sourceContext: artist,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 for (final section in const [
                   'Essential Albums',
                   'Essential Songs',
