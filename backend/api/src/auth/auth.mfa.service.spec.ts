@@ -47,6 +47,7 @@ describe('AuthService TOTP enrollment and verification', () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       email: 'admin@example.com',
+      role: 'admin',
       mfaEnabled: false,
     });
     const result = await service.beginMfaSetup('admin-1');
@@ -189,6 +190,7 @@ describe('AuthService TOTP enrollment and verification', () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       email: 'admin@example.com',
+      role: 'admin',
       mfaEnabled: false,
       mfaSecretCiphertext: null,
     });
