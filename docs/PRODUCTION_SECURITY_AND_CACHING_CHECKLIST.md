@@ -307,5 +307,8 @@ UPDATE "User" SET "role" = 'admin' WHERE "email" = 'verified-admin@example.com';
 - Authenticated users can call `POST /api/v1/auth/mfa/setup` to obtain a one-time provisioning secret/URI, then `POST /api/v1/auth/mfa/setup/verify` with a six-digit code to complete enrollment.
 - Enrolled users call `POST /api/v1/auth/mfa/verify` after password login. The endpoint upgrades only the current refresh-token family and returns an MFA-verified access token.
 - Refresh-token records persist the MFA-verified state; refresh preserves it. AdminGuard rejects admin requests unless the access token carries the verified claim.
+- MFA verification endpoints have a stricter Redis-backed per-source limit (default five attempts per 15 minutes); tune via `MFA_ATTEMPT_RATE_LIMIT` and `MFA_ATTEMPT_RATE_WINDOW_MS`.
+- Accepted TOTP counters are stored atomically per account to prevent replay of a previously accepted time-step.
+- Production API startup refuses to run without a valid 32-byte base64 MFA encryption key.
 - Configure `MFA_ENCRYPTION_KEY` before enabling MFA. Rotate it only through a planned re-encryption migration; changing it directly makes stored secrets undecryptable.
-- Recovery codes, secure MFA reset, backup factor enrollment, email/security notifications and admin recovery procedures remain mandatory before broad production rollout.
+- Administrator MFA enrollment and successful verification are added to the privileged audit trail. Recovery codes, secure MFA reset, backup factor enrollment, email/security notifications and admin recovery procedures remain mandatory before broad production rollout.
