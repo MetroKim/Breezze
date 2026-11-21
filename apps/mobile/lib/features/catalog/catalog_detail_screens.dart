@@ -829,8 +829,8 @@ class AlbumDetailScreen extends ConsumerWidget {
     final queue = tracks.where((track) => !track.id.startsWith('bz:')).toList();
 
     Future<void> playAt(int index, {bool shuffle = false}) async {
-      if (queue.isEmpty || index < 0 || index >= queue.length) return;
-      final track = queue[index];
+      if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+      final track = tracks[index];
       if (track.id.startsWith('bz:')) {
         try {
           final opened = await YoutubePlayerHandoff.openFromApi(
