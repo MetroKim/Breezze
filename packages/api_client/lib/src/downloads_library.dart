@@ -129,6 +129,16 @@ class DownloadsLibrary {
     }
   }
 
+  /// Updates the effective server-issued offline lease for an owned asset.
+  Future<void> updateOfflineLease(String trackId, DateTime? expiresAtUtc) async {
+    final metaFile = File('${_dirFor(trackId).path}/meta.json');
+    if (!await metaFile.exists()) return;
+    final raw = jsonDecode(await metaFile.readAsString());
+    if (raw is! Map<String, dynamic>) return;
+    raw['rightsExpiresAtUtc'] = expiresAtUtc?.toUtc().toIso8601String();
+    await metaFile.writeAsString(jsonEncode(raw));
+  }
+
   /// Lists only assets owned by [ownerId]. A legacy file without owner
   /// metadata is deliberately hidden rather than exposed across sessions.
   Future<List<DownloadedTrack>> list({required String ownerId}) async {
