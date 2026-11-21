@@ -26,6 +26,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Test Artist'), findsWidgets);
     expect(find.text('Saved Song'), findsOneWidget);
@@ -68,6 +69,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Search Result Song'), findsOneWidget);
     expect(find.text('Search Result Artist'), findsWidgets);
