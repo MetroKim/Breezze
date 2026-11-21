@@ -64,6 +64,38 @@ export class DownloadsService {
     };
   }
 
+  async revalidateOfflineLease(userId: string, trackId: string, territory: string) {
+    const existing = await this.prisma.downloadRecord.findFirst({
+      where: { userId, trackId, status: 'active' },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('DOWNLOAD_NOT_FOUND');
+
+    const decision = await this.rights.decide({
+      userId, trackId, action: 'download', territory,
+    });
+    if (!decision.allowed || decision.previewOnly) {
+      await this.prisma.downloadRecord.updateMany({
+        where: { userId, trackId, status: 'active' },
+        data: { status: 'revoked', expiresAt: new Date() },
+      });
+      return {
+        allowed: false,
+        reason: decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason,
+      };
+    }
+
+    const offlineLeaseExpiresAt = new Date(Math.min(
+      Date.now() + 72 * 60 * 60 * 1000,
+      decision.expiresAt?.getTime() ?? Number.POSITIVE_INFINITY,
+    ));
+    await this.prisma.downloadRecord.updateMany({
+      where: { userId, trackId, status: 'active' },
+      data: { expiresAt: offlineLeaseExpiresAt },
+    });
+    return { allowed: true, offlineLeaseExpiresAt };
+  }
+
   async list(userId: string) {
     return this.prisma.downloadRecord.findMany({
       where: { userId },
