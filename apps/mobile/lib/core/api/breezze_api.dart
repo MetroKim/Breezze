@@ -56,6 +56,41 @@ class BreezzeApi {
     }
     return _decode(response);
   }
+  Future<Map<String, dynamic>> _patch(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    Future<http.Response> send() => _client.patch(
+          _uri(path),
+          headers: _headers,
+          body: jsonEncode(body),
+        );
+    var response = await send();
+    if (response.statusCode == 401 &&
+        onUnauthorized != null &&
+        await onUnauthorized!()) {
+      response = await send();
+    }
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> _delete(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    Future<http.Response> send() => _client.delete(
+          _uri(path),
+          headers: _headers,
+          body: body == null ? null : jsonEncode(body),
+        );
+    var response = await send();
+    if (response.statusCode == 401 &&
+        onUnauthorized != null &&
+        await onUnauthorized!()) {
+      response = await send();
+    }
+    return _decode(response);
+  }
 
   Map<String, dynamic> _decode(http.Response response) {
     final body = response.body.isEmpty
@@ -171,6 +206,101 @@ class BreezzeApi {
   }
 
   Future<Map<String, dynamic>> me() async => _get('/auth/me');
+
+  // ---- account and sessions ----
+
+  Future<Map<String, dynamic>> profile() => _get('/users/me');
+
+  Future<Map<String, dynamic>> updateProfile({required String displayName}) =>
+      _patch('/users/me', {'displayName': displayName});
+
+  Future<void> deleteAccount({required String password}) async {
+    await _delete('/users/me', body: {'password': password});
+  }
+
+  Future<List<Map<String, dynamic>>> sessions() async =>
+      _asMapList((await _get('/auth/sessions'))['sessions'] ??
+          (await _get('/auth/sessions'))['items']);
+
+  Future<void> revokeSession(String sessionId) async {
+    await _delete('/auth/sessions/${Uri.encodeComponent(sessionId)}');
+  }
+
+  // ---- home and playlists ----
+
+  Future<List<Map<String, dynamic>>> homeFeed() async =>
+      _asMapList(await _get('/home'));
+
+  Future<Map<String, dynamic>> recordPlay(String trackId) =>
+      _post('/home/plays', {'trackId': trackId});
+
+  Future<List<Map<String, dynamic>>> playlists() async =>
+      _asMapList(await _get('/playlists'));
+
+  Future<Map<String, dynamic>> createPlaylist(String name) =>
+      _post('/playlists', {'name': name});
+
+  Future<Map<String, dynamic>> getPlaylist(String playlistId) =>
+      _get('/playlists/${Uri.encodeComponent(playlistId)}');
+
+  Future<Map<String, dynamic>> addPlaylistTrack(
+    String playlistId,
+    String trackId,
+  ) =>
+      _post('/playlists/${Uri.encodeComponent(playlistId)}/tracks', {
+        'trackId': trackId,
+      });
+
+  Future<void> removePlaylistTrack(String playlistId, String trackId) async {
+    await _delete(
+      '/playlists/${Uri.encodeComponent(playlistId)}/tracks/'
+      '${Uri.encodeComponent(trackId)}',
+    );
+  }
+
+  Future<Map<String, dynamic>> renamePlaylist(
+    String playlistId,
+    String name,
+  ) =>
+      _patch('/playlists/${Uri.encodeComponent(playlistId)}', {'name': name});
+
+  Future<void> deletePlaylist(String playlistId) async {
+    await _delete('/playlists/${Uri.encodeComponent(playlistId)}');
+  }
+
+  // ---- artist portal ----
+
+  Future<List<Map<String, dynamic>>> artistClaims() async =>
+      _asMapList(await _get('/artist-portal/claims'));
+
+  Future<Map<String, dynamic>> claimArtist(String artistId) =>
+      _post('/artist-portal/claims', {'artistId': artistId});
+
+  Future<Map<String, dynamic>> artistDashboard() =>
+      _get('/artist-portal/dashboard');
+
+  Future<Map<String, dynamic>> artistAnalytics() =>
+      _get('/artist-portal/analytics');
+
+  // ---- notifications ----
+
+  Future<List<Map<String, dynamic>>> notifications() async =>
+      _asMapList(await _get('/notifications'));
+
+  Future<Map<String, dynamic>> markNotificationRead(String id) =>
+      _post('/notifications/${Uri.encodeComponent(id)}/read', const {});
+
+  List<Map<String, dynamic>> _asMapList(Object? value) {
+    if (value is List) {
+      return value.whereType<Map>().map((item) {
+        return item.map((key, value) => MapEntry(key.toString(), value));
+      }).toList();
+    }
+    if (value is Map && value['data'] is List) {
+      return _asMapList(value['data']);
+    }
+    return const [];
+  }
 }
 
 class AuthResponse {
