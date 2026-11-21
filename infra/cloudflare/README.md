@@ -29,7 +29,7 @@ NestJS API ---- Provider Resolver ------------+
 
 **Audio path:** the API returns a provider-approved, short-lived playable source to the client. The Flutter audio engine connects to that provider directly. Do not route full audio streams through Workers or the NestJS origin unless a provider contract, rights requirement, and measured use case explicitly require it.
 
-**No R2 requirement:** R2, media upload pipelines, audio transcoding storage, and a Breezze-operated audio CDN are out of scope. Artwork may be fetched from its source and cached by the client; public artwork proxying is an optional later decision, not a prerequisite.
+**R2 is optional:** keep the existing private media Worker only for Breezze-owned, artist-delivered, or separately rights-cleared uploads. Do not use R2 as a generic proxy or re-hosting layer for third-party catalog recordings. Artwork may be fetched from its source and cached by the client; public artwork proxying is an optional later decision, not a prerequisite.
 
 ## 2. Cloudflare service allocation
 
