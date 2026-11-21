@@ -11,6 +11,7 @@ describe('AdminService role management', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('persists role assignment instead of returning a success-shaped placeholder', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'target-user' });
     prisma.user.update.mockResolvedValue({ id: 'target-user', role: 'moderator' });
     await expect(service.createUserRole('target-user', 'moderator')).resolves.toEqual({
       id: 'target-user', role: 'moderator',
