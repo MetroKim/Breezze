@@ -126,17 +126,9 @@ class TrackDetailScreen extends ConsumerWidget {
                     FilledButton.icon(
                       onPressed: () async {
                         if (track.id.startsWith('bz:')) {
-                          final providerId = track.id.substring(3);
-                          final launch = await ref.read(authSessionProvider.notifier).api
-                              .getProviderPlaybackLaunch('youtube_music', providerId);
-                          final descriptor = launch['value'];
-                          final watchUrl = descriptor is Map ? descriptor['watchUrl'] as String? : null;
-                          final opened = await YoutubePlayerHandoff.openBreezzeTrackId(track.id, watchUrl: watchUrl);
-                          if (!opened && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Could not open the official YouTube player.')),
-                            );
-                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
+                          );
                           return;
                         }
                         await ref.read(playerControllerProvider.notifier).playTrack(
@@ -834,23 +826,9 @@ class AlbumDetailScreen extends ConsumerWidget {
       if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
       final track = tracks[index];
       if (track.id.startsWith('bz:')) {
-        try {
-          final opened = await YoutubePlayerHandoff.openFromApi(
-            ref.read(authSessionProvider.notifier).api,
-            track.id,
-          );
-          if (!opened && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not open the official YouTube player.')),
-            );
-          }
-        } catch (_) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('YouTube Music playback is unavailable right now.')),
-            );
-          }
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
+        );
         return;
       }
       final queueIndex = queue.indexWhere((item) => item.id == track.id);
