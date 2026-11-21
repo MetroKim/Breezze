@@ -150,7 +150,7 @@ class TrackDetailScreen extends ConsumerWidget {
                       label: const Text('Add to Library'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: track.id.startsWith('bz:')
+                      onPressed: _isMetadataOnlySourceTrack(track.id)
                           ? null
                           : () => ref.read(playerControllerProvider.notifier).playNext(
                                 TrackInfo(id: track.id, title: track.title, artist: track.artist, artworkUrl: track.artworkUrl, duration: track.duration),
