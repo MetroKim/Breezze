@@ -26,6 +26,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _recent = RecentStore();
   List<RecentEntry> _recentlyPlayed = [];
   List<FavoriteTrack> _favorites = [];
+  Map<String, dynamic>? _replay;
 
   @override
   void initState() {
@@ -36,10 +37,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _refresh() async {
     final recent = await _recent.load();
     final favorites = await ref.read(favoritesStoreProvider).load();
+    Map<String, dynamic>? replay;
+    if (ref.read(authSessionProvider) is AuthSignedIn) {
+      try {
+        replay = await ref.read(authSessionProvider.notifier).api.replaySummary();
+      } catch (_) {
+        // Local listening history remains available during an API outage.
+      }
+    }
     if (!mounted) return;
     setState(() {
       _recentlyPlayed = recent;
       _favorites = favorites;
+      _replay = replay;
     });
   }
 
@@ -229,12 +239,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             status: 'MADE FOR YOU',
           ),
           const SizedBox(height: 24),
-          const _FeedPlaceholder(
-            title: 'Replay 2026',
-            description:
-                'Your year-end listening summary is being built from your listening history. It will appear when enough history is available.',
-            status: 'YEAR IN MUSIC',
-          ),
+          if (_replay != null && ((_replay!['totalPlays'] as num?)?.toInt() ?? 0) > 0)
+            _ReplayCard(summary: _replay!)
+          else
+            const _FeedPlaceholder(
+              title: 'Your Replay',
+              description:
+                  'Your listening recap will appear here as your Breezze listening history grows.',
+              status: 'YOUR YEAR IN MUSIC',
+            ),
         ],
       ),
     );
@@ -451,6 +464,64 @@ class _FeedPlaceholder extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+
+class _ReplayCard extends StatelessWidget {
+  const _ReplayCard({required this.summary});
+  final Map<String, dynamic> summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final songs = summary['topSongIds'] is List
+        ? (summary['topSongIds'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final artists = summary['topArtistIds'] is List
+        ? (summary['topArtistIds'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.bzSurface1,
+        borderRadius: BorderRadius.circular(BzRadius.card),
+        border: Border.all(color: theme.bzSeparator),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('YOUR REPLAY', style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.bzText2, letterSpacing: 1, fontWeight: FontWeight.w700,
+          )),
+          const SizedBox(height: 8),
+          Text('${summary['totalPlays'] ?? 0} plays',
+              style: theme.textTheme.headlineMedium),
+          const SizedBox(height: 12),
+          if (songs.isNotEmpty) ...[
+            Text('TOP SONGS', style: theme.textTheme.labelSmall),
+            for (final song in songs.take(3))
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(song['title'] as String? ?? 'Track'),
+                subtitle: Text(song['artist'] as String? ?? ''),
+                trailing: Text('${song['plays'] ?? 0}'),
+              ),
+          ],
+          if (artists.isNotEmpty) ...[
+            Text('TOP ARTISTS', style: theme.textTheme.labelSmall),
+            for (final artist in artists.take(3))
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(artist['name'] as String? ?? 'Artist'),
+                trailing: Text('${artist['plays'] ?? 0}'),
+              ),
+          ],
+        ],
+      ),
     );
   }
 }
