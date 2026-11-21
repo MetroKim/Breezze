@@ -48,8 +48,8 @@ describe('ProviderRegistry', () => {
     expect(registry().list()[0].capabilities.playback).toBe(false);
   });
 
-  it('never selects metadata-only providers as playback candidates', () => {
-    expect(registry().getPlaybackCandidates()).toEqual([]);
+  it('selects Audius but excludes the metadata-only YouTube adapter', () => {
+    expect(registry().getPlaybackCandidates().map((provider) => provider.providerId)).toEqual(['audius']);
   });
 
   it('selects only enabled providers that explicitly declare playback', () => {
