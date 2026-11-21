@@ -251,3 +251,14 @@ This status map preserves the full supplied catalogue while distinguishing real 
 ### Release rule
 
 A capability marked *gated* is still part of the interface architecture, but it must not be represented as live or playable until the corresponding data contract, permissions, platform integration and tests exist. This is deliberate product correctness—not a reason to fabricate demo content.
+
+
+## Platform runner bootstrap
+
+The responsive Flutter UI is shared, but this repository still needs native runner folders generated and verified for the selected targets. From the repository root, run:
+
+```bash
+bash apps/mobile/tool/generate_platform_targets.sh
+```
+
+The script invokes Flutter's project generator for Android, iOS, Web, Linux, macOS and Windows while retaining the shared Dart application source. Native plugin support, signing, entitlements, desktop packaging and platform-specific media integrations must then be validated on their respective build runners. Generating a runner does not by itself certify every integration on every OS.
