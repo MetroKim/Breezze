@@ -266,47 +266,140 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
                               ],
                             ),
                           )
-                        : ListView.separated(
-                            padding:
-                                const EdgeInsets.fromLTRB(16, 0, 16, 220),
-                            itemCount: _stations.length,
-                            separatorBuilder: (_, __) =>
-                                Divider(color: theme.bzSeparator, height: 1),
-                            itemBuilder: (context, index) {
-                              final station = _stations[index];
-                              return ListTile(
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 6),
-                                leading: Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
+                        : ListView(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 180),
+                            children: [
+                              Text('Featured Stations',
+                                  style: theme.textTheme.titleLarge),
+                              const SizedBox(height: 12),
+                              GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _stations.length.clamp(0, 6),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                  childAspectRatio: 1.55,
+                                ),
+                                itemBuilder: (context, index) {
+                                  final station = _stations[index];
+                                  return Material(
                                     color: theme.bzSurface1,
-                                    borderRadius: BorderRadius.circular(
-                                        BzRadius.artwork),
+                                    borderRadius:
+                                        BorderRadius.circular(BzRadius.card),
+                                    child: InkWell(
+                                      borderRadius:
+                                          BorderRadius.circular(BzRadius.card),
+                                      onTap: () => _showStation(station),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                              BzRadius.card),
+                                          border: Border.all(
+                                              color: theme.bzSeparator),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                BzSvgIcon(
+                                                  name: 'radio',
+                                                  color: theme.bzAccent,
+                                                  size: 22,
+                                                ),
+                                                const Spacer(),
+                                                if (station.isLive)
+                                                  Text(
+                                                    'LIVE',
+                                                    style: TextStyle(
+                                                      color: theme.bzAccent,
+                                                      fontSize: BzType.caption,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            Text(
+                                              station.name,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  theme.textTheme.titleSmall,
+                                            ),
+                                            if (station.genre != null)
+                                              Text(
+                                                station.genre!,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: theme.bzText2,
+                                                  fontSize: BzType.caption,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                              Text('All Stations',
+                                  style: theme.textTheme.titleLarge),
+                              const SizedBox(height: 8),
+                              for (final station in _stations.skip(6)) ...[
+                                ListTile(
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(vertical: 6),
+                                  leading: Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: theme.bzSurface1,
+                                      borderRadius: BorderRadius.circular(
+                                          BzRadius.artwork),
+                                    ),
+                                    child: BzSvgIcon(
+                                      name: 'radio',
+                                      size: 28,
+                                      color: theme.bzText2,
+                                    ),
                                   ),
-                                  child: BzSvgIcon(name: 'radio', size: 28,
-                                      color: theme.bzText2),
+                                  title: Text(station.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(
+                                    [
+                                      if (station.genre != null)
+                                        station.genre!,
+                                      if (station.description != null)
+                                        station.description!,
+                                    ].join(' · '),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: station.isLive
+                                      ? const Chip(
+                                          label: Text('LIVE'),
+                                          visualDensity:
+                                              VisualDensity.compact,
+                                        )
+                                      : BzSvgIcon(
+                                          name: 'chevron-right', size: 20),
+                                  onTap: () => _showStation(station),
                                 ),
-                                title: Text(station.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                subtitle: Text(
-                                  [if (station.genre != null) station.genre!,
-                                   if (station.description != null)
-                                     station.description!].join(' · '),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                trailing: station.isLive
-                                    ? const Chip(
-                                        label: Text('LIVE'),
-                                        visualDensity: VisualDensity.compact,
-                                      )
-                                    : BzSvgIcon(name: 'chevron-right', size: 20),
-                                onTap: () => _showStation(station),
-                              );
-                            },
+                                Divider(
+                                    color: theme.bzSeparator, height: 1),
+                              ],
+                            ],
                           ),
           ),
         ],
