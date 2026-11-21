@@ -1,5 +1,33 @@
 # Breezze Engineering Backlog — Completion Plan & Critical Defect Register
 
+## Current implementation status — 21 November 2026
+
+This status snapshot supersedes older validation caveats and checkboxes below where they conflict.
+
+### Implemented on this branch
+- [x] Root-owned Riverpod container and app-owned audio engine; shell rebuilds no longer create a second container.
+- [x] Playback request generations reject stale resolver completions; stop, detach and sign-out invalidate pending requests.
+- [x] Playback state machine accepts new selections from active states and ignores stale source events.
+- [x] Resolver, prepare and play failures enter a visible failed state instead of silently hanging.
+- [x] Mobile tests cover stale resolver responses, serialized prepare, stop invalidation and resolver/engine failures.
+- [x] Persistent search history and stale search response protection.
+- [x] Flutter + NestJS/Prisma CI workflow runs on PRs targeting `breezze`.
+- [x] Backend Prisma generation/validation, TypeScript typecheck, Jest suite and Nest build have passed in CI.
+- [x] Mobile analyzer and mobile tests have passed in a completed CI attempt.
+- [x] Queue shuffle traversal now retains the current entry in its shuffled snapshot; repeat-one and shuffle traversal tests corrected/added.
+- [x] Scrobble duplicate-submission test now respects the implementation's two-second per-tick cap.
+- [x] Radio controller now delegates to RadioService; public station/program DTO selections omit raw `streamUrl`.
+- [x] Radio station list and detail requests have a 10-second timeout; stale station-list responses are ignored.
+
+### Verification still open
+- [ ] The complete latest CI run must pass after the queue/scrobble/radio changes. Earlier audio-contracts CI failed on an incorrect repeat-one expectation and a scrobble test that skipped the documented per-tick cap; both have now been corrected.
+- [ ] Add missing PlayerController tests for pause/resume during resolution, next/previous during a pending load, and engine detach/disposal.
+- [ ] Add mobile radio request/widget tests and timezone contract. The current station schema does not define a station timezone, so the UI must not imply that device-local time is the station's timezone.
+- [ ] Add a real radio playback session contract only after stream rights, secure URL resolution, buffering/reconnect behavior and engine integration are designed.
+- [ ] No Prisma migration directory is present. Do not deploy the current schema change until a baseline/deployment migration strategy is established.
+- [ ] Inspect and remediate npm dependency audit findings; do not run `npm audit fix --force` blindly.
+- [ ] Verify repeated-play semantics for `RecentlyPlayed` against deployed data before changing its current `@@unique([userId, trackId])` constraint.
+
 **Working branch:** `feature/breezze-product-experience`  
 **Target base:** `breezze`  
 **Status:** Active engineering backlog. Items are not complete until implementation, automated tests, and runtime verification are recorded.  
@@ -11,13 +39,13 @@ This backlog is intentionally opinionated: stabilize the app and playback first,
 
 ## 0. Release gates — do these before expanding features
 
-- [ ] **P0 — Make the app container lifecycle stable.** Move `ProviderContainer` creation out of `BreezzeShell.build()` into a lifecycle owner (or use a single root `ProviderScope` with the required overrides). Dispose it exactly once. Attach the audio engine once, detach/dispose subscriptions and engine on teardown, and ensure onboarding/auth transitions do not create duplicate playback engines.
-- [ ] **P0 — Make playback requests race-safe.** Add a monotonically increasing playback request token/cancellation strategy. A resolver response may prepare/play only if it still belongs to the latest requested track. Invalidate older requests on track change, stop, logout, and engine detach.
-- [ ] **P0 — Repair playback state-machine transitions.** A new `StartRequested` must be legal from every active state (playing, paused, loading, buffering, seeking, interrupted, offline as appropriate). Define explicit cancellation of the previous load. Never let a stale `SourceResolved` transition a newer request.
-- [ ] **P0 — Handle playback failures honestly.** Catch resolver and engine exceptions; dispatch a failure state; expose retry/error details; do not leave the UI stuck in resolving/loading/buffering. Do not report a scrobble/listening event as a successful play before playback actually starts.
-- [ ] **P0 — Add playback controller tests.** Cover rapid A→B selection, A resolving after B, resolver returning null, resolver throwing, engine prepare throwing, play/pause during resolution, next/previous during load, engine detach, and queue boundary behavior.
+- [x] **P0 — Make the app container lifecycle stable.** Move `ProviderContainer` creation out of `BreezzeShell.build()` into a lifecycle owner (or use a single root `ProviderScope` with the required overrides). Dispose it exactly once. Attach the audio engine once, detach/dispose subscriptions and engine on teardown, and ensure onboarding/auth transitions do not create duplicate playback engines.
+- [x] **P0 — Make playback requests race-safe.** Add a monotonically increasing playback request token/cancellation strategy. A resolver response may prepare/play only if it still belongs to the latest requested track. Invalidate older requests on track change, stop, logout, and engine detach.
+- [x] **P0 — Repair playback state-machine transitions.** A new `StartRequested` must be legal from every active state (playing, paused, loading, buffering, seeking, interrupted, offline as appropriate). Define explicit cancellation of the previous load. Never let a stale `SourceResolved` transition a newer request.
+- [x] **P0 — Handle playback failures honestly.** Catch resolver and engine exceptions; dispatch a failure state; expose retry/error details; do not leave the UI stuck in resolving/loading/buffering. Do not report a scrobble/listening event as a successful play before playback actually starts.
+- [ ] **P0 — Complete playback controller tests.** Existing race/failure tests are in place; pause/resume during resolution, next/previous during load, engine detach and lifecycle widget coverage remain. Cover rapid A→B selection, A resolving after B, resolver returning null, resolver throwing, engine prepare throwing, play/pause during resolution, next/previous during load, engine detach, and queue boundary behavior.
 - [ ] **P0 — Run and fix the complete validation suite.** Flutter dependency resolution, analyzer, all mobile tests, audio-contract tests, API-client tests, backend typecheck, backend tests, Prisma validation/generation, and production build. Record actual command output; never write “passed” without running it.
-- [ ] **P0 — Establish CI for the actual Breezze branch.** Current `.github/workflows/ci.yml` only builds Gradle and its push branches are `main` and `develop`; it does not validate this Flutter/NestJS product branch. Add branch-aware Flutter + backend jobs, database migration validation, and required checks. Verify the workflow triggers on PRs targeting `breezze`.
+- [x] **P0 — Establish CI for the actual Breezze branch.** Full green validation is still required before release. Current `.github/workflows/ci.yml` only builds Gradle and its push branches are `main` and `develop`; it does not validate this Flutter/NestJS product branch. Add branch-aware Flutter + backend jobs, database migration validation, and required checks. Verify the workflow triggers on PRs targeting `breezze`.
 
 ## 1. Critical defects and suspicious behavior found during repository inspection
 
@@ -25,25 +53,25 @@ Severity key: **P0** blocks reliable release; **P1** can break a core feature or
 
 | ID | Severity | Finding | Evidence / impact | Required fix and proof |
 |---|---|---|---|---|
-| BUG-001 | P0 · Confirmed design flaw | Riverpod container is created inside the shell's `build()` | `apps/mobile/lib/widgets/bz_shell.dart` constructs `ProviderContainer`, attaches an engine and starts migration during widget build. A rebuild can create another container/engine and orphan the old one. | Move ownership to a stable lifecycle; add a widget test proving one container/engine across rebuilds and correct disposal. |
-| BUG-002 | P0 · Confirmed race risk | Concurrent playback resolutions are not versioned/cancelled | `PlayerController._resolveAndPlay` awaits resolver and engine calls without checking whether the selected track changed. A late response can prepare/play an obsolete track. | Request generation + cancellation; deterministic fake-resolver tests with out-of-order completion. |
-| BUG-003 | P0 · Confirmed state-machine gap | Starting a new track from several active states is not represented | `PlaybackStateMachine` handles `StartRequested` in idle, ended, failed and offline, but not playing, paused, loading, buffering or seeking. Controller dispatches it on every new selection. | Define transition table and cancellation semantics; exhaustive transition tests. |
-| BUG-004 | P1 · Confirmed error-classification bug | Search-history persistence failure is conflated with source/network failure | `SearchScreen._search` awaits `_history.add()` inside the same try/catch as provider search. A disk write error returns “Could not reach the music source” even if source search was never attempted. | Make history best-effort and independently report storage errors; test source search still runs when history storage fails. |
+| BUG-001 | P0 · Fixed in branch; lifecycle widget proof pending | Riverpod container is created inside the shell's `build()` | `apps/mobile/lib/widgets/bz_shell.dart` constructs `ProviderContainer`, attaches an engine and starts migration during widget build. A rebuild can create another container/engine and orphan the old one. | Move ownership to a stable lifecycle; add a widget test proving one container/engine across rebuilds and correct disposal. |
+| BUG-002 | P0 · Fixed in branch; broaden controller coverage pending | Concurrent playback resolutions are not versioned/cancelled | `PlayerController._resolveAndPlay` awaits resolver and engine calls without checking whether the selected track changed. A late response can prepare/play an obsolete track. | Request generation + cancellation; deterministic fake-resolver tests with out-of-order completion. |
+| BUG-003 | P0 · Fixed in branch; exhaustive transition proof pending | Starting a new track from several active states is not represented | `PlaybackStateMachine` handles `StartRequested` in idle, ended, failed and offline, but not playing, paused, loading, buffering or seeking. Controller dispatches it on every new selection. | Define transition table and cancellation semantics; exhaustive transition tests. |
+| BUG-004 | P1 · Fixed in branch; storage-failure widget test pending | Search-history persistence failure is conflated with source/network failure | `SearchScreen._search` awaits `_history.add()` inside the same try/catch as provider search. A disk write error returns “Could not reach the music source” even if source search was never attempted. | Make history best-effort and independently report storage errors; test source search still runs when history storage fails. |
 | BUG-005 | P1 · Confirmed missing behavior | Radio is a directory, not a playable radio product | `radio_screen.dart` displays station metadata/schedules and explicitly says playback is not integrated. | Define a radio playback contract/session type, resolve authorized stream URL server-side, support buffering/reconnect/stop/metadata, and add engine + API tests. Keep play controls hidden until complete. |
 | BUG-006 | P1 · Verify migration/schema drift | RecentlyPlayed uniqueness may still prevent multiple plays of the same track | The inspected `backend/api/prisma/schema.prisma` still declares `@@unique([userId, trackId])`, while an earlier PR description says this uniqueness was removed to preserve play order. | Inspect the active `breezze` migration history and deployed DB before editing. Reconcile schema, migrations, generated Prisma client, and recent-history service. Test repeated plays create separate events and Home deduplicates for display. |
 | BUG-007 | P1 · Confirmed integration risk | Radio screen bypasses the shared API client | `RadioScreen` uses raw `http.get` with no timeout/client lifecycle and no typed response model. Errors are collapsed into one generic message. | Move radio calls into `breezze_api_client` repository; add timeout, typed DTO parsing, retry policy, and API-client tests. |
-| BUG-008 | P1 · Confirmed missing race guard | Radio station list requests can overlap | `_loadStations` has no request generation/disposal cancellation. A retry or refresh can race an earlier request. | Add request token/cancellation and tests for stale responses. |
-| BUG-009 | P1 · Confirmed missing race guard | Radio schedule request is not bounded by a timeout and schedule UI lacks explicit timezone context | `_loadPrograms` performs raw HTTP and renders `airsAt.toLocal()` without stating the station timezone. | Add timeout, server-defined timezone field, timezone-aware display, and tests around UTC/local conversion and daylight-saving boundaries. |
-| BUG-010 | P1 · Verify API contract | Radio controller and service appear to duplicate station-query logic | Both `backend/api/src/radio/radio.controller.ts` and `radio.service.ts` implement station listing/detail/program queries. | Inspect module wiring; keep one service-backed controller path and add controller/service tests. Avoid two competing implementations. |
-| BUG-011 | P1 · Verify public data exposure | Station list query returns full Prisma records, including `streamUrl` | `RadioController.stations()` returns `radioStation.findMany()` without a select/DTO. Stream URL exposure may be intentional for public streams, but must not expose private/signed/expiring URLs. | Define public station DTO. Return only safe public metadata; issue short-lived playback URLs through an authorized resolve endpoint if required. |
+| BUG-008 | P1 · Fixed in branch; mobile request tests pending | Radio station list requests can overlap | `_loadStations` has no request generation/disposal cancellation. A retry or refresh can race an earlier request. | Add request token/cancellation and tests for stale responses. |
+| BUG-009 | P1 · Timeout fixed; station timezone contract still missing | Radio schedule request is not bounded by a timeout and schedule UI lacks explicit timezone context | `_loadPrograms` performs raw HTTP and renders `airsAt.toLocal()` without stating the station timezone. | Add timeout, server-defined timezone field, timezone-aware display, and tests around UTC/local conversion and daylight-saving boundaries. |
+| BUG-010 | P1 · Fixed in branch; CI verification pending | Radio controller and service appear to duplicate station-query logic | Both `backend/api/src/radio/radio.controller.ts` and `radio.service.ts` implement station listing/detail/program queries. | Inspect module wiring; keep one service-backed controller path and add controller/service tests. Avoid two competing implementations. |
+| BUG-011 | P1 · Fixed in branch; CI verification pending | Station list query returns full Prisma records, including `streamUrl` | `RadioController.stations()` returns `radioStation.findMany()` without a select/DTO. Stream URL exposure may be intentional for public streams, but must not expose private/signed/expiring URLs. | Define public station DTO. Return only safe public metadata; issue short-lived playback URLs through an authorized resolve endpoint if required. |
 | BUG-012 | P2 · Confirmed robustness gap | Search history writes are not serialized | Concurrent `add/remove/clear` operations each load then overwrite the same JSON file; fast actions can lose an update. | Serialize writes or move search history into existing Drift database; add concurrent-operation tests. |
 | BUG-013 | P2 · Confirmed validation gap | Search-history tests are not sufficient for storage failure/concurrency | Current tests cover order, dedupe, cap, remove, clear and malformed JSON only. | Add file I/O failure, concurrent adds, concurrent clear/remove, whitespace and Unicode cases. |
 | BUG-014 | P2 · Confirmed UX gap | Radio station cards have no artwork and use a generic Material radio icon | Current UI has no station artwork field in its local model. | Add optional station artwork to API DTO and render real image with an accessible fallback; no fake station art. |
 | BUG-015 | P2 · Confirmed navigation gap to verify | Main tab bar is horizontally scrollable; small-screen and wide-layout behavior needs proof | Current shell has seven destinations. Search shortcut index was updated, but layout/semantics need device coverage. | Test narrow phones, tablets, keyboard navigation, selected tab semantics and mini-player overlap. |
 
-### Known validation caveat
+### Validation status
 
-The GitHub connector was used to inspect and edit source files, but it did not provide a local Flutter/Dart/Node execution environment. The existing Search History tests have **not** been run. The current repository CI workflow is Gradle-only and does not establish Flutter or backend test status. Treat all runtime behavior as unverified until CI or a local checkout produces logs.
+GitHub Actions now runs Flutter analysis/tests and NestJS/Prisma validation for pull requests targeting `breezze`. Backend checks have passed. Mobile analysis and mobile tests have passed in a completed run. The audio-contracts suite exposed two test defects and one shuffle traversal defect; these have been fixed, and a complete post-fix run is required before this phase can be marked green. Do not treat a cancelled workflow as a pass.
 
 ---
 
