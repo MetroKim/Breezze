@@ -8,7 +8,7 @@
 - Preserve the positions, section order, controls, and interactions in the interface contract.
 - Use original Breezze SVG assets for interface icons. Do not introduce emoji or icon-font glyphs.
 - Do not display invented catalog metadata, fake streams, fake charts, fake concerts, or pretend backend capabilities.
-- Existing backend is a NestJS modular monolith with Prisma/PostgreSQL and Redis/BullMQ. Cloudflare is the edge/media platform, not a forced replacement for this backend.
+- Existing backend is a NestJS modular monolith with Prisma/PostgreSQL and Redis/BullMQ. Cloudflare is the API edge/security platform, not a forced replacement for this backend. Audio is streamed directly from approved external providers; Breezze does not host music files.
 
 ## 1. Architecture overview
 
@@ -24,7 +24,7 @@ DOMAIN — entities, value objects, use cases, repository contracts,
        ↓
 DATA — repository implementations, DTO mapping, local DB, API clients
        ↓
-PLATFORM — NestJS API, Cloudflare edge/R2, audio engine,
+PLATFORM — NestJS API, Cloudflare edge, audio engine,
            secure storage, OS audio/session APIs
 ```
 
@@ -37,7 +37,7 @@ Dependency direction points inward. Presentation does not call HTTP, Prisma, R2,
 - `packages/audio_contracts`: playback state, queue, source and audio-engine abstractions.
 - `packages/api_client`: transport and provider-facing DTO/client contracts.
 - `backend/api`: NestJS modules, Prisma/PostgreSQL, Redis/BullMQ, authorization and domain services.
-- `infra/cloudflare`: Workers, R2 bindings, deployment configuration, cache and edge security.
+- `infra/cloudflare`: Workers, deployment configuration, cache and edge security.
 - `docs/design`: visual/interface contracts.
 - `docs/architecture`: system and implementation contracts.
 
@@ -439,7 +439,7 @@ Use correlation/request IDs across Flutter, Cloudflare Worker and NestJS. Track:
 - playback resolve/start/buffer/failure;
 - download completion/failure;
 - queue age and worker retries;
-- cache hit ratio and R2 object errors.
+- edge/API cache hit ratio and provider resolution errors.
 
 Analytics must not block UI and should be privacy-minimized. Tab navigation analytics are optional, not an audit log.
 
@@ -453,7 +453,7 @@ Analytics must not block UI and should be privacy-minimized. Tab navigation anal
 | UI | section order, empty/loading/error, gestures, accessibility | flutter_test |
 | Audio | seek, interruptions, background, queue, route changes | real-device QA + integration_test |
 | Backend | authz, ownership isolation, rights, API contracts | Jest + Nest testing |
-| Cloudflare | WAF/rate-limit behavior, Worker auth, R2 access, Range/cache headers | Worker tests + staging smoke tests |
+| Cloudflare | WAF/rate-limit behavior, Worker auth, public-cache allowlist and cache headers | Worker tests + staging smoke tests |
 | Performance | cold start, search, playback start, hot media, cache miss | Flutter DevTools + load tests |
 
 Release gate:
@@ -477,8 +477,24 @@ Release gate:
 5. Content: Song, Album, Artist detail using canonical catalog IDs.
 6. Organization: playlist sync, share/deep links, library customization.
 7. Advanced: lyrics enhancements, downloads, social/collaboration, AirPlay and platform-specific features.
-8. Infrastructure: Cloudflare DNS/WAF/API edge, private R2 media gateway, cache policies, queues, observability, load testing.
+8. Infrastructure: Cloudflare DNS/WAF/API edge, public metadata cache policies, provider resolver resilience, observability and staged load testing.
 
-## 25. Implementation truth rule
+
+## 21. Provider resolution, fallback and traffic scale
+
+### Provider fallback policy
+Playback uses a modular ProviderResolver with independent adapters. Each adapter exposes search/resolve/health/capabilities and typed errors. A fallback is allowed only when it is contractually permitted, rights-compatible for the user's territory, and confidently matched to the same recording. Do not substitute a remix/live version or cache a signed stream URL.
+
+Liner Desktop is not an approved Breezze fallback. Its current source-available license prohibits commercial deployment/distribution and extraction of core algorithms, and requires modified builds to use official Liner services. Do not embed, fork, rebrand, extract its resolver or depend on its private client behavior without explicit written authorization. See the separate scaling plan for the provider approval gate.
+
+### Audio and Cloudflare
+Audio is delivered directly from approved provider hosts to the Flutter audio engine. Do not store music in R2 or relay full audio through Workers/NestJS by default. Cloudflare protects the API, applies WAF/rate limits and caches only public, non-personalized metadata/assets.
+
+### One-million-active-listener engineering target
+One million concurrent users is a target to prove with workload models and staged load tests, not a guarantee supplied by Cloudflare. Keep NestJS stateless and horizontally scalable; use PostgreSQL connection pooling/query budgets, Redis for bounded ephemeral caches, BullMQ for non-interactive jobs, per-provider concurrency limits/circuit breakers, cursor pagination and request coalescing. Test 10k → 50k → 100k → 250k → 500k → 1M virtual active clients, including cold-cache bursts, provider throttling and origin failures. Record p95/p99 latency, cache hit ratio, DB saturation, queue age, provider failures and playback resolution/start success.
+
+See `infra/cloudflare/README.md` and `docs/architecture/BREEZZE_ONE_MILLION_SCALING_PLAN.md` for cache keys, TTLs, invalidation, edge policy, capacity assumptions and release gates.
+
+## 26. Implementation truth rule
 
 This document defines the target architecture. A feature is **implemented** only when real behavior exists and its relevant tests pass. A proposed endpoint, interface, placeholder state, disabled control, or documentation entry is not implementation evidence. Update the gap register with evidence after each completed feature.
