@@ -864,7 +864,15 @@ class AlbumDetailScreen extends ConsumerWidget {
       if (shuffle) player.toggleShuffle();
     }
 
-    Future<void> play({bool shuffle = false}) => playAt(0, shuffle: shuffle);
+    Future<void> play({bool shuffle = false}) async {
+      if (tracks.isEmpty) return;
+      final nativeIndex = tracks.indexWhere((item) => !item.id.startsWith('bz:'));
+      if (nativeIndex >= 0) {
+        await playAt(nativeIndex, shuffle: shuffle);
+      } else {
+        await playAt(0, shuffle: shuffle);
+      }
+    }
 
     return Scaffold(
       backgroundColor: theme.bzBackground,
