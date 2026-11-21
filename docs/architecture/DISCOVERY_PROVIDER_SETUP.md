@@ -16,6 +16,13 @@ Apple's Search API describes ID-based lookups for artist albums and album trackl
 
 ## Requires deployment secrets
 
+### Apple Music Daily Global Top 100
+
+Set:
+- `APPLE_MUSIC_DEVELOPER_TOKEN` — a valid Apple Music API developer JWT, stored only in the backend secret manager.
+
+The backend requests `dailyGlobalTopCharts` for the selected storefront. Without this token, Daily Top 100 remains unavailable; Breezze does not substitute a generic most-played chart and label it daily.
+
 ### YouTube music videos
 
 Set:
@@ -52,6 +59,7 @@ These are intentionally not populated from arbitrary search results. The backend
 Example backend environment entries (values must be supplied out-of-band):
 
 ```dotenv
+APPLE_MUSIC_DEVELOPER_TOKEN=
 YOUTUBE_DATA_API_KEY=
 YOUTUBE_OFFICIAL_CHANNEL_IDS=
 JAMBASE_DATA_API_KEY=
@@ -62,6 +70,7 @@ Do not add real values to this file or commit them. Configure the secrets in the
 ## Verification
 
 - [ ] Apple RSS charts and releases return the selected storefront's feed.
+- [ ] Daily Top 100 is populated only when a valid Apple Music developer token returns the `dailyGlobalTopCharts` feed.
 - [ ] Apple artist search uses exact artist-name matching before opening a discography.
 - [ ] Apple album tracks are loaded only from a returned collection ID.
 - [ ] YouTube video results are empty until both API key and approved channel allowlist are configured.
