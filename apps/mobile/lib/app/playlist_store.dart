@@ -85,6 +85,25 @@ class PlaylistStore {
     }
   }
 
+  Future<void> mergeRemote(String ownerId, List<Map<String, dynamic>> remote) => _serialize(() async {
+        final local = await load(ownerId);
+        final byId = {for (final item in local) item.id: item};
+        final merged = <UserPlaylist>[];
+        for (final item in remote) {
+          final id = item['id'] as String?;
+          if (id == null || id.isEmpty) continue;
+          final cached = byId.remove(id);
+          merged.add(UserPlaylist(
+            id: id,
+            name: item['name'] as String? ?? cached?.name ?? 'Untitled playlist',
+            createdAt: DateTime.tryParse(item['createdAt'] as String? ?? '') ?? cached?.createdAt ?? DateTime.now().toUtc(),
+            tracks: cached?.tracks ?? const [],
+          ));
+        }
+        merged.addAll(byId.values);
+        await _save(ownerId, merged);
+      });
+
   Future<void> create(String ownerId, String name, {String? id}) => _serialize(() async {
         final normalized = name.trim();
         if (normalized.isEmpty) {
