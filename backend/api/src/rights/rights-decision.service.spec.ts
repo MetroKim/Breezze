@@ -91,6 +91,24 @@ describe('RightsDecisionService', () => {
     expect(decision.reason).toBe('RIGHTS_EXPIRED');
   });
 
+  it('does not use preview permission to authorize a download', async () => {
+    previewPermission = {
+      startAt: null,
+      endAt: new Date(Date.now() + 60_000),
+    };
+
+    const decision = await service.decide({
+      userId: 'user-1',
+      trackId: 'track-1',
+      action: 'download',
+      territory: 'TZ',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('NO_EXPLICIT_AUTHORIZATION');
+    expect(prisma.rightsUsagePermission.findFirst).toHaveBeenCalledTimes(1);
+  });
+
   it('returns a bounded preview-only decision for an active preview grant', async () => {
     const endAt = new Date(Date.now() + 60_000);
     previewPermission = { startAt: new Date(Date.now() - 60_000), endAt };
