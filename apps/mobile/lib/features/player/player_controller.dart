@@ -264,6 +264,7 @@ class PlayerController extends Notifier<PlayerState> {
         source.streamUrl,
         requestId: requestId,
       ));
+      if (_machine.state != PlaybackState.loading) return;
 
       final engine = _engine;
       if (engine == null) {
@@ -285,7 +286,9 @@ class PlayerController extends Notifier<PlayerState> {
         }
 
         _machine.dispatch(MediaReady(requestId: requestId));
+        if (_machine.state != PlaybackState.buffering) return;
         _machine.dispatch(PlayPressed());
+        if (_machine.state != PlaybackState.playing) return;
 
         // just_audio's play Future completes when playback stops, not when
         // playback first starts. Do not await the whole song here.
