@@ -62,6 +62,6 @@ describe('ProviderRegistry', () => {
     const instance = registry();
     instance.register(playable as unknown as InternalCatalogAdapter);
     expect(instance.getPlaybackCandidates().map((provider) => provider.providerId))
-      .toEqual(['licensed_provider']);
+      .toEqual(['licensed_provider', 'audius']);
   });
 });
