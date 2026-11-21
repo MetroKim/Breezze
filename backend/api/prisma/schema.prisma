@@ -23,6 +23,7 @@ model User {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   refreshTokens  RefreshToken[]
+  mfaRecoveryCodes MfaRecoveryCode[]
   favorites      Favorite[]
   playlists      Playlist[]
   downloads      DownloadRecord[]
@@ -357,4 +358,16 @@ model AdminAuditEvent {
   @@index([createdAt])
   @@index([actorId, createdAt])
   @@index([targetType, targetId, createdAt])
+}
+
+
+model MfaRecoveryCode {
+  id         String   @id @default(uuid())
+  userId     String
+  codeHash   String   @unique
+  createdAt  DateTime @default(now())
+  consumedAt DateTime?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
 }
