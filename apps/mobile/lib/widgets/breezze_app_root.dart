@@ -39,6 +39,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
     _audioEngine = JustAudioEngineAdapter();
     _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
     unawaited(migrateJsonStoresToDrift(_container!));
+    unawaited(_container!.read(authSessionProvider.notifier).restoreSession());
     ref.listenManual(authSessionProvider, (prev, next) {
       if (prev is AuthSignedIn && next is AuthSignedOut) {
         unawaited(ref.read(playerControllerProvider.notifier).stop());
@@ -96,6 +97,12 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authSessionProvider);
+
+    if (auth is AuthUninitialized) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     if (auth is AuthSignedIn) {
       final shell = KeyedSubtree(
