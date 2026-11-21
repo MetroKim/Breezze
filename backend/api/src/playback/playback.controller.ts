@@ -11,6 +11,17 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PlaybackResolveService } from './playback-resolve.service';
 
+export class ProviderResolveDto {
+  @IsString()
+  providerId!: string;
+
+  @IsString()
+  providerTrackId!: string;
+
+  @IsString()
+  territory!: string;
+}
+
 export class ResolveDto {
   @IsString()
   trackId!: string;
@@ -26,6 +37,13 @@ export class ResolveDto {
 @Controller('playback')
 export class PlaybackController {
   constructor(private readonly resolver: PlaybackResolveService) {}
+
+  @Post('provider/resolve')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  resolveProvider(@CurrentUser() userId: string, @Body() dto: ProviderResolveDto) {
+    return this.resolver.resolveProvider(userId, dto);
+  }
 
   @Post('resolve')
   @HttpCode(HttpStatus.OK)
