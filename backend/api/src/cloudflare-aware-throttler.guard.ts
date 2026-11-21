@@ -126,7 +126,7 @@ export class CloudflareAwareThrottlerGuard
           Date.now() / this.loginAccountWindowMs,
         );
         const [accountCount, accountTtl] = await this.increment(
-          `breezze:ratelimit:v1:login-account:${accountDigest}:${accountBucket}`,
+          `breezze:ratelimit:v1:login-account:${accountDigest}:${ipDigest}:${accountBucket}`,
           this.loginAccountWindowMs,
         );
         if (accountCount > this.loginAccountLimit) this.reject(accountTtl, res);
