@@ -47,6 +47,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     );
     final tracks = await library.list(ownerId: auth.userId);
     if (!mounted) return;
+    final latestAuth = ref.read(authSessionProvider);
+    if (latestAuth is! AuthSignedIn || latestAuth.userId != auth.userId) {
+      setState(() {
+        _tracks = [];
+        _loading = false;
+      });
+      return;
+    }
     setState(() {
       _tracks = tracks;
       _loading = false;
