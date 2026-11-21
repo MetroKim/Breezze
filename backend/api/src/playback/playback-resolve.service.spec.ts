@@ -6,7 +6,7 @@ import { PlaybackResolveService } from './playback-resolve.service';
 
 describe('PlaybackResolveService', () => {
   const rights = { decide: jest.fn() };
-  const signer = { signPlaybackUrl: jest.fn() };
+  const signer = { createPlaybackUrl: jest.fn() };
   let service: PlaybackResolveService;
 
   const request = {
@@ -37,7 +37,7 @@ describe('PlaybackResolveService', () => {
     await expect(service.resolve('user-1', request)).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
-    expect(signer.signPlaybackUrl).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 
   it('does not sign a URL when rights are denied', async () => {
@@ -53,7 +53,7 @@ describe('PlaybackResolveService', () => {
     await expect(service.resolve('user-1', request)).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
-    expect(signer.signPlaybackUrl).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 
   it('signs only an explicitly authorized full-stream variant', async () => {
@@ -65,7 +65,10 @@ describe('PlaybackResolveService', () => {
       expiresAt: null,
       attribution: 'Licensed via label',
     });
-    signer.signPlaybackUrl.mockReturnValue('https://cdn.example/audio/signed');
+    signer.createPlaybackUrl.mockReturnValue({
+      url: 'https://cdn.example/audio/signed',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
 
     await expect(service.resolve('user-1', request)).resolves.toMatchObject({
       trackId: 'track-1',
@@ -74,6 +77,6 @@ describe('PlaybackResolveService', () => {
       attribution: 'Licensed via label',
       previewOnly: false,
     });
-    expect(signer.signPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128');
+    expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });
 });
