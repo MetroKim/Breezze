@@ -111,6 +111,8 @@ export class CloudflareAwareThrottlerGuard
       );
       if (ipCount > this.limit) this.reject(ipTtl, res);
 
+      const path = String(req.originalUrl ?? req.url ?? '').split('?')[0];
+
       // MFA code endpoints get a stricter per-source quota to slow online TOTP guessing.
       if (
         req.method === 'POST' &&
@@ -126,7 +128,6 @@ export class CloudflareAwareThrottlerGuard
 
       // Add a second independent bucket for login attempts against one account.
       // Hash the normalized identifier so Redis keys never contain email addresses.
-      const path = String(req.originalUrl ?? req.url ?? '').split('?')[0];
       const email = req.body?.email;
       if (
         req.method === 'POST' &&
