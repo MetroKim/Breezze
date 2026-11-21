@@ -6,11 +6,24 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsUUID } from 'class-validator';
+import { IsInt, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma.service';
 import { ArtistPortalService } from './artist-portal.service';
+
+export class SubmitReleaseDto {
+  @IsString()
+  @MaxLength(160)
+  title!: string;
+
+  @IsUUID()
+  artistId!: string;
+
+  @IsInt()
+  @Min(1)
+  trackCount!: number;
+}
 
 export class ClaimDto {
   @IsUUID()
@@ -38,6 +51,16 @@ export class ArtistPortalController {
   @Get('analytics')
   analytics(@CurrentUser() userId: string) {
     return this.portal.analytics(userId);
+  }
+
+  @Post('releases')
+  submitRelease(@CurrentUser() userId: string, @Body() dto: SubmitReleaseDto) {
+    return this.portal.submitRelease(userId, dto);
+  }
+
+  @Get('releases')
+  myReleases(@CurrentUser() userId: string) {
+    return this.portal.myReleases(userId);
   }
 
   @Get('dashboard')
