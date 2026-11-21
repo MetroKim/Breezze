@@ -64,16 +64,39 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
     );
   }
 
+  ProviderTrack _localTrackFromJson(Map value) {
+    final id = value['id'] as String? ?? '';
+    final artistData = value['artist'];
+    final artist = artistData is Map
+        ? artistData['name'] as String? ?? 'Unknown artist'
+        : 'Unknown artist';
+    final duration = value['duration'];
+    return ProviderTrack(
+      breezzeTrackId: id,
+      providerTrackId: value['externalId'] as String? ?? id,
+      title: value['title'] as String? ?? '',
+      artist: artist,
+      duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+    );
+  }
+
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
     try {
       final data = await _ref.read(authSessionProvider.notifier).api.searchMusic(query);
-      final rawTracks = data['externalTracks'];
-      if (rawTracks is! List) return ProviderError('invalid_response');
-      final tracks = rawTracks
-          .whereType<Map>()
-          .map(_trackFromJson)
-          .where((track) => track.providerTrackId.isNotEmpty && track.title.isNotEmpty)
+      final rawExternal = data['externalTracks'];
+      final rawLocal = data['tracks'];
+      final externalTracks = rawExternal is List
+          ? rawExternal.whereType<Map>().map(_trackFromJson)
+          : <ProviderTrack>[];
+      final localTracks = rawLocal is List
+          ? rawLocal.whereType<Map>().map(_localTrackFromJson)
+          : <ProviderTrack>[];
+      final seen = <String>{};
+      final tracks = [...localTracks, ...externalTracks]
+          .where((track) => track.breezzeTrackId.isNotEmpty
+              && track.title.isNotEmpty
+              && seen.add(track.breezzeTrackId))
           .toList();
       if (tracks.isEmpty) return ProviderError('empty_result');
       return ProviderOk(tracks);
