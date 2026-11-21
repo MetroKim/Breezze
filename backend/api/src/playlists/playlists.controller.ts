@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Patch,
   Param,
   Post,
   UseGuards,
@@ -13,6 +14,12 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { PlaylistsService } from './playlists.service';
 
 export class CreatePlaylistDto {
+  @IsString()
+  @MaxLength(128)
+  name!: string;
+}
+
+export class RenamePlaylistDto {
   @IsString()
   @MaxLength(128)
   name!: string;
@@ -44,6 +51,20 @@ export class PlaylistsController {
   @Get(':id')
   get(@CurrentUser() userId: string, @Param('id') id: string) {
     return this.playlists.get(userId, id);
+  }
+
+  @Patch(':id')
+  rename(
+    @CurrentUser() userId: string,
+    @Param('id') id: string,
+    @Body() dto: RenamePlaylistDto,
+  ) {
+    return this.playlists.rename(userId, id, dto.name);
+  }
+
+  @Delete(':id')
+  delete(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.playlists.delete(userId, id);
   }
 
   @Post(':id/tracks')
