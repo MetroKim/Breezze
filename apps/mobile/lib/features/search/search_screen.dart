@@ -125,26 +125,53 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     try {
-      final op = await ref.read(youtubeSourceProvider).search(normalized);
-      if (!mounted || generation != _searchGeneration) return;
-
-      setState(() {
-        _loading = false;
-        _results = op is ProviderOk<List<ProviderTrack>>
-            ? op.value
-                .map((track) => BzTrack(
-                      id: track.breezzeTrackId,
-                      title: track.title,
-                      artist: track.artist,
-                      artworkUrl: track.artworkUrl,
-                      duration: track.duration,
-                    ))
-                .toList()
-            : [];
-        if (op is! ProviderOk<List<ProviderTrack>>) {
-          _error = 'Search could not be completed. Try again in a moment.';
-        }
-      });
+      final isVideoSearch = normalized.toLowerCase() == 'music videos';
+      if (isVideoSearch) {
+        // The video discovery endpoint only returns YouTube Music's
+        // Original Music Video classification, not UGC or static-art tracks.
+        final data = await ref.read(authSessionProvider.notifier).api
+            .discoveryMusicVideos(query: 'official music video');
+        final rawItems = data['items'];
+        final videos = rawItems is List ? rawItems.whereType<Map>() : const <Map>[];
+        if (!mounted || generation != _searchGeneration) return;
+        setState(() {
+          _loading = false;
+          _results = videos.map((item) {
+            final id = item['id'] as String? ?? '';
+            final duration = item['durationSec'];
+            return BzTrack(
+              id: 'bz:$id',
+              title: item['title'] as String? ?? 'Untitled video',
+              artist: item['artist'] as String? ?? 'Unknown artist',
+              artworkUrl: item['artworkUrl'] as String?,
+              duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+            );
+          }).where((track) => track.id.length > 9).toList();
+          if (_results.isEmpty) {
+            _error = 'No official music videos were found for this search.';
+          }
+        });
+      } else {
+        final op = await ref.read(youtubeSourceProvider).search(normalized);
+        if (!mounted || generation != _searchGeneration) return;
+        setState(() {
+          _loading = false;
+          _results = op is ProviderOk<List<ProviderTrack>>
+              ? op.value
+                  .map((track) => BzTrack(
+                        id: track.breezzeTrackId,
+                        title: track.title,
+                        artist: track.artist,
+                        artworkUrl: track.artworkUrl,
+                        duration: track.duration,
+                      ))
+                  .toList()
+              : [];
+          if (op is! ProviderOk<List<ProviderTrack>>) {
+            _error = 'Search could not be completed. Try again in a moment.';
+          }
+        });
+      }
     } catch (_) {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
