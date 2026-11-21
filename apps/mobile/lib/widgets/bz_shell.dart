@@ -3,7 +3,10 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/bootstrap.dart';
 import '../app/downloads_controller.dart';
+import '../core/audio/audio_service_bridge.dart';
+import '../core/audio/background_audio.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/radio/radio_screen.dart';
 import '../features/downloads/downloads_screen.dart';
