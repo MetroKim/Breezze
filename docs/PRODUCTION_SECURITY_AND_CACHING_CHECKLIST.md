@@ -12,10 +12,10 @@
 - Protocol: **15-minute JWT bearer access token** for the current mobile API; OIDC/PKCE required if browser/social SSO is introduced.
 - Password hashing: **Argon2id, 19 MiB, 2 iterations, parallelism 1** baseline; benchmark and tune upward on production hardware.
 - Database: **PostgreSQL + Prisma**.
-- Cache/coordination: **Redis**; current NestJS throttler is not yet a distributed Redis limiter.
+- Cache/coordination: **Redis**; global API IP rate limits now use atomic shared Redis counters across API replicas.
 - Edge/CDN/WAF: **Cloudflare**.
 - Media storage: **Cloudflare R2**, only for Breezze-owned or rights-cleared media.
-- Mobile token storage: **iOS Keychain / Android Keystore required**; current session controller still keeps tokens in memory only.
+- Mobile token storage: **iOS Keychain / Android Keystore** via Flutter secure storage; access tokens remain memory-only.
 - Logging: **request IDs and structured logging foundation**; centralized immutable audit storage and alerting remain.
 
 > A checked code item is not proof of a secure production deployment. Cloudflare rules, TLS, secret-manager values, private networking, backups, restore drills and app-store signing must be verified in actual environments.
@@ -28,7 +28,7 @@
 - [x] Refresh-token storage: SHA-256 hashes are stored; migration hashes existing values in place.
 - [~] Refresh-token reuse: replay of a revoked token can revoke its family; add concurrency/replay integration tests.
 - [ ] MFA: TOTP and passkeys/WebAuthn; require MFA for administrators.
-- [~] Login protection: global throttling exists; per-account + per-IP limits, progressive backoff and CAPTCHA escalation are incomplete.
+- [~] Login protection: atomic Redis-backed global per-IP quota is shared across API replicas; per-account limits, progressive backoff and CAPTCHA escalation remain.
 - [ ] Account recovery: single-use expiring links and generic responses that do not reveal whether an email exists.
 - [ ] Email verification: signed one-time verification before sensitive actions.
 - [ ] Social login: Google/Apple/GitHub OIDC and verified-email claim validation.
@@ -43,8 +43,8 @@
 - [~] Server-side refresh-token rows, session listing and per-session revoke service exist; controller revoke endpoint and integration tests remain.
 - [ ] Browser cookies: HttpOnly, Secure, SameSite and __Host- prefix if a browser session frontend is added.
 - [ ] CSRF tokens for cookie-authenticated state-changing browser requests.
-- [~] Mobile access token is memory-only; refresh token is not persisted. Add OS secure storage before persistent mobile sessions.
-- [ ] Logout clears OS secure storage, revokes server-side token; add logout-all-devices.
+- [x] Mobile access token is memory-only; refresh token is persisted through OS secure storage (Keychain/Keystore).
+- [~] Logout attempts server revocation and clears OS secure storage; logout-all-devices and revoke-all endpoint remain.
 
 ## 3. Authorization
 - [~] Deny by default: guards exist on parts of API; audit every controller and route.
@@ -105,7 +105,7 @@
 - [x] Breezze currently has no payment/card feature. If payments are added, use hosted checkout and never store card numbers.
 
 ## 8. API security
-- [~] Global NestJS IP throttling and trusted Cloudflare client-IP extraction exist; distributed per-user/per-key Redis quotas and endpoint-specific policies are incomplete.
+- [~] Global IP quota uses atomic Redis counters shared across API replicas; trusted Cloudflare client-IP extraction is authenticated by the edge secret. Per-user/per-key quotas and endpoint-specific policies remain.
 - [~] Cloudflare WAF/rate rules are documented but production thresholds/rules must be configured and verified.
 - [~] Set explicit request body limits and request/upstream timeouts per route.
 - [~] Bounded pagination is a route-by-route task; cap every list endpoint.
@@ -147,7 +147,7 @@
 - [ ] Incident runbook: severity, contacts, containment, credential rotation, evidence preservation and postmortem.
 
 ## 12. Mobile-specific
-- [ ] Add secure storage backed by iOS Keychain and Android Keystore; never put refresh tokens in preferences or SQLite.
+- [x] Refresh tokens use flutter_secure_storage backed by iOS Keychain / Android Keystore; never put refresh tokens in preferences or SQLite.
 - [x] No provider secrets in app bundle by design; use backend proxy.
 - [ ] Certificate pinning only with backup pin and tested emergency rotation plan.
 - [ ] Play Integrity and Apple App Attest verification for sensitive endpoints.
@@ -235,7 +235,7 @@ Breezze currently has no user-facing LLM feature. These are mandatory gates befo
 - [ ] Latest CI green on exact release commit: Flutter, API typecheck/tests/build, Prisma validation and both Cloudflare Workers.
 - [ ] Refresh-token migration tested on fresh/existing DB; replay/concurrent-refresh tests pass.
 - [ ] Mobile refresh token stored only in OS secure storage; logout and revoke-all work.
-- [ ] Distributed auth rate limits tested against enumeration and credential stuffing.
+- [~] Shared Redis IP rate limit is implemented and unit-tested; per-account enumeration/credential-stuffing controls and production Redis failure drills remain.
 - [ ] Every protected endpoint has ownership/role tests, including cross-user IDOR.
 - [ ] Secret scan passes current tree and Git history; exposed credentials rotated.
 - [ ] Production Cloudflare WAF/rate rules, TLS/HSTS/CSP/CORS and private-origin restrictions verified.
@@ -247,6 +247,7 @@ Breezze currently has no user-facing LLM feature. These are mandatory gates befo
 - Cloudflare API Worker: infra/cloudflare/api-worker/
 - Cloudflare guidance: infra/cloudflare/README.md
 - API bootstrap: backend/api/src/main.ts
+- Distributed rate limiter: backend/api/src/cloudflare-aware-throttler.guard.ts and backend/api/src/cloudflare-aware-throttler.guard.spec.ts
 - Auth: backend/api/src/auth/
 - Refresh-token schema/migration: backend/api/prisma/
 - Provider resilience: backend/api/src/providers/ytmusic.adapter.ts and backend/ytmusicapi/main.py
