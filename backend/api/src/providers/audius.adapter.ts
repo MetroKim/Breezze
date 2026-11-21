@@ -60,7 +60,7 @@ export class AudiusAdapter implements ProviderAdapter {
   constructor(private readonly cache: ProviderCacheService) {}
 
   private url(path: string, params: Record<string, string> = {}): URL {
-    const url = new URL(path, `${this.baseUrl}/`);
+    const url = new URL(path.replace(/^\\//, ''), `${this.baseUrl}/`);
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);
     }
