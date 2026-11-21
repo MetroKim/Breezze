@@ -388,97 +388,272 @@ const _browseDestinations = <_BrowseDestination>[
   _BrowseDestination('Artist Spotlight', 'Editorial artist features backed by catalog metadata.', 'user-round'),
 ];
 
-class _BrowseCollectionScreen extends StatelessWidget {
+class _BrowseCollectionScreen extends ConsumerStatefulWidget {
   final _BrowseDestination destination;
-
   const _BrowseCollectionScreen({required this.destination});
+
+  @override
+  ConsumerState<_BrowseCollectionScreen> createState() => _BrowseCollectionScreenState();
+}
+
+class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen> {
+  static const _genres = ['Afrobeats','Bongo Flava','Amapiano','Gospel','Hip-Hop','R&B','Jazz','Electronic','Pop','Rock','Soul','Dancehall'];
+  static const _moods = ['Focus','Workout','Chill','Party','Sleep','Commute','Feel good','Romance','Meditation','Running','Study','Driving'];
+  String _selected = '';
+  List<BzTrack> _tracks = [];
+  bool _loading = false;
+  String? _error;
+  int _generation = 0;
+
+  bool get _genre => widget.destination.title == 'Browse by Genre';
+  bool get _mood => widget.destination.title == 'Moods & Activities';
+  bool get _searchable => _genre || _mood;
+  List<String> get _choices => _genre ? _genres : _moods;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_searchable) {
+      _selected = _choices.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _search(_selected);
+      });
+    }
+  }
+
+  Future<void> _search(String choice) async {
+    final generation = ++_generation;
+    setState(() {
+      _selected = choice;
+      _loading = true;
+      _error = null;
+      _tracks = [];
+    });
+    try {
+      final result = await ref.read(youtubeSourceProvider).search('$choice music');
+      if (!mounted || generation != _generation) return;
+      if (result is ProviderOk<List<ProviderTrack>>) {
+        setState(() {
+          _tracks = result.value.map((track) => BzTrack(
+            id: track.breezzeTrackId,
+            title: track.title,
+            artist: track.artist,
+            artworkUrl: track.artworkUrl,
+            duration: track.duration,
+          )).toList();
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _loading = false;
+          _error = 'The connected music source could not return search results.';
+        });
+      }
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not reach the music source. Check your connection and retry.';
+      });
+    }
+  }
+
+  void _play(int index) {
+    if (_tracks.isEmpty) return;
+    final queue = [for (final track in _tracks) TrackInfo(
+      id: track.id, title: track.title, artist: track.artist,
+      artworkUrl: track.artworkUrl, duration: track.duration,
+    )];
+    ref.read(playerControllerProvider.notifier).playTrack(
+      trackId: _tracks[index].id,
+      queue: queue,
+      startIndex: index,
+      origin: 'browse',
+      sourceContext: widget.destination.title + ': ' + _selected,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final progress = ref.watch(downloadProgressProvider);
     return Scaffold(
       backgroundColor: theme.bzBackground,
       appBar: AppBar(
-        title: Text(destination.title),
+        title: Text(widget.destination.title),
         leading: IconButton(
           tooltip: 'Back to Browse',
           icon: const BzSvgIcon(name: 'chevron-left'),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: theme.bzSurface1,
-                    borderRadius: BorderRadius.circular(BzRadius.card),
-                    border: Border.all(color: theme.bzSeparator),
-                  ),
-                  alignment: Alignment.center,
-                  child: BzSvgIcon(
-                    name: destination.icon,
-                    size: 32,
-                    color: theme.bzAccent,
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Text(
-                  destination.title,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  destination.description,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.bzText2,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.bzSurface1,
-                    borderRadius: BorderRadius.circular(BzRadius.card),
-                    border: Border.all(color: theme.bzSeparator),
-                  ),
-                  child: Column(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: _searchable
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Catalog source required',
-                        style: theme.textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Breezze will show this collection when a verified source is connected. We will not fill it with generic search results or invented rankings.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.bzText2,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.destination.description, style: theme.textTheme.bodyMedium),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [for (final choice in _choices)
+                                ChoiceChip(
+                                  label: Text(choice),
+                                  selected: _selected == choice,
+                                  onSelected: (_) => _search(choice),
+                                )],
+                            ),
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: theme.bzSurface1,
+                                borderRadius: BorderRadius.circular(BzRadius.card),
+                                border: Border.all(color: theme.bzSeparator),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  BzSvgIcon(name: 'info', size: 18, color: theme.bzText2),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Text(
+                                    'These are track-search matches from the connected source. They are not verified editorial playlists, mood classifications or official genre charts.',
+                                    style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                                  )),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(_genre ? 'Genre search matches' : 'Mood search matches', style: theme.textTheme.titleMedium),
+                          ],
                         ),
                       ),
+                      Expanded(
+                        child: _loading
+                            ? ListView.separated(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: 6,
+                                separatorBuilder: (_, __) => const SizedBox(height: 14),
+                                itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                              )
+                            : _error != null
+                                ? _BrowseMessageState(
+                                    icon: 'wifi-off', title: 'Music source unavailable',
+                                    message: _error!, onRetry: () => _search(_selected),
+                                  )
+                                : _tracks.isEmpty
+                                    ? _BrowseMessageState(
+                                        icon: 'music-note', title: 'No matches found',
+                                        message: 'Try another selection or retry this search.',
+                                        onRetry: () => _search(_selected),
+                                      )
+                                    : ListView.builder(
+                                        padding: EdgeInsets.fromLTRB(0, 8, 0, BzBreakpoints.bottomClearance(context, compact: 220)),
+                                        itemCount: _tracks.length,
+                                        itemBuilder: (context, index) {
+                                          final track = _tracks[index];
+                                          final download = progress[track.id];
+                                          return ListTile(
+                                            leading: track.artworkUrl == null
+                                                ? BzBnoteMark(size: 48, color: theme.bzText2)
+                                                : ClipRRect(
+                                                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                                                    child: Image.network(
+                                                      track.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) => BzBnoteMark(size: 48, color: theme.bzText2),
+                                                    ),
+                                                  ),
+                                            title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            trailing: download != null
+                                                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                                                : IconButton(
+                                                    tooltip: 'Download',
+                                                    icon: const BzSvgIcon(name: 'download', size: 20),
+                                                    onPressed: () => ref.read(downloadProgressProvider.notifier).download(track),
+                                                  ),
+                                            onTap: () => _play(index),
+                                          );
+                                        },
+                                      ),
+                      ),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-                OutlinedButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  child: const Text('Back to Browse'),
-                ),
-              ],
-            ),
+                  )
+                : _unavailable(theme),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _unavailable(ThemeData theme) {
+    final destination = widget.destination;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: theme.bzSurface1,
+            borderRadius: BorderRadius.circular(BzRadius.card),
+            border: Border.all(color: theme.bzSeparator),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 54, height: 54,
+                decoration: BoxDecoration(color: theme.bzSurface2, borderRadius: BorderRadius.circular(15)),
+                alignment: Alignment.center,
+                child: BzSvgIcon(name: destination.icon, size: 27, color: theme.bzAccent),
+              ),
+              const SizedBox(height: 18),
+              Text(destination.title, style: theme.textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(destination.description, style: theme.textTheme.bodyMedium?.copyWith(color: theme.bzText2)),
+              const SizedBox(height: 22),
+              Row(children: [
+                BzSvgIcon(name: 'info', size: 19, color: theme.bzAccent),
+                const SizedBox(width: 9),
+                Text('Not available yet', style: theme.textTheme.titleMedium),
+              ]),
+              const SizedBox(height: 10),
+              Text(
+                'A verified catalog or editorial provider is required for this section. Breezze will not substitute generic search results or invented rankings.',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(destination.description, style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text('What belongs in this section', style: theme.textTheme.titleLarge),
+        const SizedBox(height: 10),
+        for (final item in destination.previewSections)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(children: [
+              BzSvgIcon(name: 'check', size: 17, color: theme.bzText2),
+              const SizedBox(width: 10),
+              Expanded(child: Text(item, style: theme.textTheme.bodyMedium)),
+            ]),
+          ),
+        const SizedBox(height: 24),
+        OutlinedButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          child: const Text('Back to Browse'),
+        ),
+      ],
     );
   }
 }
