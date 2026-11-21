@@ -31,6 +31,7 @@ class _FakeEngine implements AudioEngineAdapter {
   final StreamController<PlaybackState> states =
       StreamController<PlaybackState>.broadcast();
   final List<String> prepared = [];
+  final List<PlayableSource> preparedSources = [];
   int playCount = 0;
   bool failPrepare = false;
   bool failPlay = false;
@@ -40,6 +41,7 @@ class _FakeEngine implements AudioEngineAdapter {
   @override
   Future<void> prepare(PlayableSource source) async {
     prepared.add(source.trackId);
+    preparedSources.add(source);
     if (failPrepare) throw StateError('prepare failed');
     if (prepared.length == 1 && firstPrepare != null) {
       await firstPrepare!.future;
@@ -127,6 +129,29 @@ void main() {
     expect(engine.playCount, 1);
     expect(container.read(playerControllerProvider).currentTrack?.id,
         'track-b');
+    expect(container.read(playerControllerProvider).playbackState,
+        PlaybackState.playing);
+  });
+
+  test('downloaded tracks bypass network resolution and prepare a local source',
+      () async {
+    final player = container.read(playerControllerProvider.notifier);
+
+    await player.playTrack(
+      trackId: 'catalog-track-1',
+      title: 'Offline track',
+      artist: 'Breezze Artist',
+      localFilePath: '/app/private/downloads/audio.m4a',
+      origin: 'downloads',
+    );
+
+    expect(resolver.pending, isEmpty);
+    expect(engine.prepared, ['catalog-track-1']);
+    expect(engine.preparedSources.single.isLocal, isTrue);
+    expect(
+      engine.preparedSources.single.streamUrl,
+      '/app/private/downloads/audio.m4a',
+    );
     expect(container.read(playerControllerProvider).playbackState,
         PlaybackState.playing);
   });
