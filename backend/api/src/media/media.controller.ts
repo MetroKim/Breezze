@@ -40,6 +40,11 @@ export class MediaController {
     return this.media.completeUpload(userId, id);
   }
 
+  @Post('jobs/:id/retry')
+  retry(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.media.retryFailedUpload(userId, id);
+  }
+
   @Get('jobs')
   jobs(@CurrentUser() userId: string) {
     return this.media.listJobs(userId);
