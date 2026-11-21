@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
@@ -81,12 +82,14 @@ export class AuthController {
   }
 
   @Post('mfa/setup')
+  @Header('Cache-Control', 'private, no-store')
   @UseGuards(JwtAuthGuard)
   beginMfaSetup(@CurrentUser() userId: string) {
     return this.auth.beginMfaSetup(userId);
   }
 
   @Post('mfa/setup/verify')
+  @Header('Cache-Control', 'private, no-store')
   @UseGuards(JwtAuthGuard)
   verifyMfaSetup(
     @CurrentUser() userId: string,
@@ -97,6 +100,7 @@ export class AuthController {
   }
 
   @Post('mfa/verify')
+  @Header('Cache-Control', 'private, no-store')
   @UseGuards(JwtAuthGuard)
   verifyMfa(
     @CurrentUser() userId: string,
