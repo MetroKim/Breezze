@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_session.dart';
@@ -75,10 +76,15 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           icon: BzSvgIcon(name: 'chevron-left'),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        actions: [IconButton(onPressed: _load, icon: const BzSvgIcon(name: 'refresh'))],
+        actions: [IconButton(tooltip: 'Refresh notifications', onPressed: _load, icon: const BzSvgIcon(name: 'refresh'))],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: 5,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+            )
           : _error != null
               ? Center(
                   child: Padding(
@@ -101,8 +107,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                         final id = item['id'] as String? ?? '';
                         final isRead = item['readAt'] != null;
                         return ListTile(
-                          leading: Icon(
-                            isRead ? Icons.notifications_none : Icons.notifications_active,
+                          leading: BzSvgIcon(
+                            name: 'bell',
                             color: isRead ? theme.disabledColor : theme.colorScheme.primary,
                           ),
                           title: Text(item['title'] as String? ?? 'Breezze update'),
