@@ -83,7 +83,12 @@ async function upload(request: Request, url: URL, env: Env): Promise<Response> {
   const expires = Number(url.searchParams.get('e'));
   const signature = url.searchParams.get('s');
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
-  if (!userId || !jobId || !safeName || safeName !== filename
+  // These values become R2 key segments. Keep them opaque and path-safe even
+  // though the signature is server-issued; never let encoded separators or
+  // traversal-like identifiers alter the quarantine namespace.
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(userId)
+    || !/^[a-zA-Z0-9_-]{1,128}$/.test(jobId)
+    || !safeName || safeName !== filename
     || !Number.isSafeInteger(bytes) || bytes < 1 || bytes > 100 * 1024 * 1024) {
     return error(400, 'INVALID_UPLOAD');
   }
