@@ -317,6 +317,838 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         ),
                       ),
                       onDismissed: (_) async {
+                        if (widget.ownerId != 'guest' && RegExp(r'^[0-9a-fA-F-]{36}
+                        _load();
+                        widget.onChanged?.call();
+                      },
+                      child: ListTile(
+                        leading: track.artworkUrl == null
+                            ? BzBnoteMark(size: 46, color: theme.bzText2)
+                            : ClipRRect(
+                                borderRadius:
+                                    BorderRadius.circular(BzRadius.artwork),
+                                child: Image.network(
+                                  track.artworkUrl!,
+                                  width: 46,
+                                  height: 46,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      BzBnoteMark(
+                                          size: 46, color: theme.bzText2),
+                                ),
+                              ),
+                        title: Text(track.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(track.artist,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () => _playTrack(playlist, index),
+                      ),
+                    );
+                  },
+                  childCount: playlist.tracks.length,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+).hasMatch(playlist.id)) {
+      try {
+        await ref.read(authSessionProvider.notifier).api.renamePlaylist(playlist.id, name.trim());
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not sync playlist rename.')));
+        return;
+      }
+    }
+    await _store.rename(widget.ownerId, playlist.id, name);
+    await _load();
+    widget.onChanged?.call();
+  }
+
+  Future<void> _delete(UserPlaylist playlist) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete playlist?'),
+        content: Text('“${playlist.name}” will be removed from this device.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _store.delete(widget.ownerId, playlist.id);
+    widget.onChanged?.call();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: theme.bzBackground,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final playlist = _playlist;
+    if (playlist == null) {
+      return Scaffold(
+        backgroundColor: theme.bzBackground,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: BzSvgIcon(name: 'chevron-down'),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text('Playlist'),
+        ),
+        body: const Center(child: Text('This playlist is no longer available.')),
+      );
+    }
+
+    final artworks = playlist.tracks
+        .where((item) => item.artworkUrl != null)
+        .map((item) => item.artworkUrl!)
+        .toList();
+    final artwork = artworks.isEmpty ? null : artworks.first;
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Close playlist',
+                      icon: BzSvgIcon(name: 'chevron-down'),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    const Spacer(),
+                    PopupMenuButton<String>(
+                      icon: BzSvgIcon(name: 'more-vertical'),
+                      onSelected: (value) {
+                        if (value == 'rename') _rename(playlist);
+                        if (value == 'delete') _delete(playlist);
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'rename',
+                          child: Text('Rename'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete from this device'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(BzRadius.modal),
+                        child: artwork == null
+                            ? Container(
+                                width: 220,
+                                height: 220,
+                                color: theme.bzSurface1,
+                                alignment: Alignment.center,
+                                child: BzBnoteMark(
+                                  size: 72,
+                                  color: theme.bzText2,
+                                ),
+                              )
+                            : Image.network(
+                                artwork,
+                                width: 220,
+                                height: 220,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: BzBnoteMark(
+                                    size: 72,
+                                    color: theme.bzText2,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(playlist.name, style: theme.textTheme.headlineMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Playlist · ${playlist.tracks.length} songs · On this device',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.bzText2),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        FilledButton.icon(
+                          onPressed: playlist.tracks.isEmpty
+                              ? null
+                              : () => _playAll(playlist),
+                          icon: BzSvgIcon(
+                            name: 'play',
+                            size: 17,
+                            color: theme.bzBackground,
+                          ),
+                          label: const Text('Play'),
+                        ),
+                        const SizedBox(width: 10),
+                        OutlinedButton.icon(
+                          onPressed: playlist.tracks.isEmpty
+                              ? null
+                              : () {
+                                  final controller =
+                                      ref.read(playerControllerProvider.notifier);
+                                  controller.toggleShuffle();
+                                  _playAll(playlist);
+                                },
+                          icon: BzSvgIcon(name: 'shuffle', size: 17),
+                          label: const Text('Shuffle'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Text('SONGS',
+                    style: TextStyle(
+                      color: theme.bzText2,
+                      fontSize: BzType.caption,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                    )),
+              ),
+            ),
+            if (playlist.tracks.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Text(
+                      'Add songs from Search using the track action menu.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final track = playlist.tracks[index];
+                    return Dismissible(
+                      key: ValueKey(track.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 24),
+                        color: theme.bzError,
+                        child: BzSvgIcon(
+                          name: 'trash',
+                          color: theme.bzBackground,
+                        ),
+                      ),
+                      onDismissed: (_) async {
+                        await _store.removeTrack(
+                          widget.ownerId,
+                          playlist.id,
+                          track.id,
+                        );
+                        _load();
+                        widget.onChanged?.call();
+                      },
+                      child: ListTile(
+                        leading: track.artworkUrl == null
+                            ? BzBnoteMark(size: 46, color: theme.bzText2)
+                            : ClipRRect(
+                                borderRadius:
+                                    BorderRadius.circular(BzRadius.artwork),
+                                child: Image.network(
+                                  track.artworkUrl!,
+                                  width: 46,
+                                  height: 46,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      BzBnoteMark(
+                                          size: 46, color: theme.bzText2),
+                                ),
+                              ),
+                        title: Text(track.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(track.artist,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () => _playTrack(playlist, index),
+                      ),
+                    );
+                  },
+                  childCount: playlist.tracks.length,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+).hasMatch(playlist.id)) {
+      try {
+        await ref.read(authSessionProvider.notifier).api.deletePlaylist(playlist.id);
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not delete playlist from your account.')));
+        return;
+      }
+    }
+    await _store.delete(widget.ownerId, playlist.id);
+    widget.onChanged?.call();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: theme.bzBackground,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final playlist = _playlist;
+    if (playlist == null) {
+      return Scaffold(
+        backgroundColor: theme.bzBackground,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: BzSvgIcon(name: 'chevron-down'),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text('Playlist'),
+        ),
+        body: const Center(child: Text('This playlist is no longer available.')),
+      );
+    }
+
+    final artworks = playlist.tracks
+        .where((item) => item.artworkUrl != null)
+        .map((item) => item.artworkUrl!)
+        .toList();
+    final artwork = artworks.isEmpty ? null : artworks.first;
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Close playlist',
+                      icon: BzSvgIcon(name: 'chevron-down'),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    const Spacer(),
+                    PopupMenuButton<String>(
+                      icon: BzSvgIcon(name: 'more-vertical'),
+                      onSelected: (value) {
+                        if (value == 'rename') _rename(playlist);
+                        if (value == 'delete') _delete(playlist);
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'rename',
+                          child: Text('Rename'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete from this device'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(BzRadius.modal),
+                        child: artwork == null
+                            ? Container(
+                                width: 220,
+                                height: 220,
+                                color: theme.bzSurface1,
+                                alignment: Alignment.center,
+                                child: BzBnoteMark(
+                                  size: 72,
+                                  color: theme.bzText2,
+                                ),
+                              )
+                            : Image.network(
+                                artwork,
+                                width: 220,
+                                height: 220,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: BzBnoteMark(
+                                    size: 72,
+                                    color: theme.bzText2,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(playlist.name, style: theme.textTheme.headlineMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Playlist · ${playlist.tracks.length} songs · On this device',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.bzText2),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        FilledButton.icon(
+                          onPressed: playlist.tracks.isEmpty
+                              ? null
+                              : () => _playAll(playlist),
+                          icon: BzSvgIcon(
+                            name: 'play',
+                            size: 17,
+                            color: theme.bzBackground,
+                          ),
+                          label: const Text('Play'),
+                        ),
+                        const SizedBox(width: 10),
+                        OutlinedButton.icon(
+                          onPressed: playlist.tracks.isEmpty
+                              ? null
+                              : () {
+                                  final controller =
+                                      ref.read(playerControllerProvider.notifier);
+                                  controller.toggleShuffle();
+                                  _playAll(playlist);
+                                },
+                          icon: BzSvgIcon(name: 'shuffle', size: 17),
+                          label: const Text('Shuffle'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Text('SONGS',
+                    style: TextStyle(
+                      color: theme.bzText2,
+                      fontSize: BzType.caption,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                    )),
+              ),
+            ),
+            if (playlist.tracks.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Text(
+                      'Add songs from Search using the track action menu.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final track = playlist.tracks[index];
+                    return Dismissible(
+                      key: ValueKey(track.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 24),
+                        color: theme.bzError,
+                        child: BzSvgIcon(
+                          name: 'trash',
+                          color: theme.bzBackground,
+                        ),
+                      ),
+                      onDismissed: (_) async {
+                        await _store.removeTrack(
+                          widget.ownerId,
+                          playlist.id,
+                          track.id,
+                        );
+                        _load();
+                        widget.onChanged?.call();
+                      },
+                      child: ListTile(
+                        leading: track.artworkUrl == null
+                            ? BzBnoteMark(size: 46, color: theme.bzText2)
+                            : ClipRRect(
+                                borderRadius:
+                                    BorderRadius.circular(BzRadius.artwork),
+                                child: Image.network(
+                                  track.artworkUrl!,
+                                  width: 46,
+                                  height: 46,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      BzBnoteMark(
+                                          size: 46, color: theme.bzText2),
+                                ),
+                              ),
+                        title: Text(track.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(track.artist,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () => _playTrack(playlist, index),
+                      ),
+                    );
+                  },
+                  childCount: playlist.tracks.length,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+).hasMatch(playlist.id)) {
+      try {
+        await ref.read(authSessionProvider.notifier).api.renamePlaylist(playlist.id, name.trim());
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not sync playlist rename.')));
+        return;
+      }
+    }
+    await _store.rename(widget.ownerId, playlist.id, name);
+    await _load();
+    widget.onChanged?.call();
+  }
+
+  Future<void> _delete(UserPlaylist playlist) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete playlist?'),
+        content: Text('“${playlist.name}” will be removed from this device.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _store.delete(widget.ownerId, playlist.id);
+    widget.onChanged?.call();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: theme.bzBackground,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final playlist = _playlist;
+    if (playlist == null) {
+      return Scaffold(
+        backgroundColor: theme.bzBackground,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: BzSvgIcon(name: 'chevron-down'),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text('Playlist'),
+        ),
+        body: const Center(child: Text('This playlist is no longer available.')),
+      );
+    }
+
+    final artworks = playlist.tracks
+        .where((item) => item.artworkUrl != null)
+        .map((item) => item.artworkUrl!)
+        .toList();
+    final artwork = artworks.isEmpty ? null : artworks.first;
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Close playlist',
+                      icon: BzSvgIcon(name: 'chevron-down'),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    const Spacer(),
+                    PopupMenuButton<String>(
+                      icon: BzSvgIcon(name: 'more-vertical'),
+                      onSelected: (value) {
+                        if (value == 'rename') _rename(playlist);
+                        if (value == 'delete') _delete(playlist);
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'rename',
+                          child: Text('Rename'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete from this device'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(BzRadius.modal),
+                        child: artwork == null
+                            ? Container(
+                                width: 220,
+                                height: 220,
+                                color: theme.bzSurface1,
+                                alignment: Alignment.center,
+                                child: BzBnoteMark(
+                                  size: 72,
+                                  color: theme.bzText2,
+                                ),
+                              )
+                            : Image.network(
+                                artwork,
+                                width: 220,
+                                height: 220,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: BzBnoteMark(
+                                    size: 72,
+                                    color: theme.bzText2,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(playlist.name, style: theme.textTheme.headlineMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Playlist · ${playlist.tracks.length} songs · On this device',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.bzText2),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        FilledButton.icon(
+                          onPressed: playlist.tracks.isEmpty
+                              ? null
+                              : () => _playAll(playlist),
+                          icon: BzSvgIcon(
+                            name: 'play',
+                            size: 17,
+                            color: theme.bzBackground,
+                          ),
+                          label: const Text('Play'),
+                        ),
+                        const SizedBox(width: 10),
+                        OutlinedButton.icon(
+                          onPressed: playlist.tracks.isEmpty
+                              ? null
+                              : () {
+                                  final controller =
+                                      ref.read(playerControllerProvider.notifier);
+                                  controller.toggleShuffle();
+                                  _playAll(playlist);
+                                },
+                          icon: BzSvgIcon(name: 'shuffle', size: 17),
+                          label: const Text('Shuffle'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Text('SONGS',
+                    style: TextStyle(
+                      color: theme.bzText2,
+                      fontSize: BzType.caption,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                    )),
+              ),
+            ),
+            if (playlist.tracks.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Text(
+                      'Add songs from Search using the track action menu.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final track = playlist.tracks[index];
+                    return Dismissible(
+                      key: ValueKey(track.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 24),
+                        color: theme.bzError,
+                        child: BzSvgIcon(
+                          name: 'trash',
+                          color: theme.bzBackground,
+                        ),
+                      ),
+                      onDismissed: (_) async {
+                        await _store.removeTrack(
+                          widget.ownerId,
+                          playlist.id,
+                          track.id,
+                        );
+                        _load();
+                        widget.onChanged?.call();
+                      },
+                      child: ListTile(
+                        leading: track.artworkUrl == null
+                            ? BzBnoteMark(size: 46, color: theme.bzText2)
+                            : ClipRRect(
+                                borderRadius:
+                                    BorderRadius.circular(BzRadius.artwork),
+                                child: Image.network(
+                                  track.artworkUrl!,
+                                  width: 46,
+                                  height: 46,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      BzBnoteMark(
+                                          size: 46, color: theme.bzText2),
+                                ),
+                              ),
+                        title: Text(track.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(track.artist,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () => _playTrack(playlist, index),
+                      ),
+                    );
+                  },
+                  childCount: playlist.tracks.length,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+).hasMatch(playlist.id)) {
+                          try {
+                            await ref.read(authSessionProvider.notifier).api.removePlaylistTrack(playlist.id, track.id);
+                          } catch (_) {
+                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not sync song removal.')));
+                            await _load();
+                            return;
+                          }
+                        }
                         await _store.removeTrack(
                           widget.ownerId,
                           playlist.id,
