@@ -5,6 +5,7 @@ import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 
 import '../player/player_controller.dart';
+import '../downloads/downloads_screen.dart';
 
 /// Browse destination. Catalog-backed sections remain empty until a
 /// CatalogRepository is connected; this avoids presenting sample data as real.
@@ -111,11 +112,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   String _section = 'Playlists';
 
   static const _sections = [
-    'Playlists', 'Artists', 'Albums', 'Songs', 'Genres', 'Downloads',
+    'Playlists', 'Artists', 'Albums', 'Songs', 'Genres', 'Compilations', 'Downloads',
   ];
 
   @override
   Widget build(BuildContext context) {
+    if (_section == 'Downloads') return const DownloadsScreen();
     final theme = Theme.of(context);
     return SafeArea(
       child: ListView(
