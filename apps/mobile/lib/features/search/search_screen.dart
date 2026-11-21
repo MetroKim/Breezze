@@ -565,7 +565,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                           )
                                         : Text(
                                             (track.id.startsWith('bz:') || track.id.startsWith('bzv:'))
-                                                ? '${track.artist} · YouTube Music'
+                                                ? '${track.artist} · YouTube Music · Catalogue only'
                                                 : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -576,7 +576,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         IconButton(
                                           tooltip: 'Play',
                                           icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
-                                          onPressed: () => _play(track),
+                                          onPressed: track.id.startsWith('bz:')
+                                              ? null
+                                              : () => _play(track),
                                         ),
                                         PopupMenuButton<String>(
                                           tooltip: 'Track actions',
