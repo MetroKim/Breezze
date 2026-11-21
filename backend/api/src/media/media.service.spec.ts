@@ -12,9 +12,13 @@ describe('MediaService tenant isolation', () => {
     },
   };
   const signer = { createUploadUrl: jest.fn() };
+  const queue = { add: jest.fn() };
   const service = new MediaService(prisma as any, signer as any);
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (service as any).queue = queue;
+  });
 
   it('does not register an upload against another account release', async () => {
     prisma.releaseSubmission.findFirst.mockResolvedValue(null);
@@ -34,6 +38,7 @@ describe('MediaService tenant isolation', () => {
 
   it('does not complete another account upload job', async () => {
     prisma.mediaJob.updateMany.mockResolvedValue({ count: 0 });
+    prisma.mediaJob.findFirst.mockResolvedValue(null);
     await expect(service.completeUpload('user-a', 'job-owned-by-user-b'))
       .rejects.toBeInstanceOf(NotFoundException);
 
@@ -41,7 +46,10 @@ describe('MediaService tenant isolation', () => {
       where: { id: 'job-owned-by-user-b', userId: 'user-a', status: 'quarantined' },
       data: { status: 'uploaded' },
     });
-    expect(prisma.mediaJob.findFirst).not.toHaveBeenCalled();
+    expect(prisma.mediaJob.findFirst).toHaveBeenCalledWith({
+      where: { id: 'job-owned-by-user-b', userId: 'user-a' },
+    });
+    expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('lists only jobs owned by the authenticated account', async () => {
@@ -52,5 +60,59 @@ describe('MediaService tenant isolation', () => {
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
+  });
+  it('retries queue insertion safely after Redis fails following the DB state change', async () => {
+    const job = {
+      id: 'job-1',
+      userId: 'user-a',
+      submissionId: 'release-1',
+      originalFilename: 'track.wav',
+      status: 'uploaded',
+    };
+    prisma.mediaJob.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    prisma.mediaJob.findFirst.mockResolvedValue(job);
+    queue.add.mockRejectedValueOnce(new Error('REDIS_UNAVAILABLE'))
+      .mockResolvedValueOnce({});
+
+    await expect(service.completeUpload('user-a', 'job-1'))
+      .rejects.toThrow('REDIS_UNAVAILABLE');
+    await expect(service.completeUpload('user-a', 'job-1')).resolves.toEqual({
+      jobId: 'job-1',
+      status: 'uploaded',
+      queued: true,
+    });
+
+    expect(queue.add).toHaveBeenCalledTimes(2);
+    expect(queue.add).toHaveBeenLastCalledWith(
+      'pipeline',
+      {
+        jobId: 'job-1',
+        submissionId: 'release-1',
+        inputPath: 'quarantine/user-a/job-1/track.wav',
+      },
+      expect.objectContaining({
+        jobId: 'media_job-1',
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 1_000 },
+      }),
+    );
+  });
+
+  it('does not enqueue a second pipeline while the worker is already processing', async () => {
+    prisma.mediaJob.updateMany.mockResolvedValue({ count: 0 });
+    prisma.mediaJob.findFirst.mockResolvedValue({
+      id: 'job-2',
+      userId: 'user-a',
+      status: 'processing',
+    });
+
+    await expect(service.completeUpload('user-a', 'job-2')).resolves.toEqual({
+      jobId: 'job-2',
+      status: 'processing',
+      queued: true,
+    });
+    expect(queue.add).not.toHaveBeenCalled();
   });
 });
