@@ -273,34 +273,6 @@ class BreezzeApi {
     await _delete('/playlists/${Uri.encodeComponent(playlistId)}');
   }
 
-  // ---- artist portal ----
-
-  Future<List<Map<String, dynamic>>> artistClaims() async =>
-      _asMapList(await _get('/artist-portal/claims'));
-
-  Future<Map<String, dynamic>> claimArtist(String artistId) =>
-      _post('/artist-portal/claims', {'artistId': artistId});
-
-  Future<Map<String, dynamic>> submitArtistRelease({
-    required String title,
-    required String artistId,
-    required int trackCount,
-  }) =>
-      _post('/artist-portal/releases', {
-        'title': title,
-        'artistId': artistId,
-        'trackCount': trackCount,
-      });
-
-  Future<List<Map<String, dynamic>>> artistReleases() async =>
-      _asMapList(await _get('/artist-portal/releases'));
-
-  Future<Map<String, dynamic>> artistDashboard() =>
-      _get('/artist-portal/dashboard');
-
-  Future<Map<String, dynamic>> artistAnalytics() =>
-      _get('/artist-portal/analytics');
-
   // ---- notifications ----
 
   Future<List<Map<String, dynamic>>> notifications() async =>
