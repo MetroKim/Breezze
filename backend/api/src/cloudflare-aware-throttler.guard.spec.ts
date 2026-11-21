@@ -11,9 +11,9 @@ describe('CloudflareAwareThrottlerGuard', () => {
   };
   let response: { setHeader: jest.Mock };
 
-  const context = (ip = '127.0.0.1') => ({
+  const context = (ip = '127.0.0.1', body: Record<string, unknown> = {}, url = '/api/v1/catalog') => ({
     switchToHttp: () => ({
-      getRequest: () => ({ ip, headers: {}, socket: {} }),
+      getRequest: () => ({ ip, body, method: 'POST', originalUrl: url, headers: {}, socket: {} }),
       getResponse: () => response,
     }),
   }) as any;
@@ -37,6 +37,8 @@ describe('CloudflareAwareThrottlerGuard', () => {
     await guard.onModuleDestroy();
     delete process.env.API_RATE_LIMIT;
     delete process.env.API_RATE_WINDOW_MS;
+    delete process.env.LOGIN_ACCOUNT_RATE_LIMIT;
+    delete process.env.LOGIN_ACCOUNT_RATE_WINDOW_MS;
     delete process.env.NODE_ENV;
   });
 
@@ -54,7 +56,7 @@ describe('CloudflareAwareThrottlerGuard', () => {
     expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '60');
   });
 
-  it('fails closed in production when Redis is unavailable', async () => {
+  it('applies a separate hashed account quota to login attempts', async () => {\n    process.env.API_RATE_LIMIT = '100';\n    process.env.LOGIN_ACCOUNT_RATE_LIMIT = '1';\n    redis.eval.mockResolvedValueOnce([1, 60000]).mockResolvedValueOnce([2, 899000]);\n\n    await expect(guard.canActivate(context('127.0.0.1', { email: 'Person@Example.com' }, '/api/v1/auth/login')))\n      .rejects.toBeInstanceOf(HttpException);\n    const accountKey = redis.eval.mock.calls[1][2] as string;\n    expect(accountKey).toContain('login-account:');\n    expect(accountKey).not.toContain('Person@Example.com');\n    expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '899');\n  });\n\n  it('fails closed in production when Redis is unavailable', async () => {
     process.env.NODE_ENV = 'production';
     redis.eval.mockRejectedValue(new Error('redis unavailable'));
 
