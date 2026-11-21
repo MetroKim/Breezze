@@ -113,7 +113,8 @@ class DownloadsLibrary {
       }
       onProgress?.call(1.0);
 
-      // 2. Cover art
+      // 2. Cover art is optional. A CDN/network failure must not turn a
+      // completed, rights-authorized audio download into a failed job.
       if (track.artworkUrl != null) {
         final coverFile = File('${dir.path}/cover.jpg');
         if (!await coverFile.exists()) {
@@ -121,18 +122,29 @@ class DownloadsLibrary {
           try {
             final request = await client.getUrl(Uri.parse(track.artworkUrl!));
             final response = await request.close();
-            await response.pipe(coverFile.openWrite());
+            if (response.statusCode == HttpStatus.ok) {
+              await response.pipe(coverFile.openWrite());
+            } else {
+              await response.drain<void>();
+            }
+          } catch (_) {
+            if (await coverFile.exists()) await coverFile.delete();
           } finally {
-            client.close();
+            client.close(force: true);
           }
         }
       }
 
-      // 3. Lyrics (LRCLIB synced when available)
-      final lyricsFile = File('${dir.path}/lyrics.lrc');
-      final result = await lyrics.bestFor(track);
-      if (result != null) {
-        await lyricsFile.writeAsString(result.bestLrc);
+      // 3. Lyrics are also best-effort. LRCLIB being unavailable must not
+      // invalidate an otherwise complete offline audio asset.
+      try {
+        final lyricsFile = File('${dir.path}/lyrics.lrc');
+        final result = await lyrics.bestFor(track);
+        if (result != null) {
+          await lyricsFile.writeAsString(result.bestLrc);
+        }
+      } catch (_) {
+        // Lyrics can be fetched again independently when the app is online.
       }
 
       // 4. Ownership and licence metadata are stored beside the app-private asset. Downloads are listed only for their owner and
