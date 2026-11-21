@@ -51,7 +51,7 @@ class UserPlaylist {
 /// Local playlist repository. Operations are serialized so rapid adds/removes
 /// cannot overwrite each other's JSON snapshots.
 class PlaylistStore {
-  Future<void> _pending = Future<void>.value();
+  static Future<void> _pending = Future<void>.value();
 
   Future<Directory> _directory(String ownerId) async {
     final safeOwner = ownerId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
