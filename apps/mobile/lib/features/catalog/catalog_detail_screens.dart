@@ -1,4 +1,3 @@
-import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,7 +27,6 @@ class ArtistDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final queue = [for (final track in savedTracks) track.toTrackInfo()];
-    final player = ref.read(playerControllerProvider.notifier);
 
     return Scaffold(
       backgroundColor: theme.bzBackground,
@@ -103,7 +101,7 @@ class ArtistDetailScreen extends ConsumerWidget {
                     FilledButton.icon(
                       onPressed: savedTracks.isEmpty
                           ? null
-                          : () => player.playTrack(
+                           : () => ref.read(playerControllerProvider.notifier).playTrack(
                                 trackId: savedTracks.first.id,
                                 queue: queue,
                                 origin: 'library',
@@ -158,7 +156,7 @@ class ArtistDetailScreen extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          onTap: () => player.playTrack(
+                          onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
                             trackId: savedTracks[i].id,
                             queue: queue,
                             startIndex: i,
@@ -224,6 +222,7 @@ class AlbumDetailScreen extends ConsumerWidget {
 
     void play({bool shuffle = false}) {
       if (queue.isEmpty) return;
+      final player = ref.read(playerControllerProvider.notifier);
       player.playTrack(
         trackId: queue.first.id,
         queue: queue,
@@ -330,7 +329,7 @@ class AlbumDetailScreen extends ConsumerWidget {
                             _duration(tracks[i].duration),
                             style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
                           ),
-                          onTap: () => player.playTrack(
+                          onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
                             trackId: tracks[i].id,
                             queue: queue,
                             startIndex: i,
