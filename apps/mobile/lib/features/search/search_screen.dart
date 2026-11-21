@@ -491,9 +491,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               _showAddToPlaylist(track);
                                             } else if (action == 'favorite') {
                                               _addFavorite(track);
+                                            } else if (action == 'play_next') {
+                                              ref.read(playerControllerProvider.notifier).playNext(
+                                                TrackInfo(
+                                                  id: track.id,
+                                                  title: track.title,
+                                                  artist: track.artist,
+                                                  artworkUrl: track.artworkUrl,
+                                                  duration: track.duration,
+                                                ),
+                                                origin: 'search',
+                                                sourceContext: 'Search',
+                                              );
+                                            } else if (action == 'play_last') {
+                                              ref.read(playerControllerProvider.notifier).playLast(
+                                                TrackInfo(
+                                                  id: track.id,
+                                                  title: track.title,
+                                                  artist: track.artist,
+                                                  artworkUrl: track.artworkUrl,
+                                                  duration: track.duration,
+                                                ),
+                                                origin: 'search',
+                                                sourceContext: 'Search',
+                                              );
                                             }
                                           },
                                           itemBuilder: (context) => const [
+                                            PopupMenuItem(
+                                              value: 'play_next',
+                                              child: Text('Play Next'),
+                                            ),
+                                            PopupMenuItem(
+                                              value: 'play_last',
+                                              child: Text('Add to Queue'),
+                                            ),
                                             PopupMenuItem(
                                               value: 'playlist',
                                               child: Text('Add to Playlist'),
