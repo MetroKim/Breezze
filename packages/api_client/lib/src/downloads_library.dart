@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'bz_track.dart';
@@ -29,6 +30,9 @@ class DownloadsLibrary {
   Future<bool> download(
     BzTrack track, {
     required String downloadUrl,
+    required String ownerId,
+    required String catalogTrackId,
+    DateTime? rightsExpiresAtUtc,
     void Function(double progress)? onProgress,
   }) async {
     final dir = _dirFor(track.id);
@@ -102,10 +106,17 @@ class DownloadsLibrary {
         await lyricsFile.writeAsString(result.bestLrc);
       }
 
-      // 4. Metadata
+      // 4. Ownership and licence metadata are stored beside the encrypted
+      // app-private asset. Downloads are listed only for their owner and
+      // are blocked locally after an explicit rights end time.
       final metaFile = File('${dir.path}/meta.json');
-      await metaFile.writeAsString(
-          '{"title":${_jsonEncode(track.title)},"artist":${_jsonEncode(track.artist)}}');
+      await metaFile.writeAsString(jsonEncode({
+        'title': track.title,
+        'artist': track.artist,
+        'ownerId': ownerId,
+        'catalogTrackId': catalogTrackId,
+        'rightsExpiresAtUtc': rightsExpiresAtUtc?.toUtc().toIso8601String(),
+      }));
 
       return true;
     } catch (_) {
@@ -113,17 +124,9 @@ class DownloadsLibrary {
     }
   }
 
-  /// Minimal JSON string escaping for the metadata file.
-  String _jsonEncode(String value) {
-    final escaped = value
-        .replaceAll('\\', '\\\\')
-        .replaceAll('"', '\\"')
-        .replaceAll('\n', '\\n');
-    return '"$escaped"';
-  }
-
-  /// All downloaded tracks with their local assets resolved.
-  Future<List<DownloadedTrack>> list() async {
+  /// Lists only assets owned by [ownerId]. A legacy file without owner
+  /// metadata is deliberately hidden rather than exposed across sessions.
+  Future<List<DownloadedTrack>> list({required String ownerId}) async {
     final tracks = <DownloadedTrack>[];
     if (!await root.exists()) return tracks;
     await for (final entry in root.list()) {
@@ -131,23 +134,23 @@ class DownloadsLibrary {
       final metaFile = File('${entry.path}/meta.json');
       if (!await metaFile.exists()) continue;
       try {
-        final raw = await metaFile.readAsString();
-        final title = RegExp(r'"title"\s*:\s*"((?:[^"\\]|\\.)*)"')
-            .firstMatch(raw)
-            ?.group(1)
-            ?.replaceAll('\\\\"', '"')
-            .replaceAll('\\\\n', '\n')
-            .replaceAll('\\\\', '\\');
-        final artist = RegExp(r'"artist"\s*:\s*"((?:[^"\\]|\\.)*)"')
-            .firstMatch(raw)
-            ?.group(1)
-            ?.replaceAll('\\\\"', '"')
-            .replaceAll('\\\\n', '\n')
-            .replaceAll('\\\\', '\\');
+        final raw = jsonDecode(await metaFile.readAsString());
+        if (raw is! Map<String, dynamic> || raw['ownerId'] != ownerId) {
+          continue;
+        }
+        final title = raw['title'] as String? ?? 'Unknown';
+        final artist = raw['artist'] as String? ?? 'Unknown';
+        final catalogTrackId = raw['catalogTrackId'] as String?;
+        if (catalogTrackId == null || catalogTrackId.isEmpty) continue;
+        final expiryRaw = raw['rightsExpiresAtUtc'] as String?;
+        final expiry = expiryRaw == null ? null : DateTime.tryParse(expiryRaw);
         tracks.add(DownloadedTrack(
           trackId: entry.uri.pathSegments.last,
-          title: (title ?? 'Unknown').isNotEmpty ? title! : 'Unknown',
-          artist: artist ?? 'Unknown',
+          catalogTrackId: catalogTrackId,
+          ownerId: ownerId,
+          rightsExpiresAtUtc: expiry?.toUtc(),
+          title: title.isNotEmpty ? title : 'Unknown',
+          artist: artist,
           audioPath: '${entry.path}/audio.m4a',
           coverPath: await File('${entry.path}/cover.jpg').exists()
               ? '${entry.path}/cover.jpg'
@@ -173,7 +176,11 @@ class DownloadsLibrary {
 
 /// A downloaded track with its local file paths.
 class DownloadedTrack {
+  /// Storage key used to remove this local asset.
   final String trackId;
+  final String catalogTrackId;
+  final String ownerId;
+  final DateTime? rightsExpiresAtUtc;
   final String title;
   final String artist;
   final String audioPath;
@@ -182,6 +189,9 @@ class DownloadedTrack {
 
   const DownloadedTrack({
     required this.trackId,
+    required this.catalogTrackId,
+    required this.ownerId,
+    required this.rightsExpiresAtUtc,
     required this.title,
     required this.artist,
     required this.audioPath,
