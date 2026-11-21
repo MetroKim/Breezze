@@ -285,7 +285,7 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
                                     borderRadius: BorderRadius.circular(
                                         BzRadius.artwork),
                                   ),
-                                  child: Icon(Icons.radio,
+                                  child: BzSvgIcon(name: 'radio', size: 28,
                                       color: theme.bzText2),
                                 ),
                                 title: Text(station.name,
@@ -303,7 +303,7 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
                                         label: Text('LIVE'),
                                         visualDensity: VisualDensity.compact,
                                       )
-                                    : const Icon(Icons.chevron_right),
+                                    : BzSvgIcon(name: 'chevron-right', size: 20),
                                 onTap: () => _showStation(station),
                               );
                             },
