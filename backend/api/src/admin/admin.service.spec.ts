@@ -14,7 +14,6 @@ describe('AdminService privileged audit trail', () => {
     playlist: { count: jest.fn() },
     contentTakedownCase: { count: jest.fn(), findMany: jest.fn() },
     adminAuditEvent: { findMany: jest.fn() },
-    adminAuditEvent: { findMany: jest.fn() },
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
   };
   const service = new AdminService(prisma as any);
