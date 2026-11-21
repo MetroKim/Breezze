@@ -6,8 +6,9 @@
 /// capture scripts do it, and search uses the anonymous WEB_REMIX path
 /// (no session cookie, per BitChord's postMusicAnonymous).
 ///
-/// Full-track playback additionally needs the poToken BitChord mints
-/// on-device (BotGuard WebView) — injected through [poTokenProvider].
+/// This adapter is metadata/search only. BotGuard tokens or extracted stream
+/// URLs do not grant Breezze playback rights; full playback must pass the
+/// backend's catalog and rights authorization flow.
 library;
 
 import 'provider_adapter.dart';
@@ -220,6 +221,6 @@ class BitChordAdapter implements ProviderAdapter {
   @override
   Future<ProviderOp<String>> getAttributionRequirements(
       String providerTrackId) async {
-    return ProviderOk('Music via BitChord source');
+    return ProviderOk('YouTube Music metadata via Breezze search');
   }
 }
