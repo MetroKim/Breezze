@@ -10,7 +10,7 @@ import {
   Param,
   UseGuards,
 } from '@nestjs/common';
-import { IsEmail, IsString, IsOptional, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsString, IsOptional, Matches, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -42,8 +42,7 @@ export class LoginDto {
 
 export class TotpCodeDto {
   @IsString()
-  @MinLength(6)
-  @MaxLength(6)
+  @Matches(/^(?:\\d{6}|[A-Fa-f0-9]{4}(?:-?[A-Fa-f0-9]{4}){3})$/)
   code!: string;
 }
 
