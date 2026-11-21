@@ -34,7 +34,6 @@ Cloudflare Cache API storage is data-center-local; this is an edge optimization,
 
 ```sh
 npm install
-npx wrangler secret? # no secret is required by this Worker
 npx wrangler deploy
 ```
 
