@@ -51,6 +51,50 @@ export class DiscoveryService {
     };
   }
 
+
+  async dailyTop100(country?: string) {
+    const token = process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
+    if (!token) throw new Error('APPLE_MUSIC_API_NOT_CONFIGURED');
+    const territory = this.country(country);
+    const url = new URL(`https://api.music.apple.com/v1/catalog/${territory}/charts`);
+    url.searchParams.set('types', 'songs');
+    url.searchParams.set('with', 'dailyGlobalTopCharts');
+    url.searchParams.set('limit', '100');
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error(`APPLE_MUSIC_CHART_HTTP_${response.status}`);
+    const payload = await response.json() as {
+      results?: { songs?: { name?: string; data?: Record<string, any>[] }[] };
+    };
+    const charts = payload.results?.songs ?? [];
+    const chart = charts[0];
+    const items = chart?.data ?? [];
+    return {
+      source: 'Apple Music API',
+      title: chart?.name ?? 'Daily Global Top Songs',
+      territory: territory.toUpperCase(),
+      fetchedAt: new Date().toISOString(),
+      items: items.map((item, index) => {
+        const attributes = item.attributes ?? {};
+        const artwork = attributes.artwork?.url;
+        return {
+          id: item.id ?? null,
+          title: attributes.name ?? 'Untitled',
+          artist: attributes.artistName ?? 'Unknown artist',
+          artworkUrl: typeof artwork === 'string'
+            ? artwork.replace('{w}', '300').replace('{h}', '300')
+            : null,
+          rank: index + 1,
+          releaseDate: attributes.releaseDate ?? null,
+          url: attributes.url ?? null,
+          playback: 'external_catalog_only',
+        };
+      }),
+    };
+  }
+
   songsChart(country?: string) {
     return this.appleFeed('songs', 'most-played', country);
   }
