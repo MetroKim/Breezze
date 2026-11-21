@@ -132,7 +132,7 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   let object: R2ObjectBody | R2Object | null;
   let status = 200;
   if (rangeHeader) {
-    const match = /^bytes=(\\d*)-(\\d*)$/.exec(rangeHeader);
+    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
     if (!match) return error(416, 'INVALID_RANGE');
     const start = match[1] ? Number(match[1]) : null;
     const end = match[2] ? Number(match[2]) : null;
