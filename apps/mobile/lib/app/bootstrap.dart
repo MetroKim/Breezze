@@ -49,9 +49,6 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
   @override
   String get adapterVersion => '1.0.0';
 
-  @override
-  bool get supportsPlayback => false;
-
   ProviderTrack _trackFromJson(Map value) {
     final providerId = value['providerTrackId'] as String? ?? '';
     final duration = value['durationSec'];
@@ -123,18 +120,6 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
     }
   }
 
-  @override
-  Future<ProviderOp<String>> resolvePlayback(
-    String providerTrackId,
-    ProviderUserContext userContext,
-  ) async =>
-      ProviderUnsupported('BACKEND_RIGHTS_CHECK_REQUIRED');
-
-  @override
-  Future<ProviderOp<String>> getAttributionRequirements(
-    String providerTrackId,
-  ) async =>
-      ProviderOk('YouTube Music metadata via ytmusicapi');
 }
 
 /// The app-wide metadata/search adapter; it is not a playback authority.
