@@ -77,6 +77,10 @@ class PlayerController extends Notifier<PlayerState> {
         return;
       }
       state = state.copyWith(playbackState: engineState);
+      if (engineState == PlaybackState.ended) {
+        final currentTrackId = state.currentTrack?.id;
+        if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      }
     });
   }
 
