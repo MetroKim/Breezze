@@ -50,7 +50,7 @@ export class PlaybackSessionService {
       trackId = input.trackId;
       playback = await this.resolver.resolve(userId, {
         trackId,
-        requestedQuality: input.requestedQuality,
+        ...(input.requestedQuality ? { requestedQuality: input.requestedQuality } : {}),
       }, country);
     }
 
