@@ -90,6 +90,39 @@ void main() {
     expect(player.state.position, const Duration(seconds: 55));
     expect(player.state.playbackState, PlaybackState.playing);
   });
+  test('OS audio interruption pauses and requires an explicit resume', () async {
+    final resolver = _FakeResolver();
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const track = TrackInfo(
+      id: 'bz:audius:interrupt-test',
+      title: 'Interruption test',
+      artist: 'Example Artist',
+    );
+    await player.playTrack(trackId: track.id, queue: const [track]);
+    expect(player.state.playbackState, PlaybackState.playing);
+
+    engine.emit(PlaybackState.interrupted);
+    await Future<void>.delayed(Duration.zero);
+    expect(player.state.playbackState, PlaybackState.interrupted);
+
+    engine.emit(PlaybackState.paused);
+    await Future<void>.delayed(Duration.zero);
+    expect(player.state.playbackState, PlaybackState.paused);
+
+    await player.resume();
+    expect(player.state.playbackState, PlaybackState.playing);
+  });
+
 }
 
 class _FakeResolver implements PlaybackResolver {
@@ -159,6 +192,8 @@ class _FakeAudioEngine implements AudioEngineAdapter {
 
   @override
   Future<void> setSpeed(double rate) async {}
+
+  void emit(PlaybackState state) => _states.add(state);
 
   Future<void> dispose() async {
     await _positions.close();
