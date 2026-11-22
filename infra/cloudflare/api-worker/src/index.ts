@@ -1,5 +1,5 @@
 export interface Env {
-  API_ORIGIN: string;
+  API_ORIGIN?: string;
   EDGE_SHARED_SECRET: string;
 }
 
@@ -60,7 +60,8 @@ function makeOriginRequest(url: string, request: Request, edgeSecret: string): R
 }
 
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  if (!env.API_ORIGIN) return jsonError(503, 'API_ORIGIN_NOT_CONFIGURED');
+  const configuredOrigin = env.API_ORIGIN?.trim();
+  if (!configuredOrigin) return jsonError(503, 'API_ORIGIN_NOT_CONFIGURED');
   if (!env.EDGE_SHARED_SECRET || env.EDGE_SHARED_SECRET.length < 32) {
     return jsonError(503, 'EDGE_SHARED_SECRET_NOT_CONFIGURED');
   }
@@ -68,7 +69,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const incoming = new URL(request.url);
   let origin: URL;
   try {
-    origin = new URL(env.API_ORIGIN);
+    origin = new URL(configuredOrigin);
   } catch {
     return jsonError(503, 'API_ORIGIN_INVALID');
   }

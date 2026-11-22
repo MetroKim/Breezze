@@ -30,6 +30,8 @@ async function bootstrap() {
   // The Worker strips any client-supplied value and injects this secret.
   if (edgeSecret) {
     app.use((req: any, res: any, next: () => void) => {
+      // Container health probes run directly against the origin, not through the Worker.
+      if (req.path === '/health') return next();
       const supplied = req.headers['x-breezze-edge-secret'];
       const expectedBuffer = Buffer.from(edgeSecret);
       const suppliedBuffer = Buffer.from(typeof supplied === 'string' ? supplied : '');
@@ -84,7 +86,13 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swagger));
 
+  // Lightweight health endpoint for container orchestration and deployment smoke tests.
+  // It exposes no dependency state, credentials, or internal configuration.
+  app.getHttpAdapter().get('/health', (_request: unknown, response: any) => {
+    response.status(200).json({ status: 'ok', service: 'breezze-api' });
+  });
+
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();

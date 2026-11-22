@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
+
 import 'package:http/http.dart' as http;
 
 /// Breezze backend API client — thin transport for /api/v1.
@@ -16,7 +18,38 @@ class BreezzeApi {
   String? accessToken;
   Future<bool> Function()? onUnauthorized;
 
-  Uri _uri(String path) => Uri.parse('$baseUrl/api/v1$path');
+  Uri _uri(String path) {
+    final configured = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (configured.isEmpty) {
+      throw const BreezzeApiException(
+        code: 'API_URL_NOT_CONFIGURED',
+        message: 'Breezze API URL is not configured. Set BREEZZE_API_URL to the HTTPS API edge URL.',
+      );
+    }
+    final origin = Uri.tryParse(configured);
+    if (origin == null || !origin.hasAuthority || origin.host.isEmpty
+        || (origin.scheme != 'https' && origin.scheme != 'http')
+        || origin.path.isNotEmpty || origin.query.isNotEmpty || origin.fragment.isNotEmpty) {
+      throw const BreezzeApiException(
+        code: 'API_URL_INVALID',
+        message: 'Breezze API URL must be an absolute HTTP(S) origin without a path, query, or fragment.',
+      );
+    }
+    if (kReleaseMode && origin.scheme != 'https') {
+      throw const BreezzeApiException(
+        code: 'API_URL_REQUIRES_HTTPS',
+        message: 'Release builds require an HTTPS Breezze API URL.',
+      );
+    }
+    if (kReleaseMode && (origin.host == 'localhost' || origin.host == '127.0.0.1')) {
+      throw const BreezzeApiException(
+        code: 'API_URL_LOCALHOST_IN_RELEASE',
+        message: 'A release build cannot connect to localhost. Configure the public Breezze API URL.',
+      );
+    }
+    // resolve() preserves query strings already embedded in API paths.
+    return origin.resolve('/api/v1$path');
+  }
 
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',

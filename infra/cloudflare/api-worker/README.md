@@ -17,11 +17,11 @@ The Worker does not implement domain authorization, rights decisions, provider s
 
 ## Configure
 
-1. Set `API_ORIGIN` to the HTTPS origin hosting NestJS (for example, `https://api-origin.example.com`). It must be the origin only, with no path/query, and must not point back at the Worker hostname.
+1. Set the Worker variable `API_ORIGIN` to the real HTTPS origin hosting NestJS. It must be the origin only (scheme + hostname + optional port), with no path/query, and must not point back at the Worker hostname. An unset value returns `503 API_ORIGIN_NOT_CONFIGURED`; no fake origin is committed.
 2. Generate one shared secret of at least 32 random bytes: `openssl rand -hex 32`.
 3. Set that exact value in the API deployment as `EDGE_SHARED_SECRET`.
 4. From this directory, run `npx wrangler secret put EDGE_SHARED_SECRET` and enter the same value. Never commit it or put it in `wrangler.toml`.
-5. Deploy this Worker with Wrangler.
+5. Deploy this Worker with Wrangler. The repository workflow `.github/workflows/deploy-api-edge.yml` can deploy it after the required GitHub secrets are configured.
 6. Attach the public API hostname/route to this Worker.
 7. Restrict the origin firewall/network to Cloudflare egress where practical. The API also rejects requests without the shared edge secret when `NODE_ENV=production`; use network restrictions as a second layer.
 8. Configure Cloudflare WAF managed rules and rate-limiting rules in the dashboard for auth, search, playback resolution and write endpoints. Use route-specific limits; do not rely on one global IP-only threshold because mobile carrier NAT can group many listeners behind one address.
@@ -40,8 +40,8 @@ npm install
 npx wrangler deploy
 ```
 
-Set `API_ORIGIN` as a Wrangler variable in `wrangler.toml` or through the Cloudflare dashboard before deploying. It must point to the actual NestJS HTTPS origin. Keep production origin details out of public source when required by your deployment policy.
+Set `API_ORIGIN` as a Wrangler variable through the Cloudflare dashboard or deployment workflow. It must point to the actual NestJS HTTPS origin. Do not commit a fake/example production origin. Set `EDGE_SHARED_SECRET` with `wrangler secret put`; never put it in `wrangler.toml`.
 
 The NestJS API requires the same `EDGE_SHARED_SECRET` in production, so direct requests to the origin are rejected. The Worker overwrites any client-supplied `x-breezze-edge-secret` header before forwarding and removes the header from responses.
 
-This repository change does not deploy the Worker, create DNS records, provision WAF/rate-limit rules, or prove one-million-user capacity. Those require Cloudflare account access and staged load tests.
+The deployment workflow deploys the Worker only. The NestJS origin must already be deployed and reachable over HTTPS, and DNS/custom-domain routing plus WAF/rate-limit rules still require Cloudflare account configuration. This does not prove one-million-user capacity; staged load tests are required.

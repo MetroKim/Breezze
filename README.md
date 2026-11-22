@@ -56,7 +56,7 @@ npm run typecheck
 npm test -- --runInBand
 ```
 
-The local API defaults to `http://localhost:3000`; Swagger is exposed at `/api/docs` when enabled. Configure provider credentials only in backend environment/secrets. Never place provider secrets in Flutter or commit them.
+The local API defaults to `http://localhost:3000`; Swagger is exposed at `/api/docs`. For a physical phone, `localhost` is the phone itself: pass the computer's LAN API address during local development (for example, `--dart-define=BREEZZE_API_URL=http://192.168.x.x:3000`) or use the public HTTPS Cloudflare API URL. Release builds refuse API calls without a configured HTTPS `BREEZZE_API_URL`, preventing production from silently targeting localhost. Configure provider credentials only in backend environment/secrets. Never place provider secrets in Flutter or commit them.
 
 ## Audio and provider architecture
 
@@ -91,3 +91,12 @@ The Flutter codebase targets Android, iOS, Web, Linux, macOS and Windows. Build 
 The current main baseline includes the merged provider, playback and backend-hardening work through commit `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`. Its post-merge quality workflow [45008430816](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816) passed all 7 jobs. The in-app experience contract is proposed in [PR #33](https://github.com/MetroKim/MetroMusic/pull/33); remaining product implementation and acceptance evidence are tracked in [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27).
 
 Breezze's one-million-active-listener goal is an engineering target, not a measured capacity claim. Production deployment, provider rights approval, load testing and physical-device certification remain release gates.
+
+
+### Production connectivity and deployment
+
+- The API exposes `GET /health` for origin/container health checks.
+- Production container template: `backend/docker-compose.production.yml`. Copy `backend/.env.production.example` to `.env.production`, generate unique secrets, then run `docker compose --env-file .env.production -f docker-compose.production.yml up -d --build` from `backend/`.
+- Deploy the NestJS origin first on a host with a public HTTPS origin (or a Cloudflare Tunnel). Then configure `BREEZZE_API_ORIGIN`, `EDGE_SHARED_SECRET`, `CLOUDFLARE_API_TOKEN`, and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets and run the **Deploy Breezze API edge** workflow. Set `BREEZZE_API_PUBLIC_URL` to the public Worker/custom-domain URL for its post-deploy smoke check.
+- Build release clients with `--dart-define=BREEZZE_API_URL=https://YOUR-API-HOST`; never ship a release build with a localhost URL.
+- Deployment credentials and a real hosting origin are not stored in this repository. Green CI proves compilation/tests, not that a production origin is deployed or reachable.

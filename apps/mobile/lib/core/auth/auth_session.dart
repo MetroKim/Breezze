@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -68,10 +69,9 @@ class AuthSessionController extends Notifier<AuthState> {
   static const _secureStorage = FlutterSecureStorage();
 
   late final BreezzeApi _api = BreezzeApi(
-    baseUrl: const String.fromEnvironment(
-      'BREEZZE_API_URL',
-      defaultValue: 'http://localhost:3000',
-    ),
+    baseUrl: const String.fromEnvironment('BREEZZE_API_URL').isNotEmpty
+        ? const String.fromEnvironment('BREEZZE_API_URL')
+        : (kReleaseMode ? '' : 'http://localhost:3000'),
   )..onUnauthorized = _refreshAccessToken;
 
   @override
