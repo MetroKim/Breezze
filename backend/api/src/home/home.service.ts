@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 export interface HomeSection {
@@ -58,7 +58,7 @@ export class HomeService {
     });
     if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
     if (!Number.isInteger(playedMs) || playedMs < 30_000 || playedMs > 86_400_000) {
-      throw new NotFoundException('PLAY_DURATION_NOT_QUALIFIED');
+      throw new BadRequestException('PLAY_DURATION_NOT_QUALIFIED');
     }
 
     await this.prisma.$transaction(async (tx) => {
