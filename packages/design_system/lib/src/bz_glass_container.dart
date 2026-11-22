@@ -115,20 +115,26 @@ class BzGlassContainer extends StatelessWidget {
   }
 }
 
-/// Saturation color matrix for the standard luminance-preserving
-/// saturate transform (s = saturationPercent / 100).
+/// Saturation color matrix (20-element row-major list) for the standard
+/// luminance-preserving saturate transform (s = saturationPercent / 100).
 ///
 /// Exposed so platform code that composes its own `ColorFiltered` can
 /// reuse the exact same matrix, keeping the material identical across
 /// surfaces that filter foreground content (artwork overlays, chips).
-ColorMatrix saturateMatrix(double saturationPercent) {
+List<double> saturateMatrix(double saturationPercent) {
   final s = saturationPercent / 100.0;
   const lumR = 0.2126, lumG = 0.7152, lumB = 0.0722;
   final sr = (1 - s) * lumR, sg = (1 - s) * lumG, sb = (1 - s) * lumB;
-  return ColorMatrix.fromList(<double>[
+  return <double>[
     sr + s, sg,     sb,     0, 0,
     sr,     sg + s, sb,     0, 0,
     sr,     sg,     sb + s, 0, 0,
     0,      0,      0,      1, 0,
-  ]);
+  ];
 }
+
+/// Convenience: the saturate matrix from [saturateMatrix] as a ready-to-
+/// use [ColorFilter] for `ColorFiltered` widgets that filter foreground
+/// content with the same material recipe the glass surfaces use.
+ColorFilter saturateColorFilter(double saturationPercent) =>
+    ColorFilter.matrix(saturateMatrix(saturationPercent));
