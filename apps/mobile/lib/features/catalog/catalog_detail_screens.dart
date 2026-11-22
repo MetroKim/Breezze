@@ -11,6 +11,11 @@ import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
+final _artistFollowing = FutureProvider.autoDispose.family<bool, String>((ref, key) {
+  ref.watch(authSessionProvider);
+  return ref.read(authSessionProvider.notifier).api.artistFollowing(key);
+});
+
 final _appleTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
   final data = await ref
@@ -322,6 +327,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
   bool _discographyLoading = true;
   String? _discographyError;
   String? _appleArtistId;
+  bool _changingFollow = false;
 
   String get artist => widget.artist;
   List<FavoriteTrack> get savedTracks => widget.savedTracks;
@@ -388,6 +394,13 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final artistKey = canonicalArtistId != null
+        ? 'catalog:$canonicalArtistId'
+        : _appleArtistId != null ? 'apple:$_appleArtistId' : null;
+    final signedIn = ref.watch(authSessionProvider) is AuthSignedIn;
+    final following = signedIn && artistKey != null
+        ? ref.watch(_artistFollowing(artistKey))
+        : null;
     final queue = [for (final track in savedTracks) track.toTrackInfo()];
     final heroArtwork = portraitUrl ?? (searchTracks.isNotEmpty
         ? searchTracks.first.artworkUrl
@@ -486,26 +499,38 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                       ),
                       label: const Text('Play saved songs'),
                     ),
-                    Tooltip(
-                      message: 'Artist following is not available yet.',
-                      child: OutlinedButton.icon(
-                        onPressed: null,
-                        icon: const BzSvgIcon(name: 'user-round-plus'),
-                        label: const Text('Follow'),
+                    if (following != null && artistKey != null)
+                      following.when(
+                        loading: () => const OutlinedButton(
+                          onPressed: null, child: Text('Loading…'),
+                        ),
+                        error: (_, __) => OutlinedButton(
+                          onPressed: () => ref.invalidate(_artistFollowing(artistKey)),
+                          child: const Text('Retry follow status'),
+                        ),
+                        data: (active) => OutlinedButton.icon(
+                          icon: BzSvgIcon(name: active ? 'check' : 'user-round-plus'),
+                          label: Text(active ? 'Following' : 'Follow'),
+                          onPressed: _changingFollow ? null : () async {
+                            setState(() => _changingFollow = true);
+                            try {
+                              await ref.read(authSessionProvider.notifier).api
+                                  .followArtist(artistKey, !active);
+                              if (mounted) ref.invalidate(_artistFollowing(artistKey));
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not update this artist. Try again.')),
+                                );
+                              }
+                            } finally {
+                              if (mounted) setState(() => _changingFollow = false);
+                            }
+                          },
+                        ),
                       ),
-                    ),
                   ],
                 ),
-                Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(
-                      'Following and artist-wide catalog actions become available when the artist services are connected.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.bzText2,
-                      ),
-                    ),
-                  ),
                 const SizedBox(height: 28),
                 _CatalogSection(
                   title: 'Saved Songs',

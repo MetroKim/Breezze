@@ -30,6 +30,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<TrackInfo> _madeForYou = [];
   Map<String, dynamic>? _replay;
   bool _loading = true;
+  int _refreshVersion = 0;
 
   @override
   void initState() {
@@ -38,13 +39,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refresh() async {
+    final version = ++_refreshVersion;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     final recent = await _recent.load(ownerId: ownerId);
+    if (!mounted || version != _refreshVersion) return;
     final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
-    if (ref.read(authSessionProvider) is AuthSignedIn) {
+    if (!mounted || version != _refreshVersion) return;
+    if (auth is AuthSignedIn) {
       final api = ref.read(authSessionProvider.notifier).api;
       try {
         final sections = await api.homeFeed();
@@ -92,10 +96,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Replay is an independent home section.
       }
     }
+    if (!mounted || version != _refreshVersion) return;
     final currentAuth = ref.read(authSessionProvider);
     final currentOwnerId =
         currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
-    if (!mounted || currentOwnerId != ownerId) return;
+    if (currentOwnerId != ownerId) return;
     setState(() {
       _recentlyPlayed = recent;
       _favorites = favorites;
@@ -103,13 +108,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _replay = replay;
       _loading = false;
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Refresh when returning to this tab (IndexedStack keeps state alive).
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
   Future<void> _createPlaylist() async {
@@ -176,7 +174,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      final before = previous is AuthSignedIn ? previous.userId : null;
+      final after = next is AuthSignedIn ? next.userId : null;
+      if (before == after) return;
+      setState(() {
+        _recentlyPlayed = [];
+        _favorites = [];
+        _madeForYou = [];
+        _replay = null;
+        _loading = true;
+      });
+      _refresh();
+    });
     final theme = Theme.of(context);
     final shortcuts = <String, TrackInfo>{};
     for (final r in _recentlyPlayed) {
@@ -185,18 +195,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return SafeArea(
-      child: ListView(
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(16, 24, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
         children: [
           Row(
             children: [
               BzRibbonLogo(width: 96, color: theme.bzText1),
               const Spacer(),
-              IconButton(
-                tooltip: 'Share Breezze',
-                onPressed: null,
-                icon: BzSvgIcon(name: 'share', color: theme.bzText2),
-              ),
               IconButton(
                 tooltip: 'Create playlist',
                 onPressed: _createPlaylist,
@@ -264,9 +272,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SizedBox(height: 24),
           // Hero greeting (§4.1): time-based, local only.
           Text(_greeting, style: theme.textTheme.displayMedium),
-          const SizedBox(height: 8),
-          Text('Your music. Every platform. One line.',
-              style: theme.textTheme.bodyMedium),
           const SizedBox(height: 24),
           if (_loading) ...[
             const BzSkeleton(width: 172, height: 16, radius: 5),
@@ -333,32 +338,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _FirstRunCard(
               onSearch: () => ref.read(homeTabHintProvider.notifier).state = 4,
             ),
-          const SizedBox(height: 28),
-          const _FeedPlaceholder(
-            title: 'Shared With You',
-            description:
-                'Music shared by friends will appear here when Breezze sharing is connected.',
-            status: 'SHARED MUSIC',
-          ),
-          const SizedBox(height: 24),
-          if (!_loading && _madeForYou.isEmpty)
-            const _FeedPlaceholder(
-              title: 'Made for You',
-              description:
-                  'Personalized recommendations will appear here when Breezze has enough eligible listening signals in your region.',
-              status: 'PERSONALIZED LISTENING',
-            ),
-          const SizedBox(height: 24),
           if (_replay != null && ((_replay!['totalPlays'] as num?)?.toInt() ?? 0) > 0)
-            _ReplayCard(summary: _replay!)
-          else
-            const _FeedPlaceholder(
-              title: 'Your Replay',
-              description:
-                  'Your listening recap will appear here as your Breezze listening history grows.',
-              status: 'YOUR YEAR IN MUSIC',
-            ),
+            _ReplayCard(summary: _replay!),
         ],
+      ),
       ),
     );
   }
@@ -657,60 +640,6 @@ class _FirstRunCard extends StatelessWidget {
   }
 }
 
-
-class _FeedPlaceholder extends StatelessWidget {
-  final String title;
-  final String description;
-  final String status;
-
-  const _FeedPlaceholder({
-    required this.title,
-    required this.description,
-    required this.status,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: theme.textTheme.titleLarge),
-        const SizedBox(height: 10),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-          color: theme.bzSurface1,
-          borderRadius: BorderRadius.circular(BzRadius.card),
-          border: Border.all(color: theme.bzSeparator),
-        ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                status,
-                style: TextStyle(
-                  color: theme.bzText2,
-                  fontSize: BzType.caption,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.9,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.bzText2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _ReplayCard extends StatelessWidget {
   const _ReplayCard({required this.summary});

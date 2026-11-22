@@ -5,6 +5,24 @@ import { PrismaService } from '../prisma.service';
 export class LibraryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async artistStatus(userId: string, artistKey: string) {
+    const row = await this.prisma.userFollowedArtist.findUnique({
+      where: { userId_artistKey: { userId, artistKey } },
+    });
+    return { following: row !== null };
+  }
+
+  async setFollowing(userId: string, artistKey: string, following: boolean) {
+    if (following) {
+      await this.prisma.userFollowedArtist.createMany({
+        data: [{ userId, artistKey }], skipDuplicates: true,
+      });
+    } else {
+      await this.prisma.userFollowedArtist.deleteMany({ where: { userId, artistKey } });
+    }
+    return { following };
+  }
+
   private static readonly savedAlbumSource = 'apple_itunes';
 
   private trustedCatalogUrl(value: string | undefined): string | null {
