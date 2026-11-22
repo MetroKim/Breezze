@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../../core/audio/playback_source_policy.dart';
 import '../../app/playlist_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -134,14 +135,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   List<TrackInfo> _queue() => [
         for (final f in _favorites)
-          if ((!f.id.startsWith('bz:') || f.id.startsWith('bz:audius:'))) f.toTrackInfo(),
+          if (canQueueTrackId(f.id)) f.toTrackInfo(),
       ];
 
   Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
-    final nativeIndex = _favorites.indexWhere((item) => (!item.id.startsWith('bz:') || item.id.startsWith('bz:audius:')));
+    final nativeIndex = _favorites.indexWhere((item) => canQueueTrackId(item.id));
     if (nativeIndex >= 0) {
-      if (_favorites.any((item) => (item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:'))) && mounted) {
+      if (_favorites.any((item) => !canQueueTrackId(item.id)) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
@@ -149,12 +150,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       await _playOne(nativeIndex);
       return;
     }
-    await _playOne(0);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No saved songs have an authorized playback source yet.')),
+      );
+    }
   }
 
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
-    if ((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))) {
+    if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This saved item has metadata only; Breezze cannot play it from this source.')),
