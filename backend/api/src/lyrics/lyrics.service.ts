@@ -37,9 +37,31 @@ export class LyricsService {
     };
   }
 
-  async getTranslations(lyricsId: string, language?: string) {
+  async getTranslations(
+    userId: string,
+    lyricsId: string,
+    territory: string,
+    language?: string,
+  ) {
+    const lyrics = await this.prisma.lyrics.findUnique({
+      where: { id: lyricsId },
+      select: { id: true, trackId: true },
+    });
+    if (!lyrics) throw new NotFoundException('LYRICS_NOT_FOUND');
+
+    const decision = await this.rights.decide({
+      userId,
+      trackId: lyrics.trackId,
+      action: 'lyrics.translate',
+      territory,
+    });
+    if (!decision.allowed) {
+      throw new NotFoundException(decision.reason);
+    }
+
     return this.prisma.lyricTranslation.findMany({
       where: { lyricsId, ...(language ? { language } : {}) },
+      orderBy: { language: 'asc' },
     });
   }
 }
