@@ -14,6 +14,8 @@ import 'background_audio.dart';
 class AudioServiceBridge extends audio.BaseAudioHandler
     implements BackgroundAudioBridge {
   final ProviderContainer container;
+  String? _lastTrackId;
+  int? _lastQueueVersion;
 
   AudioServiceBridge(this.container);
 
@@ -58,56 +60,67 @@ class AudioServiceBridge extends audio.BaseAudioHandler
     final buffering = state.playbackState == contracts.PlaybackState.buffering ||
         state.playbackState == contracts.PlaybackState.loading ||
         state.playbackState == contracts.PlaybackState.resolving;
-    final actuallyPlaying = state.playbackState == contracts.PlaybackState.playing;
+    final actuallyPlaying = playing &&
+        state.playbackState == contracts.PlaybackState.playing;
 
-    if (track == null) {
-      mediaItem.add(null);
-      queue.add(const <audio.MediaItem>[]);
-    } else {
-      final art = Uri.tryParse(track.artworkUrl ?? '');
-      mediaItem.add(audio.MediaItem(
-        id: track.id,
-        title: track.title?.trim().isNotEmpty == true
-            ? track.title!.trim()
-            : title,
-        artist: track.artist?.trim().isNotEmpty == true
-            ? track.artist!.trim()
-            : artist,
-        duration: track.duration > Duration.zero ? track.duration : null,
-        artUri: art != null &&
-                (art.scheme == 'https' || art.scheme == 'http')
-            ? art
-            : null,
-      ));
-
-      final items = <audio.MediaItem>[
-        audio.MediaItem(
+    final trackChanged = track?.id != _lastTrackId;
+    final queueChanged = state.queueVersion != _lastQueueVersion;
+    if (trackChanged) {
+      _lastTrackId = track?.id;
+      if (track == null) {
+        mediaItem.add(null);
+      } else {
+        final art = Uri.tryParse(track.artworkUrl ?? '');
+        mediaItem.add(audio.MediaItem(
           id: track.id,
-          title: track.title ?? title,
-          artist: track.artist ?? artist,
+          title: track.title?.trim().isNotEmpty == true
+              ? track.title!.trim()
+              : title,
+          artist: track.artist?.trim().isNotEmpty == true
+              ? track.artist!.trim()
+              : artist,
           duration: track.duration > Duration.zero ? track.duration : null,
           artUri: art != null &&
                   (art.scheme == 'https' || art.scheme == 'http')
               ? art
               : null,
-        ),
-      ];
-      for (final entry in controller.queue.upNext) {
-        final info = controller.trackInfoFor(entry.trackId);
-        if (info == null) continue;
-        final upcomingArt = Uri.tryParse(info.artworkUrl ?? '');
-        items.add(audio.MediaItem(
-          id: info.id,
-          title: info.title ?? 'Unknown track',
-          artist: info.artist ?? 'Unknown artist',
-          duration: info.duration > Duration.zero ? info.duration : null,
-          artUri: upcomingArt != null &&
-                  (upcomingArt.scheme == 'https' || upcomingArt.scheme == 'http')
-              ? upcomingArt
-              : null,
         ));
       }
-      queue.add(items);
+    }
+    if (trackChanged || queueChanged) {
+      if (track == null) {
+        queue.add(const <audio.MediaItem>[]);
+      } else {
+        final items = <audio.MediaItem>[];
+        final currentArt = Uri.tryParse(track.artworkUrl ?? '');
+        items.add(audio.MediaItem(
+          id: track.id,
+          title: track.title ?? title,
+          artist: track.artist ?? artist,
+          duration: track.duration > Duration.zero ? track.duration : null,
+          artUri: currentArt != null &&
+                  (currentArt.scheme == 'https' || currentArt.scheme == 'http')
+              ? currentArt
+              : null,
+        ));
+        for (final entry in controller.queue.upNext) {
+          final info = controller.trackInfoFor(entry.trackId);
+          if (info == null) continue;
+          final upcomingArt = Uri.tryParse(info.artworkUrl ?? '');
+          items.add(audio.MediaItem(
+            id: info.id,
+            title: info.title ?? 'Unknown track',
+            artist: info.artist ?? 'Unknown artist',
+            duration: info.duration > Duration.zero ? info.duration : null,
+            artUri: upcomingArt != null &&
+                    (upcomingArt.scheme == 'https' || upcomingArt.scheme == 'http')
+                ? upcomingArt
+                : null,
+          ));
+        }
+        queue.add(items);
+      }
+      _lastQueueVersion = state.queueVersion;
     }
 
     audio.AudioProcessingState processingState;
@@ -162,6 +175,8 @@ class AudioServiceBridge extends audio.BaseAudioHandler
   @override
   Future<void> stop() async {
     await _player.stop();
+    _lastTrackId = null;
+    _lastQueueVersion = null;
     mediaItem.add(null);
     queue.add(const <audio.MediaItem>[]);
     await super.stop();
