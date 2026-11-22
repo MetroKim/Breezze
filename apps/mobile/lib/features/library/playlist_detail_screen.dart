@@ -47,24 +47,42 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   }
 
   List<TrackInfo> _queue(UserPlaylist playlist) => [
-        for (final item in playlist.tracks) item.toTrackInfo(),
+        for (final item in playlist.tracks)
+          if ((!item.id.startsWith('bz:') || item.id.startsWith('bz:audius:'))) item.toTrackInfo(),
       ];
 
-  void _playAll(UserPlaylist playlist) {
+  Future<void> _playAll(UserPlaylist playlist) async {
     if (playlist.tracks.isEmpty) return;
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: playlist.tracks.first.id,
-          queue: _queue(playlist),
-          origin: 'playlist',
-          sourceContext: playlist.name,
+    final nativeIndex = playlist.tracks.indexWhere((item) => (!(item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:')) || item.id.startsWith('bz:audius:')));
+    if (nativeIndex >= 0) {
+      if (playlist.tracks.any((item) => (item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:'))) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
+      }
+      await _playTrack(playlist, nativeIndex);
+      return;
+    }
+    await _playTrack(playlist, 0);
   }
 
-  void _playTrack(UserPlaylist playlist, int index) {
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: playlist.tracks[index].id,
-          queue: _queue(playlist),
-          startIndex: index,
+  Future<void> _playTrack(UserPlaylist playlist, int index) async {
+    final track = playlist.tracks[index];
+    if ((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This playlist item has metadata only; native playback is unavailable.')),
+        );
+      }
+      return;
+    }
+    final queue = _queue(playlist);
+    final queueIndex = queue.indexWhere((item) => item.id == track.id);
+    if (queueIndex < 0) return;
+    await ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: track.id,
+          queue: queue,
+          startIndex: queueIndex,
           origin: 'playlist',
           sourceContext: playlist.name,
         );

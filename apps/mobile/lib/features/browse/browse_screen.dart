@@ -95,10 +95,22 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     );
   }
 
-  void _play(int index) {
+  Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
+    final selected = _tracks[index];
+    if ((selected.id.startsWith('bz:') && !selected.id.startsWith('bz:audius:'))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
+        );
+      }
+      return;
+    }
+    final playableTracks = _tracks
+        .where((track) => !((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:')) || track.id.startsWith('bzv:')))
+        .toList();
     final queue = [
-      for (final track in _tracks)
+      for (final track in playableTracks)
         TrackInfo(
           id: track.id,
           title: track.title,
@@ -107,10 +119,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
           duration: track.duration,
         ),
     ];
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: _tracks[index].id,
+    final queueIndex = playableTracks.indexWhere((track) => track.id == selected.id);
+    if (queueIndex < 0) return;
+    await ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: selected.id,
           queue: queue,
-          startIndex: index,
+          startIndex: queueIndex,
           origin: 'browse',
           sourceContext: _selectedGenre,
         );
@@ -286,7 +300,9 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                           : IconButton(
                               tooltip: 'Download',
                               icon: const BzSvgIcon(name: 'download', size: 20),
-                              onPressed: () => ref.read(downloadProgressProvider.notifier).download(track),
+                              onPressed: track.id.startsWith('bz:')
+                                  ? null
+                                  : () => ref.read(downloadProgressProvider.notifier).download(track),
                             ),
                       onTap: () => _play(index),
                     );
@@ -558,16 +574,30 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     }
   }
 
-  void _play(int index) {
+  Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
-    final queue = [for (final track in _tracks) TrackInfo(
+    final selected = _tracks[index];
+    if ((selected.id.startsWith('bz:') && !selected.id.startsWith('bz:audius:'))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
+        );
+      }
+      return;
+    }
+    final playableTracks = _tracks
+        .where((track) => !((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:')) || track.id.startsWith('bzv:')))
+        .toList();
+    final queue = [for (final track in playableTracks) TrackInfo(
       id: track.id, title: track.title, artist: track.artist,
       artworkUrl: track.artworkUrl, duration: track.duration,
     )];
-    ref.read(playerControllerProvider.notifier).playTrack(
-      trackId: _tracks[index].id,
+    final queueIndex = playableTracks.indexWhere((track) => track.id == selected.id);
+    if (queueIndex < 0) return;
+    await ref.read(playerControllerProvider.notifier).playTrack(
+      trackId: selected.id,
       queue: queue,
-      startIndex: index,
+      startIndex: queueIndex,
       origin: 'browse',
       sourceContext: widget.destination.title + ': ' + _selected,
     );
@@ -681,7 +711,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                                 : IconButton(
                                                     tooltip: 'Download',
                                                     icon: const BzSvgIcon(name: 'download', size: 20),
-                                                    onPressed: () => ref.read(downloadProgressProvider.notifier).download(track),
+                                                    onPressed: (track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))
+                                                        ? null
+                                                        : () => ref.read(downloadProgressProvider.notifier).download(track),
                                                   ),
                                             onTap: () => _play(index),
                                           );
@@ -748,7 +780,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                     Expanded(
                       child: Text(
                         isVideoFeed
-                            ? 'Results are filtered to YouTube Music's Original Music Video (OMV) classification, which identifies videos uploaded by the original artist. Links open on YouTube; Breezze does not rehost or relay them.'
+                            ? "Results are filtered to YouTube Music's Original Music Video (OMV) classification, which identifies videos uploaded by the original artist. Links open on YouTube; Breezze does not rehost or relay them."
                             : isConcertFeed
                                 ? 'Event listings are supplied by JamBase. Dates and ticket availability can change; verify details with the event and ticket provider before attending.'
                                 : 'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; open an item in Apple Music. Breezze playback remains subject to its own provider rights checks.',

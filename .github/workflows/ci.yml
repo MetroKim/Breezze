@@ -8,7 +8,9 @@ on:
       - breezze
   pull_request:
     branches:
+      - main
       - breezze
+      - feat/youtube-music-primary-provider
   workflow_dispatch:
 
 permissions:

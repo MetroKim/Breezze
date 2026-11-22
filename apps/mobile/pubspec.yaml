@@ -25,9 +25,17 @@ dependencies:
 
   # Audio engine (native ExoPlayer / AVFoundation wrappers)
   just_audio: ^0.9.39
+  audio_session: ^0.1.21
+  # Native desktop implementations for the shared just_audio engine.
+  just_audio_media_kit: ^2.1.0
+  media_kit_libs_linux: ^1.2.1
+  media_kit_libs_windows_audio: ^1.0.9
 
   # Background audio: lock-screen controls, notification, audio focus
   audio_service: ^0.18.15
+  # Platform adapters for the same audio_service media-session bridge.
+  audio_service_mpris: ^0.2.1
+  audio_service_win: ^0.0.3
 
   # HTTP for backend connections
   http: ^1.2.1

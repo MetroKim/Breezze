@@ -129,24 +129,42 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   List<TrackInfo> _queue() => [
-        for (final f in _favorites) f.toTrackInfo(),
+        for (final f in _favorites)
+          if ((!f.id.startsWith('bz:') || f.id.startsWith('bz:audius:'))) f.toTrackInfo(),
       ];
 
-  void _playAll() {
+  Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: _favorites.first.id,
-          queue: _queue(),
-          origin: 'library',
-          sourceContext: 'Songs',
+    final nativeIndex = _favorites.indexWhere((item) => (!item.id.startsWith('bz:') || item.id.startsWith('bz:audius:')));
+    if (nativeIndex >= 0) {
+      if (_favorites.any((item) => (item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:'))) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
+      }
+      await _playOne(nativeIndex);
+      return;
+    }
+    await _playOne(0);
   }
 
-  void _playOne(int index) {
-    ref.read(playerControllerProvider.notifier).playTrack(
-          trackId: _favorites[index].id,
-          queue: _queue(),
-          startIndex: index,
+  Future<void> _playOne(int index) async {
+    final track = _favorites[index];
+    if ((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This saved item has metadata only; Breezze cannot play it from this source.')),
+        );
+      }
+      return;
+    }
+    final queue = _queue();
+    final queueIndex = queue.indexWhere((item) => item.id == track.id);
+    if (queueIndex < 0) return;
+    await ref.read(playerControllerProvider.notifier).playTrack(
+          trackId: track.id,
+          queue: queue,
+          startIndex: queueIndex,
           origin: 'library',
           sourceContext: 'Songs',
         );

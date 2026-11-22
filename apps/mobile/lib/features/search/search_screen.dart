@@ -3,14 +3,20 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/youtube_player_handoff.dart';
+
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../app/search_history_store.dart';
 import '../../app/playlist_store.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
-import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
+import '../../widgets/bz_brand_icons.dart';
+
+bool _isMetadataOnlySourceTrack(String id) =>
+    id.startsWith('bzv:') ||
+    (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
 
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
@@ -123,26 +129,53 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     try {
-      final op = await ref.read(youtubeSourceProvider).search(normalized);
-      if (!mounted || generation != _searchGeneration) return;
-
-      setState(() {
-        _loading = false;
-        _results = op is ProviderOk<List<ProviderTrack>>
-            ? op.value
-                .map((track) => BzTrack(
-                      id: track.breezzeTrackId,
-                      title: track.title,
-                      artist: track.artist,
-                      artworkUrl: track.artworkUrl,
-                      duration: track.duration,
-                    ))
-                .toList()
-            : [];
-        if (op is! ProviderOk<List<ProviderTrack>>) {
-          _error = 'Search could not be completed. Try again in a moment.';
-        }
-      });
+      final isVideoSearch = normalized.toLowerCase() == 'music videos';
+      if (isVideoSearch) {
+        // The video discovery endpoint only returns YouTube Music's
+        // Original Music Video classification, not UGC or static-art tracks.
+        final data = await ref.read(authSessionProvider.notifier).api
+            .discoveryMusicVideos(query: 'official music video');
+        final rawItems = data['items'];
+        final videos = rawItems is List ? rawItems.whereType<Map>() : const <Map>[];
+        if (!mounted || generation != _searchGeneration) return;
+        setState(() {
+          _loading = false;
+          _results = videos.map((item) {
+            final id = item['id'] as String? ?? '';
+            final duration = item['durationSec'];
+            return BzTrack(
+              id: 'bzv:$id',
+              title: item['title'] as String? ?? 'Untitled video',
+              artist: item['artist'] as String? ?? 'Unknown artist',
+              artworkUrl: item['artworkUrl'] as String?,
+              duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+            );
+          }).where((track) => track.id.length > 9).toList();
+          if (_results.isEmpty) {
+            _error = 'No official music videos were found for this search.';
+          }
+        });
+      } else {
+        final op = await ref.read(youtubeSourceProvider).search(normalized);
+        if (!mounted || generation != _searchGeneration) return;
+        setState(() {
+          _loading = false;
+          _results = op is ProviderOk<List<ProviderTrack>>
+              ? op.value
+                  .map((track) => BzTrack(
+                        id: track.breezzeTrackId,
+                        title: track.title,
+                        artist: track.artist,
+                        artworkUrl: track.artworkUrl,
+                        duration: track.duration,
+                      ))
+                  .toList()
+              : [];
+          if (op is! ProviderOk<List<ProviderTrack>>) {
+            _error = 'Search could not be completed. Try again in a moment.';
+          }
+        });
+      }
     } catch (_) {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
@@ -305,6 +338,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _download(BzTrack track) {
+    // Metadata providers do not grant offline-download rights.
+    if (track.id.startsWith('bz:') || track.id.startsWith('bzv:')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Offline downloads are not available for this catalogue source.')),
+      );
+      return;
+    }
     ref.read(downloadProgressProvider.notifier).download(track);
   }
 
@@ -333,9 +373,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ));
   }
 
-  void _play(BzTrack track) {
+  Future<void> _play(BzTrack track) async {
+    // Only dedicated music-video results may open the official YouTube
+    // video player. Song metadata is not a native playback grant.
+    if (track.id.startsWith('bzv:')) {
+      final opened = await YoutubePlayerHandoff.openProviderTrackId(track.id.substring(4));
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the official music video player.')),
+        );
+      }
+      return;
+    }
+    if (_isMetadataOnlySourceTrack(track.id)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
+        );
+      }
+      return;
+    }
+
+    final playableTracks = _results
+        .where((item) => !_isMetadataOnlySourceTrack(item.id))
+        .toList();
     final queue = [
-      for (final item in _results)
+      for (final item in playableTracks)
         TrackInfo(
           id: item.id,
           title: item.title,
@@ -344,8 +407,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           duration: item.duration,
         )
     ];
-    final index = _results.indexOf(track);
-    if (queue.isEmpty) return;
+    final index = playableTracks.indexOf(track);
+    if (queue.isEmpty || index < 0) return;
     ref.read(playerControllerProvider.notifier).playTrack(
           trackId: track.id,
           queue: queue,
@@ -508,9 +571,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            track.id.startsWith('bz:')
-                                                ? '${track.artist} · YouTube Music'
-                                                : track.artist,
+                                            track.id.startsWith('bz:audius:')
+                                                ? '${track.artist} · Audius'
+                                                : _isMetadataOnlySourceTrack(track.id)
+                                                    ? '${track.artist} · YouTube Music · Catalogue only'
+                                                    : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -520,7 +585,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         IconButton(
                                           tooltip: 'Play',
                                           icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
-                                          onPressed: () => _play(track),
+                                          onPressed: _isMetadataOnlySourceTrack(track.id)
+                                              ? null
+                                              : () => _play(track),
                                         ),
                                         PopupMenuButton<String>(
                                           tooltip: 'Track actions',
@@ -560,23 +627,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               );
                                             }
                                           },
-                                          itemBuilder: (context) => const [
-                                            PopupMenuItem(
-                                              value: 'play_next',
-                                              child: Text('Play Next'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: 'play_last',
-                                              child: Text('Add to Queue'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: 'playlist',
-                                              child: Text('Add to Playlist'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: 'favorite',
-                                              child: Text('Add to Library'),
-                                            ),
+                                          itemBuilder: (context) => [
+                                            if (!_isMetadataOnlySourceTrack(track.id)) ...[
+                                              const PopupMenuItem(
+                                                value: 'play_next',
+                                                child: Text('Play Next'),
+                                              ),
+                                              const PopupMenuItem(
+                                                value: 'play_last',
+                                                child: Text('Add to Queue'),
+                                              ),
+                                            ],
+                                            if (!track.id.startsWith('bzv:')) ...[
+                                              const PopupMenuItem(
+                                                value: 'playlist',
+                                                child: Text('Add to Playlist'),
+                                              ),
+                                              const PopupMenuItem(
+                                                value: 'favorite',
+                                                child: Text('Add to Library'),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                         value != null
@@ -595,11 +666,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                   name: 'download',
                                                   color: theme.bzText1,
                                                 ),
-                                                onPressed: () => _download(track),
+                                                onPressed: (track.id.startsWith('bz:') || track.id.startsWith('bzv:'))
+                                                    ? null
+                                                    : () => _download(track),
                                               ),
                                       ],
                                     ),
-                                    onTap: () => _openTrack(track),
+                                    onTap: () => track.id.startsWith('bzv:') ? _play(track) : _openTrack(track),
                                   );
                                 },
                               ),

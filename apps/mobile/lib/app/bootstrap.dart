@@ -18,8 +18,9 @@ import '../features/player/player_controller.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// YouTube is used for metadata discovery only. Full playback and downloads
-/// are resolved through backend rights checks and signed CDN URLs. Lyrics
+/// YouTube Music is metadata-only. Audius public streams and Breezze-owned
+/// licensed media are resolved by the backend; gated Audius tracks are denied.
+/// Downloads remain rights-gated. Lyrics
 /// lookup remains keyless through LRCLIB.
 
 /// package:http impl of the lyrics HTTP seam.
@@ -49,15 +50,12 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
   @override
   String get adapterVersion => '1.0.0';
 
-  @override
-  bool get supportsPlayback => false;
-
-  ProviderTrack _trackFromJson(Map value) {
-    final providerId = value['providerTrackId'] as String? ?? '';
+  ProviderTrack _trackFromJson(Map value, {String providerId = 'youtube_music'}) {
+    final trackId = value['providerTrackId'] as String? ?? '';
     final duration = value['durationSec'];
     return ProviderTrack(
-      breezzeTrackId: 'bz:$providerId',
-      providerTrackId: providerId,
+      breezzeTrackId: 'bz:$providerId:$trackId',
+      providerTrackId: trackId,
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
       artworkUrl: value['artworkUrl'] as String?,
@@ -88,13 +86,18 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
       final rawExternal = data['externalTracks'];
       final rawLocal = data['tracks'];
       final externalTracks = rawExternal is List
-          ? rawExternal.whereType<Map>().map(_trackFromJson)
+          ? rawExternal.whereType<Map>().map((value) => _trackFromJson(
+              value,
+              providerId: value['providerId'] as String? ?? 'youtube_music',
+            ))
           : <ProviderTrack>[];
       final localTracks = rawLocal is List
           ? rawLocal.whereType<Map>().map(_localTrackFromJson)
           : <ProviderTrack>[];
       final seen = <String>{};
-      final tracks = [...localTracks, ...externalTracks]
+      // YouTube Music is the primary discovery source; Breezze's own
+      // catalog entries remain available after provider results.
+      final tracks = [...externalTracks, ...localTracks]
           .where((track) => track.breezzeTrackId.isNotEmpty
               && track.title.isNotEmpty
               && seen.add(track.breezzeTrackId))
@@ -115,24 +118,12 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
       if (data['kind'] != 'ok' || value is! Map) {
         return ProviderError('track_metadata_unavailable');
       }
-      return ProviderOk(_trackFromJson(value));
+      return ProviderOk(_trackFromJson(value, providerId: providerId));
     } catch (_) {
       return ProviderError('network_error');
     }
   }
 
-  @override
-  Future<ProviderOp<String>> resolvePlayback(
-    String providerTrackId,
-    ProviderUserContext userContext,
-  ) async =>
-      ProviderUnsupported('BACKEND_RIGHTS_CHECK_REQUIRED');
-
-  @override
-  Future<ProviderOp<String>> getAttributionRequirements(
-    String providerTrackId,
-  ) async =>
-      ProviderOk('YouTube Music metadata via ytmusicapi');
 }
 
 /// The app-wide metadata/search adapter; it is not a playback authority.
@@ -168,6 +159,25 @@ class LiveResolver implements PlaybackResolver {
     try {
       final catalogId = await _resolveCatalogId(api, track);
       if (catalogId == null) return null;
+
+      if (track.id.startsWith('bz:audius:')) {
+        final providerTrackId = track.id.substring('bz:audius:'.length);
+        final result = await api.resolveProviderPlayback(
+          providerId: 'audius',
+          providerTrackId: providerTrackId,
+          canonicalTrackId: catalogId,
+          territory: _ref.read(outboxTerritoryProvider),
+        );
+        final streamUrl = result['streamUrl'] as String?;
+        final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
+        if (streamUrl == null || expiresAt == null) return null;
+        return PlayableSource(
+          trackId: track.id,
+          streamUrl: streamUrl,
+          expiresAtUtc: expiresAt.toUtc(),
+          codec: result['codec'] as String?,
+        );
+      }
 
       final preferences = await DownloadPreferencesStore().load();
       final result = await api.resolvePlayback(
@@ -208,7 +218,7 @@ class LiveResolver implements PlaybackResolver {
 
     final resolved = await api.resolveCatalogTrack(
       externalId: track.id,
-      source: 'youtube_music',
+      source: track.id.startsWith('bz:audius:') ? 'audius' : 'youtube_music',
       title: title,
       artistName: artist,
       durationSec: track.duration.inSeconds.clamp(1, 86400).toInt(),

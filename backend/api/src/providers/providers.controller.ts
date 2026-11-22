@@ -1,8 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ProviderRegistry } from './provider-registry.service';
 
-// Plan §14 — read-only provider introspection. Admin-side management
-// endpoints land with the admin RBAC gate.
+// Read-only provider discovery and metadata endpoints.
 @Controller('providers')
 export class ProvidersController {
   constructor(private readonly registry: ProviderRegistry) {}

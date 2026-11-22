@@ -1,24 +1,37 @@
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:breezze_audio_contracts/audio_contracts.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 
 /// Native audio engine — implements the Breezze engine contract over
 /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
 class JustAudioEngineAdapter implements AudioEngineAdapter {
-  final AudioPlayer _player = AudioPlayer();
+  final ja.AudioPlayer _player = ja.AudioPlayer();
   final StreamController<PlaybackState> _states =
       StreamController<PlaybackState>.broadcast();
+  late final StreamSubscription<ja.PlaybackEvent> _errorSubscription;
+  late final StreamSubscription<ja.PlayerState> _stateSubscription;
+  StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
+  StreamSubscription<void>? _becomingNoisySubscription;
+  bool _disposed = false;
 
   JustAudioEngineAdapter() {
-    _player.playerStateStream.listen((state) {
+    _errorSubscription = _player.playbackEventStream.listen(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        _states.add(PlaybackState.failed);
+      },
+    );
+    _stateSubscription = _player.playerStateStream.listen((state) {
       PlaybackState mapped;
       final processing = state.processingState;
 
-      if (processing == ProcessingState.loading ||
-          processing == ProcessingState.buffering) {
+      if (processing == ja.ProcessingState.loading ||
+          processing == ja.ProcessingState.buffering) {
         mapped = PlaybackState.buffering;
-      } else if (processing == ProcessingState.completed) {
+      } else if (processing == ja.ProcessingState.completed) {
         mapped = PlaybackState.ended;
       } else if (state.playing) {
         mapped = PlaybackState.playing;
@@ -27,6 +40,38 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       }
       _states.add(mapped);
     });
+    unawaited(_configureAudioSession());
+  }
+
+  Future<void> _configureAudioSession() async {
+    // Audio focus and headphone events are mobile OS concerns. Desktop and
+    // web use their own platform audio policies and must not require this plugin.
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      if (_disposed) return;
+      _interruptionSubscription = session.interruptionEventStream.listen((event) {
+        if (event.begin) {
+          // Pause rather than duck for calls, navigation prompts and other
+          // exclusive audio interruptions. Never auto-resume after a call.
+          unawaited(_player.pause().catchError((_) {}));
+          _states.add(PlaybackState.interrupted);
+        } else {
+          _states.add(PlaybackState.paused);
+        }
+      });
+      _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
+        // Headphones/Bluetooth route removed: pause to avoid speaker leakage.
+        unawaited(_player.pause().catchError((_) {}));
+      });
+    } catch (_) {
+      // Audio session integration is best-effort; core playback remains usable.
+    }
   }
 
   @override
@@ -68,8 +113,13 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   @override
   Stream<PlaybackState> get engineStateStream => _states.stream;
 
-  void dispose() {
-    _states.close();
-    _player.dispose();
+  Future<void> dispose() async {
+    _disposed = true;
+    await _errorSubscription.cancel();
+    await _stateSubscription.cancel();
+    await _interruptionSubscription?.cancel();
+    await _becomingNoisySubscription?.cancel();
+    await _states.close();
+    await _player.dispose();
   }
 }

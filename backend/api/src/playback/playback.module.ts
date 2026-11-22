@@ -4,9 +4,10 @@ import { PlaybackResolveService } from './playback-resolve.service';
 import { PlaybackController } from './playback.controller';
 import { MediaSigner } from './media-signer.service';
 import { MediaSignerFactory } from './media-signer.factory';
+import { ProvidersModule } from '../providers/providers.module';
 
 @Module({
-  imports: [RightsModule],
+  imports: [RightsModule, ProvidersModule],
   controllers: [PlaybackController],
   providers: [
     PlaybackResolveService,

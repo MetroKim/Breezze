@@ -31,9 +31,9 @@ Primary source: the existing internal `ytmusicapi` sidecar, using the MIT-licens
 - `GET /videos` calls `YTMusic().search(query, filter="videos")`.
 - The adapter returns only `MUSIC_VIDEO_TYPE_OMV` (Original Music Video) results. The upstream FAQ describes OMV as an original-artist upload with actual video content; UGC uploads and audio tracks with static artwork are excluded.
 - The sidecar is already included in `backend/docker-compose.yml`; NestJS calls it using `YTMUSIC_API_URL`.
-- The app opens the result on YouTube. Breezze does not download, extract stream URLs, rehost, or relay YouTube media.
+- The app opens the result in the official YouTube experience. Breezze does not download, extract stream URLs, embed an unofficial playback client, rehost, or relay YouTube media.
 
-This is an unofficial client that emulates YouTube Music web requests and is not supported or endorsed by Google. It may break when YouTube changes its web client, and upstream rate limits apply. Treat it as a best-effort discovery source with monitoring, caching, concurrency limits and a fallback—not as a production SLA or a music licence.
+This is an unofficial client that emulates YouTube Music web requests and is not supported or endorsed by Google. It may break when YouTube changes its web client, and upstream rate limits apply. Treat it as a best-effort discovery source with monitoring, caching and concurrency limits—not as a production SLA, an audio resolver or a music licence. Do not add YouTube audio extraction to Breezze.
 
 Optional fallback:
 - `YOUTUBE_DATA_API_KEY`

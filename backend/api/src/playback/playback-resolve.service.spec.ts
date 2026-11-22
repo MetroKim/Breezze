@@ -2,11 +2,17 @@ import { NotAcceptableException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from './media-signer.service';
+import { ProviderRegistry } from '../providers/provider-registry.service';
 import { PlaybackResolveService } from './playback-resolve.service';
 
 describe('PlaybackResolveService', () => {
   const rights = { decide: jest.fn() };
   const signer = { createPlaybackUrl: jest.fn() };
+  const prisma = {
+    track: { findUnique: jest.fn() },
+    contentTakedownCase: { findFirst: jest.fn() },
+  };
+  const providers = { get: jest.fn() };
   let service: PlaybackResolveService;
 
   const request = {
@@ -18,9 +24,10 @@ describe('PlaybackResolveService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new PlaybackResolveService(
-      {} as PrismaService,
+      prisma as unknown as PrismaService,
       rights as unknown as RightsDecisionService,
       signer as unknown as MediaSigner,
+      providers as unknown as ProviderRegistry,
     );
   });
 
@@ -79,4 +86,76 @@ describe('PlaybackResolveService', () => {
     });
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });
+  it('resolves an enabled provider source without accepting a client-supplied URL', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
+    const adapter = {
+      capabilities: { playback: true },
+      resolvePlayback: jest.fn().mockResolvedValue({
+        kind: 'ok',
+        value: {
+          url: 'https://api.audius.co/v1/tracks/track123/stream',
+          expiresAt: new Date(Date.now() + 600_000),
+          mimeType: 'audio/mpeg',
+        },
+        attribution: 'Audius public catalogue',
+      }),
+    };
+    providers.get.mockReturnValue(adapter);
+
+    await expect(service.resolveProvider({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      canonicalTrackId: 'canonical-1',
+      territory: 'TZ',
+    })).resolves.toMatchObject({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
+    });
+    expect(adapter.resolvePlayback).toHaveBeenCalled();
+  });
+
+  it('rejects provider playback when an active takedown exists', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'takedown-1' });
+    providers.get.mockReturnValue({
+      capabilities: { playback: true },
+      resolvePlayback: jest.fn(),
+    });
+
+    await expect(service.resolveProvider({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      canonicalTrackId: 'canonical-1',
+      territory: 'TZ',
+    })).rejects.toBeInstanceOf(NotAcceptableException);
+    expect(providers.get).not.toHaveBeenCalled();
+  });
+
+  it('rejects a provider ID that does not match the canonical source mapping', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1',
+      source: 'youtube_music',
+      externalId: 'bz:youtube_music:track123',
+    });
+
+    await expect(service.resolveProvider({
+      providerId: 'audius',
+      providerTrackId: 'track123',
+      canonicalTrackId: 'canonical-1',
+      territory: 'TZ',
+    })).rejects.toBeInstanceOf(NotAcceptableException);
+    expect(prisma.contentTakedownCase.findFirst).not.toHaveBeenCalled();
+    expect(providers.get).not.toHaveBeenCalled();
+  });
+
 });

@@ -14,10 +14,12 @@ describe('SearchService', () => {
   };
 
   const youtubeMusic = {
+    providerId: 'youtube_music',
     capabilities: { search: true },
     search: jest.fn().mockResolvedValue({ kind: 'ok', value: [] }),
   };
   const providers = {
+    list: jest.fn().mockReturnValue([{ providerId: 'youtube_music', capabilities: { search: true } }]),
     get: jest.fn().mockReturnValue(youtubeMusic),
   };
 
@@ -38,6 +40,7 @@ describe('SearchService', () => {
       albums: [],
       externalTracks: [],
       externalProviderStatus: 'skipped',
+      providerStatuses: [],
     });
 
     expect(prisma.track.findMany).not.toHaveBeenCalled();
@@ -52,6 +55,7 @@ describe('SearchService', () => {
       albums,
       externalTracks: [],
       externalProviderStatus: 'ok',
+      providerStatuses: [{ providerId: 'youtube_music', status: 'ok' }],
     });
 
     expect(prisma.track.findMany).toHaveBeenCalledWith({

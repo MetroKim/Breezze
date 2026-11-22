@@ -118,6 +118,10 @@ jobs:
         working-directory: apps/mobile
         run: flutter build apk --debug
 
+      - name: Prepare Drift WebAssembly database assets
+        working-directory: apps/mobile
+        run: bash tool/prepare_web_database.sh
+
       - name: Build Web
         working-directory: apps/mobile
         run: flutter build web --release
@@ -182,6 +186,11 @@ jobs:
 
       - name: Build Windows desktop
         working-directory: apps/mobile
+        env:
+          # audio_service_win currently uses the deprecated MSVC experimental
+          # coroutine header; VS 2026 promotes its deprecation to an error.
+          # Silence that upstream compatibility diagnostic for this build.
+          CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --debug
 
   backend:

@@ -1,211 +1,110 @@
-# Breezze Gap Register — spec §50.4
+# Breezze Current Implementation Gap Register
 
-A line is IMPLEMENTED only with real behavior + passing tests (§50.6).
+**Last reconciled:** 2026-11-22  
+**Active implementation branch:** `feat/breezze-audio-engine-foundation`  
+**Current proposal:** [PR #8](https://github.com/MetroKim/MetroMusic/pull/8)  
+**Related provider proposal:** [PR #7](https://github.com/MetroKim/MetroMusic/pull/7)
 
-## Compiler-cascade root cause (found and fixed)
+This file is the current release-status reference. A capability is not marked release-ready merely because a class, screen, endpoint or configuration exists. It needs implementation, automated tests, CI evidence, provider/rights approval where relevant, and platform validation.
 
-`packages/design_system/lib/src/bz_theme.dart` was **never committed**
-(an earlier write silently failed) while the barrel exported it and all
-seven screens + shell consumed its tokens. One missing file made the
-entire design_system package fail to resolve, cascading hundreds of
-analyzer errors into every screen.
+## Product scope — current release
 
-Fixes applied:
+- Listener-facing Breezze app only.
+- Five destinations: Home, Browse, Radio, Library and Search.
+- No artist portal, artist upload workflow, subscription, membership, billing, paywall or paid tier.
+- Artist/album/playlist pages, where implemented, are consumer catalog pages—not artist management tools.
+- No third-party audio extraction or unauthorized re-hosting.
+- No R2-hosted third-party music. Approved provider audio is delivered directly to the device by default.
 
-- Added `bz_theme.dart` (light/dark themes + BzThemeColors extension +
-  `theme.bzText1`-style aliases every screen uses).
-- Corrected the package barrel: it pointed at a wrong path
-  (`bz_theme.dart` instead of `src/bz_theme.dart`) and did not export
-  `tokens.dart` (BzType/BzRadius/BzMotion/BzSpacing) at all.
-- Verified every consumed API against its real source file, line by
-  line: QueueManager.replaceWith(startIndex:), PlaybackStateMachine
-  events, AudioEngineAdapter.prepare(PlayableSource), ScrobbleBus.onPlay,
-  LrcParser.parse/activeLineIndex/activeWordIndex, ProviderOp types,
-  ProviderUserContext, brand icons. All match.
+## Verified repository direction
 
-| Req ID | Requirement | Status | Evidence |
-|---|---|---|---|
-| A-01 | Brand marks | IMPLEMENTED | `assets/icons/`, `bz_brand_icons.dart` |
-| A-02 | Tokens light+dark, exact hex | IMPLEMENTED | `tokens.dart` (verified) |
-| A-03 | Atmosphere materials in theme | IMPLEMENTED | `bz_theme.dart` |
-| A-05 | Type/spacing/radius/elevation | IMPLEMENTED | `tokens.dart` |
-| B-01..04 | Architecture, Riverpod, one player, navigation | IMPLEMENTED | `features/*`, shell |
-| C-01/03 | Real keyless source, honest results | IMPLEMENTED | `youtube_source_adapter.dart` |
-| D-01..03 | Player, state machine, queue | IMPLEMENTED | + tests |
-| D-04 | Native playback engine | IMPLEMENTED | `just_audio_engine_adapter.dart` |
-| D-05/06/08 | Crossfade, scrobble, AutoMix | IMPLEMENTED | ports + tests |
-| D-07 | Lyrics engine + provider | IMPLEMENTED | `lrc_parser.dart` + LRCLIB |
-| D-09 | Quality tiers | IMPLEMENTED | `audio_quality.dart` |
-| D-10 | Now Playing, word-synced lyrics | IMPLEMENTED | `now_playing_screen.dart` |
-| D-11 | Background audio | IMPLEMENTED | `audio_service_bridge.dart` |
-| E-01 | Favorites persistence | IMPLEMENTED | `FavoritesStore` |
-| E-02 | Downloads w/ lyrics + art | IMPLEMENTED | `downloads_library.dart` |
-| E-03 | Live download progress | IMPLEMENTED | `DownloadsController` |
-| E-04 | Recently played rails | IMPLEMENTED | `RecentStore` |
-| G-01 | No client secrets | IMPLEMENTED | keyless sources |
-| H-01..03 | Tiers, settings, gating | IMPLEMENTED | `membership.dart` |
+| Area | Current state | Evidence / remaining gate |
+|---|---|---|
+| Flutter architecture | One Flutter application codebase for Android, iOS, Web, Linux, macOS and Windows | Platform runner generator and CI build matrix; each target still needs supported-host/device validation |
+| Global playback | One global PlayerController and one shared native audio engine; screens do not own separate players | `apps/mobile/lib/features/player/player_controller.dart`, audio-engine adapter and player tests |
+| Playback race handling | Request generations and serialized engine mutations protect against stale resolver results and overlapping prepare/play operations | PlayerController regression tests; execute latest CI suite |
+| Queue progression | Completion advances the global queue; regression test verifies exactly one advance and no duplicate resolve | `player_controller_test.dart`; added in commit `c9372145cd3527ba98a109e9918a004e65475cbd`; latest CI run still pending at last audit |
+| OS media session | Shared media-session bridge maps OS commands to the global player; platform adapters are configured for Android/iOS/macOS/Web/Linux/Windows | Code and platform dependencies exist; validate lock screen, notification, SMTC, MPRIS and Web Media Session on real targets |
+| Mobile audio focus | Mobile interruption handling pauses on exclusive interruptions; route removal pauses to avoid headphone/Bluetooth speaker leakage | Adapter code and interruption regression test; device-level validation remains |
+| Expired playback grants | Resume path can request a fresh grant rather than reusing an expired signed URL | PlayerController tests; verify provider expiry behavior against live authorized provider |
+| Search | Search UI and metadata discovery exist; local recent-search behavior is present in the app implementation | Verify history persistence/error states and out-of-order response widget tests |
+| Browse | Genre/discovery UI and backend metadata feeds exist | Curated editorial feeds, full charts and catalog-backed entity routes remain incomplete |
+| Radio | Station directory and program/schedule metadata are exposed | Radio stream playback is not implemented; no station Play action should imply otherwise |
+| Library | Favorites, playlists, history and download-related client/backend foundations exist | Complete account-switch, ownership, offline expiry/revocation and device storage tests before release |
+| Provider rights | Provider capability and rights boundaries are documented; backend resolver is the authorization boundary | Production terms/territory evidence and live provider acceptance tests remain required |
+| Cloudflare | API Worker typechecks and implements a narrow public metadata cache path | Worker deployment, domain/origin security, WAF/rate-limit setup and live cache tests remain |
+| Capacity | Cloudflare/NestJS/Redis/PostgreSQL scaling architecture and staged load-test plan are documented | No one-million-user capacity claim until production-like load tests pass |
 
-## Remaining
+## Provider truth table
 
-- One local verification run: `flutter create . && flutter pub get &&
-  flutter analyze`. The design-system cascade is fixed at the source; any
-  remaining output should now be a short, copyable list.
-- Android manifest entries for background audio (documented in README).
+| Source | Metadata/discovery | Breezze native playback | Downloads | Current decision |
+|---|---:|---:|---:|---|
+| Audius official API | Yes | Yes, public ungated and API-accessible tracks only | No | First official third-party playback adapter; gated/restricted tracks are rejected |
+| YouTube Music via `ytmusicapi` | Best-effort metadata only | No | No | Unofficial discovery adapter; never extract audio streams |
+| Apple RSS / iTunes catalog | Yes, where the feed/API is available | No full-track playback grant | No | Metadata/chart/release/catalog discovery only |
+| MusicAPI Core | Not connected | No | No | Future candidate only; credentials, plan and terms review required |
+| Breezze-owned/licensed catalog | Internal metadata | Only with explicit rights record and approved delivery | Only with explicit download rights | Not a substitute for third-party licenses |
+| User local files | Local metadata | Yes, on supported platforms | Already local | User-controlled local playback |
 
-## Product experience rollout — 2026-11-21
+A metadata match, preview URL, video result, public endpoint or technically reachable stream is not proof of full-track playback rights. Provider health is not authorization. Failover must preserve recording identity, territory and permitted action.
 
-The full target information architecture and UX behavior are documented in
-`docs/PRODUCT_EXPERIENCE.md`. This rollout deliberately builds on the
-existing `breezze` branch implementation rather than duplicating the
-screens that already exist there.
+## Current CI snapshot
 
-| Requirement | Status | Evidence | Remaining work |
-|---|---|---|---|
-| Local recent-search history | IMPLEMENTATION ADDED — tests pending | `app/search_history_store.dart`, `features/search/search_screen.dart` | Run Flutter tests/analyze; then mark implemented |
-| Search history deduplication and cap | IMPLEMENTATION ADDED — tests pending | Store caps at 10 and deduplicates case-insensitively | Verify tests |
-| Remove one recent search / clear all | IMPLEMENTATION ADDED — tests pending | Search screen actions + store methods | Verify UI and persistence tests |
-| Stale search response protection | IMPLEMENTED IN CODE — tests pending | Search generation token in SearchScreen | Add widget test for out-of-order results |
-| Search failure vs no-results state | IMPLEMENTED IN CODE — tests pending | Provider/network error state separated from empty results | Add provider failure widget tests |
-| Catalog result groups | PARTIAL | Existing keyless source returns track results; backend has catalog/search modules | Add canonical catalog-backed album/artist/playlist/video/station results |
-| Browse editorial/charts/genres/moods | BACKEND/UI INTEGRATION PENDING | Backend Catalog and Recommendations modules exist | Connect typed client repositories and real feeds |
-| Radio stations and programs | BACKEND/UI INTEGRATION PENDING | Radio backend module exists | Connect client repository, station detail, and playback rights |
-| Album/artist/playlist detail | PARTIAL | Catalog models and backend read endpoints exist | Add detail routes and complete track/entity UI |
-| Responsive desktop/tablet shell | NOT VERIFIED | Existing Flutter shell is phone-first | Implement and test responsive layouts |
-| Accessibility/reduced motion | NOT AUDITED | Existing design-system motion/tokens and semantic controls | Run accessibility and reduced-motion audit |
+Latest commit at this audit: `c9372145cd3527ba98a109e9918a004e65475cbd`.  
+Latest workflow: [44986131001](https://github.com/MetroKim/MetroMusic/actions/runs/44986131001).
 
-### Verification gate
+At the last observed check:
+- Flutter analysis completed successfully.
+- Flutter tests were still running.
+- Backend/Prisma validation, tests and build completed successfully.
+- Both Cloudflare Worker typechecks completed successfully.
+- Linux/Android/Web, Windows, macOS and iOS build jobs were still running or pending.
 
-Do not promote the new search-history rows to IMPLEMENTED until these pass
-from `apps/mobile`:
+Do not describe the complete workflow as green until every job for this exact commit has completed successfully. A later commit requires a new CI result.
 
-```bash
-flutter pub get
-flutter analyze
-flutter test
-```
+## Release blockers / unfinished work
 
-Backend verification remains separate:
+### P0 — Playback correctness and platform certification
+- [ ] Complete latest CI run and fix any failures.
+- [ ] Verify audio-service queue index/current item synchronization, including next/previous, repeat and shuffle.
+- [ ] Test Android foreground playback, notification controls, lock-screen controls, audio focus and route changes on physical devices.
+- [ ] Test iOS background mode, lock-screen controls, interruption handling and Bluetooth routes on physical devices.
+- [ ] Test Windows SMTC, Linux MPRIS, macOS Now Playing and Web Media Session on their supported environments.
+- [ ] Validate provider grant expiry, refresh, network loss, retry budget and typed error recovery with an authorized live source.
+- [ ] Confirm there is no second player instance after navigation, sign-in/sign-out or app lifecycle transitions.
 
-```bash
-cd backend/api
-npm install
-npx prisma generate
-npm run typecheck
-npm test -- --runInBand
-```
+### P1 — Catalog, discovery and library
+- [ ] Complete typed catalog search for tracks, artists, albums, playlists and music videos with source attribution.
+- [ ] Complete album/artist/playlist listener detail routes from canonical catalog data.
+- [ ] Connect real, territory-aware editorial and chart feeds; do not synthesize charts from search results.
+- [ ] Complete library account-isolation tests for favorites, playlists, history and downloads.
+- [ ] Complete offline lease expiry, online revalidation, takedown and account-switch tests.
+- [ ] Add empty, loading, offline, provider-error and populated states for every screen.
 
-### Additional navigation and discovery work — 2026-11-21
+### P1 — Provider and rights readiness
+- [ ] Record provider-specific terms, allowed use, territories, attribution, caching and takedown obligations.
+- [ ] Verify Audius playback eligibility and gated/restricted rejection against live API responses.
+- [ ] Keep YouTube Music metadata-only unless a separately approved official playback path is implemented.
+- [ ] Do not enable a provider until same-recording matching, rights checks, grant expiry and source validation pass.
+- [ ] Add provider health, bounded retries, concurrency budgets and circuit-breaker tests.
 
-| Requirement | Status | Evidence | Remaining work |
-|---|---|---|---|
-| Browse destination | UI + live genre search added — verification pending | `features/browse/browse_screen.dart` uses the existing keyless source adapter and global PlayerController | Add widget tests; add curated backend editorial/chart/genre feeds when available |
-| Genre discovery | UI + provider integration added — verification pending | Afrobeats, Bongo Flava, Amapiano, Gospel, Hip-Hop, R&B, Jazz and Electronic search categories | Add backend-owned genre taxonomy and browse analytics |
-| Radio station directory | API-connected UI added — verification pending | `features/radio/radio_screen.dart` reads the existing public `/radio/stations` endpoint | Add widget tests and real station artwork |
-| Radio program details | API-connected UI added — verification pending | Station detail reads `/radio/stations/:id` and renders returned programs | Add schedule timezone formatting and pagination |
-| Radio playback | NOT IMPLEMENTED | Current PlayerController resolves catalog track IDs, not radio station stream sessions | Add a separate authorized radio playback contract and engine session type |
-| Primary navigation | Browse and Radio added to IndexedStack shell | `widgets/bz_shell.dart` | Validate small-screen horizontal tab navigation and wide layouts |
+### P2 — Production and scale
+- [ ] Configure Cloudflare zone, TLS Full (strict), origin protection, WAF and route-specific rate limits.
+- [ ] Deploy the API Worker and verify only explicitly public metadata is cacheable.
+- [ ] Verify secrets, database backups, restore drills, migrations, alerting and incident runbooks.
+- [ ] Complete tenant-isolation integration tests across every user-owned endpoint.
+- [ ] Complete accessibility, reduced-motion, localization and responsive layout audits.
+- [ ] Run staged load tests and publish measured results; do not claim one million concurrent listeners based on architecture alone.
 
-Browse search results are provider search results for the selected genre. They are
-not presented as official charts, editorial playlists, or platform-curated
-rankings. Radio station cards show the backend's live flag but do not expose a
-play action until station playback is supported by the audio engine.
+## Explicitly not part of this release
 
+- Artist portal, artist upload/claim tools or artist management dashboard.
+- Subscription, membership, billing, payment, premium tier or paywall.
+- Unofficial YouTube audio extraction, stream URL scraping, cookie reuse or access-control bypass.
+- Generic third-party audio proxying or R2 re-hosting.
+- Radio stream playback until an authorized station playback contract is implemented.
+- A claim that every Apple Music/Spotify catalog recording is available in Breezze.
 
-## Engineering completion backlog — 2026-11-21
+## Change-control rule
 
-The prioritized completion plan and critical defect register now live in
-`docs/ROADMAP_AND_BUG_BACKLOG.md`. It separates confirmed code defects from
-items that require migration/runtime verification and defines P0/P1/P2 work,
-regression coverage, exit gates and the recommended implementation order.
-
-**New release blockers identified during source inspection:**
-- ProviderContainer/audio-engine ownership currently occurs inside
-  `BreezzeShell.build()`; lifecycle ownership must be stabilized.
-- Playback resolver operations have no request generation/cancellation
-  guard, and the state machine does not accept a new start from several
-  active states.
-- Search history persistence errors were caught as if they were provider
-  network errors; the SearchScreen now treats history as best-effort and
-  continues the provider request when local persistence fails (test pending).
-- Radio is metadata/schedule UI only; stream playback is not implemented.
-- The inspected Prisma schema still contains
-  `@@unique([userId, trackId])` on `RecentlyPlayed`; reconcile it with
-  the migration history and intended repeated-play semantics before
-  changing the schema.
-
-Do not treat these findings as fixed. The Flutter/backend validation suite
-has not been run in this environment. See the backlog for exact tests and
-release acceptance criteria.
-
-
-## P0 playback stabilization — implementation started
-
-| Defect | Status | Evidence | Remaining verification |
-|---|---|---|---|
-| ProviderContainer recreated during shell build | FIX APPLIED — tests pending | `main.dart` now provides one root ProviderScope; `BreezzeShell` no longer creates a private container; `BreezzeAppRoot` owns engine attach/dispose and the migration container | Widget test auth transitions/rebuilds and exactly-once engine disposal; analyzer/runtime verification |
-| Stale playback resolver responses | FIX APPLIED — tests added | `PlayerController` uses request generations and ignores stale resolver results | Execute fake-resolver tests; add detach and engine-error cases |
-| Native prepare operations racing | FIX APPLIED — tests added | PlayerController serializes prepare/play engine mutations and rechecks request generation before/after prepare | Execute delayed-prepare race test on CI and real device |
-| State machine rejects a new selection from active states | FIX APPLIED — tests added | `PlaybackStateMachine` treats each new start as superseding and rejects stale request IDs | Execute package tests and expand transition matrix |
-| Playback Future awaited for entire song | FIX APPLIED — test pending | Controller no longer awaits the long-lived just_audio play Future as if it meant “started” | Verify actual just_audio behavior on Android/iOS and ensure async engine errors surface |
-
-
-## Verified implementation update — 2026-11-21
-
-This section supersedes older "verification pending" and "suite not run"
-statements above for the exact commit tested below.
-
-**Verified commit:** `f919323173156b0494fe49c5dc23d2c4f8f3f12d`  
-**CI run:** [44911197349 — all jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/44911197349)
-
-| Requirement | Current status | Evidence | Remaining work |
-|---|---|---|---|
-| Search-history persistence, deduplication, cap, remove and clear | IMPLEMENTED + tests passed | `apps/mobile/test/search_history_store_test.dart`; full mobile test suite passed | Add widget-level coverage for visual actions and storage failure |
-| Browse and Radio directories | IMPLEMENTED + app analysis/tests passed | Browse genre search and Radio API integration | Widget tests; curated editorial feeds; radio playback remains separate |
-| Playback request races and serialized prepare | IMPLEMENTED + tests passed | `player_controller_test.dart` | Device-level Android/iOS validation and detach lifecycle tests |
-| Native seek failure handling | IMPLEMENTED + regression test passed | PlayerController dispatches `SEEK_FAILED` | Verify on real devices |
-| Scrobble listening-time ticks and session cleanup | IMPLEMENTED IN CODE | Position stream ticks only while player is playing; stop/track-change/end/detach/dispose and playback failures remove pending sessions | Add deterministic controller integration tests for 30-second threshold and pause behavior |
-| Download account isolation | IMPLEMENTED + API-client tests passed | Per-user storage directories; owner ID persisted; owner-filtered library; legacy ownerless records hidden; library refreshes on auth changes and stale account results are discarded | Device-level account-switch-during-download tests |
-| Offline local-file playback | IMPLEMENTED IN CODE + mobile tests passed | Local `PlayableSource`, `setFilePath`, resolver bypass test | Real-device codec/container validation and corrupted-file recovery |
-| Offline licence expiry | BOUNDED LEASE + ONLINE REVALIDATION IMPLEMENTED IN CODE | Server issues a maximum 72-hour offline lease capped by the underlying rights end; mobile persists it, checks it before playback, and revalidates current territory/rights/takedowns when online. Revoked downloads are removed from the local library. | Run full CI, add device-level offline/online/revocation tests, and verify policy with rights holders |
-| Download storage path safety | IMPLEMENTED IN CODE | User IDs and track storage keys sanitized | Add adversarial path test cases |
-| Full CI | PASSED | Run 44910820541: Drift codegen, mobile/API-client/design-system/audio-contracts checks, Prisma generation/validation, backend typecheck/tests/build | Re-run after any subsequent code changes |
-
-### Offline-rights limitation
-
-A fully offline device cannot learn that a rights holder has issued a new takedown
-or revoked a licence after the last successful authorization. Local playback
-currently enforces the stored rights end time and account owner; it does not
-provide instantaneous offline revocation. Production release requires a
-bounded offline licence lease and mandatory revalidation when connectivity
-returns, with a policy for expired or revoked leases.
-
-### Still not implemented
-
-- Cloudflare R2 deployment, custom-domain configuration and live end-to-end signature validation (code and CI checks are implemented; account provisioning is pending).
-- Radio streaming sessions and player-engine support.
-- Prisma migration baseline/history against the deployed database.
-- Artist, album and playlist detail routes and catalog-backed editorial feeds.
-- Full tenant-isolation integration tests, accessibility/responsive audits and real-device audio/download validation.
-
-
-## Cloudflare R2 + offline licence implementation update — 2026-11-21
-
-- Added `infra/cloudflare/media-worker`: HMAC verification, expiring signed playback URLs, byte-range requests, and size-bound signed uploads to a private R2 bucket.
-- Added NestJS signed upload registration and owner-scoped upload completion. Uploads are queued only after completion.
-- Added an R2-backed media worker path: quarantine object download, FFmpeg validation/transcoding, and processed HLS output upload to R2 staging keys.
-- Added Cloudflare Worker TypeScript checking to the Breezze quality workflow.
-- Signed playback responses now use `Cache-Control: private, no-store`; browser/intermediary caches cannot keep a signed media response playable after its URL expires. Any future edge cache must include the signature in its cache key and cap TTL at the signature expiry.
-- Upload `userId` and `jobId` path segments are restricted to safe opaque identifiers before constructing R2 quarantine keys; encoded separators and path-like values are rejected.
-- Added a maximum 72-hour offline lease, capped by catalogue rights expiry, plus an authenticated online revalidation endpoint. Rights denial/takedown revokes the server download record and the mobile library removes the local asset on successful revalidation.
-- Important: processed outputs are staged under `processed/{jobId}`. A moderated publication step must map them to canonical `audio/{trackId}/{variant}` objects before playback URLs can resolve. No public R2 access is enabled.
-
-Operator setup remains: create the bucket and scoped R2 token; deploy the Worker; attach a custom domain; set the same `MEDIA_SIGNING_KEY` on Worker and API; configure the backend media worker's R2 credentials; and run live upload/range/playback tests. These account-side actions have not been performed by repository commits.
-
-
-## Dependency audit + framework upgrade — 2026-11-21
-
-- Upgraded the API from NestJS 10 to patched NestJS 11.2.11 packages, with compatible Config 4.0.4, Swagger 11.2.7, Throttler 6.8.0, Passport 11.0.5 and JWT 11.0.2 integrations.
-- Added patched `glob` 14.0.2 and `minimatch` 11.0.1 overrides for the Nest CLI dependency chain.
-- Upgraded the Cloudflare Worker to Wrangler 4.166.0 and matching `@cloudflare/workers-types` 5.20261121.1; Worker CI uses Node 22.
-- Full CI workflow `44913618622` passed backend typecheck/tests/build, Flutter analysis/tests and API client/audio contract checks, plus Cloudflare Worker typechecking.
-- `npm audit` reports 0 vulnerabilities for both the backend and Cloudflare Worker dependency trees.
+Update this register when a feature changes status. Link the implementation path and passing test/CI evidence. If rights approval, deployment, or physical-device verification is missing, keep the release gate open even when the code exists.
