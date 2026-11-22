@@ -9,6 +9,7 @@ Breezze is a free, listener-first music app built with one Flutter/Dart applicat
 - Persistent mini-player, Now Playing, queue controls, favorites and local listening history.
 - Cross-platform OS media-session integration: Android notifications, iOS lock screen, macOS Now Playing, Web Media Session, Windows SMTC and Linux MPRIS. Play/pause, previous/next and stop route through the single global PlayerController; seek support depends on the platform adapter.
 - Android foreground media playback service declarations and iOS audio background mode are applied by `tool/generate_platform_targets.sh` when native runners are generated.
+- Mobile audio focus is configured for music playback; calls/other exclusive interruptions pause playback without auto-resuming, and headphone/Bluetooth route removal pauses to prevent speaker leakage.
 - Local playlists with account-scoped storage and optional backend synchronization.
 - Offline downloads through backend authorization and signed media URLs.
 - LRCLIB lyrics lookup with track-change-safe loading.
