@@ -10,6 +10,7 @@ describe('PlaylistsService tenant isolation', () => {
       updateMany: jest.fn(),
       deleteMany: jest.fn(),
     },
+    track: { findUnique: jest.fn() },
     playlistItem: {
       count: jest.fn(),
       create: jest.fn(),
@@ -21,6 +22,7 @@ describe('PlaylistsService tenant isolation', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.track.findUnique.mockResolvedValue({ id: 'track-1' });
     service = new PlaylistsService(prisma as any);
   });
 
@@ -41,6 +43,16 @@ describe('PlaylistsService tenant isolation', () => {
       where: { id: 'playlist-owned-by-b', userId: 'user-a' },
       include: { items: { orderBy: { position: 'asc' } } },
     });
+  });
+
+  it('rejects adding a track that is not in the canonical catalog', async () => {
+    prisma.playlist.findFirst.mockResolvedValue({ id: 'playlist-a', userId: 'user-a' });
+    prisma.track.findUnique.mockResolvedValue(null);
+
+    await expect(service.addTrack('user-a', 'playlist-a', 'missing-track'))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.playlistItem.count).not.toHaveBeenCalled();
+    expect(prisma.playlistItem.create).not.toHaveBeenCalled();
   });
 
   it('does not mutate a playlist owned by another user', async () => {

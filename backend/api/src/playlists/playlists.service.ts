@@ -48,6 +48,11 @@ export class PlaylistsService {
 
   async addTrack(userId: string, playlistId: string, trackId: string) {
     await this.assertOwned(userId, playlistId);
+    const track = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: { id: true },
+    });
+    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
     const count = await this.prisma.playlistItem.count({
       where: { playlistId },
     });

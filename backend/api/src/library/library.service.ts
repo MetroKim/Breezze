@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -14,6 +14,12 @@ export class LibraryService {
   }
 
   async addFavorite(userId: string, trackId: string) {
+    const track = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: { id: true },
+    });
+    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
+
     return this.prisma.favorite.upsert({
       where: { userId_trackId: { userId, trackId } },
       create: { userId, trackId },
