@@ -153,6 +153,13 @@ export class PlaybackSessionService {
           select: { sessionId: true, sequence: true, elapsedMs: true },
         });
         if (raced?.sessionId === sessionId && raced.sequence === sequence) {
+          const owner = await this.prisma.playbackSession.findUnique({
+            where: { id: sessionId },
+            select: { userId: true },
+          });
+          if (!owner || owner.userId !== userId) {
+            throw new NotFoundException('PLAYBACK_SESSION_NOT_FOUND');
+          }
           return { accepted: true, duplicate: true, creditedMs: raced.elapsedMs };
         }
         throw new ConflictException('PLAYBACK_HEARTBEAT_ID_CONFLICT');
