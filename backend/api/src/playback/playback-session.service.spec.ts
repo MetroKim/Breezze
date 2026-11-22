@@ -64,9 +64,7 @@ describe('PlaybackSessionService', () => {
   it('creates a session only after full-track playback authorization', async () => {
     resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/audio' });
     const result = await service.start('user-1', 'tz', { trackId: 'track-1' });
-    expect(resolver.resolve).toHaveBeenCalledWith('user-1', {
-      trackId: 'track-1', requestedQuality: undefined,
-    }, 'TZ');
+    expect(resolver.resolve).toHaveBeenCalledWith('user-1', { trackId: 'track-1' }, 'TZ');
     expect(prisma.playbackSession.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         userId: 'user-1', trackId: 'track-1', territory: 'TZ', providerId: null,
