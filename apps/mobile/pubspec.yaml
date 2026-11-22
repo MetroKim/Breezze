@@ -57,6 +57,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # Deterministic native launcher PNG/ICO generation from supplied Breezze SVG.
+  image: ^4.3.0
   drift_dev: ^2.20.0
   build_runner: ^2.4.12
 
