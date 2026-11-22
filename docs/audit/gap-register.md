@@ -1,10 +1,10 @@
 # Breezze Current Implementation Gap Register
 
 **Last reconciled:** 2026-11-22  
-**Main baseline:** `d5a23f2db1ad00d946a1c5f33ff2c263f305a28c` (PR #44 merged 2026-11-22)  
+**Main baseline:** `bd031a24616d7257e2b04ef76b469332d4a49658` (PR #45 merged 2026-11-22)  
 **PR #44 CI:** [45017890994 — all 7 jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/45017890994)  
-**Recent integration merges:** PR #43 Settings → in-app Help & Support (`c1ac3c44`); PR #44 Account listening preferences → `/users/me` (`d5a23f2d`).  
-**Post-merge main CI:** no post-merge status evidence has been returned yet for `d5a23f2db1ad00d946a1c5f33ff2c263f305a28c`; PR CI is not post-merge proof.  
+**Recent integration merges:** PR #43 Settings → in-app Help & Support (`c1ac3c44`); PR #44 Account listening preferences → `/users/me` (`d5a23f2d`); PR #45 sleep timer + platform media bridge (`bd031a24`).  
+**PR #45 CI:** [45019475554 — all 7 jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/45019475554) on exact PR head `30e081a06f5492fa4a9378ade2a89f284ccb3f56`. **Post-merge main CI:** no workflow run or combined status was returned yet for merge commit `bd031a24616d7257e2b04ef76b469332d4a49658`; PR CI is not post-merge proof.  
 **In-app experience contract:** [PR #33](https://github.com/MetroKim/MetroMusic/pull/33)  
 **Master implementation checklist:** [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27)
 
@@ -29,7 +29,7 @@ This file is the current release-status reference. A capability is not marked re
 | Global playback | One global PlayerController and one shared native audio engine; screens do not own separate players | `apps/mobile/lib/features/player/player_controller.dart`, audio-engine adapter and player tests |
 | Playback race handling | Request generations and serialized engine mutations protect against stale resolver results and overlapping prepare/play operations | PlayerController regression tests; execute latest CI suite |
 | Queue progression | Completion advances the global queue; regression test verifies exactly one advance and no duplicate resolve | `player_controller_test.dart`; added in commit `c9372145cd3527ba98a109e9918a004e65475cbd`; latest CI run still pending at last audit |
-| OS media session | Shared media-session bridge maps OS commands to the global player; platform adapters are configured for Android/iOS/macOS/Web/Linux/Windows | Code and platform dependencies exist; validate lock screen, notification, SMTC, MPRIS and Web Media Session on real targets |
+| OS media session | audio_service bridge is initialized only on Android/iOS; Web and desktop intentionally use the documented no-op OS bridge | PR #45 CI passed all 7 jobs; physical lock-screen/notification controls remain unverified. Desktop/Web native media-session integration is not claimed |
 | Mobile audio focus | Mobile interruption handling pauses on exclusive interruptions; route removal pauses to avoid headphone/Bluetooth speaker leakage | Adapter code and interruption regression test; device-level validation remains |
 | Expired playback grants | Resume path can request a fresh grant rather than reusing an expired signed URL | PlayerController tests; verify provider expiry behavior against live authorized provider |
 | Search | Search UI and metadata discovery exist; local recent-search behavior is present in the app implementation | Verify history persistence/error states and out-of-order response widget tests |
@@ -110,3 +110,15 @@ Verified result: all 7 jobs passed, including Flutter analysis/tests, Windows, m
 ## Change-control rule
 
 Update this register when a feature changes status. Link the implementation path and passing test/CI evidence. If rights approval, deployment, or physical-device verification is missing, keep the release gate open even when the code exists.
+
+
+## PR #45 — sleep timer and platform media bridge (2026-11-22)
+
+- Merged to main as `bd031a24616d7257e2b04ef76b469332d4a49658`.
+- PR: https://github.com/MetroKim/MetroMusic/pull/45
+- Exact PR head: `30e081a06f5492fa4a9378ade2a89f284ccb3f56`.
+- CI run [45019475554](https://github.com/MetroKim/MetroMusic/actions/runs/45019475554): all 7 jobs passed, including Flutter analysis/tests, Linux/Android/Web, Windows, macOS/iOS, NestJS/Prisma, Cloudflare Worker and API Worker typechecks.
+- Sleep timer is app-wide across navigation, supports 15/30/45/60/90 minutes, rescheduling and cancellation, and pauses the global player at expiry.
+- Limitation: sleep timer is process-local and is lost after force-stop/process termination/reboot. No OS alarm or durable timer persistence is implemented.
+- Platform bridge guard: audio_service OS media-session initialization is restricted to Android/iOS; web and desktop use the documented no-op bridge.
+- Post-merge main workflow/status lookup returned no workflow runs and no combined statuses for the merge SHA at audit time. This is **not** post-merge verification; that gate remains open.
