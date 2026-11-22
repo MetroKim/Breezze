@@ -81,4 +81,44 @@ export class RightsDecisionService {
       attribution: attribution?.text ?? null,
     });
   }
+
+  /**
+   * Bulk equivalent of decide(..., action: 'stream.full') for recommendation
+   * candidates. It excludes preview-only grants and evaluates territory,
+   * takedown, and permission windows in three bounded database queries.
+   */
+  async filterFullStream(trackIds: string[], territory: string): Promise<Set<string>> {
+    const ids = [...new Set(trackIds)];
+    if (ids.length === 0) return new Set<string>();
+
+    const now = new Date();
+    const [available, takedowns, permissions] = await Promise.all([
+      this.prisma.territoryAvailability.findMany({
+        where: { trackId: { in: ids }, territory },
+        select: { trackId: true },
+      }),
+      this.prisma.contentTakedownCase.findMany({
+        where: { trackId: { in: ids }, status: 'active' },
+        select: { trackId: true },
+      }),
+      this.prisma.rightsUsagePermission.findMany({
+        where: {
+          trackId: { in: ids },
+          action: 'stream.full',
+          AND: [
+            { OR: [{ startAt: null }, { startAt: { lte: now } }] },
+            { OR: [{ endAt: null }, { endAt: { gte: now } }] },
+          ],
+        },
+        select: { trackId: true },
+      }),
+    ]);
+
+    const availableIds = new Set(available.map((row) => row.trackId));
+    const takedownIds = new Set(takedowns.map((row) => row.trackId));
+    const permittedIds = new Set(permissions.map((row) => row.trackId));
+    return new Set(ids.filter((id) =>
+      availableIds.has(id) && permittedIds.has(id) && !takedownIds.has(id),
+    ));
+  }
 }
