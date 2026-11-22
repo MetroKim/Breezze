@@ -535,7 +535,11 @@ class PlayerController extends Notifier<PlayerState> {
     TrackInfo info, {
     Duration initialPosition = Duration.zero,
   }) async {
-    await _closePlaybackSession();
+    if (_playbackSessionId != null) {
+      await _closePlaybackSession();
+    } else {
+      _pauseHeartbeatTimer();
+    }
     // Defensive check for restored or stale queue entries created before the
     // metadata-only provider capability was enforced.
     if (_isMetadataOnlyProviderTrack(info.id) && info.localFilePath == null) return;
