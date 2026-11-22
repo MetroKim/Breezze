@@ -78,7 +78,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
 
   @override
   void dispose() {
-    _backgroundBridge?.stop();
+    unawaited(_backgroundBridge?.stop() ?? Future<void>.value());
     _container?.read(playerControllerProvider.notifier).detachEngine();
     _audioEngine?.dispose();
     super.dispose();
