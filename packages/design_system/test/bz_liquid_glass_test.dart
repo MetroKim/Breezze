@@ -114,13 +114,21 @@ void main() {
     test('dark scrolled fill resolves to rgba(28,28,30,0.88)', () {
       final fill =
           BzGlassRecipe.fillOf(Brightness.dark, BzGlassMaterial.pillScrolled);
-      expect(fill, const Color(0xE01C1C1E)); // 0.88 alpha = 224
+      // Component-wise: withValues-created colors are float-backed, so
+      // compare channels with tolerance instead of whole-color equality.
+      expect(fill.alpha, closeTo(0.88 * 255, 1));
+      expect(fill.red, 28);
+      expect(fill.green, 28);
+      expect(fill.blue, 30);
     });
 
     test('light scrolled fill resolves to rgba(255,255,255,0.88)', () {
       final fill = BzGlassRecipe.fillOf(
           Brightness.light, BzGlassMaterial.pillScrolled);
-      expect(fill, const Color(0xE0FFFFFF));
+      expect(fill.alpha, closeTo(0.88 * 255, 1));
+      expect(fill.red, 255);
+      expect(fill.green, 255);
+      expect(fill.blue, 255);
     });
   });
 
