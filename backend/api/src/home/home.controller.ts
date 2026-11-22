@@ -6,9 +6,12 @@ import { HomeService } from './home.service';
 
 export class RecordPlayDto {
   @IsUUID()
+  eventId!: string;
+
+  @IsUUID()
   trackId!: string;
 
-  // Only count a listening event after the minimum qualifying play duration.
+  // Client-reported duration qualifies a submission; it does not prove continuous playback.
   @IsInt()
   @Min(30_000)
   @Max(24 * 60 * 60 * 1000)
@@ -26,10 +29,7 @@ export class HomeController {
   }
 
   @Post('plays')
-  recordPlay(
-    @CurrentUser() userId: string,
-    @Body() dto: RecordPlayDto,
-  ) {
-    return this.home.recordPlay(userId, dto.trackId, dto.playedMs);
+  recordPlay(@CurrentUser() userId: string, @Body() dto: RecordPlayDto) {
+    return this.home.recordPlay(userId, dto.eventId, dto.trackId, dto.playedMs);
   }
 }
