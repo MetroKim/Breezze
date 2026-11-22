@@ -332,11 +332,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
               ),
             ),
-            const ListTile(
-              leading: BzSvgIcon(name: 'share'),
-              title: Text('Send feedback'),
-              subtitle: Text('In-app feedback will be connected in a later release.'),
-              enabled: false,
+            ListTile(
+              leading: const BzSvgIcon(name: 'share'),
+              title: const Text('Send feedback'),
+              subtitle: const Text('Share feedback with the Breezze team.'),
+              trailing: const BzSvgIcon(name: 'chevron-right'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+              ),
             ),
           ]),
         ],
