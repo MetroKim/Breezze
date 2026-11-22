@@ -1,11 +1,18 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  NotAcceptableException,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   IsOptional,
   IsString,
   IsUUID,
-  Length,
   MaxLength,
-  Matches,
 } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -15,26 +22,24 @@ export class LyricsRequestDto {
   @IsString()
   @IsUUID()
   trackId!: string;
-
-  @IsString()
-  @Length(2, 2)
-  @Matches(/^[A-Z]{2}$/)
-  territory!: string;
 }
 
 export class LyricsTranslationsQueryDto {
   @IsUUID()
   lyricsId!: string;
 
-  @IsString()
-  @Length(2, 2)
-  @Matches(/^[A-Z]{2}$/)
-  territory!: string;
-
   @IsOptional()
   @IsString()
   @MaxLength(35)
   language?: string;
+}
+
+function requireEdgeTerritory(value?: string): string {
+  const territory = value?.trim().toUpperCase();
+  if (!territory || !/^[A-Z]{2}$/.test(territory)) {
+    throw new NotAcceptableException('LYRICS_TERRITORY_UNAVAILABLE');
+  }
+  return territory;
 }
 
 @Controller('lyrics')
@@ -45,20 +50,25 @@ export class LyricsController {
   @Post()
   getLyrics(
     @CurrentUser() userId: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
     @Body() dto: LyricsRequestDto,
   ) {
-    return this.lyrics.getLyrics(userId, dto);
+    return this.lyrics.getLyrics(userId, {
+      trackId: dto.trackId,
+      territory: requireEdgeTerritory(edgeCountry),
+    });
   }
 
   @Get('translations')
   translations(
     @CurrentUser() userId: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
     @Query() dto: LyricsTranslationsQueryDto,
   ) {
     return this.lyrics.getTranslations(
       userId,
       dto.lyricsId,
-      dto.territory,
+      requireEdgeTerritory(edgeCountry),
       dto.language,
     );
   }
