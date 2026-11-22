@@ -32,7 +32,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
-  final _history = SearchHistoryStore();
+  final Map<String, SearchHistoryStore> _historyStores = {};
   List<BzTrack> _results = [];
   List<String> _recentSearches = [];
   var _loading = false;
@@ -54,6 +54,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     'City Charts': 'top city charts',
   };
   int _searchGeneration = 0;
+
+  SearchHistoryStore get _history {
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    return _historyStores.putIfAbsent(
+      ownerId,
+      () => SearchHistoryStore(ownerId: ownerId),
+    );
+  }
+
 
   @override
   void initState() {
@@ -429,6 +439,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      final previousOwner = previous is AuthSignedIn ? previous.userId : 'guest';
+      final nextOwner = next is AuthSignedIn ? next.userId : 'guest';
+      if (previousOwner != nextOwner) {
+        _searchGeneration++;
+        setState(() {
+          _recentSearches = [];
+          _results = [];
+          _searched = false;
+          _error = null;
+        });
+        _loadHistory();
+      }
+    });
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
 
