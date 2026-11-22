@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../app/playlist_store.dart';
+import '../../app/saved_album_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
@@ -40,6 +41,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   String _ownerId = 'guest';
   List<UserPlaylist> _playlists = [];
   List<FavoriteTrack> _favorites = [];
+  List<SavedAlbum> _albums = [];
   var _loading = true;
 
   @override
@@ -53,6 +55,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     var playlists = await _playlistStore.load(ownerId);
+    final savedAlbums = await SavedAlbumStore().load(ownerId);
     if (auth is AuthSignedIn) {
       try {
         final remote = await ref.read(authSessionProvider.notifier).api.playlists();
@@ -70,6 +73,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       _ownerId = ownerId;
       _favorites = favorites;
       _playlists = playlists;
+      _albums = savedAlbums;
       _loading = false;
     });
   }
@@ -240,6 +244,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
     ref.listen<int>(playlistRefreshSignalProvider, (previous, next) => _refresh());
+    ref.listen<int>(savedAlbumRefreshProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
     final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
@@ -296,6 +301,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     ? _buildSongs(theme)
                     : _selected == 'Playlists'
                         ? _buildPlaylists(theme)
+                        : _selected == 'Albums'
+                            ? _buildAlbums(theme)
                         : _selected == 'Artists'
                             ? _buildArtists(theme)
                             : _buildEmptySection(theme, _selected),
@@ -384,6 +391,99 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
           trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
           onTap: () => _openPlaylist(playlist),
+        );
+      },
+    );
+  }
+
+  Widget _buildAlbums(ThemeData theme) {
+    if (_loading) {
+      return ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: 6,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+      );
+    }
+    if (_albums.isEmpty) {
+      return _emptyState(
+        theme,
+        'No saved albums',
+        'Open an album in New or an artist page, then choose Add to Library.',
+      );
+    }
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(
+        8, 4, 8, BzBreakpoints.bottomClearance(context, compact: 150),
+      ),
+      itemCount: _albums.length,
+      itemBuilder: (context, index) {
+        final album = _albums[index];
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(BzRadius.artwork),
+            child: album.artworkUrl == null
+                ? Container(
+                    width: 54, height: 54, color: theme.bzSurface2,
+                    alignment: Alignment.center,
+                    child: BzBnoteMark(size: 28, color: theme.bzText2),
+                  )
+                : Image.network(
+                    album.artworkUrl!, width: 54, height: 54,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        BzBnoteMark(size: 54, color: theme.bzText2),
+                  ),
+          ),
+          title: Text(album.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(album.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => AppleAlbumCatalogScreen(
+              albumId: album.id,
+              title: album.title,
+              artist: album.artist,
+              artworkUrl: album.artworkUrl,
+              appleUrl: album.catalogUrl,
+            ),
+          )),
+          trailing: IconButton(
+            tooltip: 'Remove saved album',
+            icon: const BzSvgIcon(name: 'more-vertical'),
+            onPressed: () async {
+              final shouldRemove = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('Remove album?'),
+                  content: Text('Remove "${album.title}" from your library?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ),
+              );
+              if (shouldRemove != true || !mounted) return;
+              try {
+                await SavedAlbumStore().remove(_ownerId, album.id);
+                ref.invalidate(isAlbumSavedProvider(
+                  (ownerId: _ownerId, albumId: album.id),
+                ));
+                ref.read(savedAlbumRefreshProvider.notifier).state++;
+              } catch (_) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not remove saved album.')),
+                  );
+                }
+              }
+            },
+          ),
         );
       },
     );
