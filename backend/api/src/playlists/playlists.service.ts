@@ -47,17 +47,41 @@ export class PlaylistsService {
   }
 
   async addTrack(userId: string, playlistId: string, trackId: string) {
-    await this.assertOwned(userId, playlistId);
-    const track = await this.prisma.track.findUnique({
-      where: { id: trackId },
-      select: { id: true },
-    });
-    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
-    const count = await this.prisma.playlistItem.count({
-      where: { playlistId },
-    });
-    return this.prisma.playlistItem.create({
-      data: { playlistId, trackId, position: count },
+    return this.prisma.$transaction(async (tx) => {
+      // Serialize additions to the same playlist. Without this row lock,
+      // concurrent requests can calculate the same next position.
+      const owned = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Playlist"
+        WHERE "id" = ${playlistId} AND "userId" = ${userId}
+        FOR UPDATE
+      `;
+      if (owned.length === 0) throw new NotFoundException('PLAYLIST_NOT_FOUND');
+
+      const track = await tx.track.findUnique({
+        where: { id: trackId },
+        select: { id: true },
+      });
+      if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
+
+      // Treat a repeated add as idempotent rather than returning a database
+      // uniqueness error to a client retrying after a network timeout.
+      const existing = await tx.playlistItem.findFirst({
+        where: { playlistId, trackId },
+      });
+      if (existing) return existing;
+
+      // max + 1 remains correct after removals create gaps; count() could
+      // reuse an occupied position and produce an unstable queue order.
+      const aggregate = await tx.playlistItem.aggregate({
+        where: { playlistId },
+        _max: { position: true },
+      });
+      const position = (aggregate._max.position ?? -1) + 1;
+
+      return tx.playlistItem.create({
+        data: { playlistId, trackId, position },
+      });
     });
   }
 
