@@ -9,8 +9,9 @@ class SyncOutboxDao {
   final BreezzeDatabase _db;
   SyncOutboxDao(this._db);
 
-  Future<List<SyncOutboxData>> pending() {
+  Future<List<SyncOutboxData>> pending({required String ownerId}) {
     return (_db.select(_db.syncOutbox)
+          ..where((t) => t.trackId.like('$ownerId::%'))
           ..orderBy([(t) => OrderingTerm.asc(t.id)]))
         .get();
   }
