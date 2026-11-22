@@ -64,6 +64,10 @@ jobs:
         working-directory: packages/design_system
         run: flutter analyze --fatal-infos
 
+      - name: Test design system
+        working-directory: packages/design_system
+        run: flutter test --reporter expanded
+
       - name: Resolve audio contracts dependencies
         working-directory: packages/audio_contracts
         run: flutter pub get
@@ -142,6 +146,7 @@ jobs:
           name: breezze-test-builds-${{ github.sha }}
           path: |
             apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk
             apps/mobile/build/breezze-linux-debug.tar.gz
             apps/mobile/build/web/
           if-no-files-found: error
@@ -270,7 +275,7 @@ jobs:
         run: npm test -- --runInBand
 
       - name: Test PostgreSQL concurrency constraints
-        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts
+        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts src/library/saved-albums.integration.spec.ts
 
       - name: Build backend
         run: npm run build

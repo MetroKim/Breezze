@@ -142,6 +142,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
     expect(captured, const Color(0xFFFFFFFF));
 
     await tester.pumpWidget(
@@ -155,6 +156,25 @@ void main() {
         ),
       ),
     );
+    // MaterialApp animates theme changes. Read the settled brightness,
+    // not the preceding dark theme's initial transition frame.
+    await tester.pumpAndSettle();
     expect(captured, const Color(0xFF000000));
+  });
+
+  testWidgets('high contrast overrides explicit full glass quality',
+      (tester) async {
+    await tester.pumpWidget(
+      _host(
+        const BzGlass(
+          state: BzGlassState.pillScrolled,
+          quality: BzGlassQuality.full,
+          child: _glassChild,
+        ),
+        media: MediaQueryData(highContrast: true),
+      ),
+    );
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

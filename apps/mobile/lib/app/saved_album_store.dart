@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../core/api/breezze_api.dart';
+
 /// Account-scoped album references. Saving metadata never grants playback
 /// or download rights for the tracks on the album.
 class SavedAlbum {
@@ -44,6 +46,19 @@ class SavedAlbum {
         addedAt: DateTime.tryParse(json['addedAt'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       );
+
+  /// The backend owns bookmark IDs; catalogAlbumId stays the Apple ID.
+  factory SavedAlbum.fromServerJson(Map<String, dynamic> json) =>
+      SavedAlbum.fromJson({
+        'id': json['externalAlbumId'],
+        'title': json['title'],
+        'artist': json['artist'],
+        'artworkUrl': json['artworkUrl'],
+        'catalogUrl': json['catalogUrl'],
+        'genres': json['genres'],
+        'isCompilation': json['isCompilation'],
+        'addedAt': json['savedAt'],
+      });
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -90,12 +105,34 @@ class SavedAlbumGroups {
       albums.where((album) => album.isCompilation).toList(growable: false);
 }
 
+/// Injectable secure key-value seam for deterministic offline/restart tests.
+abstract class SavedAlbumKeyValueStore {
+  Future<String?> read({required String key});
+  Future<void> write({required String key, required String value});
+}
+
+class _EncryptedSavedAlbumStorage implements SavedAlbumKeyValueStore {
+  final FlutterSecureStorage _storage;
+  const _EncryptedSavedAlbumStorage(this._storage);
+
+  @override
+  Future<String?> read({required String key}) =>
+      _storage.read(key: key);
+
+  @override
+  Future<void> write({required String key, required String value}) =>
+      _storage.write(key: key, value: value);
+}
+
 /// Lightweight per-account saved-album cache shared by the Library and
 /// album-detail surfaces; the existing signed-in user ID is the owner key.
 class SavedAlbumStore {
-  final FlutterSecureStorage _storage;
-  SavedAlbumStore({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+  final SavedAlbumKeyValueStore _storage;
+  SavedAlbumStore({
+    FlutterSecureStorage? storage,
+    SavedAlbumKeyValueStore? keyValueStore,
+  }) : _storage = keyValueStore ??
+      _EncryptedSavedAlbumStorage(storage ?? const FlutterSecureStorage());
 
   static Future<void> _pending = Future<void>.value();
 
@@ -104,6 +141,35 @@ class SavedAlbumStore {
       throw ArgumentError.value(ownerId, 'ownerId');
     }
     return 'breezze:saved_albums:v1:' + Uri.encodeComponent(ownerId);
+  }
+
+  String _opsKey(String ownerId) =>
+      'breezze:saved_albums:pending:v1:' + Uri.encodeComponent(ownerId);
+
+  String _cloudReadyKey(String ownerId) =>
+      'breezze:saved_albums:cloud_ready:v1:' + Uri.encodeComponent(ownerId);
+
+  Future<Map<String, Map<String, dynamic>>> _readOps(String ownerId) async {
+    final raw = await _storage.read(key: _opsKey(ownerId));
+    if (raw == null) return <String, Map<String, dynamic>>{};
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) {
+      throw const FormatException('Corrupt saved album sync outbox');
+    }
+    return decoded.map((key, value) => MapEntry(
+      key.toString(),
+      Map<String, dynamic>.from(value as Map),
+    ));
+  }
+
+  Future<void> _writeOps(
+    String ownerId,
+    Map<String, Map<String, dynamic>> operations,
+  ) async {
+    await _storage.write(
+      key: _opsKey(ownerId),
+      value: jsonEncode(operations),
+    );
   }
 
   Future<List<SavedAlbum>> load(String ownerId) async {
@@ -127,6 +193,11 @@ class SavedAlbumStore {
       (await load(ownerId)).any((album) => album.id == albumId);
 
   Future<void> save(String ownerId, SavedAlbum album) => _serialize(() async {
+        final ops = await _readOps(ownerId);
+        // Persist intent before changing the visible local cache. Repeating a
+        // pending upsert after a crash is safe because the API is idempotent.
+        ops[album.id] = {'action': 'upsert', 'album': album.toJson()};
+        await _writeOps(ownerId, ops);
         final albums = await load(ownerId);
         albums.removeWhere((item) => item.id == album.id);
         albums.insert(0, album);
@@ -137,6 +208,9 @@ class SavedAlbumStore {
       });
 
   Future<void> remove(String ownerId, String albumId) => _serialize(() async {
+        final ops = await _readOps(ownerId);
+        ops[albumId] = {'action': 'delete'};
+        await _writeOps(ownerId, ops);
         final albums = await load(ownerId);
         albums.removeWhere((item) => item.id == albumId);
         await _storage.write(
@@ -144,6 +218,108 @@ class SavedAlbumStore {
           value: jsonEncode(albums.map((item) => item.toJson()).toList()),
         );
       });
+
+  /// Replays the exact pending user operations, then replaces local cache
+  /// with the authoritative account-scoped cloud view. Network failure leaves
+  /// both cache and unacknowledged operations intact for the next refresh.
+  ///
+  /// Existing pre-sync local albums are migrated *once*, without making
+  /// remote deletions reappear on every subsequent device login.
+  Future<void> syncWithCloud(
+    String ownerId,
+    BreezzeApi api, {
+    required bool Function() ownerStillActive,
+  }) => _serialize(() async {
+        _key(ownerId); // Require explicit owner; never use shared cache keys.
+        final ownerToken = api.accessToken;
+        void ensureOwner() {
+          if (!ownerStillActive() ||
+              ownerToken == null ||
+              api.accessToken != ownerToken) {
+            throw StateError('Saved album sync owner or token changed');
+          }
+        }
+        ensureOwner();
+        final ops = await _readOps(ownerId);
+        if (await _storage.read(key: _cloudReadyKey(ownerId)) != 'ready') {
+          final legacy = await load(ownerId);
+          for (final album in legacy) {
+            ops.putIfAbsent(album.id, () => {
+              'action': 'upsert',
+              'album': album.toJson(),
+            });
+          }
+          await _writeOps(ownerId, ops);
+          // Mark the one-time import after the intents are durable.
+          await _storage.write(
+            key: _cloudReadyKey(ownerId),
+            value: 'ready',
+          );
+        }
+
+        for (final entry in ops.entries.toList()) {
+          ensureOwner();
+          final item = entry.value;
+          if (item['action'] == 'delete') {
+            await api.deleteSavedAlbum(entry.key);
+          } else if (item['action'] == 'upsert' && item['album'] is Map) {
+            final album = SavedAlbum.fromJson(
+              Map<String, dynamic>.from(item['album'] as Map),
+            );
+            await api.upsertSavedAlbum(
+              externalAlbumId: album.id,
+              title: album.title,
+              artist: album.artist,
+              artworkUrl: album.artworkUrl,
+              catalogUrl: album.catalogUrl,
+              genres: album.genres,
+              isCompilation: album.isCompilation,
+            );
+          } else {
+            // Damaged outbox entries must not be silently discarded.
+            throw const FormatException('Invalid saved album sync operation');
+          }
+          ensureOwner();
+          ops.remove(entry.key);
+          await _writeOps(ownerId, ops);
+        }
+
+        final remote = <SavedAlbum>[];
+        final seenCursors = <String>{};
+        String? cursor;
+        // Bounded cursor traversal avoids infinite loops on API errors.
+        for (var page = 0; page < 50; page++) {
+          ensureOwner();
+          final response = await api.getSavedAlbums(cursor: cursor);
+          ensureOwner();
+          final items = response['items'];
+          if (items is! List) {
+            throw const FormatException('Invalid saved album API response');
+          }
+          for (final item in items.whereType<Map>()) {
+            final album = Map<String, dynamic>.from(item);
+            if (album['source'] != 'apple_itunes') {
+              continue;
+            }
+            remote.add(SavedAlbum.fromServerJson(album));
+          }
+          final next = response['nextCursor'];
+          if (next == null) {
+            ensureOwner();
+            await _storage.write(
+              key: _key(ownerId),
+              value: jsonEncode(remote.map((album) => album.toJson()).toList()),
+            );
+            return;
+          }
+          if (next is! String || !seenCursors.add(next)) {
+            throw const FormatException('Invalid saved album pagination cursor');
+          }
+          cursor = next;
+        }
+        throw const FormatException('Saved album catalog exceeds sync page budget');
+      });
+
 
   Future<void> _serialize(Future<void> Function() action) {
     final next = _pending.then((_) => action());

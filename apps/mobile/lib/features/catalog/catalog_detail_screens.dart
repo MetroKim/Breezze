@@ -769,10 +769,12 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                       FilledButton.icon(
                         onPressed: isSaved.isLoading ? null : () async {
                           try {
-                            if (isSaved.valueOrNull == true) {
-                              await SavedAlbumStore().remove(ownerId, albumId);
+                            final wasSaved = isSaved.valueOrNull == true;
+                            final store = SavedAlbumStore();
+                            if (wasSaved) {
+                              await store.remove(ownerId, albumId);
                             } else {
-                              await SavedAlbumStore().save(ownerId, SavedAlbum(
+                              await store.save(ownerId, SavedAlbum(
                                 id: albumId,
                                 title: title,
                                 artist: artist,
@@ -783,13 +785,43 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                                 addedAt: DateTime.now().toUtc(),
                               ));
                             }
+                            var cloudSynced = false;
+                            final active = context.mounted
+                                ? ref.read(authSessionProvider)
+                                : null;
+                            if (auth is AuthSignedIn &&
+                                active is AuthSignedIn &&
+                                active.userId == ownerId) {
+                              try {
+                                await store.syncWithCloud(
+                                  ownerId,
+                                  ref.read(authSessionProvider.notifier).api,
+                                  ownerStillActive: () {
+                                    if (!context.mounted) return false;
+                                    final latest = ref.read(authSessionProvider);
+                                    return latest is AuthSignedIn &&
+                                        latest.userId == ownerId;
+                                  },
+                                );
+                                cloudSynced = true;
+                              } catch (_) {
+                                // The durable local outbox retains this exact
+                                // add/remove operation for the next reconnect.
+                              }
+                            }
                             ref.invalidate(isAlbumSavedProvider(savedKey));
                             ref.read(savedAlbumRefreshProvider.notifier).state++;
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(isSaved.valueOrNull == true
-                                    ? 'Album removed from Library'
-                                    : 'Album saved to Library')),
+                                SnackBar(content: Text(
+                                  auth is! AuthSignedIn
+                                      ? (wasSaved ? 'Removed from this device'
+                                          : 'Saved on this device')
+                                      : cloudSynced
+                                          ? (wasSaved ? 'Album removed from Library'
+                                              : 'Album saved across your devices')
+                                          : 'Saved locally. Cloud sync will retry when connected.',
+                                )),
                               );
                             }
                           } catch (_) {

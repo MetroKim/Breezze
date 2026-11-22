@@ -206,12 +206,13 @@ class _BzGlassElement extends State<BzGlass> {
   }
 
   BzGlassQuality _resolvedQuality(BuildContext context) {
-    if (widget.quality != null) return widget.quality!;
-    if (MediaQuery.of(context).disableAnimations) {
+    // Accessibility always wins over an optional quality override: no
+    // caller may force blur on high-contrast or reduced-motion devices.
+    if (MediaQuery.of(context).disableAnimations ||
+        MediaQuery.highContrastOf(context)) {
       return BzGlassQuality.solid;
     }
-    if (MediaQuery.highContrastOf(context)) return BzGlassQuality.solid;
-    return BzGlassQuality.full;
+    return widget.quality ?? BzGlassQuality.full;
   }
 
   @override
@@ -225,11 +226,12 @@ class _BzGlassElement extends State<BzGlass> {
         _scope!.grantOf(this) < _scope!.widget.maxVisibleSurfaces;
 
     final radius = BorderRadius.circular(widget.radius);
-    final border = Border(
-      top: const BorderSide(color: BzGlassShadows.specular, width: 1),
-      left: const BorderSide(color: BzGlassEdge.color, width: BzGlassEdge.width),
-      right: const BorderSide(color: BzGlassEdge.color, width: BzGlassEdge.width),
-      bottom: const BorderSide(color: BzGlassEdge.color, width: BzGlassEdge.width),
+    // Flutter cannot paint a rounded BoxDecoration with differently colored
+    // border sides. Use a consistent hairline rim; the soft lift shadow
+    // supplies depth without triggering paint exceptions on every glass
+    // surface (including accessibility and budget-demoted states).
+    const border = Border.fromBorderSide(
+      BorderSide(color: BzGlassEdge.color, width: BzGlassEdge.width),
     );
     final tint = _tint(widget.state, dark);
 

@@ -213,6 +213,35 @@ class BreezzeApi {
     return Map<String, dynamic>.from(payload);
   }
 
+  // ---- signed-in saved album metadata (not playback/download grants) ----
+
+  Future<Map<String, dynamic>> getSavedAlbums({String? cursor}) =>
+      _get('/library/albums' +
+          (cursor == null ? '' : '?cursor=${Uri.encodeQueryComponent(cursor)}'));
+
+  Future<Map<String, dynamic>> upsertSavedAlbum({
+    required String externalAlbumId,
+    required String title,
+    required String artist,
+    String? artworkUrl,
+    String? catalogUrl,
+    List<String> genres = const [],
+    bool isCompilation = false,
+  }) =>
+      _post('/library/albums', {
+        'externalAlbumId': externalAlbumId,
+        'title': title,
+        'artist': artist,
+        if (artworkUrl != null) 'artworkUrl': artworkUrl,
+        if (catalogUrl != null) 'catalogUrl': catalogUrl,
+        'genres': genres,
+        'isCompilation': isCompilation,
+      });
+
+  Future<void> deleteSavedAlbum(String externalAlbumId) async {
+    await _delete('/library/albums/${Uri.encodeComponent(externalAlbumId)}');
+  }
+
   Future<void> saveOnboardingPreferences({
     required String country,
     required List<String> genres,

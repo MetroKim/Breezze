@@ -57,9 +57,24 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     var playlists = await _playlistStore.load(ownerId);
-    final savedAlbums = await SavedAlbumStore().load(ownerId);
+    final albumStore = SavedAlbumStore();
+    var savedAlbums = await albumStore.load(ownerId);
     final visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
     if (auth is AuthSignedIn) {
+      try {
+        await albumStore.syncWithCloud(
+          ownerId,
+          ref.read(authSessionProvider.notifier).api,
+          ownerStillActive: () {
+            if (!mounted) return false;
+            final active = ref.read(authSessionProvider);
+            return active is AuthSignedIn && active.userId == ownerId;
+          },
+        );
+        savedAlbums = await albumStore.load(ownerId);
+      } catch (_) {
+        // Keep owner-specific cached albums and pending operations offline.
+      }
       try {
         final remote = await ref.read(authSessionProvider.notifier).api.playlists();
         await _playlistStore.mergeRemote(ownerId, remote);
@@ -502,7 +517,32 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               );
               if (shouldRemove != true || !mounted) return;
               try {
-                await SavedAlbumStore().remove(_ownerId, album.id);
+                final store = SavedAlbumStore();
+                final owner = _ownerId;
+                await store.remove(owner, album.id);
+                final auth = ref.read(authSessionProvider);
+                if (auth is AuthSignedIn && auth.userId == owner) {
+                  try {
+                    await store.syncWithCloud(
+                      owner,
+                      ref.read(authSessionProvider.notifier).api,
+                      ownerStillActive: () {
+                        if (!mounted) return false;
+                        final active = ref.read(authSessionProvider);
+                        return active is AuthSignedIn && active.userId == owner;
+                      },
+                    );
+                  } catch (_) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text(
+                          'Removed from this device. Cloud sync will retry when connected.',
+                        )),
+                      );
+                    }
+                  }
+                }
+                if (!mounted) return;
                 ref.invalidate(isAlbumSavedProvider(
                   (ownerId: _ownerId, albumId: album.id),
                 ));
