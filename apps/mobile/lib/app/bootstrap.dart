@@ -11,7 +11,6 @@ import '../core/api/breezze_api.dart';
 import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
-import '../core/database/outbox_sync_service.dart';
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
