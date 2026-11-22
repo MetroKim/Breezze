@@ -95,11 +95,29 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
     const end = match[2] ? Number(match[2]) : null;
     const head = await env.MEDIA_BUCKET.head(key);
     if (!head) return error(404, 'MEDIA_NOT_FOUND');
-    const offset = start ?? Math.max(0, head.size - (end ?? 0));
-    const length = start !== null && end !== null
-      ? end - start + 1
-      : start !== null ? head.size - start : (end ?? 0) + 1;
-    if (offset < 0 || length < 1 || offset + length > head.size) {
+    if (
+      (start === null && (end === null || end <= 0)) ||
+      (start !== null && (!Number.isSafeInteger(start) || start < 0)) ||
+      (end !== null && (!Number.isSafeInteger(end) || end < 0)) ||
+      (start !== null && end !== null && end < start)
+    ) {
+      return new Response(null, {
+        status: 416,
+        headers: { 'Content-Range': `bytes */${head.size}`, 'Cache-Control': 'no-store' },
+      });
+    }
+    // RFC 9110 byte-range semantics: suffix N means exactly the final N
+    // bytes (not N+1), and an explicit end beyond EOF is clamped to EOF.
+    const offset = start !== null
+      ? start
+      : Math.max(0, head.size - (end ?? 0));
+    const rangeEnd = start !== null
+      ? Math.min(end ?? (head.size - 1), head.size - 1)
+      : head.size - 1;
+    const length = start === null
+      ? Math.min(end ?? 0, head.size)
+      : rangeEnd - start + 1;
+    if (offset < 0 || length < 1 || offset >= head.size || offset + length > head.size) {
       return new Response(null, {
         status: 416,
         headers: { 'Content-Range': `bytes */${head.size}`, 'Cache-Control': 'no-store' },
