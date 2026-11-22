@@ -31,6 +31,7 @@ The upstream package metadata currently identifies:
 - media_kit_libs_windows_audio: MIT
 - audio_service_mpris: MIT (Linux MPRIS platform adapter)
 - audio_service_win: MIT (Windows SMTC platform adapter)
+- audio_session: MIT (mobile audio focus and interruption events)
 
 These are separate dependencies, not BitChord code. The release process must regenerate and review pubspec.lock and the complete transitive license inventory for the exact shipped versions.
 
