@@ -786,11 +786,22 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                               ));
                             }
                             var cloudSynced = false;
-                            if (auth is AuthSignedIn) {
+                            final active = context.mounted
+                                ? ref.read(authSessionProvider)
+                                : null;
+                            if (auth is AuthSignedIn &&
+                                active is AuthSignedIn &&
+                                active.userId == ownerId) {
                               try {
                                 await store.syncWithCloud(
                                   ownerId,
                                   ref.read(authSessionProvider.notifier).api,
+                                  ownerStillActive: () {
+                                    if (!context.mounted) return false;
+                                    final latest = ref.read(authSessionProvider);
+                                    return latest is AuthSignedIn &&
+                                        latest.userId == ownerId;
+                                  },
                                 );
                                 cloudSynced = true;
                               } catch (_) {
