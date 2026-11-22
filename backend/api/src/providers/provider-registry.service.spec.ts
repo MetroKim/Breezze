@@ -43,6 +43,30 @@ describe('ProviderRegistry', () => {
     jamendo as unknown as JamendoAdapter,
   );
 
+  it('searches every enabled catalog provider and preserves partial provider failures', async () => {
+    internal.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'local-1' }] });
+    youtube.search.mockResolvedValue({ kind: 'error', code: 'YTMUSIC_UNAVAILABLE', retryable: true, message: 'offline' });
+    audius.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'audius-1' }] });
+    jamendo.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'jamendo-1' }] });
+
+    const result = await registry().searchAll('  afrobeats  ');
+    expect(result.query).toBe('afrobeats');
+    expect(result.providers).toHaveLength(4);
+    expect(result.providers.map((item) => item.providerId))
+      .toEqual(['breezze_internal', 'youtube_music', 'audius', 'jamendo']);
+    expect(result.providers.find((item) => item.providerId === 'youtube_music')?.result)
+      .toMatchObject({ kind: 'error', code: 'YTMUSIC_UNAVAILABLE' });
+  });
+
+  it('does not call upstream providers for an invalid federated query', async () => {
+    const instance = registry();
+    await expect(instance.searchAll('x')).resolves.toEqual({ query: 'x', providers: [] });
+    expect(internal.search).not.toHaveBeenCalled();
+    expect(youtube.search).not.toHaveBeenCalled();
+    expect(audius.search).not.toHaveBeenCalled();
+    expect(jamendo.search).not.toHaveBeenCalled();
+  });
+
   it('lists enabled providers in priority order with their declared capabilities', () => {
     expect(registry().list().map((provider) => provider.providerId))
       .toEqual(['audius', 'jamendo', 'youtube_music', 'breezze_internal']);
