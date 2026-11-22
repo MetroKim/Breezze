@@ -2,6 +2,7 @@ import { DownloadsService } from './downloads.service';
 
 describe('DownloadsService tenant isolation', () => {
   const prisma = {
+    track: { findUnique: jest.fn() },
     downloadRecord: {
       findMany: jest.fn(),
       deleteMany: jest.fn(),
@@ -10,11 +11,13 @@ describe('DownloadsService tenant isolation', () => {
   };
   const rights = { decide: jest.fn() };
   const signer = { createPlaybackUrl: jest.fn() };
+  const providers = { get: jest.fn() };
   let service: DownloadsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new DownloadsService(prisma as any, rights as any, signer as any);
+    prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source: null, externalId: null });
+    service = new DownloadsService(prisma as any, rights as any, signer as any, providers as any);
   });
 
   it('lists only the current user download records', async () => {
