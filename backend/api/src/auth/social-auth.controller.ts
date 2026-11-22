@@ -1,7 +1,7 @@
 import {
   Body, Controller, Get, Header, HttpCode, HttpStatus, Param, Post, Query, Res,
 } from '@nestjs/common';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { Response } from 'express';
 import { SocialAuthService } from './social-auth.service';
 
@@ -18,8 +18,19 @@ class PollSocialFlowDto {
 }
 
 class AppleCallbackDto {
-  state?: string;
+  @IsString()
+  @MinLength(32)
+  @MaxLength(256)
+  state!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
   code?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
   error?: string;
 }
 
