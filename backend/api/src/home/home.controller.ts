@@ -1,5 +1,14 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { IsInt, IsUUID, Max, Min } from 'class-validator';
+import {
+  Body,
+  Controller,
+  Get,
+  GoneException,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { IsUUID } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { HomeService } from './home.service';
@@ -7,20 +16,6 @@ import { HomeService } from './home.service';
 export class RecordRecentDto {
   @IsUUID()
   trackId!: string;
-}
-
-export class RecordPlayDto {
-  @IsUUID()
-  eventId!: string;
-
-  @IsUUID()
-  trackId!: string;
-
-  // Client-reported duration qualifies a submission; it does not prove continuous playback.
-  @IsInt()
-  @Min(30_000)
-  @Max(24 * 60 * 60 * 1000)
-  playedMs!: number;
 }
 
 @Controller('home')
@@ -38,8 +33,11 @@ export class HomeController {
     return this.home.recordRecent(userId, dto.trackId);
   }
 
+  // Qualified ListeningEvents are now created only by server-authorized
+  // playback sessions. Client-reported durations are not playback evidence.
   @Post('plays')
-  recordPlay(@CurrentUser() userId: string, @Body() dto: RecordPlayDto) {
-    return this.home.recordPlay(userId, dto.eventId, dto.trackId, dto.playedMs);
+  @HttpCode(HttpStatus.GONE)
+  recordPlay(): never {
+    throw new GoneException('PLAYBACK_SESSION_REQUIRED');
   }
 }
