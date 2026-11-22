@@ -29,6 +29,8 @@ describe('PlaybackSessionService', () => {
   let service: PlaybackSessionService;
 
   beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-11-22T08:00:00.000Z'));
     jest.clearAllMocks();
     const now = new Date();
     prisma.playbackSession.create.mockResolvedValue({
@@ -36,12 +38,13 @@ describe('PlaybackSessionService', () => {
     });
     prisma.playbackHeartbeat.findUnique.mockResolvedValue(null);
     prisma.playbackHeartbeat.create.mockResolvedValue({});
+    tx.playbackSession.findUnique.mockReset();
     tx.playbackSession.findUnique.mockResolvedValueOnce({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
       status: 'active', territory: 'TZ', expiresAt: new Date(Date.now() + 60_000),
       lastSequence: 0, lastHeartbeatAt: new Date(Date.now() - 10_000), accumulatedMs: 0,
     });
-    tx.playbackSession.findUnique.mockResolvedValue({ accumulatedMs: 10_000 });
+    tx.playbackSession.findUnique.mockResolvedValueOnce({ accumulatedMs: 10_000 });
     tx.playbackSession.updateMany.mockResolvedValue({ count: 1 });
     tx.playbackHeartbeat.create.mockResolvedValue({});
     tx.listeningEvent.findUnique.mockResolvedValue(null);
@@ -52,6 +55,10 @@ describe('PlaybackSessionService', () => {
       prisma as unknown as PrismaService,
       resolver as unknown as PlaybackResolveService,
     );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('creates a session only after full-track playback authorization', async () => {
@@ -125,7 +132,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('rejects a session owned by another user', async () => {
-    tx.playbackSession.findUnique.mockResolvedValue({
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
       id: 'session-uuid', userId: 'other-user', status: 'active',
     });
     await expect(service.heartbeat('user-1', 'session-uuid', 'event-uuid', 1))
@@ -133,7 +140,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('rejects expired sessions and does not create a heartbeat', async () => {
-    tx.playbackSession.findUnique.mockResolvedValue({
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', status: 'active',
       expiresAt: new Date(Date.now() - 1), lastSequence: 0,
     });
@@ -156,7 +163,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('records a qualified listening event from server-accumulated time on stop', async () => {
-    tx.playbackSession.findUnique.mockResolvedValue({
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
       status: 'active', accumulatedMs: 45_000, lastHeartbeatAt: new Date(Date.now() - 10_000),
     });
@@ -170,7 +177,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('does not create a qualified event for a short session', async () => {
-    tx.playbackSession.findUnique.mockResolvedValue({
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
       status: 'active', accumulatedMs: 19_999, lastHeartbeatAt: new Date(Date.now() - 10_000),
     });
@@ -181,7 +188,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('makes stop retries idempotent', async () => {
-    tx.playbackSession.findUnique.mockResolvedValue({
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', status: 'stopped', accumulatedMs: 45_000,
     });
     tx.listeningEvent.findUnique.mockResolvedValue({ id: 'session-uuid' });
