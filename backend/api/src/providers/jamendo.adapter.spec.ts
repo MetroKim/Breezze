@@ -82,6 +82,19 @@ describe('JamendoAdapter', () => {
     });
   });
 
+  it('rejects license URLs that merely contain a Creative Commons-looking path on another host', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ headers: { status: 'success', code: 0 }, results: [{
+        id: '12345', name: 'Open Road', artist_name: 'Test Artist',
+        license_ccurl: 'https://attacker.example/creativecommons.org/licenses/by/4.0/',
+      }] }),
+    }) as unknown as typeof fetch;
+    await expect(adapter.getAvailability('12345')).resolves.toMatchObject({
+      kind: 'ok', value: { available: false },
+    });
+  });
+
   it('blocks non-commercial tracks unless Breezze is explicitly configured as non-commercial', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
