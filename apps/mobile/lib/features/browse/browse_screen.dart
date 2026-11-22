@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
-import '../../core/audio/youtube_player_handoff.dart';
+import '../video/official_music_video_screen.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -556,20 +556,16 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       return;
     }
     if (_videoFeed && itemId != null) {
-      try {
-        final opened = await YoutubePlayerHandoff.openProviderTrackId(itemId);
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('The official video player is unavailable.')),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('This video could not be opened.')),
-          );
-        }
-      }
+      await ref.read(playerControllerProvider.notifier).pause();
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => OfficialMusicVideoScreen(
+          videoId: itemId,
+          title: title,
+          artist: artist,
+          artworkUrl: artwork,
+        ),
+      ));
       return;
     }
     if (!mounted) return;
@@ -952,7 +948,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                               ),
                               trailing: IconButton(
                                 tooltip: isVideoFeed
-                                    ? 'Open on YouTube'
+                                    ? 'Watch official video'
                                     : isConcertFeed
                                         ? 'Open event details'
                                         : 'View details in Breezze',
