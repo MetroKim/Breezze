@@ -22,12 +22,13 @@ class FavoritesDao {
   }) async {
     final query = _db.select(_db.favoriteTracks)
       ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]);
-    if (ownerId == 'guest') {
-      query.where((t) => t.id.notLike('%::%'));
-    } else {
+    if (ownerId != 'guest') {
       query.where((t) => t.id.like('$ownerId::%'));
     }
-    final rows = await query.get();
+    final fetched = await query.get();
+    final rows = ownerId == 'guest'
+        ? fetched.where((row) => !row.id.contains('::')).toList()
+        : fetched;
     return rows
         .map((r) => FavoriteTracksCompanion.insert(
               id: _trackId(ownerId, r.id),
