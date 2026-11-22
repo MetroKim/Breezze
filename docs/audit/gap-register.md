@@ -27,8 +27,8 @@ This file is the current release-status reference. A capability is not marked re
 |---|---|---|
 | Flutter architecture | One Flutter application codebase for Android, iOS, Web, Linux, macOS and Windows | Platform runner generator and CI build matrix; each target still needs supported-host/device validation |
 | Global playback | One global PlayerController and one shared native audio engine; screens do not own separate players | `apps/mobile/lib/features/player/player_controller.dart`, audio-engine adapter and player tests |
-| Playback race handling | Request generations and serialized engine mutations protect against stale resolver results and overlapping prepare/play operations | PlayerController regression tests; execute latest CI suite |
-| Queue progression | Completion advances the global queue; regression test verifies exactly one advance and no duplicate resolve | `player_controller_test.dart`; added in commit `c9372145cd3527ba98a109e9918a004e65475cbd`; latest CI run still pending at last audit |
+| Playback race handling | Request generations and serialized engine mutations protect against stale resolver results and overlapping prepare/play operations | PlayerController regression tests; PR #45 CI run 45019475554 passed all 7 jobs |
+| Queue progression | Completion advances the global queue; regression test verifies exactly one advance and no duplicate resolve | `player_controller_test.dart`; added in commit `c9372145cd3527ba98a109e9918a004e65475cbd`; PR #45 CI run 45019475554 passed the Flutter analysis/test job |
 | OS media session | audio_service bridge is initialized only on Android/iOS; Web and desktop intentionally use the documented no-op OS bridge | PR #45 CI passed all 7 jobs; physical lock-screen/notification controls remain unverified. Desktop/Web native media-session integration is not claimed |
 | Mobile audio focus | Mobile interruption handling pauses on exclusive interruptions; route removal pauses to avoid headphone/Bluetooth speaker leakage | Adapter code and interruption regression test; device-level validation remains |
 | Expired playback grants | Resume path can request a fresh grant rather than reusing an expired signed URL | PlayerController tests; verify provider expiry behavior against live authorized provider |
@@ -59,10 +59,11 @@ A metadata match, preview URL, video result, public endpoint or technically reac
 
 ## Current CI snapshot
 
-Latest merged baseline: `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`.  
-Post-merge workflow: [45008430816](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816).
+Latest merged baseline: `bd031a24616d7257e2b04ef76b469332d4a49658` (PR #45).  
+PR workflow: [45019475554](https://github.com/MetroKim/MetroMusic/actions/runs/45019475554) on exact head `30e081a06f5492fa4a9378ade2a89f284ccb3f56`; all 7 jobs passed.  
+Post-merge main workflow/status lookup for merge SHA `bd031a24616d7257e2b04ef76b469332d4a49658` returned no workflow runs and no combined statuses at the time of the latest check. Therefore mainline post-merge verification remains **unverified**.
 
-Verified result: all 7 jobs passed, including Flutter analysis/tests, Windows, macOS/iOS, Linux/Android/Web builds, both Cloudflare Worker typechecks, and NestJS/Prisma validation/tests/build. This proves CI compilation and automated checks for that commit; it does not prove physical-device playback, provider licensing, production deployment or load capacity. Every later code commit needs its own fresh CI result.
+PR CI proves compilation and automated checks for the tested PR head; it does not prove physical-device playback, provider licensing, production deployment or load capacity. Every later code commit needs its own fresh CI result, and mainline status must be checked separately.
 
 ## Release blockers / unfinished work
 
