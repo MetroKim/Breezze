@@ -2,7 +2,6 @@ import { ProviderRegistry } from './provider-registry.service';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
-import { SoundCloudAdapter } from './soundcloud.adapter';
 import { JamendoAdapter } from './jamendo.adapter';
 
 describe('ProviderRegistry', () => {
@@ -15,27 +14,24 @@ describe('ProviderRegistry', () => {
   const internal = makeAdapter('breezze_internal', 50, false, true);
   const youtube = makeAdapter('youtube_music', 100);
   const deezer = makeAdapter('deezer', 95);
-  const soundcloud = makeAdapter('soundcloud', 90);
   const jamendo = makeAdapter('jamendo', 110, true, true);
 
   const registry = () => new ProviderRegistry(
     internal as unknown as InternalCatalogAdapter,
     youtube as unknown as YtMusicAdapter,
     deezer as unknown as DeezerAdapter,
-    soundcloud as unknown as SoundCloudAdapter,
     jamendo as unknown as JamendoAdapter,
   );
 
   it('searches enabled external providers and preserves partial failures', async () => {
     youtube.search.mockResolvedValue({ kind: 'error', code: 'YTMUSIC_UNAVAILABLE', retryable: true, message: 'offline' });
     deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'deezer-1' }] });
-    soundcloud.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'soundcloud-1' }] });
     jamendo.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'jamendo-1' }] });
     const result = await registry().searchAll('  afrobeats  ');
     expect(result.query).toBe('afrobeats');
     expect(result.providers.map((item) => item.providerId))
-      .toEqual(['youtube_music', 'deezer', 'soundcloud', 'jamendo']);
-    expect(internal.search).not.toHaveBeenCalled();
+      .toEqual(['youtube_music', 'deezer', 'jamendo', 'breezze_internal']);
+    expect(internal.search).toHaveBeenCalledWith('afrobeats');
     expect(result.providers.find((item) => item.providerId === 'youtube_music')?.result)
       .toMatchObject({ kind: 'error', code: 'YTMUSIC_UNAVAILABLE' });
   });
@@ -46,17 +42,14 @@ describe('ProviderRegistry', () => {
     expect(internal.search).not.toHaveBeenCalled();
     expect(youtube.search).not.toHaveBeenCalled();
     expect(deezer.search).not.toHaveBeenCalled();
-    expect(soundcloud.search).not.toHaveBeenCalled();
     expect(jamendo.search).not.toHaveBeenCalled();
   });
 
-  it('lists providers by priority and declares Deezer and SoundCloud metadata-only', () => {
+  it('lists enabled providers and declares Deezer metadata-only', () => {
     const providers = registry().list();
     expect(providers.map((provider) => provider.providerId))
-      .toEqual(['jamendo', 'youtube_music', 'deezer', 'soundcloud', 'breezze_internal']);
+      .toEqual(['jamendo', 'youtube_music', 'deezer', 'breezze_internal']);
     expect(providers.find((provider) => provider.providerId === 'deezer')?.capabilities)
-      .toMatchObject({ search: true, metadata: true, playback: false, availability: false });
-    expect(providers.find((provider) => provider.providerId === 'soundcloud')?.capabilities)
       .toMatchObject({ search: true, metadata: true, playback: false, availability: false });
   });
 
