@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Param,
+  ParseUUIDPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -39,7 +40,7 @@ export class DownloadsController {
   revalidate(
     @CurrentUser() userId: string,
     @Headers('x-breezze-country') edgeCountry: string | undefined,
-    @Param('trackId', new (require('@nestjs/common').ParseUUIDPipe)()) trackId: string,
+    @Param('trackId', new ParseUUIDPipe()) trackId: string,
   ) {
     return this.downloads.revalidateOfflineLease(userId, trackId, edgeCountry ?? '');
   }
