@@ -5,6 +5,7 @@ import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/recent_store.dart';
+import '../../core/auth/auth_session.dart';
 import 'playback_session_client.dart';
 
 /// Global PlayerController — spec §51.3, §53.1.
