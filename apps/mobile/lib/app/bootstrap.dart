@@ -37,10 +37,10 @@ class HttpLyrics implements LyricsHttp {
   }
 }
 
-/// Backend-backed YouTube Music metadata adapter. Search metadata comes
-/// from Breezze's ytmusicapi sidecar; playback remains rights-gated by the API.
-class BackendYoutubeSourceAdapter implements ProviderAdapter {
-  BackendYoutubeSourceAdapter(this._ref);
+/// Backend-backed federated catalog adapter. Search metadata comes from all
+/// enabled providers; playback is still authorized separately by the API.
+class BackendCatalogSourceAdapter implements ProviderAdapter {
+  BackendCatalogSourceAdapter(this._ref);
 
   final Ref _ref;
 
@@ -82,26 +82,48 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
     try {
-      final data = await _ref.read(authSessionProvider.notifier).api.searchMusic(query);
-      final rawExternal = data['externalTracks'];
-      final rawLocal = data['tracks'];
-      final externalTracks = rawExternal is List
-          ? rawExternal.whereType<Map>().map((value) => _trackFromJson(
-              value,
-              providerId: value['providerId'] as String? ?? 'youtube_music',
-            ))
-          : <ProviderTrack>[];
-      final localTracks = rawLocal is List
-          ? rawLocal.whereType<Map>().map(_localTrackFromJson)
-          : <ProviderTrack>[];
+      final data = await _ref.read(authSessionProvider.notifier).api
+          .searchAllProviders(query);
+      final rawProviders = data['providers'];
+      if (rawProviders is! List) return ProviderError('invalid_catalog_response');
+
+      final tracks = <ProviderTrack>[];
       final seen = <String>{};
-      // YouTube Music is the primary discovery source; Breezze's own
-      // catalog entries remain available after provider results.
-      final tracks = [...externalTracks, ...localTracks]
-          .where((track) => track.breezzeTrackId.isNotEmpty
-              && track.title.isNotEmpty
-              && seen.add(track.breezzeTrackId))
-          .toList();
+      for (final providerEntry in rawProviders.whereType<Map>()) {
+        final providerId = providerEntry['providerId'] as String? ?? '';
+        final envelope = providerEntry['result'];
+        if (providerId.isEmpty || envelope is! Map || envelope['kind'] != 'ok') {
+          // One provider's error/unsupported response does not discard the
+          // successful results returned by other providers.
+          continue;
+        }
+        final rawTracks = envelope['value'];
+        if (rawTracks is! List) continue;
+        for (final rawTrack in rawTracks.whereType<Map>()) {
+          final providerTrackId = rawTrack['providerTrackId'] as String? ?? '';
+          final title = rawTrack['title'] as String? ?? '';
+          final artist = rawTrack['artist'] as String? ?? '';
+          if (providerTrackId.isEmpty || title.isEmpty || artist.isEmpty) continue;
+
+          // The internal catalog already returns canonical Breezze IDs.
+          // External provider IDs are namespaced to avoid cross-provider
+          // collisions and are converged by the backend before playback.
+          final track = providerId == 'breezze_internal'
+              ? _localTrackFromJson({
+                  'id': providerTrackId,
+                  'title': title,
+                  'artist': {'name': artist},
+                  'duration': rawTrack['durationSec'],
+                  'artworkUrl': rawTrack['artworkUrl'],
+                })
+              : _trackFromJson(rawTrack, providerId: providerId);
+          if (track.breezzeTrackId.isNotEmpty &&
+              track.title.isNotEmpty &&
+              seen.add(track.breezzeTrackId)) {
+            tracks.add(track);
+          }
+        }
+      }
       if (tracks.isEmpty) return ProviderError('empty_result');
       return ProviderOk(tracks);
     } catch (_) {
@@ -128,7 +150,7 @@ class BackendYoutubeSourceAdapter implements ProviderAdapter {
 
 /// The app-wide metadata/search adapter; it is not a playback authority.
 final youtubeSourceProvider =
-    Provider<ProviderAdapter>((ref) => BackendYoutubeSourceAdapter(ref));
+    Provider<ProviderAdapter>((ref) => BackendCatalogSourceAdapter(ref));
 
 /// The lyrics provider.
 final lyricsProvider =
@@ -160,11 +182,11 @@ class LiveResolver implements PlaybackResolver {
       final catalogId = await _resolveCatalogId(api, track);
       if (catalogId == null) return null;
 
-      if (track.id.startsWith('bz:audius:')) {
-        final providerTrackId = track.id.substring('bz:audius:'.length);
+      final providerIdentity = _providerIdentity(track.id);
+      if (providerIdentity != null) {
         final result = await api.resolveProviderPlayback(
-          providerId: 'audius',
-          providerTrackId: providerTrackId,
+          providerId: providerIdentity.$1,
+          providerTrackId: providerIdentity.$2,
           canonicalTrackId: catalogId,
           territory: _ref.read(outboxTerritoryProvider),
         );
@@ -202,6 +224,14 @@ class LiveResolver implements PlaybackResolver {
     }
   }
 
+  (String, String)? _providerIdentity(String id) {
+    if (!id.startsWith('bz:')) return null;
+    final namespaced = id.substring(3);
+    final separator = namespaced.indexOf(':');
+    if (separator <= 0 || separator == namespaced.length - 1) return null;
+    return (namespaced.substring(0, separator), namespaced.substring(separator + 1));
+  }
+
   Future<String?> _resolveCatalogId(BreezzeApi api, TrackInfo track) async {
     if (!track.id.startsWith('bz:')) return track.id;
 
@@ -211,14 +241,15 @@ class LiveResolver implements PlaybackResolver {
 
     final title = track.title;
     final artist = track.artist;
-    if (title == null || title.trim().isEmpty ||
+    final provider = _providerIdentity(track.id);
+    if (provider == null || title == null || title.trim().isEmpty ||
         artist == null || artist.trim().isEmpty) {
       return null;
     }
 
     final resolved = await api.resolveCatalogTrack(
       externalId: track.id,
-      source: track.id.startsWith('bz:audius:') ? 'audius' : 'youtube_music',
+      source: provider.$1,
       title: title,
       artistName: artist,
       durationSec: track.duration.inSeconds.clamp(1, 86400).toInt(),
