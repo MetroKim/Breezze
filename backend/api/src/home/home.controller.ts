@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   GoneException,
   HttpCode,
   HttpStatus,
@@ -24,8 +25,15 @@ export class HomeController {
   constructor(private readonly home: HomeService) {}
 
   @Get()
-  feed(@CurrentUser() userId: string) {
-    return this.home.feed(userId);
+  feed(
+    @CurrentUser() userId: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+  ) {
+    const territory = edgeCountry?.trim().toUpperCase();
+    return this.home.feed(
+      userId,
+      territory && /^[A-Z]{2}$/.test(territory) ? territory : undefined,
+    );
   }
 
   @Post('recent')
