@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/recent_store.dart';
 import '../../core/auth/auth_session.dart';
-import '../../core/database/breezze_database.dart';
 import '../../core/database/database_providers.dart';
 import '../../core/database/playback_heartbeat_outbox_dao.dart';
 import 'playback_session_client.dart';
@@ -184,6 +183,10 @@ class PlayerController extends Notifier<PlayerState> {
       // Local database/network failures must not block normal playback.
     } finally {
       _heartbeatRecoveryInFlight = false;
+      final current = ref.read(authSessionProvider);
+      if (current is AuthSignedIn && current.userId != ownerId) {
+        unawaited(_recoverPendingHeartbeats(current.userId));
+      }
     }
   }
 
