@@ -1,6 +1,6 @@
 import 'package:audio_service/audio_service.dart' as audio;
 import 'package:breezze_audio_contracts/audio_contracts.dart' as contracts;
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/player/player_controller.dart';
