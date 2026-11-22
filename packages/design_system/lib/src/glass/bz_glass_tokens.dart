@@ -1,36 +1,36 @@
 import 'package:material_ui/material_ui.dart';
 
-/// Extended Liquid Glass palette (BREEZZE_LIQUID_GLASS_EXTENDED §2.1).
+/// Breezze monochrome glass palette; tokens adapt to light and dark modes.
 ///
 /// These tokens are additive to the legacy §21.1 tokens in `tokens.dart`:
 /// the shell and chrome migrate onto them in Phase 1, while existing
 /// screens keep compiling against the legacy palette.
 class BzLiquidColorsLight {
-  static const ground = Color(0xFFF5F5F7);
+  static const ground = Color(0xFFF6F6F8);
   static const surface = Color(0xFFFFFFFF);
-  static const surfaceHover = Color(0xFFFBFBFD);
-  static const textPrimary = Color(0xFF1D1D1F);
-  static const textBody = Color(0xFF424245);
-  static const textSecondary = Color(0xFF6E6E73);
-  static const textTertiary = Color(0xFF86868B);
+  static const surfaceHover = Color(0xFFEFEFF2);
+  static const textPrimary = Color(0xFF111114);
+  static const textBody = Color(0xFF343439);
+  static const textSecondary = Color(0xFF57575D);
+  static const textTertiary = Color(0xFF7C7C82);
   static const textQuaternary = Color(0xFFAEAEB2);
-  static const accent = Color(0xFF0071E3);
-  static const accentOnTint = Color(0xFF0066CC);
+  static const accent = Color(0xFF111114);
+  static const accentOnTint = Color(0xFF35353B);
   static const hairline = Color(0x12000000); // rgba(0,0,0,0.07)
   static const live = Color(0xFF30D158);
 }
 
 class BzLiquidColorsDark {
-  static const ground = Color(0xFF000000);
-  static const surface = Color(0xFF1C1C1E);
-  static const surfaceHover = Color(0xFF2C2C2E);
+  static const ground = Color(0xFF050505);
+  static const surface = Color(0xFF171719);
+  static const surfaceHover = Color(0xFF252528);
   static const textPrimary = Color(0xFFFFFFFF);
   static const textBody = Color(0xD9FFFFFF); // white @ 85%
   static const textSecondary = Color(0xA6FFFFFF); // white @ 65%
   static const textTertiary = Color(0x73FFFFFF); // white @ 45%
   static const textQuaternary = Color(0x4DFFFFFF); // white @ 30%
-  static const accent = Color(0xFF0A84FF);
-  static const accentOnTint = Color(0xFF409CFF);
+  static const accent = Color(0xFFFFFFFF);
+  static const accentOnTint = Color(0xFFD4D4D8);
   static const hairline = Color(0x1AFFFFFF); // rgba(255,255,255,0.10)
   static const live = Color(0xFF30D158);
 }
@@ -38,7 +38,7 @@ class BzLiquidColorsDark {
 /// Base colors the glass tints derive from per brightness.
 class BzGlassBase {
   static const light = Color(0xFFFFFFFF);
-  static const dark = Color(0xFF1C1C1E);
+  static const dark = Color(0xFF171719);
 }
 
 /// Glass depth — soft lift + specular top edge, never hard drop shadows
@@ -81,18 +81,18 @@ class BzLiquidRadius {
 /// Signature gradients — hero art and primary CTA only (§2.1). Forbidden
 /// as full-bleed washes.
 class BzLiquidGradients {
-  /// Blue-to-indigo: linear-gradient(135deg, #0a84ff, #5e5ce6).
+  /// Monochrome shadow gradient; retains public field name for compatibility.
   static const heroBlueIndigo = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF0A84FF), Color(0xFF5E5CE6)],
+    colors: [Color(0xFF252528), Color(0xFF505056)],
   );
 
-  /// Warm-to-heat: linear-gradient(135deg, #ff9f0a, #ff375f).
+  /// Monochrome atmospheric gradient; artwork supplies color if present.
   static const heroWarmHeat = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFFF9F0A), Color(0xFFFF375F)],
+    colors: [Color(0xFF606067), Color(0xFF242428)],
   );
 }
 
