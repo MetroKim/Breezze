@@ -1,5 +1,4 @@
 import { ConflictException } from '@nestjs/common';
-import * as argon2 from 'argon2';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service';
 import { AuthService } from './auth.service';
@@ -28,15 +27,10 @@ describe('AuthService email normalization', () => {
       mfaEnabled: false,
     });
     prisma.refreshToken.create.mockResolvedValue({ id: 'refresh-1' });
-    jest.spyOn(argon2, 'hash').mockResolvedValue('argon2id-hash');
     service = new AuthService(
       prisma as unknown as PrismaService,
       jwt as unknown as JwtService,
     );
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
   });
 
   it('stores trimmed lowercase email addresses', async () => {
@@ -46,13 +40,11 @@ describe('AuthService email normalization', () => {
       where: { email: { equals: 'listener@example.com', mode: 'insensitive' } },
       select: { id: true },
     });
-    expect(prisma.user.create).toHaveBeenCalledWith({
-      data: {
-        email: 'listener@example.com',
-        passwordHash: 'argon2id-hash',
-        displayName: 'Listener',
-      },
-    });
+    expect(prisma.user.create).toHaveBeenCalledTimes(1);
+    const createArgs = prisma.user.create.mock.calls[0][0];
+    expect(createArgs.data.email).toBe('listener@example.com');
+    expect(createArgs.data.displayName).toBe('Listener');
+    expect(createArgs.data.passwordHash).toMatch(/^\$argon2id\$/);
   });
 
   it('rejects case-insensitive duplicate email addresses', async () => {
