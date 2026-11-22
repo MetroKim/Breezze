@@ -124,7 +124,7 @@ if windows_cmake.exists():
             raise SystemExit("Windows CMakeLists.txt has no project() declaration")
         cmake = cmake.replace(
             project_line,
-            project_line + "\\n" + definition,
+            project_line + "\n" + definition,
             1,
         )
         windows_cmake.write_text(cmake)
