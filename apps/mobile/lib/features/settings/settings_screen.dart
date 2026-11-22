@@ -8,6 +8,7 @@ import '../../core/auth/auth_session.dart';
 import 'account_screen.dart';
 import 'help_support_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../player/sleep_timer_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Settings — audio quality, playback, downloads, account (§19).
@@ -44,6 +45,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _store.save(value);
   }
 
+  Future<void> _configureSleepTimer() async {
+    final active = ref.read(sleepTimerProvider);
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sleep timer'),
+        content: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final value in [15, 30, 45, 60, 90])
+              OutlinedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(value),
+                child: Text(value.toString() + ' min'),
+              ),
+          ],
+        ),
+        actions: [
+          if (active != null)
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(-1),
+              child: const Text('Turn off timer'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || minutes == null) return;
+    final timer = ref.read(sleepTimerProvider.notifier);
+    if (minutes == -1) {
+      timer.cancel();
+      return;
+    }
+    timer.schedule(Duration(minutes: minutes));
+  }
   Future<void> _clearSearchHistory() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -75,6 +114,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final theme = Theme.of(context);
     final auth = ref.watch(authSessionProvider);
     final email = auth is AuthSignedIn ? auth.email : null;
+    final sleepTimerEndsAt = ref.watch(sleepTimerProvider);
 
     return SafeArea(
       child: ListView(
@@ -274,11 +314,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: Text('Available when Breezze recommendations are connected.'),
               enabled: false,
             ),
-            const ListTile(
-              leading: BzSvgIcon(name: 'clock'),
-              title: Text('Sleep timer'),
-              subtitle: Text('A playback timer will be added with the player controls.'),
-              enabled: false,
+            ListTile(
+              leading: const BzSvgIcon(name: 'clock'),
+              title: const Text('Sleep timer'),
+              subtitle: Text(
+                sleepTimerEndsAt == null
+                    ? 'Pause playback after a set time.'
+                    : 'Playback will pause at ' + TimeOfDay.fromDateTime(sleepTimerEndsAt).format(context) + '.',
+              ),
+              trailing: sleepTimerEndsAt == null
+                  ? const BzSvgIcon(name: 'chevron-right')
+                  : TextButton(
+                      onPressed: () => ref.read(sleepTimerProvider.notifier).cancel(),
+                      child: const Text('Turn off'),
+                    ),
+              onTap: _configureSleepTimer,
             ),
           ]),
           _section(theme, 'Appearance & Accessibility', [
