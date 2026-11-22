@@ -5,6 +5,7 @@ import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/recent_store.dart';
+import '../../core/api/breezze_api.dart';
 import '../../core/auth/auth_session.dart';
 import 'playback_session_client.dart';
 import 'playback_heartbeat_store.dart';
@@ -158,6 +159,13 @@ class PlayerController extends Notifier<PlayerState> {
           sequence: checkpoint.sequence,
         );
         await store.clear(ownerId, checkpoint.sessionId);
+      } on BreezzeApiException catch (error) {
+        // A missing/expired server session can never accept this event later.
+        // Keep transient failures and sequence races for a later retry.
+        if (error.code == 'PLAYBACK_SESSION_NOT_FOUND' ||
+            error.code == 'PLAYBACK_SESSION_EXPIRED') {
+          await store.clear(ownerId, checkpoint.sessionId);
+        }
       } catch (_) {
         // Network failures retain the checkpoint; it is never replayed for
         // another account because storage keys are owner-scoped.
