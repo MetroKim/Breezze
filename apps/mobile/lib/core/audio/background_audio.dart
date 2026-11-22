@@ -85,7 +85,7 @@ class BackgroundAudioSync {
         artworkUrl: track.artworkUrl,
         playing: next.playbackState == PlaybackState.playing,
       );
-    }, fireImmediately: false);
+    }, fireImmediately: true);
   }
 
   void dispose() {
