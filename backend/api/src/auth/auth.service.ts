@@ -88,6 +88,21 @@ export class AuthService {
     };
   }
 
+  /// Called only after SocialAuthService verifies a provider-signed ID token
+  /// and resolves its unique provider subject to an existing or new user.
+  async issueVerifiedSocialSession(userId: string): Promise<AuthResult> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, email: true, displayName: true,
+        role: true, mfaEnabled: true,
+      },
+    });
+    if (!user) throw new UnauthorizedException('SOCIAL_USER_MISSING');
+    // Never bypass the administrator MFA security boundary.
+    return this.issueTokens(user);
+  }
+
   async register(
     email: string,
     password: string,
