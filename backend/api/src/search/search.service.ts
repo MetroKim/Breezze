@@ -40,10 +40,12 @@ export class SearchService {
       }),
       this.prisma.artist.findMany({
         where: { name: { contains: q, mode: 'insensitive' } },
+        include: { tracks: { select: { id: true }, take: 100 } },
         take: 5,
       }),
       this.prisma.album.findMany({
         where: { title: { contains: q, mode: 'insensitive' } },
+        include: { tracks: { select: { id: true }, take: 100 } },
         take: 5,
       }),
       Promise.all(searchableProviders.map(async (provider) => ({
@@ -52,11 +54,22 @@ export class SearchService {
       }))),
     ]);
 
+    const metadataTrackIds = [...new Set([
+      ...tracks.map((track) => track.id),
+      ...artists.flatMap((artist) => artist.tracks.map((track) => track.id)),
+      ...albums.flatMap((album) => album.tracks.map((track) => track.id)),
+    ])];
     const visibleTrackIds = await this.rights.filterMetadataDisplay(
-      tracks.map((track) => track.id),
+      metadataTrackIds,
       territory?.trim().toUpperCase() ?? '',
     );
     const visibleTracks = tracks.filter((track) => visibleTrackIds.has(track.id));
+    const visibleArtists = artists
+      .filter((artist) => artist.tracks.some((track) => visibleTrackIds.has(track.id)))
+      .map(({ tracks: _tracks, ...artist }) => artist);
+    const visibleAlbums = albums
+      .filter((album) => album.tracks.some((track) => visibleTrackIds.has(track.id)))
+      .map(({ tracks: _tracks, ...album }) => album);
 
     const externalTracks = providerResults.flatMap(({ providerId, result }) =>
       result.kind === 'ok'
@@ -79,8 +92,8 @@ export class SearchService {
 
     return {
       tracks: visibleTracks,
-      artists,
-      albums,
+      artists: visibleArtists,
+      albums: visibleAlbums,
       externalTracks,
       // Keep the legacy aggregate field while clients migrate to the
       // provider-specific status array.
