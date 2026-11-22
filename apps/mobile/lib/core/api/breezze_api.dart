@@ -336,6 +336,7 @@ class BreezzeApi {
 
   Future<Map<String, dynamic>> updateProfile({
     required String displayName,
+    bool includePreferences = false,
     String? country,
     String? language,
     List<String>? genres,
@@ -343,10 +344,11 @@ class BreezzeApi {
   }) =>
       _patch('/users/me', {
         'displayName': displayName,
-        if (country != null) 'country': country,
-        if (language != null) 'language': language,
-        if (genres != null) 'genres': genres,
-        if (favoriteArtists != null) 'favoriteArtists': favoriteArtists,
+        if (includePreferences) 'country': country,
+        if (includePreferences) 'language': language,
+        if (includePreferences) 'genres': genres ?? const <String>[],
+        if (includePreferences)
+          'favoriteArtists': favoriteArtists ?? const <String>[],
       });
 
   Future<void> deleteAccount({required String password}) async {
