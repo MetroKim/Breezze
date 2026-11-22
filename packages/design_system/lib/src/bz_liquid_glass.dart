@@ -289,7 +289,7 @@ class BzGlassTypeRole {
   const BzGlassTypeRole({
     required this.fontSize,
     required this.fontWeight,
-    required this.letterSpacing,
+    required this.letterSpacingEm,
     required this.height,
   });
 
