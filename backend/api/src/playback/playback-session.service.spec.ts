@@ -271,6 +271,29 @@ describe('PlaybackSessionService', () => {
     expect(tx.listeningEvent.create).not.toHaveBeenCalled();
   });
 
+  it('closes expired active sessions without crediting post-expiry time', async () => {
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
+      id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
+      status: 'active', accumulatedMs: 29_999,
+      expiresAt: new Date(Date.now() - 1),
+      lastHeartbeatAt: new Date(Date.now() - 10_000),
+    });
+    await expect(service.stop('user-1', 'session-uuid')).resolves.toMatchObject({
+      stopped: true,
+      qualifiedPlayRecorded: false,
+      accumulatedMs: 29_999,
+    });
+    expect(tx.playbackSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 'session-uuid', userId: 'user-1', status: 'active' },
+      data: {
+        status: 'stopped',
+        stoppedAt: expect.any(Date),
+        accumulatedMs: { increment: 0 },
+      },
+    });
+    expect(tx.listeningEvent.create).not.toHaveBeenCalled();
+  });
+
   it('records a qualified listening event from server-accumulated time on stop', async () => {
     tx.playbackSession.findUnique.mockReset().mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
