@@ -35,27 +35,30 @@ class AppleCallbackDto {
 }
 
 @Controller('auth/social')
-@Header('Cache-Control', 'no-store')
 export class SocialAuthController {
   constructor(private readonly social: SocialAuthService) {}
 
+  @Header('Cache-Control', 'no-store')
   @Get('providers')
   providers() {
     return this.social.providers();
   }
 
+  @Header('Cache-Control', 'no-store')
   @Post(':provider/start')
   @HttpCode(HttpStatus.OK)
   start(@Param('provider') provider: string) {
     return this.social.start(provider);
   }
 
+  @Header('Cache-Control', 'no-store')
   @Post('poll')
   @HttpCode(HttpStatus.OK)
   poll(@Body() body: PollSocialFlowDto) {
     return this.social.poll(body.id, body.secret);
   }
 
+  @Header('Cache-Control', 'no-store')
   @Get('callback/google')
   async googleCallback(
     @Query('state') state: string,
@@ -67,6 +70,7 @@ export class SocialAuthController {
     this.respond(res, ok);
   }
 
+  @Header('Cache-Control', 'no-store')
   @Post('callback/apple')
   async appleCallback(@Body() body: AppleCallbackDto, @Res() res: Response) {
     const ok = await this.social.callback('apple', body.state ?? '',
