@@ -15,6 +15,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   late final StreamSubscription<PlayerState> _stateSubscription;
   StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
   StreamSubscription<void>? _becomingNoisySubscription;
+  bool _disposed = false;
 
   JustAudioEngineAdapter() {
     _errorSubscription = _player.playbackEventStream.listen(
@@ -53,6 +54,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
+      if (_disposed) return;
       _interruptionSubscription = session.interruptionEventStream.listen((event) {
         if (event.begin) {
           // Pause rather than duck for calls, navigation prompts and other
@@ -112,6 +114,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   Stream<PlaybackState> get engineStateStream => _states.stream;
 
   Future<void> dispose() async {
+    _disposed = true;
     await _errorSubscription.cancel();
     await _stateSubscription.cancel();
     await _interruptionSubscription?.cancel();
