@@ -24,6 +24,7 @@ import { ProvidersModule } from './providers/providers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ModerationModule } from './moderation/moderation.module';
 import { DiscoveryModule } from './discovery/discovery.module';
+import { SupportModule } from './support/support.module';
 import { CloudflareAwareThrottlerGuard } from './cloudflare-aware-throttler.guard';
 
 @Module({
@@ -52,6 +53,7 @@ import { CloudflareAwareThrottlerGuard } from './cloudflare-aware-throttler.guar
     NotificationsModule,
     ModerationModule,
     DiscoveryModule,
+    SupportModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: CloudflareAwareThrottlerGuard }],
 })
