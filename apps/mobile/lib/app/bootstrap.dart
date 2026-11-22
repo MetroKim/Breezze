@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/api/breezze_api.dart';
+import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
@@ -209,7 +210,11 @@ class LiveResolver implements PlaybackResolver {
         );
       }
 
-      final session = await api.startPlaybackSession(trackId: catalogId);
+      final preferences = await DownloadPreferencesStore().load();
+      final session = await api.startPlaybackSession(
+        trackId: catalogId,
+        requestedQuality: preferences.streamingQuality,
+      );
       final playback = session['playback'];
       if (playback is! Map) return null;
       final streamUrl = playback['streamUrl'] as String?;
