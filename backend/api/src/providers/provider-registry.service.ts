@@ -4,6 +4,7 @@ import { YtMusicAdapter } from './ytmusic.adapter';
 import { AudiusAdapter } from './audius.adapter';
 import { JamendoAdapter } from './jamendo.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
+import { ProviderResult } from './provider-result';
 
 // The registry owns provider identity, capability declaration, and health.
 // Playback candidates are restricted to explicitly enabled playback adapters.
@@ -44,6 +45,38 @@ export class ProviderRegistry {
         enabled: adapter.enabled !== false,
         capabilities: adapter.capabilities,
       }));
+  }
+
+  async searchAll(query: string) {
+    const normalized = query.trim();
+    if (normalized.length < 2 || normalized.length > 120) {
+      return { query: normalized, providers: [] };
+    }
+    const adapters = [...this.adapters.values()].filter(
+      (adapter) => adapter.enabled !== false && adapter.capabilities.search,
+    );
+    const settled = await Promise.allSettled(
+      adapters.map(async (adapter) => ({
+        providerId: adapter.providerId,
+        displayName: adapter.displayName ?? adapter.providerId,
+        result: await adapter.search(normalized),
+      })),
+    );
+    return {
+      query: normalized,
+      providers: settled.map((item, index) => item.status === 'fulfilled'
+        ? item.value
+        : {
+            providerId: adapters[index].providerId,
+            displayName: adapters[index].displayName ?? adapters[index].providerId,
+            result: {
+              kind: 'error' as const,
+              code: 'PROVIDER_SEARCH_FAILED',
+              retryable: true,
+              message: 'This catalogue source is temporarily unavailable',
+            } satisfies ProviderResult<unknown>,
+          }),
+    };
   }
 
   getPlaybackCandidates(): ProviderAdapter[] {
