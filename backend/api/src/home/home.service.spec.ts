@@ -118,12 +118,12 @@ describe('HomeService personalized feed integration', () => {
       prisma as unknown as PrismaService,
       recommendations as unknown as RecommendationsService,
     );
-    await expect(service.feed('user-1')).resolves.toEqual([{
+    await expect(service.feed('user-1', 'TZ')).resolves.toEqual([{
       sectionType: 'personalized',
       title: 'Made for You',
       layout: 'rail',
       trackIds: ['recommended-1', 'recommended-2'],
     }]);
-    expect(recommendations.forUser).toHaveBeenCalledWith('user-1');
+    expect(recommendations.forUser).toHaveBeenCalledWith('user-1', 'TZ');
   });
 });
