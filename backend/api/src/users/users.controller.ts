@@ -6,7 +6,16 @@ import {
   Patch,
   UseGuards,
 } from '@nestjs/common';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { UsersService } from './users.service';
@@ -16,6 +25,32 @@ export class UpdateMeDto {
   @IsString()
   @MaxLength(80)
   displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z]{2}$/)
+  country?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  language?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  genres?: string[] | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  favoriteArtists?: string[] | null;
 }
 
 export class DeleteAccountDto {
