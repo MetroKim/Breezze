@@ -180,6 +180,18 @@ class BreezzeApi {
     return Map<String, dynamic>.from(payload);
   }
 
+  Future<void> saveOnboardingPreferences({
+    required String country,
+    required List<String> genres,
+    required List<String> favoriteArtists,
+  }) async {
+    await _post('/onboarding/preferences', {
+      'country': country,
+      'genres': genres,
+      'favoriteArtists': favoriteArtists,
+    });
+  }
+
   // ---- auth ----
 
   Future<AuthResponse> register(
