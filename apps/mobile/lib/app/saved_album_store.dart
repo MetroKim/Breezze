@@ -105,12 +105,34 @@ class SavedAlbumGroups {
       albums.where((album) => album.isCompilation).toList(growable: false);
 }
 
+/// Injectable secure key-value seam for deterministic offline/restart tests.
+abstract class SavedAlbumKeyValueStore {
+  Future<String?> read({required String key});
+  Future<void> write({required String key, required String value});
+}
+
+class _EncryptedSavedAlbumStorage implements SavedAlbumKeyValueStore {
+  final FlutterSecureStorage _storage;
+  const _EncryptedSavedAlbumStorage(this._storage);
+
+  @override
+  Future<String?> read({required String key}) =>
+      _storage.read(key: key);
+
+  @override
+  Future<void> write({required String key, required String value}) =>
+      _storage.write(key: key, value: value);
+}
+
 /// Lightweight per-account saved-album cache shared by the Library and
 /// album-detail surfaces; the existing signed-in user ID is the owner key.
 class SavedAlbumStore {
-  final FlutterSecureStorage _storage;
-  SavedAlbumStore({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+  final SavedAlbumKeyValueStore _storage;
+  SavedAlbumStore({
+    FlutterSecureStorage? storage,
+    SavedAlbumKeyValueStore? keyValueStore,
+  }) : _storage = keyValueStore ??
+      _EncryptedSavedAlbumStorage(storage ?? const FlutterSecureStorage());
 
   static Future<void> _pending = Future<void>.value();
 
