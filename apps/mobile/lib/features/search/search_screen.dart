@@ -397,11 +397,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // Only dedicated music-video results may open the official YouTube
     // video player. Song metadata is not a native playback grant.
     if (track.id.startsWith('bzv:')) {
-      final opened = await YoutubePlayerHandoff.openProviderTrackId(track.id.substring(4));
-      if (!opened && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open the official music video player.')),
-        );
+      try {
+        final opened = await YoutubePlayerHandoff.openProviderTrackId(track.id.substring(4));
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('The official music video player is unavailable.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open this music video.')),
+          );
+        }
       }
       return;
     }
@@ -658,66 +666,52 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
+                                    // On compact phones one action menu
+                                    // replaces three cramped trailing icons.
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        IconButton(
-                                          tooltip: track.id.startsWith('bzv:') ? 'Watch music video' : 'Play',
-                                          icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
-                                          onPressed: (track.id.startsWith('bzv:') || !isMetadataOnlyTrackId(track.id))
-                                              ? () => _play(track)
-                                              : null,
-                                        ),
-                                        PopupMenuButton<String>(
-                                          tooltip: 'Track actions',
-                                          icon: BzSvgIcon(
-                                            name: 'more-vertical',
-                                            color: theme.bzText2,
-                                            size: 20,
+                                        if (track.id.startsWith('bzv:') ||
+                                            canQueueTrackId(track.id))
+                                          IconButton(
+                                            tooltip: track.id.startsWith('bzv:')
+                                                ? 'Watch music video' : 'Play',
+                                            icon: const BzSvgIcon(name: 'play', size: 20),
+                                            onPressed: () => _play(track),
                                           ),
-                                          onSelected: (action) {
-                                            if (action == 'playlist') {
-                                              _showAddToPlaylist(track);
-                                            } else if (action == 'favorite') {
-                                              _addFavorite(track);
-                                            } else if (action == 'play_next') {
-                                              ref.read(playerControllerProvider.notifier).playNext(
-                                                TrackInfo(
+                                        if (!track.id.startsWith('bzv:'))
+                                          PopupMenuButton<String>(
+                                            tooltip: 'Song actions',
+                                            icon: const BzSvgIcon(name: 'more-vertical', size: 20),
+                                            onSelected: (action) {
+                                              if (action == 'playlist') {
+                                                _showAddToPlaylist(track);
+                                              } else if (action == 'favorite') {
+                                                _addFavorite(track);
+                                              } else if (action == 'download') {
+                                                _download(track);
+                                              } else if (action == 'play_next' ||
+                                                  action == 'play_last') {
+                                                final item = TrackInfo(
                                                   id: track.id,
                                                   title: track.title,
                                                   artist: track.artist,
                                                   artworkUrl: track.artworkUrl,
                                                   duration: track.duration,
-                                                ),
-                                                origin: 'search',
-                                                sourceContext: 'Search',
-                                              );
-                                            } else if (action == 'play_last') {
-                                              ref.read(playerControllerProvider.notifier).playLast(
-                                                TrackInfo(
-                                                  id: track.id,
-                                                  title: track.title,
-                                                  artist: track.artist,
-                                                  artworkUrl: track.artworkUrl,
-                                                  duration: track.duration,
-                                                ),
-                                                origin: 'search',
-                                                sourceContext: 'Search',
-                                              );
-                                            }
-                                          },
-                                          itemBuilder: (context) => [
-                                            if (!isMetadataOnlyTrackId(track.id)) ...[
-                                              const PopupMenuItem(
-                                                value: 'play_next',
-                                                child: Text('Play Next'),
-                                              ),
-                                              const PopupMenuItem(
-                                                value: 'play_last',
-                                                child: Text('Add to Queue'),
-                                              ),
-                                            ],
-                                            if (!track.id.startsWith('bzv:')) ...[
+                                                );
+                                                final controller = ref.read(playerControllerProvider.notifier);
+                                                if (action == 'play_next') {
+                                                  controller.playNext(item,
+                                                      origin: 'search',
+                                                      sourceContext: 'Search');
+                                                } else {
+                                                  controller.playLast(item,
+                                                      origin: 'search',
+                                                      sourceContext: 'Search');
+                                                }
+                                              }
+                                            },
+                                            itemBuilder: (context) => [
                                               const PopupMenuItem(
                                                 value: 'playlist',
                                                 child: Text('Add to Playlist'),
@@ -726,29 +720,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                 value: 'favorite',
                                                 child: Text('Add to Library'),
                                               ),
+                                              if (canQueueTrackId(track.id)) ...[
+                                                const PopupMenuItem(
+                                                  value: 'play_next',
+                                                  child: Text('Play Next'),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'play_last',
+                                                  child: Text('Add to Queue'),
+                                                ),
+                                              ],
+                                              if (canRequestOfflineDownload(track.id))
+                                                const PopupMenuItem(
+                                                  value: 'download',
+                                                  child: Text('Download'),
+                                                ),
                                             ],
-                                          ],
-                                        ),
-                                        value != null
-                                            ? const SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child: Center(
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                  ),
-                                                ),
-                                              )
-                                            : IconButton(
-                                                tooltip: 'Download',
-                                                icon: BzSvgIcon(
-                                                  name: 'download',
-                                                  color: theme.bzText1,
-                                                ),
-                                                onPressed: !canRequestOfflineDownload(track.id)
-                                                    ? null
-                                                    : () => _download(track),
-                                              ),
+                                          ),
+                                        if (value != null)
+                                          const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          ),
                                       ],
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ? _play(track) : _openTrack(track),
