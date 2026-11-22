@@ -50,7 +50,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     if (!mounted) return;
     _recedeTimer?.cancel();
     if (MediaQuery.disableAnimationsOf(context) ||
-        MediaQuery.accessibleNavigationOf(context)) {
+        MediaQuery.of(context).accessibleNavigation) {
       return;
     }
     setState(() => _chromeReceded = false);
