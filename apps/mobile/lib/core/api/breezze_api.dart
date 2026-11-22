@@ -258,16 +258,18 @@ class BreezzeApi {
     required String trackId,
     required String territory,
   }) =>
+      // Territory is derived by the trusted Cloudflare edge. Keep the
+      // parameter temporarily for caller compatibility, but never transmit it.
       _post('/downloads', {
         'trackId': trackId,
-        'territory': territory,
       });
 
   Future<Map<String, dynamic>> revalidateOfflineLease({
     required String trackId,
     required String territory,
   }) =>
-      _post('/downloads/$trackId/revalidate', {'territory': territory});
+      // Territory is derived by the trusted Cloudflare edge, not the client.
+      _post('/downloads/$trackId/revalidate', {});
 
   Future<AuthResponse> refresh(String refreshToken) async {
     final data = await _post('/auth/refresh', {
