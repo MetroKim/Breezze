@@ -19,6 +19,7 @@ export class ProvidersController {
   @Get(':id/tracks/:trackId')
   getTrack(@Param('id') id: string, @Param('trackId') trackId: string) {
     if (id === 'breezze_internal') return { kind: 'unsupported', reason: 'USE_RIGHTS_AWARE_CATALOG_ENDPOINT' };
+    if (id === 'breezze_internal') return { kind: 'unsupported', reason: 'USE_RIGHTS_AWARE_CATALOG_ENDPOINT' };
     const adapter = this.registry.get(id);
     if (!adapter) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
     if (!adapter.capabilities.metadata) {
