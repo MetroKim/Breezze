@@ -70,7 +70,7 @@ describe('PlaybackResolveService', () => {
       attribution: null,
     });
 
-    await expect(service.resolve('user-1', request)).rejects.toBeInstanceOf(
+    await expect(service.resolve('user-1', request, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
@@ -90,7 +90,7 @@ describe('PlaybackResolveService', () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    await expect(service.resolve('user-1', request)).resolves.toMatchObject({
+    await expect(service.resolve('user-1', request, 'TZ')).resolves.toMatchObject({
       trackId: 'track-1',
       streamUrl: 'https://cdn.example/audio/signed',
       codec: 'aac',
@@ -173,7 +173,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
     expect(adapter.resolvePlayback).not.toHaveBeenCalled();
@@ -184,7 +184,7 @@ describe('PlaybackResolveService', () => {
     prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'takedown-1' });
     providers.get.mockReturnValue(validAdapter());
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(providers.get).not.toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe('PlaybackResolveService', () => {
       externalId: 'bz:youtube_music:track123',
     });
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(prisma.contentTakedownCase.findFirst).not.toHaveBeenCalled();
@@ -216,7 +216,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
@@ -233,7 +233,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
