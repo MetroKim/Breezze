@@ -78,6 +78,20 @@ export class PlaybackController {
     return this.sessions.heartbeat(userId, sessionId, dto.eventId, dto.sequence);
   }
 
+  @Post('sessions/:sessionId/pause')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  pauseSession(@CurrentUser() userId: string, @Param('sessionId', new ParseUUIDPipe()) sessionId: string) {
+    return this.sessions.pause(userId, sessionId);
+  }
+
+  @Post('sessions/:sessionId/resume')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  resumeSession(@CurrentUser() userId: string, @Param('sessionId', new ParseUUIDPipe()) sessionId: string) {
+    return this.sessions.resume(userId, sessionId);
+  }
+
   @Post('sessions/:sessionId/stop')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
