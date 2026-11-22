@@ -53,7 +53,7 @@ export class ProviderRegistry {
       return { query: normalized, providers: [] };
     }
     const adapters = [...this.adapters.values()].filter(
-      (adapter) => adapter.enabled !== false && adapter.capabilities.search,
+      (adapter) => adapter.enabled !== false && adapter.capabilities.search && adapter.providerId !== 'breezze_internal',
     );
     const settled = await Promise.allSettled(
       adapters.map(async (adapter) => ({

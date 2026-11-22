@@ -83,6 +83,43 @@ export class RightsDecisionService {
   }
 
   /**
+   * Bulk metadata-display decision. A track without an explicit metadata
+   * permission is visible only when territory availability exists and no
+   * active takedown exists. Explicit permissions must be inside their window.
+   */
+  async filterMetadataDisplay(trackIds: string[], territory: string): Promise<Set<string>> {
+    const ids = [...new Set(trackIds)];
+    if (ids.length === 0 || !/^[A-Z]{2}$/.test(territory)) return new Set<string>();
+
+    const now = new Date();
+    const [available, takedowns, permissions] = await Promise.all([
+      this.prisma.territoryAvailability.findMany({
+        where: { trackId: { in: ids }, territory },
+        select: { trackId: true },
+      }),
+      this.prisma.contentTakedownCase.findMany({
+        where: { trackId: { in: ids }, status: 'active' },
+        select: { trackId: true },
+      }),
+      this.prisma.rightsUsagePermission.findMany({
+        where: { trackId: { in: ids }, action: 'metadata.display' },
+        select: { trackId: true, startAt: true, endAt: true },
+      }),
+    ]);
+
+    const availableIds = new Set(available.map((row) => row.trackId));
+    const takedownIds = new Set(takedowns.map((row) => row.trackId));
+    const permissionByTrack = new Map(permissions.map((row) => [row.trackId, row]));
+    return new Set(ids.filter((id) => {
+      if (!availableIds.has(id) || takedownIds.has(id)) return false;
+      const permission = permissionByTrack.get(id);
+      if (!permission) return true;
+      return (!permission.startAt || permission.startAt <= now)
+        && (!permission.endAt || permission.endAt >= now);
+    }));
+  }
+
+  /**
    * Bulk equivalent of decide(..., action: 'stream.full') for recommendation
    * candidates. It excludes preview-only grants and evaluates territory,
    * takedown, and permission windows in three bounded database queries.

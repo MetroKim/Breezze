@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
+import { RightsDecisionService } from '../rights/rights-decision.service';
 
 @Injectable()
 export class SearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly providers: ProviderRegistry,
+    private readonly rights: RightsDecisionService,
   ) {}
 
-  async search(query: string) {
+  async search(query: string, territory?: string) {
     const q = query.trim();
-    if (q.length < 2) {
+    if (q.length < 2 || q.length > 120) {
       return {
         tracks: [],
         artists: [],
@@ -38,10 +40,12 @@ export class SearchService {
       }),
       this.prisma.artist.findMany({
         where: { name: { contains: q, mode: 'insensitive' } },
+        include: { tracks: { select: { id: true }, take: 100 } },
         take: 5,
       }),
       this.prisma.album.findMany({
         where: { title: { contains: q, mode: 'insensitive' } },
+        include: { tracks: { select: { id: true }, take: 100 } },
         take: 5,
       }),
       Promise.all(searchableProviders.map(async (provider) => ({
@@ -49,6 +53,23 @@ export class SearchService {
         result: await provider.search(q),
       }))),
     ]);
+
+    const metadataTrackIds = [...new Set([
+      ...tracks.map((track) => track.id),
+      ...artists.flatMap((artist) => artist.tracks.map((track) => track.id)),
+      ...albums.flatMap((album) => album.tracks.map((track) => track.id)),
+    ])];
+    const visibleTrackIds = await this.rights.filterMetadataDisplay(
+      metadataTrackIds,
+      territory?.trim().toUpperCase() ?? '',
+    );
+    const visibleTracks = tracks.filter((track) => visibleTrackIds.has(track.id));
+    const visibleArtists = artists
+      .filter((artist) => artist.tracks.some((track) => visibleTrackIds.has(track.id)))
+      .map(({ tracks: _tracks, ...artist }) => artist);
+    const visibleAlbums = albums
+      .filter((album) => album.tracks.some((track) => visibleTrackIds.has(track.id)))
+      .map(({ tracks: _tracks, ...album }) => album);
 
     const externalTracks = providerResults.flatMap(({ providerId, result }) =>
       result.kind === 'ok'
@@ -70,9 +91,9 @@ export class SearchService {
     }));
 
     return {
-      tracks,
-      artists,
-      albums,
+      tracks: visibleTracks,
+      artists: visibleArtists,
+      albums: visibleAlbums,
       externalTracks,
       // Keep the legacy aggregate field while clients migrate to the
       // provider-specific status array.

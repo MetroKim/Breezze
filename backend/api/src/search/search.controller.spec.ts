@@ -11,8 +11,8 @@ describe('SearchController', () => {
       searchService as unknown as SearchService,
     );
 
-    await expect(controller.search('afrobeats')).resolves.toBe(result);
-    expect(searchService.search).toHaveBeenCalledWith('afrobeats');
+    await expect(controller.search('afrobeats', 'TZ')).resolves.toBe(result);
+    expect(searchService.search).toHaveBeenCalledWith('afrobeats', 'TZ');
   });
 
   it('treats a missing query as an empty string', async () => {
@@ -23,7 +23,7 @@ describe('SearchController', () => {
       searchService as unknown as SearchService,
     );
 
-    await controller.search(undefined as unknown as string);
-    expect(searchService.search).toHaveBeenCalledWith('');
+    await controller.search(undefined as unknown as string, 'TZ');
+    expect(searchService.search).toHaveBeenCalledWith('', 'TZ');
   });
 });

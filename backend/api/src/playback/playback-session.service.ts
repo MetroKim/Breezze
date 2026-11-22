@@ -153,6 +153,13 @@ export class PlaybackSessionService {
           select: { sessionId: true, sequence: true, elapsedMs: true },
         });
         if (raced?.sessionId === sessionId && raced.sequence === sequence) {
+          const owner = await this.prisma.playbackSession.findUnique({
+            where: { id: sessionId },
+            select: { userId: true },
+          });
+          if (!owner || owner.userId !== userId) {
+            throw new NotFoundException('PLAYBACK_SESSION_NOT_FOUND');
+          }
           return { accepted: true, duplicate: true, creditedMs: raced.elapsedMs };
         }
         throw new ConflictException('PLAYBACK_HEARTBEAT_ID_CONFLICT');
@@ -253,10 +260,14 @@ export class PlaybackSessionService {
         return { stopped: true, duplicate: true, qualifiedPlayRecorded: Boolean(event) };
       }
       const stoppedAt = new Date();
-      const finalCreditMs = session.status === 'paused' ? 0 : Math.max(0, Math.min(
-        MAX_HEARTBEAT_CREDIT_MS,
-        stoppedAt.getTime() - session.lastHeartbeatAt.getTime(),
-      ));
+      // Expired sessions may be closed for cleanup, but cannot accrue any
+      // additional listening time after their authorization lease ends.
+      const finalCreditMs = session.status === 'paused' || session.expiresAt <= stoppedAt
+        ? 0
+        : Math.max(0, Math.min(
+            MAX_HEARTBEAT_CREDIT_MS,
+            stoppedAt.getTime() - session.lastHeartbeatAt.getTime(),
+          ));
       const totalAccumulatedMs = session.accumulatedMs + finalCreditMs;
       if (session.status !== 'active' && session.status !== 'paused') {
         throw new GoneException('PLAYBACK_SESSION_NOT_ACTIVE');
@@ -288,6 +299,7 @@ export class PlaybackSessionService {
             userId,
             trackId: session.trackId,
             playedMs: totalAccumulatedMs,
+            isServerVerified: true,
           },
         });
         await tx.recentlyPlayed.upsert({

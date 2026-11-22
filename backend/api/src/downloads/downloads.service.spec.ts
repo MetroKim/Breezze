@@ -29,6 +29,19 @@ describe('DownloadsService', () => {
     );
   });
 
+  it('fails closed when trusted edge territory is missing or invalid', async () => {
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1',
+      territory: '',
+    })).rejects.toThrow('DOWNLOAD_TERRITORY_UNAVAILABLE');
+
+    await expect(service.revalidateOfflineLease('user-1', 'track-1', 'not-a-country'))
+      .rejects.toThrow('DOWNLOAD_TERRITORY_UNAVAILABLE');
+
+    expect(prisma.track.findUnique).not.toHaveBeenCalled();
+    expect(rights.decide).not.toHaveBeenCalled();
+  });
+
   it('revokes an existing offline lease when rights are no longer valid', async () => {
     prisma.downloadRecord.findFirst.mockResolvedValue({ id: 'download-1' });
     rights.decide.mockResolvedValue({
@@ -152,6 +165,29 @@ describe('DownloadsService', () => {
     });
     expect(rights.decide).not.toHaveBeenCalled();
     expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+  });
+
+  it('does not sign Breezze storage URLs for external providers even if download is advertised', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'track-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    providers.get.mockReturnValue({
+      capabilities: { download: true, availability: true },
+      getAvailability: jest.fn().mockResolvedValue({ kind: 'ok', value: { available: true } }),
+    });
+
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1',
+      territory: 'TZ',
+    })).resolves.toEqual({
+      allowed: false,
+      reason: 'PROVIDER_DOWNLOAD_UNSUPPORTED',
+      url: null,
+    });
+    expect(rights.decide).not.toHaveBeenCalled();
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 

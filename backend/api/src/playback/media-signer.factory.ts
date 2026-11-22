@@ -23,12 +23,21 @@ export class MediaSignerFactory {
       if (parsedCdnUrl.protocol !== 'https:') {
         throw new Error('CDN_BASE_URL_MUST_USE_HTTPS');
       }
+      if (
+        parsedCdnUrl.pathname !== '/' ||
+        parsedCdnUrl.search ||
+        parsedCdnUrl.hash ||
+        parsedCdnUrl.username ||
+        parsedCdnUrl.password
+      ) {
+        throw new Error('CDN_BASE_URL_MUST_BE_ORIGIN_ONLY');
+      }
     }
 
     // Development defaults are intentionally unavailable in production.
     return new MediaSigner(
       signingKey ?? 'dev-only-signing-key',
-      cdnBaseUrl ?? 'http://localhost:3000/media',
+      cdnBaseUrl ?? 'http://localhost:8787',
     );
   }
 }

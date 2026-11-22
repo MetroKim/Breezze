@@ -30,4 +30,24 @@ describe('CatalogController', () => {
     await expect(controller.resolve(dto)).resolves.toBe(track);
     expect(catalog.resolve).toHaveBeenCalledWith(dto);
   });
+
+  it('passes normalized trusted edge territory to public catalogue reads', async () => {
+    const catalog = {
+      song: jest.fn().mockResolvedValue({ id: 'track-1' }),
+      album: jest.fn(),
+      artist: jest.fn(),
+    };
+    const controller = new CatalogController(catalog as unknown as CatalogService);
+    await controller.song('track-1', 'tz');
+    expect(catalog.song).toHaveBeenCalledWith('track-1', 'TZ');
+  });
+
+  it('fails closed when the trusted edge country is missing', () => {
+    const catalog = { song: jest.fn(), album: jest.fn(), artist: jest.fn() };
+    const controller = new CatalogController(catalog as unknown as CatalogService);
+    expect(() => controller.album('album-1', undefined))
+      .toThrow('CATALOG_TERRITORY_UNAVAILABLE');
+    expect(catalog.album).not.toHaveBeenCalled();
+  });
+
 });

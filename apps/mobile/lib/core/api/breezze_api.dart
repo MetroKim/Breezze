@@ -258,16 +258,18 @@ class BreezzeApi {
     required String trackId,
     required String territory,
   }) =>
+      // Territory is derived by the trusted Cloudflare edge. Keep the
+      // parameter temporarily for caller compatibility, but never transmit it.
       _post('/downloads', {
         'trackId': trackId,
-        'territory': territory,
       });
 
   Future<Map<String, dynamic>> revalidateOfflineLease({
     required String trackId,
     required String territory,
   }) =>
-      _post('/downloads/$trackId/revalidate', {'territory': territory});
+      // Territory is derived by the trusted Cloudflare edge, not the client.
+      _post('/downloads/$trackId/revalidate', {});
 
   Future<AuthResponse> refresh(String refreshToken) async {
     final data = await _post('/auth/refresh', {
@@ -318,8 +320,14 @@ class BreezzeApi {
   Future<List<Map<String, dynamic>>> homeFeed() async =>
       _asMapList(await _get('/home'));
 
+  Future<Map<String, dynamic>> recordRecent(String trackId) =>
+      _post('/home/recent', {'trackId': trackId});
+
+  /// Backwards-compatible history sync. It no longer submits a qualified
+  /// ListeningEvent; those are recorded only by server-authorized sessions.
+  @Deprecated('Use recordRecent; qualified plays require a playback session')
   Future<Map<String, dynamic>> recordPlay(String trackId) =>
-      _post('/home/plays', {'trackId': trackId});
+      recordRecent(trackId);
 
   Future<Map<String, dynamic>> replaySummary() => _get('/replay');
 

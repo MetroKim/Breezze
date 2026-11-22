@@ -1,22 +1,29 @@
+import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { RightsDecisionService } from '../rights/rights-decision.service';
 import { CatalogService } from './catalog.service';
 
 describe('CatalogService', () => {
   const prisma = {
-    artist: { upsert: jest.fn() },
+    artist: { upsert: jest.fn(), findUnique: jest.fn() },
     track: {
       upsert: jest.fn(),
       findUnique: jest.fn(),
     },
     album: { findUnique: jest.fn() },
   };
+  const rights = { filterMetadataDisplay: jest.fn() };
   let service: CatalogService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.artist.upsert.mockResolvedValue({ id: 'artist-1' });
     prisma.track.upsert.mockResolvedValue({ id: 'track-1' });
-    service = new CatalogService(prisma as unknown as PrismaService);
+    rights.filterMetadataDisplay.mockImplementation(async (ids: string[]) => new Set(ids));
+    service = new CatalogService(
+      prisma as unknown as PrismaService,
+      rights as unknown as RightsDecisionService,
+    );
   });
 
   it('atomically converges an external track ID using an upsert', async () => {
@@ -47,5 +54,46 @@ describe('CatalogService', () => {
       update: {},
     });
     expect(prisma.track.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('checks territory and takedown rights before returning a public track', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'track-1',
+      title: 'Nightcall',
+      artist: { id: 'artist-1' },
+      album: null,
+    });
+    rights.filterMetadataDisplay.mockResolvedValue(new Set());
+
+    await expect(service.song('track-1', 'TZ'))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(rights.filterMetadataDisplay).toHaveBeenCalledWith(['track-1'], 'TZ');
+  });
+
+  it('filters unavailable and taken-down tracks from public album metadata', async () => {
+    prisma.album.findUnique.mockResolvedValue({
+      id: 'album-1',
+      title: 'Album',
+      tracks: [{ id: 'track-1' }, { id: 'track-2' }],
+      artist: { id: 'artist-1' },
+    });
+    rights.filterMetadataDisplay.mockResolvedValue(new Set(['track-1']));
+
+    await expect(service.album('album-1', 'TZ')).resolves.toMatchObject({
+      id: 'album-1',
+      tracks: [{ id: 'track-1' }],
+    });
+  });
+
+  it('does not expose an album when none of its tracks are visible', async () => {
+    prisma.album.findUnique.mockResolvedValue({
+      id: 'album-1',
+      tracks: [{ id: 'track-1' }],
+      artist: { id: 'artist-1' },
+    });
+    rights.filterMetadataDisplay.mockResolvedValue(new Set());
+
+    await expect(service.album('album-1', 'TZ'))
+      .rejects.toBeInstanceOf(NotFoundException);
   });
 });

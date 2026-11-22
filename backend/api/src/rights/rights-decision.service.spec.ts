@@ -31,6 +31,44 @@ describe('RightsDecisionService', () => {
     service = new RightsDecisionService(prisma as unknown as PrismaService);
   });
 
+  it('bulk-filters metadata by territory, takedown and explicit permission windows', async () => {
+    const future = new Date(Date.now() + 60_000);
+    const expired = new Date(Date.now() - 60_000);
+    prisma.territoryAvailability.findMany.mockResolvedValue([
+      { trackId: 'available-no-explicit-grant' },
+      { trackId: 'active-permission' },
+      { trackId: 'future-permission' },
+      { trackId: 'taken-down' },
+      { trackId: 'expired-permission' },
+    ]);
+    prisma.contentTakedownCase.findMany.mockResolvedValue([
+      { trackId: 'taken-down' },
+    ]);
+    prisma.rightsUsagePermission.findMany.mockResolvedValue([
+      { trackId: 'active-permission', startAt: null, endAt: future },
+      { trackId: 'future-permission', startAt: future, endAt: null },
+      { trackId: 'expired-permission', startAt: null, endAt: expired },
+    ]);
+
+    await expect(service.filterMetadataDisplay([
+      'available-no-explicit-grant',
+      'active-permission',
+      'future-permission',
+      'taken-down',
+      'expired-permission',
+      'not-in-territory',
+    ], 'TZ')).resolves.toEqual(new Set([
+      'available-no-explicit-grant',
+      'active-permission',
+    ]));
+  });
+
+  it('fails closed for invalid territory in bulk metadata filtering', async () => {
+    await expect(service.filterMetadataDisplay(['track-1'], 'unknown'))
+      .resolves.toEqual(new Set());
+    expect(prisma.territoryAvailability.findMany).not.toHaveBeenCalled();
+  });
+
   it('denies tracks unavailable in the requested territory', async () => {
     prisma.territoryAvailability.findFirst.mockResolvedValue(null);
 

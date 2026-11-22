@@ -17,43 +17,44 @@ export class DownloadsService {
     private readonly providers: ProviderRegistry,
   ) {}
 
-  private async providerAllowsDownload(
-    trackId: string,
-    territory: string,
-  ): Promise<boolean> {
+  private requireTerritory(value: string): string {
+    const territory = value?.trim().toUpperCase();
+    if (!territory || !/^[A-Z]{2}$/.test(territory)) {
+      throw new NotAcceptableException('DOWNLOAD_TERRITORY_UNAVAILABLE');
+    }
+    return territory;
+  }
+
+  private async providerAllowsDownload(trackId: string): Promise<boolean> {
     const track = await this.prisma.track.findUnique({
       where: { id: trackId },
       select: { id: true, source: true, externalId: true },
     });
     if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
 
-    // Breezze-hosted assets are authorized by the rights engine and signed
-    // media service. External providers must explicitly support downloads.
-    if (!track.source || track.source === 'breezze_internal') return true;
-
-    const provider = this.providers.get(track.source);
-    if (
-      !provider ||
-      !provider.capabilities.download ||
-      !provider.capabilities.availability
-    ) {
-      return false;
+    // Only explicitly internal records (or legacy records with no external
+    // identity) can use Breezze's R2 download signer. ProviderAdapter currently
+    // has no authorized download-URL resolver, so external downloads remain
+    // blocked even if a future adapter accidentally flips its capability flag.
+    if (track.source === 'breezze_internal' || (track.source === null && track.externalId === null)) {
+      return true;
     }
 
-    const externalPrefix = `bz:${track.source}:`;
-    if (!track.externalId?.startsWith(externalPrefix)) return false;
-    const providerTrackId = track.externalId.slice(externalPrefix.length);
-    if (!providerTrackId) return false;
-
-    const availability = await provider.getAvailability(providerTrackId, territory);
-    return availability.kind === 'ok' && availability.value.available;
+    const provider = track.source ? this.providers.get(track.source) : undefined;
+    if (!provider || !provider.capabilities.download || !provider.capabilities.availability) {
+      return false;
+    }
+    // A capability flag alone is not a downloadable source URL. Do not sign
+    // a Breezze-owned R2 path for an asset hosted by a third-party provider.
+    return false;
   }
 
   async authorizeAndRecord(
     userId: string,
     dto: { trackId: string; territory: string },
   ) {
-    const supported = await this.providerAllowsDownload(dto.trackId, dto.territory);
+    const territory = this.requireTerritory(dto.territory);
+    const supported = await this.providerAllowsDownload(dto.trackId);
     if (!supported) {
       return {
         allowed: false,
@@ -66,7 +67,7 @@ export class DownloadsService {
       userId,
       trackId: dto.trackId,
       action: 'download',
-      territory: dto.territory,
+      territory,
     });
 
     if (!decision.allowed || decision.previewOnly) {
@@ -111,14 +112,15 @@ export class DownloadsService {
     };
   }
 
-  async revalidateOfflineLease(userId: string, trackId: string, territory: string) {
+  async revalidateOfflineLease(userId: string, trackId: string, territoryInput: string) {
+    const territory = this.requireTerritory(territoryInput);
     const existing = await this.prisma.downloadRecord.findFirst({
       where: { userId, trackId, status: 'active' },
       select: { id: true },
     });
     if (!existing) return { allowed: false, reason: 'DOWNLOAD_NOT_FOUND' };
 
-    const supported = await this.providerAllowsDownload(trackId, territory);
+    const supported = await this.providerAllowsDownload(trackId);
     if (!supported) {
       await this.prisma.downloadRecord.updateMany({
         where: { userId, trackId, status: 'active' },
