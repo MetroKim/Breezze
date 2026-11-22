@@ -68,6 +68,31 @@ void main() {
       ]);
     });
 
+    test('saves onboarding preferences through the authenticated API client', () async {
+      late http.Request captured;
+      final api = BreezzeApi(
+        baseUrl: 'https://api.breezze.test',
+        client: _RecordingClient((request) async {
+          captured = request;
+          return http.Response('{"data":{"saved":true}}', 200);
+        }),
+      )..accessToken = 'access-token';
+
+      await api.saveOnboardingPreferences(
+        country: 'TZ',
+        genres: ['Afrobeats', 'Amapiano', 'R&B'],
+        favoriteArtists: ['Artist One'],
+      );
+
+      expect(captured.url.path, '/api/v1/onboarding/preferences');
+      expect(captured.headers['Authorization'], 'Bearer access-token');
+      expect(jsonDecode(captured.body), {
+        'country': 'TZ',
+        'genres': ['Afrobeats', 'Amapiano', 'R&B'],
+        'favoriteArtists': ['Artist One'],
+      });
+    });
+
     test('rejects malformed station directory envelopes', () async {
       final api = BreezzeApi(
         baseUrl: 'https://api.breezze.test',
