@@ -1,8 +1,9 @@
 # Breezze Current Implementation Gap Register
 
 **Last reconciled:** 2026-11-22  
-**Main baseline:** `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`  
-**Post-merge CI:** [45008430816 — all 7 jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816)  
+**Main baseline:** `69bb90c83a890e8df248eb6ea0a603193b3de1db` (PR #42 merged 2026-11-22)  
+**PR #42 CI:** [45016498283 — all 7 jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/45016498283)  
+**Post-merge main CI:** not yet observed for `69bb90c83a890e8df248eb6ea0a603193b3de1db`; do not treat PR CI as post-merge proof.  
 **In-app experience contract:** [PR #33](https://github.com/MetroKim/MetroMusic/pull/33)  
 **Master implementation checklist:** [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27)
 
