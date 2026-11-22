@@ -3,26 +3,19 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsString } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { DownloadsService } from './downloads.service';
 
-export class RevalidateDownloadDto {
-  @IsString()
-  territory!: string;
-}
-
 export class AuthorizeDownloadDto {
-  @IsString()
+  @IsUUID()
   trackId!: string;
-
-  @IsString()
-  territory!: string;
 }
 
 @Controller('downloads')
@@ -33,18 +26,22 @@ export class DownloadsController {
   @Post()
   authorize(
     @CurrentUser() userId: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
     @Body() dto: AuthorizeDownloadDto,
   ) {
-    return this.downloads.authorizeAndRecord(userId, dto);
+    return this.downloads.authorizeAndRecord(userId, {
+      trackId: dto.trackId,
+      territory: edgeCountry ?? '',
+    });
   }
 
   @Post(':trackId/revalidate')
   revalidate(
     @CurrentUser() userId: string,
-    @Param('trackId') trackId: string,
-    @Body() dto: RevalidateDownloadDto,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+    @Param('trackId', new (require('@nestjs/common').ParseUUIDPipe)()) trackId: string,
   ) {
-    return this.downloads.revalidateOfflineLease(userId, trackId, dto.territory);
+    return this.downloads.revalidateOfflineLease(userId, trackId, edgeCountry ?? '');
   }
 
   @Get()
