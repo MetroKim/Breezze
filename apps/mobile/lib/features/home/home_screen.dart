@@ -46,8 +46,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final api = ref.read(authSessionProvider.notifier).api;
       try {
         final sections = await api.homeFeed();
-        final personalized = sections.where((section) =>
-            section['sectionType'] == 'personalized').firstOrNull;
+        Map<String, dynamic>? personalized;
+        for (final section in sections) {
+          if (section['sectionType'] == 'personalized') {
+            personalized = section;
+            break;
+          }
+        }
         final rawIds = personalized?['trackIds'];
         final ids = rawIds is List
             ? rawIds.whereType<String>().where((id) => id.isNotEmpty).take(12)
