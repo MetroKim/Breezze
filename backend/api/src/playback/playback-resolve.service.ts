@@ -13,15 +13,25 @@ export class PlaybackResolveService {
     private readonly providers: ProviderRegistry,
   ) {}
 
+  private requireTerritory(edgeCountry?: string): string {
+    const territory = edgeCountry?.trim().toUpperCase();
+    if (!territory || !/^[A-Z]{2}$/.test(territory)) {
+      throw new NotAcceptableException('PLAYBACK_TERRITORY_UNAVAILABLE');
+    }
+    return territory;
+  }
+
   async resolve(
     userId: string | null,
-    dto: { trackId: string; territory: string; requestedQuality?: string },
+    dto: { trackId: string; territory?: string; requestedQuality?: string },
+    edgeCountry?: string,
   ) {
+    const territory = this.requireTerritory(edgeCountry);
     const decision = await this.rights.decide({
       userId,
       trackId: dto.trackId,
       action: 'stream.full',
-      territory: dto.territory,
+      territory,
     });
     if (!decision.allowed) {
       throw new NotAcceptableException(decision.reason);
@@ -47,12 +57,17 @@ export class PlaybackResolveService {
     };
   }
 
-  async resolveProvider(dto: {
-    providerId: string;
-    providerTrackId: string;
-    canonicalTrackId: string;
-    territory: string;
-  }) {
+  async resolveProvider(
+    _userId: string,
+    dto: {
+      providerId: string;
+      providerTrackId: string;
+      canonicalTrackId: string;
+      territory?: string;
+    },
+    edgeCountry?: string,
+  ) {
+    const territory = this.requireTerritory(edgeCountry);
     const canonicalTrack = await this.prisma.track.findUnique({
       where: { id: dto.canonicalTrackId },
     });
@@ -83,7 +98,7 @@ export class PlaybackResolveService {
     // metadata or a client assertion. Fail closed before returning a URL.
     const availability = await provider.getAvailability(
       dto.providerTrackId,
-      dto.territory,
+      territory,
     );
     if (availability.kind === 'unsupported') {
       throw new NotAcceptableException(availability.reason);
@@ -98,7 +113,7 @@ export class PlaybackResolveService {
     const result = await provider.resolvePlayback({
       providerTrackId: dto.providerTrackId,
       canonicalTrackId: dto.canonicalTrackId,
-      territory: dto.territory,
+      territory,
       authorization: {
         action: 'stream.full',
         expiresAt: null,
