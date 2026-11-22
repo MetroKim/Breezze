@@ -41,15 +41,11 @@ export class CatalogService {
     tracks: T[],
     territory: string,
   ): Promise<T[]> {
-    const decisions = await Promise.all(tracks.map((track) =>
-      this.rights.decide({
-        userId: null,
-        trackId: track.id,
-        action: 'metadata.display',
-        territory,
-      }),
-    ));
-    return tracks.filter((_track, index) => decisions[index].allowed);
+    const visibleIds = await this.rights.filterMetadataDisplay(
+      tracks.map((track) => track.id),
+      territory,
+    );
+    return tracks.filter((track) => visibleIds.has(track.id));
   }
 
   async song(id: string, territory: string) {
