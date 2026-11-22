@@ -122,6 +122,30 @@ class PlaylistStore {
         await _save(ownerId, playlists);
       });
 
+  Future<void> replaceTracks(
+    String ownerId,
+    String playlistId,
+    List<FavoriteTrack> tracks,
+  ) =>
+      _serialize(() async {
+        final playlists = await load(ownerId);
+        final index = playlists.indexWhere((item) => item.id == playlistId);
+        if (index < 0) return;
+        final old = playlists[index];
+        await _save(ownerId, [
+          for (var i = 0; i < playlists.length; i++)
+            if (i == index)
+              UserPlaylist(
+                id: old.id,
+                name: old.name,
+                createdAt: old.createdAt,
+                tracks: List<FavoriteTrack>.unmodifiable(tracks),
+              )
+            else
+              playlists[i],
+        ]);
+      });
+
   Future<void> rename(String ownerId, String playlistId, String name) =>
       _serialize(() async {
         final normalized = name.trim();
