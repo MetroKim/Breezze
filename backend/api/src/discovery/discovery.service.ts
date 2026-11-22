@@ -126,6 +126,9 @@ export class DiscoveryService {
         artworkUrl: album.artworkUrl100,
         releaseDate: album.releaseDate,
         trackCount: album.trackCount,
+        genres: typeof album.primaryGenreName === 'string'
+          ? [album.primaryGenreName].filter(Boolean) : [],
+        isCompilation: album.isCompilation === true,
         url: album.collectionViewUrl,
         playback: 'external_catalog_only',
       })),
@@ -145,7 +148,16 @@ export class DiscoveryService {
     const tracks = rows.filter((row) => row.wrapperType === 'track');
     return {
       source: 'Apple iTunes Search API',
-      album: album ? { id: album.collectionId, title: album.collectionName, artist: album.artistName } : null,
+      album: album ? {
+        id: album.collectionId,
+        title: album.collectionName,
+        artist: album.artistName,
+        // Only report source-provided metadata, never infer genre/compilation
+        // from the artist name or the album title.
+        genres: typeof album.primaryGenreName === 'string'
+          ? [album.primaryGenreName].filter(Boolean) : [],
+        isCompilation: album.isCompilation === true,
+      } : null,
       fetchedAt: new Date().toISOString(),
       items: tracks.map((track) => ({
         id: track.trackId,
