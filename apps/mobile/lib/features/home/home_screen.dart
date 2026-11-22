@@ -38,8 +38,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    final recent = await _recent.load();
-    final favorites = await ref.read(favoritesStoreProvider).load();
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final recent = await _recent.load(ownerId: ownerId);
+    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
     if (ref.read(authSessionProvider) is AuthSignedIn) {
