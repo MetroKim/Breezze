@@ -223,8 +223,8 @@ model ListeningEvent {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
 
-  @@index([userId, trackId, isServerVerified])
-  @@index([trackId, createdAt, isServerVerified])
+  @@index([userId, isServerVerified, trackId])
+  @@index([isServerVerified, trackId, createdAt])
 }
 
 model PlaybackSession {
