@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           public_url="${BREEZZE_API_PUBLIC_URL:-$WORKER_URL}"
-          response="$(curl --fail --silent --show-error --max-time 20 -D /tmp/breezzze-headers "$public_url/health")"
+          response="$(curl --fail --silent --show-error --max-time 20 -D /tmp/breezze-headers "$public_url/health")"
           printf '%s' "$response" | grep -q '"status":"ok"'
-          grep -qi '^x-breezze-edge-cache: BYPASS' /tmp/breezzze-headers
+          grep -qi '^x-breezze-edge-cache: BYPASS' /tmp/breezze-headers
           echo "Breezze API edge health check passed."
