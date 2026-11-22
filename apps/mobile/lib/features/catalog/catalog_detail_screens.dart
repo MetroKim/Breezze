@@ -11,7 +11,7 @@ import '../../widgets/bz_brand_icons.dart';
 
 bool _isMetadataOnlySourceTrack(String id) =>
     id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
+    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:'));
 
 final _appleTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
