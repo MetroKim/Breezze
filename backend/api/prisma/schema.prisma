@@ -38,6 +38,7 @@ model User {
   pushTokens     PushToken[]
   supportRequests SupportRequest[]
   savedCatalogAlbums UserSavedCatalogAlbum[]
+  socialIdentities SocialAuthIdentity[]
 }
 
 /// Per-user catalog bookmarks only; they are never media playback rights.
@@ -59,6 +60,40 @@ model UserSavedCatalogAlbum {
 
   @@unique([userId, source, externalAlbumId])
   @@index([userId, savedAt, id])
+}
+
+
+/// OAuth identities bind to provider subject, never to an unverified email.
+/// Users with matching preexisting email/password accounts must explicitly link.
+model SocialAuthIdentity {
+  id          String   @id @default(uuid())
+  userId      String
+  provider    String
+  subject     String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([userId, provider])
+}
+
+/// Browser OAuth pairing. The browser never sees the Flutter refresh token.
+/// Flow secret is hashed and the result is AES-GCM sealed at rest.
+model SocialLoginFlow {
+  id            String    @id @default(uuid())
+  provider      String
+  stateHash     String    @unique
+  pollSecretHash String
+  nonce         String
+  codeVerifier  String
+  status        String    @default("pending")
+  resultCiphertext String?
+  errorCode     String?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([expiresAt])
 }
 
 model RefreshToken {
