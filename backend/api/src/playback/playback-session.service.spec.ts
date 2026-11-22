@@ -303,7 +303,7 @@ describe('PlaybackSessionService', () => {
       stopped: true, duplicate: false, qualifiedPlayRecorded: true, accumulatedMs: 55_000,
     });
     expect(tx.listeningEvent.create).toHaveBeenCalledWith({
-      data: { id: 'session-uuid', userId: 'user-1', trackId: 'track-1', playedMs: 55_000 },
+      data: { id: 'session-uuid', userId: 'user-1', trackId: 'track-1', playedMs: 55_000, isServerVerified: true },
     });
     expect(tx.recentlyPlayed.upsert).toHaveBeenCalled();
   });
