@@ -309,7 +309,7 @@ class _SupportRequestPanelState extends ConsumerState<_SupportRequestPanel> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: _category,
+                    initialValue: _category,
                     decoration: const InputDecoration(labelText: 'Topic'),
                     items: [
                       for (final entry in _categories.entries)
