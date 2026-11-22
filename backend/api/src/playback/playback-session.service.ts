@@ -299,6 +299,7 @@ export class PlaybackSessionService {
             userId,
             trackId: session.trackId,
             playedMs: totalAccumulatedMs,
+            isServerVerified: true,
           },
         });
         await tx.recentlyPlayed.upsert({
