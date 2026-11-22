@@ -195,9 +195,8 @@ Future<BackgroundAudioBridge> startBackgroundAudio(
       androidNotificationChannelDescription:
           'Playback controls for Breezze',
       androidNotificationIcon: 'mipmap/ic_launcher',
-      androidNotificationOngoing: true,
       androidStopForegroundOnPause: false,
     ),
   );
-  return bridge as AudioServiceBridge;
+  return bridge;
 }
