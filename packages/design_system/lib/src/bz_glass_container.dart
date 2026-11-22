@@ -107,7 +107,10 @@ class BzGlassContainer extends StatelessWidget {
   Color _saturatedFill(Color base) {
     if (saturation == 100) return base;
     final hsl = HSLColor.fromColor(base);
-    final boosted = (hsl.saturation * saturation / 100).clamp(0.0, 1.0);
+    // num.clamp() returns num, not double — the explicit toDouble() is
+    // required for withSaturation(double).
+    final boosted =
+        (hsl.saturation * saturation / 100).clamp(0.0, 1.0).toDouble();
     return hsl.withSaturation(boosted).toColor();
   }
 }
