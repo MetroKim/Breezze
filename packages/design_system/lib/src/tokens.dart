@@ -5,25 +5,21 @@ import 'package:material_ui/material_ui.dart';
 /// Semantic tokens only. No literal colors are allowed anywhere else in
 /// the app; every surface, text, and control consumes these.
 ///
-/// 2026-11 revision ("Liquid Glass" alignment):
-/// - Light mode ground is a cool grey (#f5f5f7), never warm cream.
-/// - Dark mode collapses to pure black (#000000) for OLED efficiency.
-/// - Accent is a single blue family (#0071e3 light / #0a84ff dark),
-///   reserved for primary music actions and active navigation only.
-/// - Separators are hairlines (7% black / 10% white), not solid greys.
-/// - Accent is NEVER used as a background wash.
+/// Breezze brand-aligned monochrome: black (#050505), white, cool greys.
+/// Accent means high-contrast monochrome foreground, never a colored wash.
+/// Error/success feedback remains semantic and distinguishable.
 class BzColorsLight {
-  static const background = Color(0xFFF5F5F7); // cool ground
+  static const background = Color(0xFFF6F6F8); // cool ground
   static const surfacePrimary = Color(0xFFFFFFFF); // cards, sheets, panels
-  static const surfaceSecondary = Color(0xFFFBFBFD); // hover, secondary buttons
+  static const surfaceSecondary = Color(0xFFEFEFF2); // hover, secondary buttons
   static const surfaceElevated = Color(0xFFFFFFFF);
-  static const textPrimary = Color(0xFF1D1D1F);
-  static const textSecondary = Color(0xFF6E6E73);
-  static const textTertiary = Color(0xFF86868B);
+  static const textPrimary = Color(0xFF111114);
+  static const textSecondary = Color(0xFF57575D);
+  static const textTertiary = Color(0xFF7C7C82);
   static const separator = Color(0x12000000); // 7% black hairline
-  static const brandMonochrome = Color(0xFF1D1D1F);
-  static const accent = Color(0xFF0071E3); // light-mode Apple blue
-  static const accentOnTint = Color(0xFF0066CC);
+  static const brandMonochrome = Color(0xFF111114);
+  static const accent = Color(0xFF111114); // light-mode Apple blue
+  static const accentOnTint = Color(0xFF35353B);
   static const live = Color(0xFF30D158);
   static const success = Color(0xFF237A4B);
   static const warning = Color(0xFF98620E);
@@ -31,17 +27,17 @@ class BzColorsLight {
 }
 
 class BzColorsDark {
-  static const background = Color(0xFF000000); // OLED pure black
-  static const surfacePrimary = Color(0xFF1C1C1E); // cards, sheets, panels
-  static const surfaceSecondary = Color(0xFF2C2C2E); // hover, secondary buttons
-  static const surfaceElevated = Color(0xFF1C1C1E);
+  static const background = Color(0xFF050505); // OLED pure black
+  static const surfacePrimary = Color(0xFF171719); // cards, sheets, panels
+  static const surfaceSecondary = Color(0xFF252528); // hover, secondary buttons
+  static const surfaceElevated = Color(0xFF171719);
   static const textPrimary = Color(0xFFFFFFFF);
-  static const textSecondary = Color(0xFFB3B3B8); // ~rgba(255,255,255,0.7)
-  static const textTertiary = Color(0xFF737378); // ~rgba(255,255,255,0.45)
+  static const textSecondary = Color(0xFFB6B6BD); // ~rgba(255,255,255,0.7)
+  static const textTertiary = Color(0xFF84848B); // ~rgba(255,255,255,0.45)
   static const separator = Color(0x1AFFFFFF); // 10% white hairline
   static const brandOnDark = Color(0xFFFFFFFF);
-  static const accent = Color(0xFF0A84FF); // dark-mode Apple blue
-  static const accentOnTint = Color(0xFF409CFF);
+  static const accent = Color(0xFFFFFFFF); // dark-mode Apple blue
+  static const accentOnTint = Color(0xFFD4D4D8);
   static const live = Color(0xFF30D158);
   static const success = Color(0xFF55C88A);
   static const warning = Color(0xFFEAB95C);
@@ -49,17 +45,17 @@ class BzColorsDark {
 
   // Atmosphere material overlays (§20.1)
   // pill-scrolled state: 85-95% near-opaque surface + saturate/blur.
-  static const atmoRegular = Color(0xE01C1C1E); // 88% surface-1
+  static const atmoRegular = Color(0xE8171719); // 88% surface-1
   // clear state: sparse large controls over rich media only.
-  static const atmoClear = Color(0x2E000000); // 18% background
+  static const atmoClear = Color(0x2E050505); // 18% background
   // media-overlay: demoted overlay-chrome recipe (55%).
-  static const softDiffuse = Color(0x8C1C1C1E); // 55% surface-1
+  static const softDiffuse = Color(0x8C171719); // 55% surface-1
 }
 
 class BzColorsLightAtmo {
   // pill-scrolled light equivalent: 88% white + blur.
   static const atmoRegular = Color(0xE0FFFFFF); // 88% white
-  static const atmoClear = Color(0x2EF5F5F7); // 18% ground
+  static const atmoClear = Color(0x2EF6F6F8); // 18% ground
   static const softDiffuse = Color(0x8CFFFFFF); // 55% white
 }
 
