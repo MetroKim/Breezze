@@ -25,6 +25,15 @@ describe('MediaSigner', () => {
     expect(signer.verify('track-1', 'LOSSLESS', expires, signature)).toBe(false);
   });
 
+  it('limits default playback grants to 15 minutes', () => {
+    const signer = new MediaSigner('test-signing-key', 'https://cdn.example');
+    const before = Date.now();
+    const signed = signer.createPlaybackUrl('track-1', 'AAC_256');
+
+    expect(signed.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 15 * 60 * 1000 - 1000);
+    expect(signed.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 15 * 60 * 1000);
+  });
+
   it('caps signed URL expiry at the rights end time', () => {
     const signer = new MediaSigner('test-signing-key', 'https://cdn.example');
     const rightsExpiry = new Date(Date.now() + 60_000);
