@@ -1,8 +1,11 @@
 ALTER TABLE "ListeningEvent"
 ADD COLUMN "isServerVerified" BOOLEAN NOT NULL DEFAULT false;
 
-CREATE INDEX "ListeningEvent_userId_trackId_isServerVerified_idx"
-ON "ListeningEvent"("userId", "trackId", "isServerVerified");
+DROP INDEX IF EXISTS "ListeningEvent_userId_trackId_idx";
+DROP INDEX IF EXISTS "ListeningEvent_trackId_createdAt_idx";
 
-CREATE INDEX "ListeningEvent_trackId_createdAt_isServerVerified_idx"
-ON "ListeningEvent"("trackId", "createdAt", "isServerVerified");
+CREATE INDEX "ListeningEvent_userId_isServerVerified_trackId_idx"
+ON "ListeningEvent"("userId", "isServerVerified", "trackId");
+
+CREATE INDEX "ListeningEvent_isServerVerified_trackId_createdAt_idx"
+ON "ListeningEvent"("isServerVerified", "trackId", "createdAt");
