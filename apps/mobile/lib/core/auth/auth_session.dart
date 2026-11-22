@@ -68,10 +68,14 @@ class AuthSessionController extends Notifier<AuthState> {
   static const _refreshTokenKey = 'breezze.refresh_token';
   static const _secureStorage = FlutterSecureStorage();
 
+  static const _configuredApiUrl = String.fromEnvironment('BREEZZE_API_URL');
+  static const _productionApiUrl =
+      'https://breezze-api-edge.ykw8vmq7ph.workers.dev';
+
   late final BreezzeApi _api = BreezzeApi(
-    baseUrl: const String.fromEnvironment('BREEZZE_API_URL').isNotEmpty
-        ? const String.fromEnvironment('BREEZZE_API_URL')
-        : (kReleaseMode ? '' : 'http://localhost:3000'),
+    baseUrl: _configuredApiUrl.isNotEmpty
+        ? _configuredApiUrl
+        : (kReleaseMode ? _productionApiUrl : 'http://localhost:3000'),
   )..onUnauthorized = _refreshAccessToken;
 
   @override
@@ -109,6 +113,7 @@ class AuthSessionController extends Notifier<AuthState> {
       return false;
     }
   }
+
   Future<void> restoreSession() async {
     try {
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
@@ -169,7 +174,6 @@ class AuthSessionController extends Notifier<AuthState> {
       state = const AuthError('NETWORK_ERROR');
     }
   }
-
 
   Future<void> beginMfaSetup(String password) async {
     final current = state;
