@@ -156,11 +156,7 @@ class AudioServiceBridge extends audio.BaseAudioHandler
     ];
     playbackState.add(audio.PlaybackState(
       controls: controls,
-      systemActions: const {
-        audio.MediaAction.seek,
-        audio.MediaAction.seekForward,
-        audio.MediaAction.seekBackward,
-      },
+      systemActions: const {audio.MediaAction.seek},
       androidCompactActionIndices:
           active ? const [0, 1, 2] : const <int>[],
       processingState: processingState,
