@@ -261,14 +261,15 @@ class PlayerController extends Notifier<PlayerState> {
 
   Future<void> seekTo(Duration position) async {
     final engine = _engine;
-    if (engine == null || state.playbackState != PlaybackState.playing) {
-      return;
-    }
-    _machine.dispatch(SeekRequested(position));
+    final wasPlaying = state.playbackState == PlaybackState.playing;
+    final wasPaused = state.playbackState == PlaybackState.paused;
+    if (engine == null || (!wasPlaying && !wasPaused)) return;
+
+    if (wasPlaying) _machine.dispatch(SeekRequested(position));
     try {
       await _serializeEngineOperation(() => engine.seek(position));
       state = state.copyWith(position: position);
-      _machine.dispatch(SeekCompleted());
+      if (wasPlaying) _machine.dispatch(SeekCompleted());
     } catch (_) {
       final currentTrackId = state.currentTrack?.id;
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
