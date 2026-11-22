@@ -23,6 +23,7 @@ interface JamendoTrack {
   album_image?: string;
   license_ccurl?: string;
   audiodownload_allowed?: boolean;
+  shareurl?: string;
 }
 
 interface JamendoEnvelope<T> {
@@ -41,6 +42,7 @@ export class JamendoAdapter implements ProviderAdapter {
     return Boolean(
       process.env.JAMENDO_CLIENT_ID?.trim() &&
       process.env.JAMENDO_API_TERMS_ACCEPTED === 'true' &&
+      process.env.JAMENDO_BREEZZE_APPROVED === 'true' &&
       process.env.JAMENDO_ENABLED !== 'false',
     );
   }
@@ -95,6 +97,7 @@ export class JamendoAdapter implements ProviderAdapter {
       artist: track.artist_name.trim(),
       artworkUrl: track.album_image || track.image || undefined,
       durationSec: Number.isFinite(duration) && duration > 0 ? duration : undefined,
+      sourceUrl: track.shareurl || `https://www.jamendo.com/track/${track.id}`,
     };
   }
 
@@ -183,7 +186,7 @@ export class JamendoAdapter implements ProviderAdapter {
       if (!track) return providerOk({ available: false });
       const allowed = this.licenseAllowsStreaming(track.license_ccurl);
       const attribution = allowed
-        ? `“${track.name ?? 'Track'}” by ${track.artist_name ?? 'the artist'} — Jamendo; license: ${track.license_ccurl}`
+        ? `“${track.name ?? 'Track'}” by ${track.artist_name ?? 'the artist'} — Jamendo; source: https://www.jamendo.com/track/${providerTrackId}; license: ${track.license_ccurl}`
         : undefined;
       return providerOk({ available: allowed }, attribution);
     } catch (error) {
