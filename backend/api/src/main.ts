@@ -7,6 +7,9 @@ import { AppModule } from './app.module';
 import { ResponseEnvelopeInterceptor } from './response-envelope.interceptor';
 
 async function bootstrap() {
+  const port = Number(process.env.PORT ?? 3000);
+  console.info(`[breezze-api] booting; node=${process.version}; port=${port}; environment=${process.env.NODE_ENV ?? 'development'}`);
+
   const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
@@ -92,7 +95,11 @@ async function bootstrap() {
     response.status(200).json({ status: 'ok', service: 'breezze-api' });
   });
 
-  const port = Number(process.env.PORT ?? 3000);
   await app.listen(port, '0.0.0.0');
+  console.info(`[breezze-api] listening on 0.0.0.0:${port}`);
 }
-bootstrap();
+
+bootstrap().catch((error: unknown) => {
+  console.error('[breezze-api] startup failed', error);
+  process.exitCode = 1;
+});
