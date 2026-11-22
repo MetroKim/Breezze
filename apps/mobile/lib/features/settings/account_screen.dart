@@ -89,7 +89,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       setState(() => _error = 'Country must be a two-letter ISO code, such as TZ.');
       return;
     }
-
     List<String> genres;
     List<String> artists;
     try {
@@ -99,11 +98,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       setState(() => _error = error.message);
       return;
     }
-
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
+    setState(() { _saving = true; _error = null; });
     try {
       await ref.read(authSessionProvider.notifier).api.updateProfile(
             displayName: name,
@@ -118,21 +113,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         const SnackBar(content: Text('Profile and listening preferences updated')),
       );
     } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Profile could not be saved. Please retry.');
-      }
+      if (mounted) setState(() => _error = 'Profile could not be saved. Please retry.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   List<String> _splitPreferenceList(String value, {required int maxItems}) {
-    final values = value
-        .split(',')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toSet()
-        .toList(growable: false);
+    final values = value.split(',').map((item) => item.trim())
+        .where((item) => item.isNotEmpty).toSet().toList(growable: false);
     if (values.length > maxItems) {
       throw FormatException('Maximum $maxItems values allowed.');
     }
@@ -267,223 +256,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 const SizedBox(height: 12),
                 Text('LISTENING PREFERENCES', style: theme.textTheme.labelLarge),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _country,
-                  maxLength: 2,
+                TextField(controller: _country, maxLength: 2,
                   textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Country code',
-                    hintText: 'TZ',
-                    helperText: 'Two-letter country code used for availability.',
-                  ),
-                ),
-                TextField(
-                  controller: _language,
-                  maxLength: 16,
-                  decoration: const InputDecoration(
-                    labelText: 'Preferred language',
-                    hintText: 'en',
-                  ),
-                ),
-                TextField(
-                  controller: _genres,
-                  maxLength: 800,
-                  decoration: const InputDecoration(
-                    labelText: 'Favorite genres',
-                    hintText: 'Afrobeats, R&B, Hip-hop',
-                    helperText: 'Separate values with commas.',
-                  ),
-                ),
-                TextField(
-                  controller: _favoriteArtists,
-                  maxLength: 4000,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Favorite artists',
-                    hintText: 'Artist One, Artist Two',
-                    helperText: 'Separate values with commas.',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: _saving ? null : _saveProfile,
-                  child: Text(_saving ? 'Saving…' : 'Save profile'),
-                ),
-                const SizedBox(height: 28),
-                Text('ACTIVE SESSIONS', style: theme.textTheme.labelLarge),
-                const SizedBox(height: 8),
-                if (_sessions.isEmpty)
-                  const ListTile(title: Text('No active sessions found'))
-                else
-                  for (final session in _sessions)
-                    ListTile(
-                      leading: const BzSvgIcon(name: 'smartphone'),
-                      title: Text('Session ${(session['id'] as String? ?? '').substring(0, (session['id'] as String? ?? '').length.clamp(0, 8).toInt())}'),
-                      subtitle: Text('Created ${session['createdAt'] ?? 'Unknown'} · Expires ${session['expiresAt'] ?? 'Unknown'}'),
-                      trailing: TextButton(
-                        onPressed: _saving ? null : () => _revoke(session['id'] as String),
-                        child: const Text('Revoke'),
-                      ),
-                    ),
-                const SizedBox(height: 28),
-                OutlinedButton(
-                  onPressed: _saving ? null : _deleteAccount,
-                  style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
-                  child: const Text('Delete account'),
-                ),
-              ],
-            ),
-    );
-  }
-}
-).hasMatch(country)) {
-        setState(() => _error = 'Country must be a two-letter ISO code, such as TZ.');
-        return;
-      }
-      await ref.read(authSessionProvider.notifier).api.updateProfile(
-            displayName: name,
-            country: country.isEmpty ? null : country,
-            language: language.isEmpty ? null : language,
-            genres: genres,
-            favoriteArtists: artists,
-          );
-      await _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated')),
-      );
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Profile could not be saved. Please retry.');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _revoke(String id) async {
-    try {
-      await ref.read(authSessionProvider.notifier).api.revokeSession(id);
-      await _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session revoked')),
-      );
-    } catch (_) {
-      if (mounted) setState(() => _error = 'That session could not be revoked.');
-    }
-  }
-
-  Future<void> _deleteAccount() async {
-    final password = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete your account?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('This permanently deletes your Breezze account and associated server data. This action cannot be undone.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Confirm with your password'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete account')),
-        ],
-      ),
-    );
-    final value = password.text;
-    password.dispose();
-    if (confirmed != true || value.isEmpty) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await ref.read(authSessionProvider.notifier).api.deleteAccount(password: value);
-      await ref.read(authSessionProvider.notifier).signOut();
-      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Account deletion failed. Check your password and try again.');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Account'),
-        leading: IconButton(
-          icon: BzSvgIcon(name: 'chevron-left'),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-      ),
-      body: _loading
-          ? ListView(
-              padding: const EdgeInsets.all(24),
-              children: const [
-                Center(child: BzSkeleton(width: 96, height: 96, radius: 48, circle: true)),
-                SizedBox(height: 24),
-                BzSkeleton(width: 180, height: 14, radius: 5),
-                SizedBox(height: 14),
-                BzSkeleton(width: double.infinity, height: 52, radius: 10),
-                SizedBox(height: 28),
-                BzSkeletonTrackRow(),
-                SizedBox(height: 14),
-                BzSkeletonTrackRow(),
-              ],
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              children: [
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
-                  ),
-                Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                          color: theme.bzSurface1,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: theme.bzSeparator),
-                        ),
-                        alignment: Alignment.center,
-                        child: BzBnoteMark(size: 42, color: theme.bzText2),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Profile photo',
-                        style: theme.textTheme.labelLarge,
-                      ),
-                      Text(
-                        'Photo editing will be available when profile media support is connected.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Text(_email ?? '', style: theme.textTheme.bodyMedium),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _name,
-                  maxLength: 80,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Display name'),
-                ),
+                  decoration: const InputDecoration(labelText: 'Country code', hintText: 'TZ', helperText: 'Two-letter country code used for availability.')),
+                TextField(controller: _language, maxLength: 16,
+                  decoration: const InputDecoration(labelText: 'Preferred language', hintText: 'en')),
+                TextField(controller: _genres, maxLength: 800,
+                  decoration: const InputDecoration(labelText: 'Favorite genres', hintText: 'Afrobeats, R&B, Hip-hop', helperText: 'Separate values with commas.')),
+                TextField(controller: _favoriteArtists, maxLength: 4000, maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'Favorite artists', hintText: 'Artist One, Artist Two', helperText: 'Separate values with commas.')),
                 const SizedBox(height: 8),
                 FilledButton(
                   onPressed: _saving ? null : _saveProfile,
