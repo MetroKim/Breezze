@@ -149,7 +149,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
 }
 
 /// The app-wide metadata/search adapter; it is not a playback authority.
-final youtubeSourceProvider =
+final catalogSourceProvider =
     Provider<ProviderAdapter>((ref) => BackendCatalogSourceAdapter(ref));
 
 /// The lyrics provider.
@@ -158,7 +158,7 @@ final lyricsProvider =
 
 /// Metadata search chain. No source in this chain grants playback rights.
 final sourceChainProvider = Provider<SourceChain>((ref) => SourceChain([
-      ref.watch(youtubeSourceProvider),
+      ref.watch(catalogSourceProvider),
     ]));
 
 /// The playback resolver. Catalog metadata is converged to a canonical
