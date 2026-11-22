@@ -1,4 +1,6 @@
 import 'package:audio_service/audio_service.dart' as audio;
+import 'package:breezze_audio_contracts/audio_contracts.dart' as contracts;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/player/player_controller.dart';
@@ -32,6 +34,9 @@ class AudioServiceBridge extends audio.BaseAudioHandler
   @override
   Future<void> skipToPrevious() => _player.previous();
 
+  @override
+  Future<void> seek(Duration position) => _player.seekTo(position);
+
   // ---- BackgroundAudioBridge (OS sync) ----------------------------
 
   @override
@@ -47,39 +52,120 @@ class AudioServiceBridge extends audio.BaseAudioHandler
     required bool playing,
   }) async {
     final state = container.read(playerControllerProvider);
+    final controller = _player;
+    final track = state.currentTrack;
+    final active = track != null;
+    final buffering = state.playbackState == contracts.PlaybackState.buffering ||
+        state.playbackState == contracts.PlaybackState.loading ||
+        state.playbackState == contracts.PlaybackState.resolving;
+    final actuallyPlaying = state.playbackState == contracts.PlaybackState.playing;
 
+    if (track == null) {
+      mediaItem.add(null);
+      queue.add(const <audio.MediaItem>[]);
+    } else {
+      final art = Uri.tryParse(track.artworkUrl ?? '');
+      mediaItem.add(audio.MediaItem(
+        id: track.id,
+        title: track.title?.trim().isNotEmpty == true
+            ? track.title!.trim()
+            : title,
+        artist: track.artist?.trim().isNotEmpty == true
+            ? track.artist!.trim()
+            : artist,
+        duration: track.duration > Duration.zero ? track.duration : null,
+        artUri: art != null &&
+                (art.scheme == 'https' || art.scheme == 'http')
+            ? art
+            : null,
+      ));
+
+      final items = <audio.MediaItem>[
+        audio.MediaItem(
+          id: track.id,
+          title: track.title ?? title,
+          artist: track.artist ?? artist,
+          duration: track.duration > Duration.zero ? track.duration : null,
+          artUri: art != null &&
+                  (art.scheme == 'https' || art.scheme == 'http')
+              ? art
+              : null,
+        ),
+      ];
+      for (final entry in controller.queue.upNext) {
+        final info = controller.trackInfoFor(entry.trackId);
+        if (info == null) continue;
+        final upcomingArt = Uri.tryParse(info.artworkUrl ?? '');
+        items.add(audio.MediaItem(
+          id: info.id,
+          title: info.title ?? 'Unknown track',
+          artist: info.artist ?? 'Unknown artist',
+          duration: info.duration > Duration.zero ? info.duration : null,
+          artUri: upcomingArt != null &&
+                  (upcomingArt.scheme == 'https' || upcomingArt.scheme == 'http')
+              ? upcomingArt
+              : null,
+        ));
+      }
+      queue.add(items);
+    }
+
+    audio.AudioProcessingState processingState;
+    switch (state.playbackState) {
+      case contracts.PlaybackState.idle:
+        processingState = audio.AudioProcessingState.idle;
+      case contracts.PlaybackState.resolving:
+      case contracts.PlaybackState.loading:
+        processingState = audio.AudioProcessingState.loading;
+      case contracts.PlaybackState.buffering:
+        processingState = audio.AudioProcessingState.buffering;
+      case contracts.PlaybackState.ended:
+        processingState = audio.AudioProcessingState.completed;
+      case contracts.PlaybackState.failed:
+        processingState = audio.AudioProcessingState.error;
+      case contracts.PlaybackState.playing:
+      case contracts.PlaybackState.paused:
+      case contracts.PlaybackState.seeking:
+      case contracts.PlaybackState.transitioning:
+      case contracts.PlaybackState.interrupted:
+      case contracts.PlaybackState.offline:
+        processingState = audio.AudioProcessingState.ready;
+    }
+
+    final controls = <audio.MediaControl>[
+      if (active) audio.MediaControl.skipToPrevious,
+      if (active)
+        actuallyPlaying || buffering
+            ? audio.MediaControl.pause
+            : audio.MediaControl.play,
+      if (active) audio.MediaControl.skipToNext,
+      if (active) audio.MediaControl.stop,
+    ];
     playbackState.add(audio.PlaybackState(
-      controls: [
-        audio.MediaControl.skipToPrevious,
-        playing ? audio.MediaControl.pause : audio.MediaControl.play,
-        audio.MediaControl.skipToNext,
-      ],
+      controls: controls,
       systemActions: const {
         audio.MediaAction.seek,
         audio.MediaAction.seekForward,
         audio.MediaAction.seekBackward,
       },
-      androidCompactActionIndices: const [0, 1, 2],
-      processingState: playing
-          ? audio.AudioProcessingState.ready
-          : audio.AudioProcessingState.idle,
-      playing: playing,
+      androidCompactActionIndices:
+          active ? const [0, 1, 2] : const <int>[],
+      processingState: processingState,
+      playing: actuallyPlaying || buffering,
       updatePosition: state.position,
       bufferedPosition: state.position,
       speed: 1.0,
-    ));
-
-    mediaItem.add(audio.MediaItem(
-      id: state.currentTrack?.id ?? 'current',
-      title: title,
-      artist: artist,
-      duration: state.duration,
-      artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
+      queueIndex: active ? 0 : null,
     ));
   }
 
   @override
-  Future<void> stop() => super.stop();
+  Future<void> stop() async {
+    await _player.stop();
+    mediaItem.add(null);
+    queue.add(const <audio.MediaItem>[]);
+    await super.stop();
+  }
 }
 
 /// Starts audio_service with our handler; call once from bootstrap
