@@ -20,7 +20,6 @@ describe('PlaybackResolveService', () => {
 
   const request = {
     trackId: 'track-1',
-    territory: 'TZ',
     requestedQuality: 'AAC_256',
   };
   const providerRequest = {
@@ -40,6 +39,11 @@ describe('PlaybackResolveService', () => {
     );
   });
 
+  it('fails closed when the trusted edge cannot determine a playback territory', async () => {
+    await expect(service.resolve('user-1', request)).rejects.toThrow('PLAYBACK_TERRITORY_UNAVAILABLE');
+    expect(rights.decide).not.toHaveBeenCalled();
+  });
+
   it('never signs a full playback URL for a preview-only grant', async () => {
     rights.decide.mockResolvedValue({
       allowed: true,
@@ -50,7 +54,7 @@ describe('PlaybackResolveService', () => {
       attribution: 'Licensed via label',
     });
 
-    await expect(service.resolve('user-1', request)).rejects.toBeInstanceOf(
+    await expect(service.resolve('user-1', request, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
@@ -128,7 +132,7 @@ describe('PlaybackResolveService', () => {
     const adapter = validAdapter();
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).resolves.toMatchObject({
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).resolves.toMatchObject({
       providerId: 'audius',
       providerTrackId: 'track123',
       streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
@@ -152,7 +156,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(adapter.resolvePlayback).not.toHaveBeenCalled();
