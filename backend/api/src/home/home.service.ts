@@ -16,7 +16,7 @@ export class HomeService {
     private readonly recommendations: RecommendationsService,
   ) {}
 
-  async feed(userId: string): Promise<HomeSection[]> {
+  async feed(userId: string, territory?: string): Promise<HomeSection[]> {
     const [recent, favorites, recommendations] = await Promise.all([
       this.prisma.recentlyPlayed.findMany({
         where: { userId },
@@ -30,7 +30,7 @@ export class HomeService {
         take: 12,
         select: { trackId: true },
       }),
-      this.recommendations.forUser(userId),
+      this.recommendations.forUser(userId, territory),
     ]);
 
     const sections: HomeSection[] = [];
