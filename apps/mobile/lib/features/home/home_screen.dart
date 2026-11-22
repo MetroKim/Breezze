@@ -115,9 +115,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
   }
 
+  /// Time-based greeting (blueprint §4.1 section 1). Local time only —
+  /// no API, and it re-evaluates on every build so day rollover is
+  /// reflected without timers.
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 5) return 'Good late night';
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    if (hour < 21) return 'Good evening';
+    return 'Good night';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Shortcut tiles: first up to 6 recently played, deduplicated by id
+    // (blueprint §4.1 section 2 — ShortcutGrid from real history only).
+    final shortcuts = <String, TrackInfo>{};
+    for (final r in _recentlyPlayed) {
+      if (shortcuts.length >= 6) break;
+      shortcuts[r.id] = TrackInfo(
+        id: r.id,
+        title: r.title,
+        artist: r.artist,
+        artworkUrl: r.artworkUrl,
+        duration: r.duration,
+      );
+    }
 
     return SafeArea(
       child: ListView(
@@ -197,7 +222,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          Text('Listen Now', style: theme.textTheme.displayMedium),
+          // Hero greeting (§4.1): time-based, local only.
+          Text(_greeting, style: theme.textTheme.displayMedium),
           const SizedBox(height: 8),
           Text('Your music. Every platform. One line.',
               style: theme.textTheme.bodyMedium),
@@ -211,6 +237,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
             const SizedBox(height: 18),
             const BzSkeletonArtworkGrid(itemCount: 4),
+          ],
+          // Shortcut tiles (§4.1): max 6, from real recently played only.
+          if (!_loading && shortcuts.isNotEmpty) ...[
+            _ShortcutGrid(tracks: shortcuts.values.toList(), onPlay: _play),
+            const SizedBox(height: 28),
           ],
           if (!_loading && _recentlyPlayed.isNotEmpty) ...[
             _Rail(
@@ -289,6 +320,135 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 /// Search tab (the shell reads this provider's value when building).
 final homeTabHintProvider = StateProvider<int>((ref) => 0);
 
+/// Shortcut tile grid (§4.1 section 2): up to 6 recently played items as
+/// compact chips — artwork, title, artist on surface1 cards. Real
+/// history only; nothing fabricated.
+class _ShortcutGrid extends StatelessWidget {
+  final List<TrackInfo> tracks;
+  final void Function(TrackInfo, List<TrackInfo>, int) onPlay;
+
+  const _ShortcutGrid({required this.tracks, required this.onPlay});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 2 columns compact, 3 medium, 4+ wide (Apple Music grid density).
+        final width = constraints.maxWidth;
+        final columns = width >= 1080 ? 4 : width >= 620 ? 3 : 2;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (var i = 0; i < tracks.length; i++)
+              _ShortcutTile(
+                track: tracks[i],
+                width: (width - 10 * (columns - 1)) / columns,
+                onTap: () => onPlay(tracks[i], tracks, i),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ShortcutTile extends StatelessWidget {
+  final TrackInfo track;
+  final double width;
+  final VoidCallback onTap;
+
+  const _ShortcutTile({
+    required this.track,
+    required this.width,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      label: 'Play ${track.title ?? 'track'}',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: width,
+          height: 64,
+          decoration: BoxDecoration(
+            color: theme.bzSurface1,
+            borderRadius: BorderRadius.circular(BzRadius.button),
+            border: Border.all(color: theme.bzSeparator),
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(BzRadius.button),
+                ),
+                child: track.artworkUrl != null
+                    ? Image.network(
+                        track.artworkUrl!,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 64,
+                          height: 64,
+                          color: theme.bzSurface2,
+                          alignment: Alignment.center,
+                          child: BzBnoteMark(size: 26, color: theme.bzText2),
+                        ),
+                      )
+                    : Container(
+                        width: 64,
+                        height: 64,
+                        color: theme.bzSurface2,
+                        alignment: Alignment.center,
+                        child: BzBnoteMark(size: 26, color: theme.bzText2),
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      track.title ?? 'Unknown',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: BzType.footnote,
+                        fontWeight: FontWeight.w600,
+                        color: theme.bzText1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      track.artist ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: BzType.caption,
+                        color: theme.bzText2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: BzSvgIcon(name: 'play', size: 16, color: theme.bzText2),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Horizontal content rail with real tracks (§3.2).
 class _Rail extends StatelessWidget {
   final String title;
@@ -334,6 +494,8 @@ class _Rail extends StatelessWidget {
 }
 
 /// Track card — artwork, title, artist (§3.2 card anatomy).
+/// Press feedback: scale 0.96 spring (§5.2). Reduced motion collapses
+/// to the resting state instantly.
 class _TrackCard extends StatefulWidget {
   final TrackInfo track;
   final VoidCallback onTap;
@@ -351,6 +513,7 @@ class _TrackCardState extends State<_TrackCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final track = widget.track;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -361,7 +524,9 @@ class _TrackCardState extends State<_TrackCard> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.96 : 1,
-        duration: const Duration(milliseconds: BzMotion.fastMs),
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: BzMotion.fastMs),
         curve: Curves.easeOut,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,10 +633,10 @@ class _FeedPlaceholder extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: theme.bzSurface1,
-            borderRadius: BorderRadius.circular(BzRadius.card),
-            border: Border.all(color: theme.bzSeparator),
-          ),
+          color: theme.bzSurface1,
+          borderRadius: BorderRadius.circular(BzRadius.card),
+          border: Border.all(color: theme.bzSeparator),
+        ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -498,7 +663,6 @@ class _FeedPlaceholder extends StatelessWidget {
     );
   }
 }
-
 
 class _ReplayCard extends StatelessWidget {
   const _ReplayCard({required this.summary});
