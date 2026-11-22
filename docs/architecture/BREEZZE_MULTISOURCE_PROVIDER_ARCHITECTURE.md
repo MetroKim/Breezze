@@ -181,6 +181,7 @@ The shared Flutter engine uses `just_audio`; Linux and Windows use the `just_aud
 - [ ] Implement bounded failover only for the same recording and same rights scope.
 - [x] Add Android/iOS audio_service media-session bridge for lock-screen/notification metadata and play/pause/next/previous/stop/seek commands.
 - [x] Add Android foreground media-service and iOS background-audio declarations to native runner generation.
+- [x] Configure mobile music audio focus; pause on exclusive interruptions and headphone/Bluetooth route removal; do not auto-resume after calls.
 - [ ] Validate background, lock-screen, seek, queue, repeat, shuffle and interruptions on physical Android/iOS devices.
 - [x] Register macOS/Web media sessions through audio_service, Linux MPRIS through audio_service_mpris, and Windows SMTC through audio_service_win.
 - [ ] Verify OS media controls and queue navigation on physical devices/desktop environments; Linux MPRIS seek is not currently supported by its platform adapter.
