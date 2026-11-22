@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 
 import '../../core/auth/auth_session.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
+import '../../core/audio/audio_service_bridge.dart';
+import '../../core/audio/background_audio.dart';
 import '../../core/database/migrate_to_drift.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
@@ -32,6 +34,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
   GlobalKey? _shellKey;
   ProviderContainer? _container;
   JustAudioEngineAdapter? _audioEngine;
+  BackgroundAudioBridge? _backgroundBridge;
 
   @override
   void initState() {
@@ -39,6 +42,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
     _container = ProviderScope.containerOf(context, listen: false);
     _audioEngine = JustAudioEngineAdapter();
     _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
+    unawaited(_startBackgroundAudio());
     unawaited(migrateJsonStoresToDrift(_container!));
     unawaited(_container!.read(authSessionProvider.notifier).restoreSession());
     ref.listenManual(authSessionProvider, (prev, next) {
@@ -55,8 +59,26 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
     });
   }
 
+  Future<void> _startBackgroundAudio() async {
+    try {
+      final bridge = await startBackgroundAudio(_container!);
+      if (!mounted) {
+        await bridge.stop();
+        return;
+      }
+      _backgroundBridge = bridge;
+      _container!.read(backgroundBridgeProvider.notifier).state = bridge;
+      // Start the single state-to-media-session subscription once for the
+      // app lifetime, not every time the authenticated shell is recreated.
+      _container!.read(backgroundSyncProvider);
+    } catch (error) {
+      debugPrint('Breezze background media session unavailable: $error');
+    }
+  }
+
   @override
   void dispose() {
+    _backgroundBridge?.stop();
     _container?.read(playerControllerProvider.notifier).detachEngine();
     _audioEngine?.dispose();
     super.dispose();
