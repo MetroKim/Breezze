@@ -531,7 +531,8 @@ class BreezzeApiException implements Exception {
     if (kReleaseMode && (origin.host == 'localhost' || origin.host == '127.0.0.1')) {
       throw const BreezzeApiException(code: 'API_URL_LOCALHOST_IN_RELEASE', message: 'A release build cannot connect to localhost. Configure the public Breezze API URL.');
     }
-    return origin.replace(path: '/api/v1$path');
+    // resolve() preserves query strings already embedded in API paths (search, filters, cursors).
+    return origin.resolve('/api/v1$path');
   }
 
   Map<String, String> get _headers => {
