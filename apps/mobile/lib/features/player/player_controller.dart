@@ -44,6 +44,8 @@ class PlayerController extends Notifier<PlayerState> {
   Timer? _heartbeatTimer;
   int _heartbeatSequence = 1;
   String? _pendingHeartbeatEventId;
+  String? _playbackOwnerId;
+  PlaybackHeartbeatStore? _activeHeartbeatStore;
   bool _heartbeatInFlight = false;
 
   PlaybackSessionClient get _sessionClient =>
@@ -177,21 +179,22 @@ class PlayerController extends Notifier<PlayerState> {
     _pauseHeartbeatTimer();
     final sessionId = _playbackSessionId;
     final client = _activeSessionClient;
+    final ownerId = _playbackOwnerId;
+    final store = _activeHeartbeatStore;
     _playbackSessionId = null;
     _activeSessionClient = null;
     _pendingHeartbeatEventId = null;
+    _playbackOwnerId = null;
+    _activeHeartbeatStore = null;
     _heartbeatSequence = 1;
     if (sessionId == null) return;
     if (client == null) return;
     try {
       await client.stop(sessionId);
-      final auth = ref.read(authSessionProvider);
-      if (auth is AuthSignedIn) {
+      if (ownerId != null && store != null) {
         // Once the server confirms stop, no later heartbeat can be credited
         // to this session; discard its now-unreplayable local checkpoint.
-        await ref
-            .read(playbackHeartbeatStoreProvider)
-            .clear(auth.userId, sessionId);
+        await store.clear(ownerId, sessionId);
       }
     } catch (_) {
       // Keep any pending checkpoint. The server TTL is the final safety net
@@ -211,6 +214,8 @@ class PlayerController extends Notifier<PlayerState> {
     await _recoverPendingHeartbeats(auth.userId);
 
     final store = ref.read(playbackHeartbeatStoreProvider);
+    _playbackOwnerId = auth.userId;
+    _activeHeartbeatStore = store;
     final current = await store.read(auth.userId, source.sessionId!);
     if (current == null) {
       await store.write(PlaybackHeartbeatCheckpoint(
