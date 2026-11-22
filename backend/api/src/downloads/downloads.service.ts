@@ -23,7 +23,7 @@ export class DownloadsService {
   ): Promise<boolean> {
     const track = await this.prisma.track.findUnique({
       where: { id: trackId },
-      select: { id: true, source: true },
+      select: { id: true, source: true, externalId: true },
     });
     if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
 
@@ -40,10 +40,12 @@ export class DownloadsService {
       return false;
     }
 
-    const availability = await provider.getAvailability(
-      trackId.startsWith('bz:') ? trackId.slice(trackId.lastIndexOf(':') + 1) : trackId,
-      territory,
-    );
+    const externalPrefix = `bz:${track.source}:`;
+    if (!track.externalId?.startsWith(externalPrefix)) return false;
+    const providerTrackId = track.externalId.slice(externalPrefix.length);
+    if (!providerTrackId) return false;
+
+    const availability = await provider.getAvailability(providerTrackId, territory);
     return availability.kind === 'ok' && availability.value.available;
   }
 
