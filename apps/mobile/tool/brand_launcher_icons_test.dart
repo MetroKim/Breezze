@@ -21,7 +21,7 @@ void main() {
       (tester) async {
     const boundaryKey = ValueKey('breezze-launcher-render');
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: Center(
             child: RepaintBoundary(
@@ -45,8 +45,8 @@ void main() {
     expect(data, isNotNull, reason: 'Supplied Breezze SVG failed to rasterize');
 
     final source = img.decodePng(data!.buffer.asUint8List());
-    expect(source, isNotNull);
-    expect(source!.width, 1024);
+    if (source == null) throw StateError('Breezze raster PNG decode failed');
+    expect(source.width, 1024);
     expect(source.height, 1024);
 
     final pngCache = <int, Uint8List>{};
@@ -93,7 +93,7 @@ void main() {
         final logicalSize = double.tryParse(sizeText.split('x').first);
         final scale = double.tryParse(scaleText.replaceAll('x', ''));
         if (logicalSize == null || scale == null) continue;
-        final pixels = (logicalSize * scale).round().clamp(1, 1024);
+        final pixels = (logicalSize * scale).round().clamp(1, 1024).toInt();
         await put('$folder/${raw['filename']}', png(pixels));
       }
     }
