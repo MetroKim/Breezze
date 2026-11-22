@@ -154,29 +154,57 @@ class PlayerController extends Notifier<PlayerState> {
     try {
       final client = _sessionClient;
       final entries = await _heartbeatOutbox.pending(ownerId: ownerId);
+      // A session can have multiple queued heartbeat events. Replay every
+      // event in sequence before stopping that session; stopping after the
+      // first row would invalidate later events and lose their credit.
+      final sessions = <String, List<PlaybackHeartbeatOutboxEntry>>{};
       for (final entry in entries) {
+        sessions.putIfAbsent(entry.sessionId, () => []).add(entry);
+      }
+      for (final session in sessions.entries) {
         final auth = ref.read(authSessionProvider);
         if (auth is! AuthSignedIn || auth.userId != ownerId) return;
-        try {
-          // Replay the original key/sequence. The server treats an already
-          // committed heartbeat as an acknowledged duplicate.
-          await client.heartbeat(
-            sessionId: entry.sessionId,
-            eventId: entry.eventId,
-            sequence: entry.sequence,
-          );
-        } catch (_) {
-          // Even when replay cannot be acknowledged, attempt to close the
-          // abandoned session. A successful stop safely bounds final credit.
+        final pendingEvents = session.value
+          ..sort((a, b) => a.sequence.compareTo(b.sequence));
+        var replayFailed = false;
+        for (final entry in pendingEvents) {
+          final currentAuth = ref.read(authSessionProvider);
+          if (currentAuth is! AuthSignedIn || currentAuth.userId != ownerId) {
+            return;
+          }
+          try {
+            // Replay the original key/sequence. The server treats an already
+            // committed heartbeat as an acknowledged duplicate.
+            final result = await client.heartbeat(
+              sessionId: entry.sessionId,
+              eventId: entry.eventId,
+              sequence: entry.sequence,
+            );
+            if (result['accepted'] == true) {
+              await _heartbeatOutbox.remove(
+                sessionId: entry.sessionId,
+                eventId: entry.eventId,
+              );
+            } else {
+              replayFailed = true;
+            }
+          } catch (_) {
+            replayFailed = true;
+          }
         }
-        try {
-          await client.stop(entry.sessionId);
-          await _heartbeatOutbox.removeSession(
-            ownerId: ownerId,
-            sessionId: entry.sessionId,
-          );
-        } catch (_) {
-          // Retain the row for a later authenticated recovery attempt.
+        // Close only after every queued event for this session was replayed.
+        // If any event could not be acknowledged, retain its row and let the
+        // server TTL expire rather than deleting uncredited retry evidence.
+        if (!replayFailed) {
+          try {
+            await client.stop(session.key);
+            await _heartbeatOutbox.removeSession(
+              ownerId: ownerId,
+              sessionId: session.key,
+            );
+          } catch (_) {
+            // Retain the row for a later authenticated recovery attempt.
+          }
         }
       }
     } catch (_) {
