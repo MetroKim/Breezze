@@ -52,7 +52,7 @@ void main() {
       expect(result['id'], 'request-1');
     });
 
-    test('loads only the signed-in user's support request collection', () async {
+    test("loads only the signed-in user's support request collection", () async {
       late http.Request captured;
       final api = BreezzeApi(
         baseUrl: 'https://api.breezze.test',
