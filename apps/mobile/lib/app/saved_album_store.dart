@@ -57,6 +57,39 @@ class SavedAlbum {
       };
 }
 
+/// Group only verified, stored catalogue metadata: never guess categories
+/// from an album title, artist name or unknown streaming provider.
+class SavedAlbumGroups {
+  static List<String> genres(Iterable<SavedAlbum> albums) {
+    final values = <String, String>{};
+    for (final album in albums) {
+      for (final genre in album.genres) {
+        final label = genre.trim();
+        if (label.isNotEmpty) {
+          values.putIfAbsent(label.toLowerCase(), () => label);
+        }
+      }
+    }
+    return values.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  }
+
+  static List<SavedAlbum> forGenre(
+    Iterable<SavedAlbum> albums,
+    String genre,
+  ) {
+    final target = genre.trim().toLowerCase();
+    return albums
+        .where((album) => album.genres.any(
+              (value) => value.trim().toLowerCase() == target,
+            ))
+        .toList(growable: false);
+  }
+
+  static List<SavedAlbum> compilations(Iterable<SavedAlbum> albums) =>
+      albums.where((album) => album.isCompilation).toList(growable: false);
+}
+
 /// Lightweight per-account saved-album cache shared by the Library and
 /// album-detail surfaces; the existing signed-in user ID is the owner key.
 class SavedAlbumStore {
