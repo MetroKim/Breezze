@@ -27,7 +27,7 @@ export class RecommendationsService {
 
     const [recent, favorites, listening] = await Promise.all([
       this.prisma.recentlyPlayed.findMany({
-        where: { userId, isServerVerified: true },
+        where: { userId },
         orderBy: { playedAt: 'desc' },
         take: 50,
         select: { trackId: true },
@@ -40,7 +40,7 @@ export class RecommendationsService {
       }),
       this.prisma.listeningEvent.groupBy({
         by: ['trackId'],
-        where: { userId },
+        where: { userId, isServerVerified: true },
         _count: { trackId: true },
         orderBy: { _count: { trackId: 'desc' } },
         take: 100,
