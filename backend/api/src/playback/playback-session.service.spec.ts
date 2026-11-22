@@ -117,6 +117,7 @@ describe('PlaybackSessionService', () => {
     prisma.playbackHeartbeat.findUnique.mockResolvedValue({
       sessionId: 'session-uuid', sequence: 1, elapsedMs: 10_000,
     });
+    prisma.playbackSession.findUnique.mockResolvedValue({ userId: 'user-1' });
     await expect(service.heartbeat('user-1', 'session-uuid', 'event-uuid', 1))
       .resolves.toEqual({ accepted: true, duplicate: true, creditedMs: 10_000 });
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -160,6 +161,69 @@ describe('PlaybackSessionService', () => {
     await expect(service.heartbeat('user-1', 'session-uuid', 'event-uuid', 1))
       .rejects.toThrow('PLAYBACK_HEARTBEAT_RACE');
     expect(tx.playbackHeartbeat.create).not.toHaveBeenCalled();
+  });
+
+  it('pauses an active session and credits only the bounded pre-pause interval', async () => {
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
+      id: 'session-uuid', userId: 'user-1', status: 'active',
+      expiresAt: new Date(Date.now() + 60_000), lastSequence: 2,
+      lastHeartbeatAt: new Date(Date.now() - 8_000), accumulatedMs: 12_000,
+    });
+    await expect(service.pause('user-1', 'session-uuid')).resolves.toMatchObject({
+      paused: true, duplicate: false, creditedMs: 8_000, accumulatedMs: 20_000,
+    });
+    expect(tx.playbackSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'session-uuid', userId: 'user-1', status: 'active',
+        lastSequence: 2, expiresAt: { gt: expect.any(Date) },
+      },
+      data: {
+        status: 'paused', lastHeartbeatAt: expect.any(Date),
+        accumulatedMs: { increment: 8_000 },
+      },
+    });
+  });
+
+  it('makes pause retries idempotent', async () => {
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
+      id: 'session-uuid', userId: 'user-1', status: 'paused', accumulatedMs: 20_000,
+    });
+    await expect(service.pause('user-1', 'session-uuid')).resolves.toMatchObject({
+      paused: true, duplicate: true, accumulatedMs: 20_000,
+    });
+    expect(tx.playbackSession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('resumes a paused session and resets the server clock', async () => {
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
+      id: 'session-uuid', userId: 'user-1', status: 'paused',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(service.resume('user-1', 'session-uuid')).resolves.toEqual({
+      resumed: true, duplicate: false,
+    });
+    expect(tx.playbackSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'session-uuid', userId: 'user-1', status: 'paused',
+        expiresAt: { gt: expect.any(Date) },
+      },
+      data: { status: 'active', lastHeartbeatAt: expect.any(Date) },
+    });
+  });
+
+  it('does not credit paused wall time when stopping a paused session', async () => {
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
+      id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
+      status: 'paused', accumulatedMs: 29_999,
+      lastHeartbeatAt: new Date(Date.now() - 25_000),
+    });
+    await expect(service.stop('user-1', 'session-uuid')).resolves.toMatchObject({
+      qualifiedPlayRecorded: false, accumulatedMs: 29_999,
+    });
+    expect(tx.playbackSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ accumulatedMs: { increment: 0 } }),
+    }));
+    expect(tx.listeningEvent.create).not.toHaveBeenCalled();
   });
 
   it('records a qualified listening event from server-accumulated time on stop', async () => {
