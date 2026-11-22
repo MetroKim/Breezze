@@ -142,6 +142,7 @@ model Track {
   favorites Favorite[]
   recentlyPlayed RecentlyPlayed[]
   listeningEvents ListeningEvent[]
+  playbackSessions PlaybackSession[]
   playlistItems PlaylistItem[]
   downloads DownloadRecord[]
   lyrics Lyrics?
