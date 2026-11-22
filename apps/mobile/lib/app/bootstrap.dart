@@ -382,8 +382,8 @@ class LegacyFavoritesJson {
 class FavoritesStore {
   final FavoritesDao _dao = FavoritesDao(breezzeDb);
 
-  Future<List<FavoriteTrack>> load() async {
-    final rows = await _dao.list();
+  Future<List<FavoriteTrack>> load({String ownerId = 'guest'}) async {
+    final rows = await _dao.list(ownerId: ownerId);
     return [
       for (final r in rows)
         FavoriteTrack(
@@ -397,9 +397,12 @@ class FavoritesStore {
   }
 
   /// Returns true when the track was added, false when removed.
-  Future<bool> toggle(FavoriteTrack track) async {
-    if (await _dao.contains(track.id)) {
-      await _dao.remove(track.id);
+  Future<bool> toggle(
+    FavoriteTrack track, {
+    String ownerId = 'guest',
+  }) async {
+    if (await _dao.contains(track.id, ownerId: ownerId)) {
+      await _dao.remove(track.id, ownerId: ownerId);
       return false;
     }
     await _dao.add(
@@ -408,11 +411,13 @@ class FavoritesStore {
       artist: track.artist,
       artworkUrl: track.artworkUrl,
       durationMs: track.durationMs,
+      ownerId: ownerId,
     );
     return true;
   }
 
-  Future<bool> isFavorite(String id) => _dao.contains(id);
+  Future<bool> isFavorite(String id, {String ownerId = 'guest'}) =>
+      _dao.contains(id, ownerId: ownerId);
 }
 
 /// App-wide favorites store provider.
