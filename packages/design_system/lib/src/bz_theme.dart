@@ -151,7 +151,7 @@ ThemeData _productTheme(ThemeData base, BzThemeColors c) {
     scaffoldBackgroundColor: background,
     canvasColor: background,
     cardColor: c.surface1,
-    dialogBackgroundColor: c.surface1,
+    dialogTheme: DialogThemeData(backgroundColor: c.surface1),
     splashColor: foreground.withValues(alpha: 0.06),
     highlightColor: foreground.withValues(alpha: 0.04),
     dividerColor: c.separator,
