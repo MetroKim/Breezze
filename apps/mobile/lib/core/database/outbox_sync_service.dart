@@ -24,9 +24,13 @@ class OutboxSyncService {
       final outbox = _ref.read(syncOutboxDaoProvider);
       final api = _ref.read(authSessionProvider.notifier).api;
 
-      final ops = await outbox.pending();
+      final ownerId = auth.userId;
+      final ops = await outbox.pending(ownerId: ownerId);
+      final ownerPrefix = '$ownerId::';
       for (final op in ops) {
-        final resolution = await _resolveCatalogId(api, op.trackId);
+        if (!op.trackId.startsWith(ownerPrefix)) continue;
+        final externalId = op.trackId.substring(ownerPrefix.length);
+        final resolution = await _resolveCatalogId(api, externalId, ownerId);
         final catalogId = resolution.catalogId;
         if (catalogId == null) {
           // Only malformed/orphaned local operations are discarded. A
@@ -50,6 +54,7 @@ class OutboxSyncService {
   Future<({String? catalogId, bool discard})> _resolveCatalogId(
     BreezzeApi api,
     String externalId,
+    String ownerId,
   ) async {
     final mapDao = _ref.read(catalogIdMapDaoProvider);
     final cached = await mapDao.lookup(externalId);
@@ -61,7 +66,7 @@ class OutboxSyncService {
       return (catalogId: externalId, discard: false);
     }
 
-    final info = await _localTrackInfo(externalId);
+    final info = await _localTrackInfo(externalId, ownerId);
     if (info == null) {
       return (catalogId: null, discard: true);
     }
@@ -98,11 +103,14 @@ class OutboxSyncService {
 
   /// Display metadata is read only from local rows; it is never treated as
   /// proof that a provider grants playback rights.
-  Future<Map<String, Object?>?> _localTrackInfo(String externalId) async {
+  Future<Map<String, Object?>?> _localTrackInfo(
+    String externalId,
+    String ownerId,
+  ) async {
     final db = _ref.read(breezzeDatabaseProvider);
 
     final favorite = await (db.select(db.favoriteTracks)
-          ..where((t) => t.id.equals(externalId)))
+          ..where((t) => t.id.equals('$ownerId::$externalId')))
         .getSingleOrNull();
     if (favorite != null) {
       return {
