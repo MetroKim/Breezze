@@ -21,12 +21,13 @@ describe('PlaybackResolveService', () => {
   const request = {
     trackId: 'track-1',
     requestedQuality: 'AAC_256',
+    territory: 'US', // Deliberately spoofed; only the edge header is trusted.
   };
   const providerRequest = {
     providerId: 'audius',
     providerTrackId: 'track123',
     canonicalTrackId: 'canonical-1',
-    territory: 'TZ',
+    territory: 'US', // Deliberately spoofed; only the edge header is trusted.
   };
 
   beforeEach(() => {
@@ -96,6 +97,9 @@ describe('PlaybackResolveService', () => {
       codec: 'aac',
       attribution: 'Licensed via label',
       previewOnly: false,
+    });
+    expect(rights.decide).toHaveBeenCalledWith({
+      userId: 'user-1', trackId: 'track-1', action: 'stream.full', territory: 'TZ',
     });
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });
