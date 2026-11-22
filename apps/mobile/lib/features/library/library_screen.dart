@@ -50,7 +50,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Future<void> _refresh() async {
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final favorites = await ref.read(favoritesStoreProvider).load();
+    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     var playlists = await _playlistStore.load(ownerId);
     if (auth is AuthSignedIn) {
       try {
@@ -505,7 +505,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     ),
                   ),
                   onPressed: () async {
-                    await ref.read(favoritesStoreProvider).toggle(fav);
+                    await ref.read(favoritesStoreProvider).toggle(fav, ownerId: _ownerId);
                     await ref.read(outboxSyncProvider).drainIfSignedIn();
                     _refresh();
                   },
