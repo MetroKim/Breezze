@@ -76,6 +76,16 @@ export class PlaybackSessionService {
       if (priorEvent.sessionId !== sessionId || priorEvent.sequence !== sequence) {
         throw new ConflictException('PLAYBACK_HEARTBEAT_ID_CONFLICT');
       }
+      // A duplicate acknowledgement must still prove that the caller owns
+      // the session. Event IDs are unguessable, but ownership is enforced
+      // consistently on every session operation.
+      const owner = await this.prisma.playbackSession.findUnique({
+        where: { id: sessionId },
+        select: { userId: true },
+      });
+      if (!owner || owner.userId !== userId) {
+        throw new NotFoundException('PLAYBACK_SESSION_NOT_FOUND');
+      }
       return { accepted: true, duplicate: true, creditedMs: priorEvent.elapsedMs };
     }
 
@@ -147,6 +157,84 @@ export class PlaybackSessionService {
     }
   }
 
+  async pause(userId: string, sessionId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const session = await tx.playbackSession.findUnique({ where: { id: sessionId } });
+      if (!session || session.userId !== userId) {
+        throw new NotFoundException('PLAYBACK_SESSION_NOT_FOUND');
+      }
+      if (session.status === 'paused') {
+        return { paused: true, duplicate: true, accumulatedMs: session.accumulatedMs };
+      }
+      if (session.status !== 'active' || session.expiresAt <= now) {
+        throw new GoneException('PLAYBACK_SESSION_EXPIRED');
+      }
+
+      // Credit only the bounded interval up to the pause command. Resetting
+      // lastHeartbeatAt prevents paused wall time from being counted later.
+      const pauseCreditMs = Math.max(0, Math.min(
+        MAX_HEARTBEAT_CREDIT_MS,
+        now.getTime() - session.lastHeartbeatAt.getTime(),
+      ));
+      const updated = await tx.playbackSession.updateMany({
+        where: {
+          id: sessionId,
+          userId,
+          status: 'active',
+          lastSequence: session.lastSequence,
+          expiresAt: { gt: now },
+        },
+        data: {
+          status: 'paused',
+          lastHeartbeatAt: now,
+          accumulatedMs: { increment: pauseCreditMs },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException('PLAYBACK_SESSION_PAUSE_RACE');
+      }
+      return {
+        paused: true,
+        duplicate: false,
+        creditedMs: pauseCreditMs,
+        accumulatedMs: session.accumulatedMs + pauseCreditMs,
+      };
+    });
+  }
+
+  async resume(userId: string, sessionId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const session = await tx.playbackSession.findUnique({ where: { id: sessionId } });
+      if (!session || session.userId !== userId) {
+        throw new NotFoundException('PLAYBACK_SESSION_NOT_FOUND');
+      }
+      if (session.status === 'active') {
+        return { resumed: true, duplicate: true };
+      }
+      if (session.status !== 'paused' || session.expiresAt <= now) {
+        throw new GoneException('PLAYBACK_SESSION_EXPIRED');
+      }
+      const updated = await tx.playbackSession.updateMany({
+        where: {
+          id: sessionId,
+          userId,
+          status: 'paused',
+          expiresAt: { gt: now },
+        },
+        data: {
+          status: 'active',
+          lastHeartbeatAt: now,
+        },
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException('PLAYBACK_SESSION_RESUME_RACE');
+      }
+      return { resumed: true, duplicate: false };
+    });
+  }
+
   async stop(userId: string, sessionId: string) {
     return this.prisma.$transaction(async (tx) => {
       const session = await tx.playbackSession.findUnique({ where: { id: sessionId } });
@@ -161,7 +249,7 @@ export class PlaybackSessionService {
         return { stopped: true, duplicate: true, qualifiedPlayRecorded: Boolean(event) };
       }
       const stoppedAt = new Date();
-      const finalCreditMs = Math.max(0, Math.min(
+      const finalCreditMs = session.status === 'paused' ? 0 : Math.max(0, Math.min(
         MAX_HEARTBEAT_CREDIT_MS,
         stoppedAt.getTime() - session.lastHeartbeatAt.getTime(),
       ));
