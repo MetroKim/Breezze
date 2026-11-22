@@ -23,17 +23,44 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _mfaCode = TextEditingController();
   bool _registerMode = false;
   bool _revealPassword = false;
-  late final Future<Map<String, dynamic>> _socialProviders;
+  late Future<Map<String, dynamic>> _socialProviders;
   bool _mfaBusy = false;
   String? _mfaError;
 
   @override
   void initState() {
     super.initState();
-    _socialProviders = ref.read(authSessionProvider.notifier).api
-        .socialProviders()
-        .timeout(const Duration(seconds: 10))
-        .catchError((Object _) => <String, dynamic>{});
+    _socialProviders = _prepareSocialFlows();
+  }
+
+  Future<Map<String, dynamic>> _prepareSocialFlows() async {
+    try {
+      final api = ref.read(authSessionProvider.notifier).api;
+      final flags = await api.socialProviders()
+          .timeout(const Duration(seconds: 10));
+      final result = Map<String, dynamic>.from(flags);
+      for (final provider in const ['apple', 'google']) {
+        if (result[provider] == true) {
+          try {
+            result['${provider}Flow'] = await api.startSocialLogin(provider)
+                .timeout(const Duration(seconds: 10));
+          } catch (_) {
+            // A failed preflight disables only that button; email and the
+            // other provider remain available.
+          }
+        }
+      }
+      return result;
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  bool _freshFlow(Object? raw) {
+    if (raw is! Map || raw['expiresAt'] is! String) return false;
+    final until = DateTime.tryParse(raw['expiresAt'] as String);
+    return until != null &&
+        until.isAfter(DateTime.now().toUtc().add(const Duration(seconds: 15)));
   }
 
   @override
@@ -226,8 +253,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 future: _socialProviders,
                 builder: (context, snapshot) {
                   final providers = snapshot.data ?? const <String, dynamic>{};
-                  final googleReady = providers['google'] == true;
-                  final appleReady = providers['apple'] == true;
+                  final googleFlow = providers['googleFlow'];
+                  final appleFlow = providers['appleFlow'];
+                  final googleReady = _freshFlow(googleFlow);
+                  final appleReady = _freshFlow(appleFlow);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -236,7 +265,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         isApple: true,
                         enabled: appleReady && !busy,
                         onPressed: () => ref.read(authSessionProvider.notifier)
-                            .socialLogin('apple'),
+                            .socialLogin('apple', preparedFlow:
+                              Map<String, dynamic>.from(appleFlow as Map)),
                       ),
                       const SizedBox(height: 12),
                       _socialButton(
@@ -244,21 +274,35 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         isApple: false,
                         enabled: googleReady && !busy,
                         onPressed: () => ref.read(authSessionProvider.notifier)
-                            .socialLogin('google'),
+                            .socialLogin('google', preparedFlow:
+                              Map<String, dynamic>.from(googleFlow as Map)),
                       ),
                       if (!googleReady || !appleReady) ...[
                         const SizedBox(height: 12),
                         Text(
                           snapshot.connectionState == ConnectionState.waiting
-                              ? 'Checking secure sign-in providers…'
-                              : 'Social sign-in becomes available when the '
-                                'provider credentials are configured.',
+                              ? 'Preparing secure sign-in providers…'
+                              : (providers['google'] == true ||
+                                  providers['apple'] == true)
+                                ? 'Provider sign-in is unavailable or expired. '
+                                  'You can refresh it, or continue with email.'
+                                : 'Social sign-in becomes available when '
+                                  'provider credentials are configured.',
                           style: TextStyle(
                             color: theme.bzText2,
                             fontSize: 12,
                             height: 1.35,
                           ),
                         ),
+                        if (snapshot.connectionState != ConnectionState.waiting &&
+                            (providers['google'] == true ||
+                             providers['apple'] == true))
+                          TextButton(
+                            onPressed: busy ? null : () => setState(() {
+                              _socialProviders = _prepareSocialFlows();
+                            }),
+                            child: const Text('Refresh social sign-in'),
+                          ),
                       ],
                     ],
                   );
