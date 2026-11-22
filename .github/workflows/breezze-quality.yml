@@ -268,7 +268,9 @@ jobs:
         with:
           node-version: 22
       - name: Install API Worker dependencies
-        run: npm install
+        # Isolate npm's cache for this job; the shared hosted-runner cache can
+        # race during content-addressed cache writes and fail with EEXIST.
+        run: npm install --cache "$RUNNER_TEMP/npm-cache-api-worker" --no-audit --no-fund
       - name: Typecheck API Worker
         run: npm run check
 
