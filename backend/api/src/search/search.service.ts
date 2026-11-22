@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
+import { RightsDecisionService } from '../rights/rights-decision.service';
 
 @Injectable()
 export class SearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly providers: ProviderRegistry,
+    private readonly rights: RightsDecisionService,
   ) {}
 
-  async search(query: string) {
+  async search(query: string, territory?: string) {
     const q = query.trim();
-    if (q.length < 2) {
+    if (q.length < 2 || q.length > 120) {
       return {
         tracks: [],
         artists: [],
@@ -50,6 +52,12 @@ export class SearchService {
       }))),
     ]);
 
+    const visibleTrackIds = await this.rights.filterMetadataDisplay(
+      tracks.map((track) => track.id),
+      territory?.trim().toUpperCase() ?? '',
+    );
+    const visibleTracks = tracks.filter((track) => visibleTrackIds.has(track.id));
+
     const externalTracks = providerResults.flatMap(({ providerId, result }) =>
       result.kind === 'ok'
         ? result.value.map((track) => ({
@@ -70,7 +78,7 @@ export class SearchService {
     }));
 
     return {
-      tracks,
+      tracks: visibleTracks,
       artists,
       albums,
       externalTracks,
