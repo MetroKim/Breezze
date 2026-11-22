@@ -16,6 +16,11 @@ class BzSvgIcon extends StatelessWidget {
   });
 
   static const _paths = <String, String>{
+    'eye': '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/>',
+    'eye-off': '<path d="M3 3 21 21M10.6 6.1a10.4 10.4 0 0 1 1.4-.1c6 0 9.5 6 9.5 6a15 15 0 0 1-3 3.6M6.1 7.9C3.8 9.5 2.5 12 2.5 12s3.5 6 9.5 6c1.1 0 2.1-.2 3-.5"/><path d="M10 10a2.8 2.8 0 0 0 4 4"/>',
+    'lock': '<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
+    'mail': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
+    'shield-check': '<path d="M12 2 4.5 5v6c0 5 3.5 8.5 7.5 11 4-2.5 7.5-6 7.5-11V5L12 2Z"/><path d="m9 12 2 2 4-4"/>',
     'info': '<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>',
     'help-circle': '<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.7c-1.1 1-1.9 1.4-1.9 3.1M12 17.5h.01"/>',
     'wifi-off': '<path d="M3 3 21 21M8.5 8.5A12 12 0 0 1 21 12M5 12a12 12 0 0 1 2.2-1.2M2 8a16 16 0 0 1 3.2-2M12 20h.01" />',
