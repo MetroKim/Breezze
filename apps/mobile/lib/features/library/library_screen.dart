@@ -38,6 +38,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Set<String> _visibleSections = {'Playlists', 'Artists', 'Albums', 'Songs'};
   String _selected = 'Playlists';
+  String? _activeGenre;
   final _playlistStore = PlaylistStore();
   String _ownerId = 'guest';
   List<UserPlaylist> _playlists = [];
@@ -305,7 +306,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 return _LibraryPill(
                   label: section,
                   active: active,
-                  onTap: () => setState(() => _selected = section),
+                  onTap: () => setState(() {
+                    if (_selected != section) _activeGenre = null;
+                    _selected = section;
+                  }),
                 );
               },
             ),
@@ -322,6 +326,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             ? _buildAlbums(theme)
                         : _selected == 'Artists'
                             ? _buildArtists(theme)
+                        : _selected == 'Genres'
+                            ? _buildGenres(theme)
+                        : _selected == 'Compilations'
+                            ? _buildAlbums(
+                                theme,
+                                selectedAlbums: SavedAlbumGroups.compilations(_albums),
+                                emptyTitle: 'No saved compilations',
+                                emptyDetail: 'Save an album identified as a compilation by its catalog to see it here.',
+                              )
                             : _buildEmptySection(theme, _selected),
           ),
         ],
@@ -413,7 +426,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildAlbums(ThemeData theme) {
+  Widget _buildAlbums(
+    ThemeData theme, {
+    List<SavedAlbum>? selectedAlbums,
+    String emptyTitle = 'No saved albums',
+    String emptyDetail = 'Open an album in New or an artist page, then choose Add to Library.',
+  }) {
+    final albums = selectedAlbums ?? _albums;
     if (_loading) {
       return ListView.separated(
         padding: const EdgeInsets.all(16),
@@ -422,20 +441,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         itemBuilder: (_, __) => const BzSkeletonTrackRow(),
       );
     }
-    if (_albums.isEmpty) {
-      return _emptyState(
-        theme,
-        'No saved albums',
-        'Open an album in New or an artist page, then choose Add to Library.',
-      );
+    if (albums.isEmpty) {
+      return _emptyState(theme, emptyTitle, emptyDetail);
     }
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
         8, 4, 8, BzBreakpoints.bottomClearance(context, compact: 150),
       ),
-      itemCount: _albums.length,
+      itemCount: albums.length,
       itemBuilder: (context, index) {
-        final album = _albums[index];
+        final album = albums[index];
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           leading: ClipRRect(
@@ -501,6 +516,73 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               }
             },
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGenres(ThemeData theme) {
+    if (_loading) {
+      return ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: 6,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+      );
+    }
+    final selectedGenre = _activeGenre;
+    if (selectedGenre != null) {
+      return Column(
+        children: [
+          ListTile(
+            leading: BzSvgIcon(name: 'chevron-left', color: theme.bzText1),
+            title: Text(selectedGenre, style: theme.textTheme.titleLarge),
+            subtitle: const Text('Saved albums'),
+            onTap: () => setState(() => _activeGenre = null),
+          ),
+          Expanded(
+            child: _buildAlbums(
+              theme,
+              selectedAlbums: SavedAlbumGroups.forGenre(_albums, selectedGenre),
+              emptyTitle: 'No albums in this genre',
+              emptyDetail: 'Album categories are based on actual catalog metadata.',
+            ),
+          ),
+        ],
+      );
+    }
+    final genres = SavedAlbumGroups.genres(_albums);
+    if (genres.isEmpty) {
+      return _emptyState(
+        theme,
+        'No categorized albums',
+        'Save albums with verified genre metadata to browse them by genre.',
+      );
+    }
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(
+        8, 4, 8, BzBreakpoints.bottomClearance(context, compact: 150),
+      ),
+      itemCount: genres.length,
+      itemBuilder: (context, index) {
+        final genre = genres[index];
+        final albums = SavedAlbumGroups.forGenre(_albums, genre);
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          leading: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: theme.bzSurface2,
+              borderRadius: BorderRadius.circular(BzRadius.card),
+            ),
+            alignment: Alignment.center,
+            child: BzSvgIcon(name: 'music-note', color: theme.bzText1),
+          ),
+          title: Text(genre),
+          subtitle: Text('${albums.length} saved ${albums.length == 1 ? 'album' : 'albums'}'),
+          trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
+          onTap: () => setState(() => _activeGenre = genre),
         );
       },
     );
