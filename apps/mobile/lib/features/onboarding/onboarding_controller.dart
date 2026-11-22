@@ -1,8 +1,4 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
-
 import '../../core/api/breezze_api.dart';
 import '../../core/auth/auth_session.dart';
 
@@ -33,21 +29,13 @@ class OnboardingController extends Notifier<OnboardingState> {
   Future<bool> save(BreezzeApi api) async {
     state = state.copyWith(saving: true);
     try {
-      final res = await http.post(
-        Uri.parse('${api.baseUrl}/api/v1/onboarding/preferences'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (api.accessToken != null)
-            'Authorization': 'Bearer ${api.accessToken}',
-        },
-        body: jsonEncode({
-          'country': state.country,
-          'genres': state.genres.toList(),
-          'favoriteArtists': state.favoriteArtists.toList(),
-        }),
+      await api.saveOnboardingPreferences(
+        country: state.country,
+        genres: state.genres.toList(),
+        favoriteArtists: state.favoriteArtists.toList(),
       );
       state = state.copyWith(saving: false);
-      return res.statusCode < 400;
+      return true;
     } catch (_) {
       state = state.copyWith(saving: false);
       return false;
