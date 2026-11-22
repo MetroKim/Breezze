@@ -187,10 +187,7 @@ class AudioServiceBridge extends audio.BaseAudioHandler
 /// before the first frame.
 Future<BackgroundAudioBridge> startBackgroundAudio(
     ProviderContainer container) async {
-  if (!kIsWeb &&
-      defaultTargetPlatform != TargetPlatform.android &&
-      defaultTargetPlatform != TargetPlatform.iOS &&
-      defaultTargetPlatform != TargetPlatform.macOS) {
+  if (defaultTargetPlatform == TargetPlatform.fuchsia) {
     return NoopBackgroundBridge();
   }
 
