@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 export interface HomeSection {
@@ -51,14 +51,26 @@ export class HomeService {
     return sections;
   }
 
-  async recordPlay(userId: string, trackId: string) {
-    await this.prisma.recentlyPlayed.upsert({
-      where: { userId_trackId: { userId, trackId } },
-      create: { userId, trackId },
-      update: { playedAt: new Date() },
+  async recordPlay(userId: string, trackId: string, playedMs: number) {
+    const track = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: { id: true },
     });
-    await this.prisma.listeningEvent.create({
-      data: { userId, trackId },
+    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
+    if (!Number.isInteger(playedMs) || playedMs < 30_000 || playedMs > 86_400_000) {
+      throw new BadRequestException('PLAY_DURATION_NOT_QUALIFIED');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.recentlyPlayed.upsert({
+        where: { userId_trackId: { userId, trackId } },
+        create: { userId, trackId },
+        update: { playedAt: new Date() },
+      });
+      await tx.listeningEvent.create({
+        data: { userId, trackId, playedMs },
+      });
     });
+    return { recorded: true };
   }
 }
