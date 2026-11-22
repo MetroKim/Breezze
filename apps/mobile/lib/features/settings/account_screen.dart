@@ -77,26 +77,50 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   Future<void> _saveProfile() async {
     final name = _name.text.trim();
+    final country = _country.text.trim().toUpperCase();
+    final language = _language.text.trim();
     if (name.isEmpty || name.length > 80) {
       setState(() => _error = 'Display name must be between 1 and 80 characters.');
       return;
     }
+    if (country.isNotEmpty &&
+        (country.length != 2 ||
+            !country.codeUnits.every((unit) => unit >= 65 && unit <= 90))) {
+      setState(() => _error = 'Country must be a two-letter ISO code, such as TZ.');
+      return;
+    }
+
+    List<String> genres;
+    List<String> artists;
+    try {
+      genres = _splitPreferenceList(_genres.text, maxItems: 20);
+      artists = _splitPreferenceList(_favoriteArtists.text, maxItems: 50);
+    } on FormatException catch (error) {
+      setState(() => _error = error.message);
+      return;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      final country = _country.text.trim().toUpperCase();
-      final language = _language.text.trim();
-      final genres = _splitPreferenceList(_genres.text, maxItems: 20);
-      final artists = _splitPreferenceList(_favoriteArtists.text, maxItems: 50);
-      if (country.isNotEmpty && !RegExp(r'^[A-Z]{2}
+      await ref.read(authSessionProvider.notifier).api.updateProfile(
+            displayName: name,
+            country: country.isEmpty ? null : country,
+            language: language.isEmpty ? null : language,
+            genres: genres,
+            favoriteArtists: artists,
+          );
+      await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated')),
+        const SnackBar(content: Text('Profile and listening preferences updated')),
       );
     } catch (_) {
-      if (mounted) setState(() => _error = 'Profile could not be saved. Please retry.');
+      if (mounted) {
+        setState(() => _error = 'Profile could not be saved. Please retry.');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
