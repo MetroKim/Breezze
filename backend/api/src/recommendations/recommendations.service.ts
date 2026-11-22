@@ -82,22 +82,31 @@ export class RecommendationsService {
       return this.popularFallback(territory, excludedIds);
     }
 
-    const candidates = await this.prisma.track.findMany({
-      where: {
-        artistId: { in: artistIds },
-        id: { notIn: [...excludedIds] },
-      },
-      orderBy: [{ artistId: 'asc' }, { title: 'asc' }],
-      take: 60,
-      select: { id: true, artistId: true },
-    });
+    // Fetch a bounded candidate window per artist. A single globally ordered
+    // LIMIT can be monopolized by one prolific artist and starve every other
+    // artist before rights filtering or the two-per-artist diversity cap.
+    const candidatesByArtist = await Promise.all(artistIds.map((artistId) =>
+      this.prisma.track.findMany({
+        where: {
+          artistId,
+          id: { notIn: [...excludedIds] },
+        },
+        orderBy: { title: 'asc' },
+        take: 12,
+        select: { id: true, artistId: true },
+      }),
+    ));
 
-    const byArtist = new Map(candidates.map((track) => [track.artistId, [] as CandidateTrack[]]));
-    for (const candidate of candidates) {
-      byArtist.get(candidate.artistId)?.push(candidate);
+    const rankedCandidates: CandidateTrack[] = [];
+    const maxCandidates = Math.max(0, ...candidatesByArtist.map((items) => items.length));
+    for (let index = 0; index < maxCandidates; index += 1) {
+      for (const artistCandidates of candidatesByArtist) {
+        const candidate = artistCandidates[index];
+        if (candidate) rankedCandidates.push(candidate);
+      }
     }
-    const rankedCandidates = artistIds.flatMap((artistId) => byArtist.get(artistId) ?? []);
-    return this.selectPlayable(rankedCandidates, territory, (track) =>
+
+    return this.selectPlayable(rankedCandidates, territory, () =>
       'Because you listen to this artist',
     );
   }
