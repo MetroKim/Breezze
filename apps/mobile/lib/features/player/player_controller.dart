@@ -59,11 +59,13 @@ class PlayerController extends Notifier<PlayerState> {
     _heartbeatTimer?.cancel();
     if (_playbackSessionId == null) return;
     _heartbeatTimer = Timer.periodic(
-      ref.read(playbackHeartbeatIntervalProvider), (_) {
-      if (state.playbackState == PlaybackState.playing) {
-        unawaited(_sendPlaybackHeartbeat());
-      }
-    });
+      ref.read(playbackHeartbeatIntervalProvider),
+      (_) {
+        if (state.playbackState == PlaybackState.playing) {
+          unawaited(_sendPlaybackHeartbeat());
+        }
+      },
+    );
   }
 
   void _pauseHeartbeatTimer() {
@@ -73,8 +75,11 @@ class PlayerController extends Notifier<PlayerState> {
 
   Future<void> _sendPlaybackHeartbeat() async {
     final sessionId = _playbackSessionId;
-    if (sessionId == null || _heartbeatInFlight ||
-        state.playbackState != PlaybackState.playing) return;
+    if (sessionId == null ||
+        _heartbeatInFlight ||
+        state.playbackState != PlaybackState.playing) {
+      return;
+    }
     _heartbeatInFlight = true;
     final eventId = _pendingHeartbeatEventId ??= _newEventId();
     try {
@@ -208,7 +213,8 @@ class PlayerController extends Notifier<PlayerState> {
         // single app-wide queue here so playback continues without requiring
         // the user to tap Next. The guard prevents duplicate completed events
         // from advancing more than once for the same item.
-        if (engineState == PlaybackState.ended || engineState == PlaybackState.failed) {
+        if (engineState == PlaybackState.ended ||
+            engineState == PlaybackState.failed) {
           unawaited(_closePlaybackSession());
         }
         if (engineState == PlaybackState.ended &&
@@ -356,7 +362,9 @@ class PlayerController extends Notifier<PlayerState> {
       return;
     }
     final sessionId = _playbackSessionId;
-    if (activeSource?.sessionId != null && sessionId == null && currentTrack != null) {
+    if (activeSource?.sessionId != null &&
+        sessionId == null &&
+        currentTrack != null) {
       await _resolveAndPlay(currentTrack, initialPosition: state.position);
       return;
     }
