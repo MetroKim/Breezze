@@ -22,6 +22,14 @@ class PlaybackHeartbeatOutboxDao {
       'VALUES (?, ?, ?, ?, ?)',
       [ownerId, sessionId, eventId, sequence, DateTime.now().millisecondsSinceEpoch],
     );
+    // Bound local recovery state so prolonged offline use cannot grow the
+    // outbox without limit. The server TTL still closes any evicted session.
+    await _db.customStatement(
+      'DELETE FROM playback_heartbeat_outbox WHERE owner_id = ? AND rowid NOT IN '
+      '(SELECT rowid FROM playback_heartbeat_outbox WHERE owner_id = ? '
+      'ORDER BY created_at DESC LIMIT 100)',
+      [ownerId, ownerId],
+    );
   }
 
   Future<List<PlaybackHeartbeatOutboxEntry>> pending({
