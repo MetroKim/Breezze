@@ -17,6 +17,14 @@ export class DownloadsService {
     private readonly providers: ProviderRegistry,
   ) {}
 
+  private requireTerritory(value: string): string {
+    const territory = value?.trim().toUpperCase();
+    if (!territory || !/^[A-Z]{2}$/.test(territory)) {
+      throw new NotAcceptableException('DOWNLOAD_TERRITORY_UNAVAILABLE');
+    }
+    return territory;
+  }
+
   private async providerAllowsDownload(
     trackId: string,
     territory: string,
@@ -53,7 +61,8 @@ export class DownloadsService {
     userId: string,
     dto: { trackId: string; territory: string },
   ) {
-    const supported = await this.providerAllowsDownload(dto.trackId, dto.territory);
+    const territory = this.requireTerritory(dto.territory);
+    const supported = await this.providerAllowsDownload(dto.trackId, territory);
     if (!supported) {
       return {
         allowed: false,
@@ -66,7 +75,7 @@ export class DownloadsService {
       userId,
       trackId: dto.trackId,
       action: 'download',
-      territory: dto.territory,
+      territory,
     });
 
     if (!decision.allowed || decision.previewOnly) {
@@ -111,7 +120,8 @@ export class DownloadsService {
     };
   }
 
-  async revalidateOfflineLease(userId: string, trackId: string, territory: string) {
+  async revalidateOfflineLease(userId: string, trackId: string, territoryInput: string) {
+    const territory = this.requireTerritory(territoryInput);
     const existing = await this.prisma.downloadRecord.findFirst({
       where: { userId, trackId, status: 'active' },
       select: { id: true },
