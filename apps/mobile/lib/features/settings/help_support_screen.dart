@@ -1,5 +1,8 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/auth_session.dart';
 
 import '../../widgets/bz_brand_icons.dart';
 
@@ -144,6 +147,8 @@ class HelpSupportScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
+                const _SupportRequestPanel(),
+                const SizedBox(height: 20),
                 Text(
                   'Need account help? Open Settings → Account details and sessions to review your profile and active sessions.',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
@@ -162,4 +167,248 @@ class _HelpTopic {
   final String answer;
 
   const _HelpTopic(this.question, this.answer);
+}
+
+
+class _SupportRequestPanel extends ConsumerStatefulWidget {
+  const _SupportRequestPanel();
+
+  @override
+  ConsumerState<_SupportRequestPanel> createState() =>
+      _SupportRequestPanelState();
+}
+
+class _SupportRequestPanelState extends ConsumerState<_SupportRequestPanel> {
+  final _formKey = GlobalKey<FormState>();
+  final _subject = TextEditingController();
+  final _message = TextEditingController();
+  static const _categories = <String, String>{
+    'account': 'Account',
+    'playback': 'Playback',
+    'downloads': 'Downloads',
+    'playlists': 'Playlists',
+    'bug': 'Report a bug',
+    'feedback': 'Product feedback',
+    'other': 'Other',
+  };
+
+  String _category = 'playback';
+  List<Map<String, dynamic>> _requests = [];
+  bool _loadingRequests = true;
+  bool _submitting = false;
+  String? _statusMessage;
+  bool _statusIsError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRequests();
+  }
+
+  @override
+  void dispose() {
+    _subject.dispose();
+    _message.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadRequests() async {
+    if (ref.read(authSessionProvider) is! AuthSignedIn) {
+      if (mounted) setState(() => _loadingRequests = false);
+      return;
+    }
+    try {
+      final requests = await ref
+          .read(authSessionProvider.notifier)
+          .api
+          .supportRequests();
+      if (!mounted) return;
+      setState(() {
+        _requests = requests;
+        _loadingRequests = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingRequests = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_submitting || !_formKey.currentState!.validate()) return;
+    if (ref.read(authSessionProvider) is! AuthSignedIn) {
+      setState(() {
+        _statusMessage = 'Sign in to send a support request.';
+        _statusIsError = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _statusMessage = null;
+    });
+    try {
+      await ref.read(authSessionProvider.notifier).api.createSupportRequest(
+            category: _category,
+            subject: _subject.text.trim(),
+            message: _message.text.trim(),
+          );
+      _subject.clear();
+      _message.clear();
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Your request was sent to Breezze Support.';
+        _statusIsError = false;
+      });
+      await _loadRequests();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage =
+            'Your request could not be sent. Check your connection and try again.';
+        _statusIsError = true;
+      });
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.bzSurface1,
+        borderRadius: BorderRadius.circular(BzRadius.card),
+        border: Border.all(color: theme.bzSeparator),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Contact Breezze Support',
+              style: theme.textTheme.titleLarge),
+          const SizedBox(height: 6),
+          Text(
+            'Send a request without leaving the app. Replies and request status will be shown here when available.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.bzText2,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (auth is! AuthSignedIn)
+            Text(
+              'Sign in to submit a support request and view your request history.',
+              style: theme.textTheme.bodyMedium,
+            )
+          else ...[
+            Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: _category,
+                    decoration: const InputDecoration(labelText: 'Topic'),
+                    items: [
+                      for (final entry in _categories.entries)
+                        DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                    ],
+                    onChanged: _submitting
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setState(() => _category = value);
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _subject,
+                    maxLength: 120,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'Subject',
+                      hintText: 'Briefly describe the issue',
+                    ),
+                    validator: (value) {
+                      if ((value ?? '').trim().length < 3) {
+                        return 'Enter at least 3 characters.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _message,
+                    minLines: 4,
+                    maxLines: 8,
+                    maxLength: 5000,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'Message',
+                      hintText: 'Tell us what happened and what you expected.',
+                      alignLabelWithHint: true,
+                    ),
+                    validator: (value) {
+                      if ((value ?? '').trim().length < 10) {
+                        return 'Enter at least 10 characters.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: _submitting ? null : _submit,
+                    child: _submitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Send request'),
+                  ),
+                ],
+              ),
+            ),
+            if (_statusMessage != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _statusMessage!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _statusIsError ? theme.colorScheme.error : theme.bzText1,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Text('Your requests', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_loadingRequests)
+              const LinearProgressIndicator()
+            else if (_requests.isEmpty)
+              Text(
+                'No support requests yet.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.bzText2,
+                ),
+              )
+            else
+              for (final request in _requests)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(request['subject'] as String? ?? 'Support request'),
+                  subtitle: Text(
+                    '${_categories[request['category']] ?? 'Support'} · ${request['status'] ?? 'open'}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                ),
+          ],
+        ],
+      ),
+    );
+  }
 }
