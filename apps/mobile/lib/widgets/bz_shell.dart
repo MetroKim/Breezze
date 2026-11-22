@@ -1,10 +1,10 @@
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
-import 'bz_brand_icons.dart';
+import 'bz_player_pill.dart';
+import 'bz_shell_nav.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/radio/radio_screen.dart';
 import '../features/home/home_screen.dart';
@@ -13,8 +13,24 @@ import '../features/player/now_playing_screen.dart';
 import '../features/player/player_controller.dart';
 import '../features/search/search_screen.dart';
 
-/// Breezze's five-destination shell. Downloads live inside Library and
-/// Settings are reached from the profile surface; neither is a top-level tab.
+/// Route observer shared with BreezzeAppRoot's MaterialApp. The shell
+/// subscribes so its glass surfaces can demote to solids while a
+/// fullscreen route (Now Playing) covers them — the viewport blur budget
+/// of 2 stays honest across route transitions.
+final RouteObserver<PageRoute<dynamic>> bzRouteObserver =
+    RouteObserver<PageRoute<dynamic>>();
+
+/// Breezze's five-destination Liquid Glass shell.
+///
+/// Shell contract (§4.1/§4.2):
+/// - >=1200px: 260px glass sidebar + main + floating player pill
+///   (bottom: 20, centered).
+/// - 810–1199px: sidebar collapses to a 72px icon rail.
+/// - <810px: sidebar becomes a glass bottom tab bar; the player pill
+///   docks to the bottom safe area with 16px horizontal margins.
+///
+/// Downloads live inside Library; Settings are reached from the profile
+/// surface; neither is a top-level tab.
 class BreezzeShell extends StatelessWidget {
   const BreezzeShell({super.key});
 
@@ -22,35 +38,72 @@ class BreezzeShell extends StatelessWidget {
   Widget build(BuildContext context) => const _BreezzeRoot();
 }
 
-class _BreezzeRoot extends StatelessWidget {
+class _BreezzeRoot extends StatefulWidget {
   const _BreezzeRoot();
 
   @override
-  Widget build(BuildContext context) => const BzHome();
+  State<_BreezzeRoot> createState() => _BreezzeRootState();
 }
 
-class BzHome extends ConsumerStatefulWidget {
-  const BzHome({super.key});
+class _BreezzeRootState extends State<_BreezzeRoot> with RouteAware {
+  bool _shellIsCurrent = true;
 
   @override
-  ConsumerState<BzHome> createState() => _BzHomeState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      bzRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    bzRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPush() => _update(true);
+
+  @override
+  void didPushNext() => _update(false);
+
+  @override
+  void didPop() => _update(true);
+
+  @override
+  void didPopNext() => _update(true);
+
+  void _update(bool current) {
+    if (_shellIsCurrent == current) return;
+    setState(() => _shellIsCurrent = current);
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _BzHome(shellIsCurrent: _shellIsCurrent);
 }
 
-class _BzHomeState extends ConsumerState<BzHome> {
+class _BzHome extends ConsumerStatefulWidget {
+  final bool shellIsCurrent;
+
+  const _BzHome({required this.shellIsCurrent});
+
+  @override
+  ConsumerState<_BzHome> createState() => _BzHomeState();
+}
+
+class _BzHomeState extends ConsumerState<_BzHome> {
   int _index = 0;
 
   static const _tabs = [
-    _TabDestination('Home', 'assets/icons/home.svg'),
-    _TabDestination('Browse', 'assets/icons/browse.svg'),
-    _TabDestination('Radio', 'assets/icons/radio.svg'),
-    _TabDestination('Library', 'assets/icons/library.svg'),
-    _TabDestination('Search', 'assets/icons/search.svg'),
+    BzTabDestination('Home', 'assets/icons/home.svg'),
+    BzTabDestination('Browse', 'assets/icons/browse.svg'),
+    BzTabDestination('Radio', 'assets/icons/radio.svg'),
+    BzTabDestination('Library', 'assets/icons/library.svg'),
+    BzTabDestination('Search', 'assets/icons/search.svg'),
   ];
-
-  @override
-  void initState() {
-    super.initState();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,22 +126,67 @@ class _BzHomeState extends ConsumerState<BzHome> {
       ],
     );
 
-    return Scaffold(
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final expanded = constraints.maxWidth >= BzBreakpoints.medium;
-          if (!expanded) return pages;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final compact = width < BzBreakpoints.medium; // <810
+        final rail = width >= BzBreakpoints.medium &&
+            width < BzBreakpoints.expanded; // 810–1199
 
-          return Row(
-            children: [
-              _DesktopNavigation(
-                index: _index,
-                tabs: _tabs,
-                onChanged: (i) => setState(() => _index = i),
-              ),
-              Expanded(
+        if (compact) {
+          // Phone: glass capsule tab bar at the bottom, player pill docked
+          // above it with 16px horizontal margins (§4.2).
+          return Scaffold(
+            body: pages,
+            bottomNavigationBar: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (hasPlayer) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal:
+                              BzBreakpoints.playerPillHorizontalMargin,
+                        ),
+                        child: BzPlayerPill(
+                          onTap: _openNowPlaying,
+                          glass: widget.shellIsCurrent,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    BzTabBar(
+                      index: _index,
+                      tabs: _tabs,
+                      glass: widget.shellIsCurrent,
+                      onChanged: (i) => setState(() => _index = i),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Desktop/tablet: glass sidebar (or 72px rail) + content pane +
+        // floating player pill anchored bottom: 20, centered — never a
+        // docked bar (§4.1).
+        return Scaffold(
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: Row(
+                  children: [
+                    BzSidebarOrRail(
+                      rail: rail,
+                      index: _index,
+                      tabs: _tabs,
+                      glass: widget.shellIsCurrent,
+                      onChanged: (i) => setState(() => _index = i),
+                    ),
                     Expanded(
                       child: Center(
                         child: ConstrainedBox(
@@ -99,40 +197,32 @@ class _BzHomeState extends ConsumerState<BzHome> {
                         ),
                       ),
                     ),
-                    if (hasPlayer)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
-                        child: _MiniPlayer(onTap: _openNowPlaying),
+                  ],
+                ),
+              ),
+              if (hasPlayer)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: BzBreakpoints.playerPillBottomInset,
+                  child: IgnorePointer(
+                    ignoring: !widget.shellIsCurrent,
+                    child: Opacity(
+                      opacity: widget.shellIsCurrent ? 1 : 0,
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: BzPlayerPill(
+                          onTap: _openNowPlaying,
+                          glass: widget.shellIsCurrent,
+                        ),
                       ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-      bottomNavigationBar: MediaQuery.sizeOf(context).width >= BzBreakpoints.medium
-          ? null
-          : SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (hasPlayer) ...[
-                      _MiniPlayer(onTap: _openNowPlaying),
-                      const SizedBox(height: 8),
-                    ],
-                    _TabBar(
-                      index: _index,
-                      tabs: _tabs,
-                      onChanged: (i) => setState(() => _index = i),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -141,432 +231,6 @@ class _BzHomeState extends ConsumerState<BzHome> {
       MaterialPageRoute(
         builder: (_) => const NowPlayingScreen(),
         fullscreenDialog: true,
-      ),
-    );
-  }
-}
-
-class _DesktopNavigation extends StatelessWidget {
-  final int index;
-  final List<_TabDestination> tabs;
-  final ValueChanged<int> onChanged;
-
-  const _DesktopNavigation({
-    required this.index,
-    required this.tabs,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: 224,
-      decoration: BoxDecoration(
-        color: theme.bzSurface1,
-        border: Border(
-          right: BorderSide(color: theme.bzSeparator, width: 0.7),
-        ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 12, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 28),
-                child: Row(
-                  children: [
-                    BzBnoteMark(size: 30, color: theme.bzText1),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Breezze',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.6,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              for (var i = 0; i < tabs.length; i++)
-                _DesktopTabButton(
-                  destination: tabs[i],
-                  active: index == i,
-                  onTap: () => onChanged(i),
-                ),
-              const Spacer(),
-              Text(
-                'YOUR MUSIC. YOUR SPACE.',
-                style: TextStyle(
-                  color: theme.bzText2,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopTabButton extends StatelessWidget {
-  final _TabDestination destination;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _DesktopTabButton({
-    required this.destination,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = active ? theme.bzAccent : theme.bzText2;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Semantics(
-        button: true,
-        selected: active,
-        label: destination.label,
-        child: Tooltip(
-          message: destination.label,
-          child: Material(
-            color: active ? theme.bzSurface2 : Colors.transparent,
-            borderRadius: BorderRadius.circular(BzRadius.button),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(BzRadius.button),
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 13,
-                ),
-                child: Row(
-                  children: [
-                    SvgPicture.asset(
-                      destination.asset,
-                      width: 21,
-                      height: 21,
-                      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-                    ),
-                    const SizedBox(width: 13),
-                    Text(
-                      destination.label,
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TabDestination {
-  final String label;
-  final String asset;
-  const _TabDestination(this.label, this.asset);
-}
-
-class _MiniPlayer extends ConsumerWidget {
-  final VoidCallback onTap;
-
-  const _MiniPlayer({required this.onTap});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final player = ref.watch(playerControllerProvider);
-    final controller = ref.read(playerControllerProvider.notifier);
-    final theme = Theme.of(context);
-    final playing = player.playbackState == PlaybackState.playing;
-    final track = player.currentTrack;
-    final progress = player.duration > Duration.zero
-        ? (player.position.inMilliseconds / player.duration.inMilliseconds)
-            .clamp(0.0, 1.0)
-        : 0.0;
-
-    return GestureDetector(
-      onVerticalDragEnd: (details) {
-        if ((details.primaryVelocity ?? 0) < -150) onTap();
-      },
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(BzRadius.card),
-          onTap: onTap,
-          child: BzGlassContainer(
-          radius: BzRadius.card,
-          blur: 18,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 8, 7),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(BzRadius.artwork),
-                      child: track?.artworkUrl != null
-                          ? Image.network(
-                              track!.artworkUrl!,
-                              width: 42,
-                              height: 42,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _MiniArtwork(color: theme.bzText2),
-                            )
-                          : _MiniArtwork(color: theme.bzText2),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            track?.title ?? 'Now Playing',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            track?.artist ?? 'Breezze',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: BzType.footnote,
-                              color: theme.bzText2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Previous track',
-                      onPressed: controller.previous,
-                      icon: BzSvgIcon(
-                        name: 'skip-previous',
-                        color: theme.bzText1,
-                        size: 20,
-                      ),
-                    ),
-                    _PlayerIconButton(
-                      asset: playing
-                          ? 'assets/icons/pause.svg'
-                          : 'assets/icons/play.svg',
-                      label: playing ? 'Pause' : 'Play',
-                      onPressed: controller.togglePlayPause,
-                    ),
-                    _PlayerIconButton(
-                      asset: 'assets/icons/skip-next.svg',
-                      label: 'Next track',
-                      onPressed: controller.next,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 2,
-                    backgroundColor: theme.bzSeparator,
-                    color: theme.bzAccent,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-    );
-  }
-}
-
-class _MiniArtwork extends StatelessWidget {
-  final Color color;
-  const _MiniArtwork({required this.color});
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: 42,
-        height: 42,
-        child: Center(
-          child: SvgPicture.asset(
-            'assets/icons/music-note.svg',
-            width: 22,
-            height: 22,
-            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-          ),
-        ),
-      );
-}
-
-class _PlayerIconButton extends StatelessWidget {
-  final String asset;
-  final String label;
-  final VoidCallback onPressed;
-
-  const _PlayerIconButton({
-    required this.asset,
-    required this.label,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: label,
-      onPressed: onPressed,
-      icon: SvgPicture.asset(
-        asset,
-        width: 21,
-        height: 21,
-        colorFilter: ColorFilter.mode(
-          Theme.of(context).bzText1,
-          BlendMode.srcIn,
-        ),
-      ),
-    );
-  }
-}
-
-class _TabBar extends StatelessWidget {
-  final int index;
-  final List<_TabDestination> tabs;
-  final ValueChanged<int> onChanged;
-
-  const _TabBar({
-    required this.index,
-    required this.tabs,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onLongPressStart: (details) => _selectFromGlobalX(
-            details.globalPosition.dx,
-            context,
-          ),
-          onLongPressMoveUpdate: (details) => _selectFromGlobalX(
-            details.globalPosition.dx,
-            context,
-          ),
-          child: BzGlassContainer(
-            radius: BzRadius.card,
-            blur: 18,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-              child: Row(
-                children: [
-                  for (var i = 0; i < tabs.length; i++)
-                    Expanded(
-                      child: _TabButton(
-                        destination: tabs[i],
-                        active: i == index,
-                        onTap: () => onChanged(i),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _selectFromGlobalX(double globalX, BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width - 24;
-    final localX = (globalX - 12).clamp(0.0, width - 1);
-    final next = (localX / (width / tabs.length)).floor();
-    onChanged(next.clamp(0, tabs.length - 1).toInt());
-  }
-}
-
-class _TabButton extends StatelessWidget {
-  final _TabDestination destination;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _TabButton({
-    required this.destination,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = active ? theme.bzAccent : theme.bzText2;
-
-    return Semantics(
-      button: true,
-      selected: active,
-      label: destination.label,
-      child: Tooltip(
-        message: destination.label,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(BzRadius.button),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: BzMotion.fastMs),
-                    curve: const Cubic(0.22, 1, 0.36, 1),
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: active ? theme.bzSurface2 : Colors.transparent,
-                      borderRadius: BorderRadius.circular(BzRadius.button),
-                    ),
-                    alignment: Alignment.center,
-                    child: SvgPicture.asset(
-                      destination.asset,
-                      width: 22,
-                      height: 22,
-                      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    destination.label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                      color: color,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
