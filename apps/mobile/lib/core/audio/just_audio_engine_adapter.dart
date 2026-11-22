@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -11,6 +13,8 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       StreamController<PlaybackState>.broadcast();
   late final StreamSubscription<PlaybackEvent> _errorSubscription;
   late final StreamSubscription<PlayerState> _stateSubscription;
+  StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
+  StreamSubscription<void>? _becomingNoisySubscription;
 
   JustAudioEngineAdapter() {
     _errorSubscription = _player.playbackEventStream.listen(
@@ -35,6 +39,37 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       }
       _states.add(mapped);
     });
+    unawaited(_configureAudioSession());
+  }
+
+  Future<void> _configureAudioSession() async {
+    // Audio focus and headphone events are mobile OS concerns. Desktop and
+    // web use their own platform audio policies and must not require this plugin.
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      _interruptionSubscription = session.interruptionEventStream.listen((event) {
+        if (event.begin) {
+          // Pause rather than duck for calls, navigation prompts and other
+          // exclusive audio interruptions. Never auto-resume after a call.
+          unawaited(_player.pause().catchError((_) {}));
+          _states.add(PlaybackState.interrupted);
+        } else {
+          _states.add(PlaybackState.paused);
+        }
+      });
+      _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
+        // Headphones/Bluetooth route removed: pause to avoid speaker leakage.
+        unawaited(_player.pause().catchError((_) {}));
+      });
+    } catch (_) {
+      // Audio session integration is best-effort; core playback remains usable.
+    }
   }
 
   @override
@@ -79,6 +114,8 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   Future<void> dispose() async {
     await _errorSubscription.cancel();
     await _stateSubscription.cancel();
+    await _interruptionSubscription?.cancel();
+    await _becomingNoisySubscription?.cancel();
     await _states.close();
     await _player.dispose();
   }
