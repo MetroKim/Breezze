@@ -14,21 +14,33 @@ export class OnboardingService {
       favoriteArtists?: string[];
     },
   ) {
+    const data: {
+      country?: string;
+      language?: string;
+      genres?: string[];
+      favoriteArtists?: string[];
+    } = {};
+
+    if (dto.country !== undefined) data.country = dto.country.trim().toUpperCase();
+    if (dto.language !== undefined) data.language = dto.language.trim();
+    if (dto.genres !== undefined) {
+      data.genres = dto.genres.map((item) => item.trim()).filter(Boolean);
+    }
+    if (dto.favoriteArtists !== undefined) {
+      data.favoriteArtists = dto.favoriteArtists.map((item) => item.trim()).filter(Boolean);
+    }
+
     return this.prisma.userPreference.upsert({
       where: { userId },
       create: {
         userId,
-        country: dto.country,
-        language: dto.language,
-        genres: dto.genres ?? [],
-        favoriteArtists: dto.favoriteArtists ?? [],
+        country: data.country,
+        language: data.language,
+        genres: data.genres ?? [],
+        favoriteArtists: data.favoriteArtists ?? [],
       },
-      update: {
-        country: dto.country,
-        language: dto.language,
-        genres: dto.genres ?? [],
-        favoriteArtists: dto.favoriteArtists ?? [],
-      },
+      // PATCH-like behavior: omitted fields are preserved rather than reset.
+      update: data,
     });
   }
 

@@ -11,6 +11,11 @@ export class ProvidersController {
     return this.registry.list();
   }
 
+  @Get('search')
+  searchAll(@Query('q') q: string) {
+    return this.registry.searchAll(q ?? '');
+  }
+
   @Get(':id/tracks/:trackId')
   getTrack(@Param('id') id: string, @Param('trackId') trackId: string) {
     const adapter = this.registry.get(id);

@@ -2,20 +2,26 @@ import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { AudiusAdapter } from './audius.adapter';
+import { JamendoAdapter } from './jamendo.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
+import { ProviderResult } from './provider-result';
 
-// Plan §7.5 — the registry owns provider identity, capability
-// declaration, and health. Adapters are registered with explicit
-// capability flags; playback is only ever declared by providers that
-// authorize it in writing.
+// The registry owns provider identity, capability declaration, and health.
+// Playback candidates are restricted to explicitly enabled playback adapters.
 @Injectable()
 export class ProviderRegistry {
   private readonly adapters = new Map<string, ProviderAdapter>();
 
-  constructor(internal: InternalCatalogAdapter, youtubeMusic: YtMusicAdapter, audius: AudiusAdapter) {
+  constructor(
+    internal: InternalCatalogAdapter,
+    youtubeMusic: YtMusicAdapter,
+    audius: AudiusAdapter,
+    jamendo: JamendoAdapter,
+  ) {
     this.register(internal);
     this.register(youtubeMusic);
     this.register(audius);
+    this.register(jamendo);
   }
 
   register(adapter: ProviderAdapter) {
@@ -41,12 +47,44 @@ export class ProviderRegistry {
       }));
   }
 
-  /** Only providers explicitly enabled for playback may enter the resolver. */
+  async searchAll(query: string) {
+    const normalized = query.trim();
+    if (normalized.length < 2 || normalized.length > 120) {
+      return { query: normalized, providers: [] };
+    }
+    const adapters = [...this.adapters.values()].filter(
+      (adapter) => adapter.enabled !== false && adapter.capabilities.search,
+    );
+    const settled = await Promise.allSettled(
+      adapters.map(async (adapter) => ({
+        providerId: adapter.providerId,
+        displayName: adapter.displayName ?? adapter.providerId,
+        result: await adapter.search(normalized),
+      })),
+    );
+    return {
+      query: normalized,
+      providers: settled.map((item, index) => item.status === 'fulfilled'
+        ? item.value
+        : {
+            providerId: adapters[index].providerId,
+            displayName: adapters[index].displayName ?? adapters[index].providerId,
+            result: {
+              kind: 'error' as const,
+              code: 'PROVIDER_SEARCH_FAILED',
+              retryable: true,
+              message: 'This catalogue source is temporarily unavailable',
+            } satisfies ProviderResult<unknown>,
+          }),
+    };
+  }
+
   getPlaybackCandidates(): ProviderAdapter[] {
     return [...this.adapters.values()]
       .filter((adapter) =>
         adapter.enabled !== false &&
         adapter.capabilities.playback === true &&
+        adapter.capabilities.availability === true &&
         typeof adapter.resolvePlayback === 'function',
       )
       .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));

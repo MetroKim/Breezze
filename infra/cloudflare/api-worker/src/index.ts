@@ -40,6 +40,14 @@ function makeOriginRequest(url: string, request: Request, edgeSecret: string): R
   headers.delete('host');
   headers.delete('x-breezze-edge-secret');
   headers.set('x-breezze-edge-secret', edgeSecret);
+
+  // Cloudflare overwrites cf-ipcountry at the edge. Never trust a client-
+  // supplied Breezze country header; derive the origin value only here.
+  headers.delete('x-breezze-country');
+  const edgeCountry = request.headers.get('cf-ipcountry')?.trim().toUpperCase();
+  if (edgeCountry && /^[A-Z]{2}$/.test(edgeCountry)) {
+    headers.set('x-breezze-country', edgeCountry);
+  }
   const init: RequestInit = {
     method: request.method,
     headers,

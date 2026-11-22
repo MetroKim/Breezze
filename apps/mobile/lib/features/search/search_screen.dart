@@ -16,7 +16,9 @@ import '../../widgets/bz_brand_icons.dart';
 
 bool _isMetadataOnlySourceTrack(String id) =>
     id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
+    (id.startsWith('bz:') &&
+        !id.startsWith('bz:audius:') &&
+        !id.startsWith('bz:jamendo:'));
 
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
@@ -156,7 +158,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           }
         });
       } else {
-        final op = await ref.read(youtubeSourceProvider).search(normalized);
+        final op = await ref.read(catalogSourceProvider).search(normalized);
         if (!mounted || generation != _searchGeneration) return;
         setState(() {
           _loading = false;

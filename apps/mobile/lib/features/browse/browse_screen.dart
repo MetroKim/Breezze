@@ -56,7 +56,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     });
 
     try {
-      final result = await ref.read(youtubeSourceProvider).search('$genre music');
+      final result = await ref.read(catalogSourceProvider).search('$genre music');
       if (!mounted || requestId != _requestId) return;
 
       if (result is ProviderOk<List<ProviderTrack>>) {
@@ -546,7 +546,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       _tracks = [];
     });
     try {
-      final result = await ref.read(youtubeSourceProvider).search('$choice music');
+      final result = await ref.read(catalogSourceProvider).search('$choice music');
       if (!mounted || generation != _generation) return;
       if (result is ProviderOk<List<ProviderTrack>>) {
         setState(() {

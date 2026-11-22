@@ -20,14 +20,14 @@ describe('PlaybackResolveService', () => {
 
   const request = {
     trackId: 'track-1',
-    territory: 'TZ',
     requestedQuality: 'AAC_256',
+    territory: 'US', // Deliberately spoofed; only the edge header is trusted.
   };
   const providerRequest = {
     providerId: 'audius',
     providerTrackId: 'track123',
     canonicalTrackId: 'canonical-1',
-    territory: 'TZ',
+    territory: 'US', // Deliberately spoofed; only the edge header is trusted.
   };
 
   beforeEach(() => {
@@ -40,6 +40,11 @@ describe('PlaybackResolveService', () => {
     );
   });
 
+  it('fails closed when the trusted edge cannot determine a playback territory', async () => {
+    await expect(service.resolve('user-1', request)).rejects.toThrow('PLAYBACK_TERRITORY_UNAVAILABLE');
+    expect(rights.decide).not.toHaveBeenCalled();
+  });
+
   it('never signs a full playback URL for a preview-only grant', async () => {
     rights.decide.mockResolvedValue({
       allowed: true,
@@ -50,7 +55,7 @@ describe('PlaybackResolveService', () => {
       attribution: 'Licensed via label',
     });
 
-    await expect(service.resolve('user-1', request)).rejects.toBeInstanceOf(
+    await expect(service.resolve('user-1', request, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
@@ -66,7 +71,7 @@ describe('PlaybackResolveService', () => {
       attribution: null,
     });
 
-    await expect(service.resolve('user-1', request)).rejects.toBeInstanceOf(
+    await expect(service.resolve('user-1', request, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
@@ -86,12 +91,15 @@ describe('PlaybackResolveService', () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    await expect(service.resolve('user-1', request)).resolves.toMatchObject({
+    await expect(service.resolve('user-1', request, 'TZ')).resolves.toMatchObject({
       trackId: 'track-1',
       streamUrl: 'https://cdn.example/audio/signed',
       codec: 'aac',
       attribution: 'Licensed via label',
       previewOnly: false,
+    });
+    expect(rights.decide).toHaveBeenCalledWith({
+      userId: 'user-1', trackId: 'track-1', action: 'stream.full', territory: 'TZ',
     });
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });
@@ -128,7 +136,7 @@ describe('PlaybackResolveService', () => {
     const adapter = validAdapter();
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).resolves.toMatchObject({
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).resolves.toMatchObject({
       providerId: 'audius',
       providerTrackId: 'track123',
       streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
@@ -152,7 +160,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(adapter.resolvePlayback).not.toHaveBeenCalled();
@@ -169,7 +177,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
     expect(adapter.resolvePlayback).not.toHaveBeenCalled();
@@ -180,7 +188,7 @@ describe('PlaybackResolveService', () => {
     prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'takedown-1' });
     providers.get.mockReturnValue(validAdapter());
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(providers.get).not.toHaveBeenCalled();
@@ -193,7 +201,7 @@ describe('PlaybackResolveService', () => {
       externalId: 'bz:youtube_music:track123',
     });
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       NotAcceptableException,
     );
     expect(prisma.contentTakedownCase.findFirst).not.toHaveBeenCalled();
@@ -212,7 +220,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
@@ -229,7 +237,7 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
