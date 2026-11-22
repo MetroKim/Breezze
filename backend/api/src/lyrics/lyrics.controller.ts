@@ -1,15 +1,40 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
-import { IsString } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  MaxLength,
+  Matches,
+} from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { LyricsService } from './lyrics.service';
 
 export class LyricsRequestDto {
   @IsString()
+  @IsUUID()
   trackId!: string;
 
   @IsString()
+  @Length(2, 2)
+  @Matches(/^[A-Z]{2}$/)
   territory!: string;
+}
+
+export class LyricsTranslationsQueryDto {
+  @IsUUID()
+  lyricsId!: string;
+
+  @IsString()
+  @Length(2, 2)
+  @Matches(/^[A-Z]{2}$/)
+  territory!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(35)
+  language?: string;
 }
 
 @Controller('lyrics')
@@ -27,9 +52,14 @@ export class LyricsController {
 
   @Get('translations')
   translations(
-    @Query('lyricsId') lyricsId: string,
-    @Query('language') language?: string,
+    @CurrentUser() userId: string,
+    @Query() dto: LyricsTranslationsQueryDto,
   ) {
-    return this.lyrics.getTranslations(lyricsId ?? '', language);
+    return this.lyrics.getTranslations(
+      userId,
+      dto.lyricsId,
+      dto.territory,
+      dto.language,
+    );
   }
 }
