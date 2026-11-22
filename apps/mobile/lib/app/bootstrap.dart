@@ -190,38 +190,40 @@ class LiveResolver implements PlaybackResolver {
 
       final providerIdentity = _providerIdentity(track.id);
       if (providerIdentity != null) {
-        final result = await api.resolveProviderPlayback(
+        final session = await api.startPlaybackSession(
           providerId: providerIdentity.$1,
           providerTrackId: providerIdentity.$2,
           canonicalTrackId: catalogId,
-          territory: _ref.read(outboxTerritoryProvider),
         );
-        final streamUrl = result['streamUrl'] as String?;
-        final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
-        if (streamUrl == null || expiresAt == null) return null;
+        final playback = session['playback'];
+        if (playback is! Map) return null;
+        final streamUrl = playback['streamUrl'] as String?;
+        final expiresAt = DateTime.tryParse(playback['expiresAt'] as String? ?? '');
+        final sessionId = session['id'] as String?;
+        if (streamUrl == null || expiresAt == null || sessionId == null) return null;
         return PlayableSource(
           trackId: track.id,
           streamUrl: streamUrl,
           expiresAtUtc: expiresAt.toUtc(),
-          codec: result['codec'] as String?,
+          sessionId: sessionId,
+          codec: playback['codec'] as String?,
         );
       }
 
-      final preferences = await DownloadPreferencesStore().load();
-      final result = await api.resolvePlayback(
-        trackId: catalogId,
-        territory: _ref.read(outboxTerritoryProvider),
-        requestedQuality: preferences.streamingQuality,
-      );
-      final streamUrl = result['streamUrl'] as String?;
-      final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
-      if (streamUrl == null || expiresAt == null) return null;
+      final session = await api.startPlaybackSession(trackId: catalogId);
+      final playback = session['playback'];
+      if (playback is! Map) return null;
+      final streamUrl = playback['streamUrl'] as String?;
+      final expiresAt = DateTime.tryParse(playback['expiresAt'] as String? ?? '');
+      final sessionId = session['id'] as String?;
+      if (streamUrl == null || expiresAt == null || sessionId == null) return null;
 
       return PlayableSource(
         trackId: track.id,
         streamUrl: streamUrl,
         expiresAtUtc: expiresAt.toUtc(),
-        codec: result['codec'] as String?,
+        sessionId: sessionId,
+        codec: playback['codec'] as String?,
       );
     } catch (_) {
       // Rights denials and backend/network failures are unavailable playback,
