@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
-import { AudiusAdapter } from './audius.adapter';
+import { DeezerAdapter } from './deezer.adapter';
+import { SoundCloudAdapter } from './soundcloud.adapter';
 import { JamendoAdapter } from './jamendo.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
 
-// The registry owns provider identity, capability declaration, and health.
-// Playback candidates are restricted to explicitly enabled playback adapters.
+// The registry owns provider identity, capabilities, and health.
+// Metadata discovery is separate from playback authorization: only providers
+// with an explicitly supported playback capability enter the playback resolver.
 @Injectable()
 export class ProviderRegistry {
   private readonly adapters = new Map<string, ProviderAdapter>();
@@ -15,12 +17,14 @@ export class ProviderRegistry {
   constructor(
     internal: InternalCatalogAdapter,
     youtubeMusic: YtMusicAdapter,
-    audius: AudiusAdapter,
+    deezer: DeezerAdapter,
+    soundCloud: SoundCloudAdapter,
     jamendo: JamendoAdapter,
   ) {
     this.register(internal);
     this.register(youtubeMusic);
-    this.register(audius);
+    this.register(deezer);
+    this.register(soundCloud);
     this.register(jamendo);
   }
 
