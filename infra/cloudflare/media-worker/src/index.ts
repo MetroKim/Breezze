@@ -136,7 +136,7 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   if (!object) return error(404, 'MEDIA_NOT_FOUND');
 
   const contentType = object.httpMetadata?.contentType
-    || (variant.toUpperCase().includes('LOSSLESS') || variant.toUpperCase().includes('FLAC')
+    || (variant.toUpperCase().includes('LOSSLESS') || variant.toUpperCase().includes('FLAC') || variant.toUpperCase().includes('HI_RES')
       ? 'audio/flac' : 'audio/mp4');
   const headers = new Headers({
     'Accept-Ranges': 'bytes',
