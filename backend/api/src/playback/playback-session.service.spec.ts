@@ -158,13 +158,13 @@ describe('PlaybackSessionService', () => {
   it('records a qualified listening event from server-accumulated time on stop', async () => {
     tx.playbackSession.findUnique.mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
-      status: 'active', accumulatedMs: 45_000,
+      status: 'active', accumulatedMs: 45_000, lastHeartbeatAt: new Date(Date.now() - 10_000),
     });
     await expect(service.stop('user-1', 'session-uuid')).resolves.toMatchObject({
-      stopped: true, duplicate: false, qualifiedPlayRecorded: true, accumulatedMs: 45_000,
+      stopped: true, duplicate: false, qualifiedPlayRecorded: true, accumulatedMs: 55_000,
     });
     expect(tx.listeningEvent.create).toHaveBeenCalledWith({
-      data: { id: 'session-uuid', userId: 'user-1', trackId: 'track-1', playedMs: 45_000 },
+      data: { id: 'session-uuid', userId: 'user-1', trackId: 'track-1', playedMs: 55_000 },
     });
     expect(tx.recentlyPlayed.upsert).toHaveBeenCalled();
   });
@@ -172,7 +172,7 @@ describe('PlaybackSessionService', () => {
   it('does not create a qualified event for a short session', async () => {
     tx.playbackSession.findUnique.mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
-      status: 'active', accumulatedMs: 29_999,
+      status: 'active', accumulatedMs: 29_999, lastHeartbeatAt: new Date(Date.now() - 10_000),
     });
     await expect(service.stop('user-1', 'session-uuid')).resolves.toMatchObject({
       qualifiedPlayRecorded: false,
