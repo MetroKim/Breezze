@@ -22,7 +22,9 @@ export class MediaSigner {
     rightsExpiresAt: Date | null = null,
   ): { url: string; expiresAt: Date } {
     const now = Date.now();
-    const defaultExpiry = now + 6 * 3600 * 1000;
+    // Keep bearer-style media grants short so takedowns and rights changes
+    // take effect quickly. Long transfers can request a fresh grant and resume.
+    const defaultExpiry = now + 15 * 60 * 1000;
     const expires = Math.min(
       defaultExpiry,
       rightsExpiresAt?.getTime() ?? defaultExpiry,
