@@ -35,26 +35,21 @@ export class DownloadsService {
     });
     if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
 
-    // Breezze-hosted assets are authorized by the rights engine and signed
-    // media service. External providers must explicitly support downloads.
-    if (!track.source || track.source === 'breezze_internal') return true;
-
-    const provider = this.providers.get(track.source);
-    if (
-      !provider ||
-      !provider.capabilities.download ||
-      !provider.capabilities.availability
-    ) {
-      return false;
+    // Only explicitly internal records (or legacy records with no external
+    // identity) can use Breezze's R2 download signer. ProviderAdapter currently
+    // has no authorized download-URL resolver, so external downloads remain
+    // blocked even if a future adapter accidentally flips its capability flag.
+    if (track.source === 'breezze_internal' || (track.source === null && track.externalId === null)) {
+      return true;
     }
 
-    const externalPrefix = `bz:${track.source}:`;
-    if (!track.externalId?.startsWith(externalPrefix)) return false;
-    const providerTrackId = track.externalId.slice(externalPrefix.length);
-    if (!providerTrackId) return false;
-
-    const availability = await provider.getAvailability(providerTrackId, territory);
-    return availability.kind === 'ok' && availability.value.available;
+    const provider = track.source ? this.providers.get(track.source) : undefined;
+    if (!provider || !provider.capabilities.download || !provider.capabilities.availability) {
+      return false;
+    }
+    // A capability flag alone is not a downloadable source URL. Do not sign
+    // a Breezze-owned R2 path for an asset hosted by a third-party provider.
+    return false;
   }
 
   async authorizeAndRecord(
