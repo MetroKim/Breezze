@@ -138,6 +138,12 @@ model Track {
   rights      RightsUsagePermission[]
   takedowns   ContentTakedownCase[]
   attribution ProviderAttribution?
+  favorites Favorite[]
+  recentlyPlayed RecentlyPlayed[]
+  listeningEvents ListeningEvent[]
+  playlistItems PlaylistItem[]
+  downloads DownloadRecord[]
+  lyrics Lyrics?
 }
 
 model TerritoryAvailability {
@@ -183,6 +189,7 @@ model Favorite {
   trackId   String
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@unique([userId, trackId])
 }
@@ -193,6 +200,7 @@ model RecentlyPlayed {
   trackId     String
   playedAt    DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track       Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@unique([userId, trackId])
 }
@@ -204,6 +212,7 @@ model ListeningEvent {
   playedMs  Int      @default(0)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
 }
 
 model Playlist {
@@ -221,6 +230,7 @@ model PlaylistItem {
   trackId    String
   position   Int
   playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@unique([playlistId, trackId])
 }
@@ -233,6 +243,7 @@ model DownloadRecord {
   createdAt DateTime  @default(now())
   expiresAt DateTime?
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@unique([userId, trackId])
 }
@@ -244,6 +255,8 @@ model Lyrics {
   syncedLrc String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  translations LyricTranslation[]
 }
 
 model LyricTranslation {
@@ -251,6 +264,7 @@ model LyricTranslation {
   lyricsId String
   language String
   text     String
+  lyrics   Lyrics @relation(fields: [lyricsId], references: [id], onDelete: Cascade)
 
   @@unique([lyricsId, language])
 }
