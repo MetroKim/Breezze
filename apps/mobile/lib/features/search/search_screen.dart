@@ -101,7 +101,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     if (_searchLibrary) {
       try {
-        final favorites = await ref.read(favoritesStoreProvider).load();
+        final auth = ref.read(authSessionProvider);
+        final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+        final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
         if (!mounted || generation != _searchGeneration) return;
         final needle = normalized.toLowerCase();
         final matches = favorites.where((item) =>
@@ -322,8 +324,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _addFavorite(BzTrack track) async {
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     final favorites = ref.read(favoritesStoreProvider);
-    if (!await favorites.isFavorite(track.id)) {
+    if (!await favorites.isFavorite(track.id, ownerId: ownerId)) {
       await favorites.toggle(
         FavoriteTrack(
           id: track.id,
@@ -332,6 +336,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           artworkUrl: track.artworkUrl,
           durationMs: track.duration.inMilliseconds,
         ),
+        ownerId: ownerId,
       );
       await ref.read(outboxSyncProvider).drainIfSignedIn();
     }
