@@ -4,7 +4,6 @@ import { RecommendationsService } from './recommendations.service';
 
 describe('RecommendationsService', () => {
   const prisma = {
-    userPreference: { findUnique: jest.fn() },
     recentlyPlayed: { findMany: jest.fn() },
     favorite: { findMany: jest.fn() },
     listeningEvent: { groupBy: jest.fn() },
@@ -15,7 +14,6 @@ describe('RecommendationsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.userPreference.findUnique.mockResolvedValue({ country: 'TZ' });
     prisma.recentlyPlayed.findMany.mockResolvedValue([]);
     prisma.favorite.findMany.mockResolvedValue([]);
     prisma.listeningEvent.groupBy.mockResolvedValue([
@@ -48,10 +46,10 @@ describe('RecommendationsService', () => {
     );
   });
 
-  it('returns no playback recommendations until the user has a valid territory', async () => {
-    prisma.userPreference.findUnique.mockResolvedValue({ country: null });
+  it('returns no playback recommendations until a trusted edge territory is available', async () => {
+    
 
-    await expect(service.forUser('user-1')).resolves.toEqual([]);
+    await expect(service.forUser('user-1', undefined)).resolves.toEqual([]);
     expect(prisma.listeningEvent.groupBy).not.toHaveBeenCalled();
     expect(rights.filterFullStream).not.toHaveBeenCalled();
   });
@@ -59,7 +57,7 @@ describe('RecommendationsService', () => {
   it('ranks listening artists, caps each artist at two tracks, and checks full-play rights', async () => {
     rights.filterFullStream.mockResolvedValue(new Set(['a-3', 'b-1']));
 
-    await expect(service.forUser('user-1')).resolves.toEqual([
+    await expect(service.forUser('user-1', 'TZ')).resolves.toEqual([
       { trackId: 'b-1', reason: 'Because you listen to this artist' },
       { trackId: 'a-3', reason: 'Because you listen to this artist' },
     ]);
@@ -125,7 +123,7 @@ describe('RecommendationsService', () => {
       { id: 'popular-2', artistId: 'artist-b' },
     ]);
 
-    await expect(service.forUser('new-user')).resolves.toEqual([
+    await expect(service.forUser('new-user', 'TZ')).resolves.toEqual([
       { trackId: 'popular-1', reason: 'Popular on Breezze' },
       { trackId: 'popular-2', reason: 'Popular on Breezze' },
     ]);
