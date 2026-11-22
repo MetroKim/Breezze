@@ -170,17 +170,25 @@ class AudioServiceBridge extends audio.BaseAudioHandler
 
 /// Starts audio_service with our handler; call once from bootstrap
 /// before the first frame.
-Future<AudioServiceBridge> startBackgroundAudio(
+Future<BackgroundAudioBridge> startBackgroundAudio(
     ProviderContainer container) async {
+  if (kIsWeb ||
+      (defaultTargetPlatform != TargetPlatform.android &&
+          defaultTargetPlatform != TargetPlatform.iOS)) {
+    return NoopBackgroundBridge();
+  }
+
   final bridge = await audio.AudioService.init(
     builder: () => AudioServiceBridge(container),
     config: const audio.AudioServiceConfig(
+      androidNotificationChannelId: 'com.breezze.audio',
       androidNotificationChannelName: 'Breezze playback',
       androidNotificationChannelDescription:
           'Playback controls for Breezze',
       androidNotificationIcon: 'mipmap/ic_launcher',
+      androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,
     ),
   );
-  return bridge;
+  return bridge as AudioServiceBridge;
 }
