@@ -611,9 +611,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         : Text(
                                             track.id.startsWith('bz:deezer:')
                                                 ? '${track.artist} · Deezer · Catalogue only'
-                                                : track.id.startsWith('bz:soundcloud:')
-                                                    ? '${track.artist} · SoundCloud · Catalogue only'
-                                                    : track.id.startsWith('bz:youtube_music:')
+                                                : track.id.startsWith('bz:youtube_music:')
                                                         ? '${track.artist} · YouTube Music · Catalogue only'
                                                         : track.id.startsWith('bz:jamendo:')
                                                             ? '${track.artist} · Jamendo'
@@ -625,11 +623,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          tooltip: 'Play',
+                                          tooltip: track.id.startsWith('bzv:') ? 'Watch music video' : 'Play',
                                           icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
-                                          onPressed: _isMetadataOnlySourceTrack(track.id)
-                                              ? null
-                                              : () => _play(track),
+                                          onPressed: (track.id.startsWith('bzv:') || !_isMetadataOnlySourceTrack(track.id))
+                                              ? () => _play(track)
+                                              : null,
                                         ),
                                         PopupMenuButton<String>(
                                           tooltip: 'Track actions',
