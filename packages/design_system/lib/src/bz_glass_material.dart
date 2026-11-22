@@ -119,13 +119,16 @@ class _BzGlassMaterialState extends State<BzGlassMaterial> {
     _syncRegistration();
   }
 
+  /// Registers or unregisters this surface against the viewport blur
+  /// budget. The flag is always updated BEFORE the budget assert runs,
+  /// so dispose() balances the counter even when the assert trips.
   void _syncRegistration() {
     final contract = _GlassContract.of(widget.state);
-    final solid = _useSolid();
-    final shouldBlur = contract.blurred && !solid;
+    final shouldBlur = contract.blurred && !_useSolid();
     if (shouldBlur == _blurred) return;
+    _blurred = shouldBlur;
+    _activeBlurredSurfaces += shouldBlur ? 1 : -1;
     if (shouldBlur) {
-      _activeBlurredSurfaces++;
       assert(
         _activeBlurredSurfaces <= bzMaxVisibleBlurredSurfaces,
         'Liquid Glass budget exceeded: $_activeBlurredSurfaces blurred '
@@ -133,10 +136,7 @@ class _BzGlassMaterialState extends State<BzGlassMaterial> {
         'per viewport is $bzMaxVisibleBlurredSurfaces (NFR-007). Merge, '
         'solidify, or demote one surface.',
       );
-    } else {
-      _activeBlurredSurfaces--;
     }
-    _blurred = shouldBlur;
   }
 
   @override
