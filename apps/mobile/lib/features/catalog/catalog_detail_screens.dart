@@ -106,7 +106,12 @@ class TrackDetailScreen extends ConsumerWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
-            child: ListView(
+            child: BzAmbientBackdrop(
+              // Content is the colour (§1): the artwork blooms softly
+              // behind the hero zone while sections below stay on the
+              // plain ground.
+              artworkUrl: track.artworkUrl,
+              child: ListView(
               padding: EdgeInsets.fromLTRB(20, 20, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
               children: [
                 Center(
@@ -278,6 +283,7 @@ class TrackDetailScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            ),
           ),
         ),
       ),
@@ -385,6 +391,9 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final queue = [for (final track in savedTracks) track.toTrackInfo()];
+    final heroArtwork = portraitUrl ?? (searchTracks.isNotEmpty
+        ? searchTracks.first.artworkUrl
+        : (savedTracks.isNotEmpty ? savedTracks.first.artworkUrl : null));
 
     return Scaffold(
       backgroundColor: theme.bzBackground,
@@ -400,7 +409,12 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
-            child: ListView(
+            child: BzAmbientBackdrop(
+              // Artist pages tint from cover art (Apple Music 7.0): the
+              // hero blooms from the first available artwork while the
+              // tracklist below stays readable on the plain ground.
+              artworkUrl: heroArtwork,
+              child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
               children: [
                 Center(
@@ -629,6 +643,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                   ),
               ],
             ),
+            ),
           ),
         ),
       ),
@@ -708,81 +723,84 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                     ? rawItems.whereType<Map>().map((item) =>
                         item.map((key, value) => MapEntry(key.toString(), value))).toList()
                     : <Map<String, dynamic>>[];
-                return ListView(
-                  padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
-                  children: [
-                    Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(BzRadius.artwork),
-                        child: artworkUrl == null
-                            ? Container(
-                                width: 220,
-                                height: 220,
-                                color: theme.bzSurface1,
-                                alignment: Alignment.center,
-                                child: const BzBnoteMark(size: 72),
-                              )
-                            : Image.network(
-                                artworkUrl!,
-                                width: 220,
-                                height: 220,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                return BzAmbientBackdrop(
+                  artworkUrl: artworkUrl,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+                    children: [
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(BzRadius.artwork),
+                          child: artworkUrl == null
+                              ? Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: const BzBnoteMark(size: 72),
+                                )
+                              : Image.network(
+                                  artworkUrl!,
+                                  width: 220,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                      const SizedBox(height: 6),
+                      Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: appleUrl == null ? null : () => _open(appleUrl),
+                        icon: const BzSvgIcon(name: 'arrow-up-right'),
+                        label: const Text('Open album in Apple Music'),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        child: Text(
+                          'Verified Apple album tracklist. iTunes preview links, when supplied, are short previews only. Full-track playback inside Breezze requires a separate provider with approved streaming rights.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      if (items.isEmpty)
+                        Text('Apple did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                      else
+                        for (var i = 0; i < items.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: SizedBox(
+                              width: 28,
+                              child: Text(
+                                (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
+                                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
                               ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
-                    const SizedBox(height: 6),
-                    Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: appleUrl == null ? null : () => _open(appleUrl),
-                      icon: const BzSvgIcon(name: 'arrow-up-right'),
-                      label: const Text('Open album in Apple Music'),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.bzSurface1,
-                        borderRadius: BorderRadius.circular(BzRadius.card),
-                        border: Border.all(color: theme.bzSeparator),
-                      ),
-                      child: Text(
-                        'Verified Apple album tracklist. iTunes preview links, when supplied, are short previews only. Full-track playback inside Breezze requires a separate provider with approved streaming rights.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
-                    const SizedBox(height: 8),
-                    if (items.isEmpty)
-                      Text('Apple did not return tracks for this album.', style: theme.textTheme.bodyMedium)
-                    else
-                      for (var i = 0; i < items.length; i++)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: SizedBox(
-                            width: 28,
-                            child: Text(
-                              (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
-                              style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                            ),
+                            title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              items[i]['durationMs'] is num
+                                  ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
+                                  : 'Duration not supplied',
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Open track in Apple Music',
+                              icon: const BzSvgIcon(name: 'arrow-up-right', size: 18),
+                              onPressed: () => _open(items[i]['url'] as String?),
                             ),
                           ),
-                          title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                            items[i]['durationMs'] is num
-                                ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
-                                : 'Duration not supplied',
-                          ),
-                          trailing: IconButton(
-                            tooltip: 'Open track in Apple Music',
-                            icon: const BzSvgIcon(name: 'arrow-up-right', size: 18),
-                            onPressed: () => _open(items[i]['url'] as String?),
-                          ),
-                        ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
@@ -874,7 +892,9 @@ class AlbumDetailScreen extends ConsumerWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
-            child: ListView(
+            child: BzAmbientBackdrop(
+              artworkUrl: artworkUrl,
+              child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
               children: [
                 Center(
@@ -969,6 +989,7 @@ class AlbumDetailScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            ),
           ),
         ),
       ),
@@ -1035,7 +1056,6 @@ class _CatalogSection extends StatelessWidget {
     );
   }
 }
-
 class _TrackArtwork extends StatelessWidget {
   final String? url;
   final double size;

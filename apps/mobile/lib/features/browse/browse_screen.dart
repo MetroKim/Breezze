@@ -150,8 +150,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                   const SizedBox(height: 18),
                   Text('Explore by genre', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 10),
+                  // Capsule pill genre rail — spec §2.3 tab indicators use
+                  // --radius-pill. Same treatment as Library and Search.
                   SizedBox(
-                    height: 42,
+                    height: 36,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _genres.length,
@@ -159,17 +161,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                       itemBuilder: (context, index) {
                         final genre = _genres[index];
                         final selected = genre == _selectedGenre;
-                        return ChoiceChip(
-                          label: Text(genre),
-                          selected: selected,
-                          onSelected: (_) => _loadGenre(genre),
-                          selectedColor: theme.bzText1,
-                          backgroundColor: theme.bzSurface1,
-                          labelStyle: TextStyle(
-                            color: selected ? theme.bzBackground : theme.bzText1,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          side: BorderSide(color: theme.bzSeparator),
+                        return _BrowsePill(
+                          label: genre,
+                          active: selected,
+                          onTap: () => _loadGenre(genre),
                         );
                       },
                     ),
@@ -354,7 +349,6 @@ class _MessageState extends StatelessWidget {
     );
   }
 }
-
 
 class _BrowseDestination {
   final String title;
@@ -638,10 +632,10 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                               spacing: 8,
                               runSpacing: 8,
                               children: [for (final choice in _choices)
-                                ChoiceChip(
-                                  label: Text(choice),
-                                  selected: _selected == choice,
-                                  onSelected: (_) => _search(choice),
+                                _BrowsePill(
+                                  label: choice,
+                                  active: _selected == choice,
+                                  onTap: () => _search(choice),
                                 )],
                             ),
                             const SizedBox(height: 14),
@@ -955,6 +949,52 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
           child: const Text('Back to Browse'),
         ),
       ],
+    );
+  }
+}
+
+/// Browse selection pill — capsule (spec --radius-pill), solid text1 fill
+/// when active, surface2 when not. Mirrors the Library and Search pills.
+class _BrowsePill extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _BrowsePill({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: BzMotion.fastMs),
+          curve: const Cubic(0.22, 1, 0.36, 1),
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? theme.bzText1 : theme.bzSurface2,
+            borderRadius: BorderRadius.circular(BzRadius.capsule),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: BzType.subheadline,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: active ? theme.bzBackground : theme.bzText2,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

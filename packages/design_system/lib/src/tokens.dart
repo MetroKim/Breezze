@@ -4,45 +4,63 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// Semantic tokens only. No literal colors are allowed anywhere else in
 /// the app; every surface, text, and control consumes these.
+///
+/// 2026-11 revision ("Liquid Glass" alignment):
+/// - Light mode ground is a cool grey (#f5f5f7), never warm cream.
+/// - Dark mode collapses to pure black (#000000) for OLED efficiency.
+/// - Accent is a single blue family (#0071e3 light / #0a84ff dark),
+///   reserved for primary music actions and active navigation only.
+/// - Separators are hairlines (7% black / 10% white), not solid greys.
+/// - Accent is NEVER used as a background wash.
 class BzColorsLight {
-  static const background = Color(0xFFFFFFFF);
-  static const surfacePrimary = Color(0xFFF4F5F7);
-  static const surfaceSecondary = Color(0xFFEAEDF0);
+  static const background = Color(0xFFF5F5F7); // cool ground
+  static const surfacePrimary = Color(0xFFFFFFFF); // cards, sheets, panels
+  static const surfaceSecondary = Color(0xFFFBFBFD); // hover, secondary buttons
   static const surfaceElevated = Color(0xFFFFFFFF);
-  static const textPrimary = Color(0xFF111317);
-  static const textSecondary = Color(0xFF626A73);
-  static const separator = Color(0xFFE2E6EA);
-  static const brandMonochrome = Color(0xFF111317);
-  static const accent = Color(0xFFE5484D);
+  static const textPrimary = Color(0xFF1D1D1F);
+  static const textSecondary = Color(0xFF6E6E73);
+  static const textTertiary = Color(0xFF86868B);
+  static const separator = Color(0x12000000); // 7% black hairline
+  static const brandMonochrome = Color(0xFF1D1D1F);
+  static const accent = Color(0xFF0071E3); // light-mode Apple blue
+  static const accentOnTint = Color(0xFF0066CC);
+  static const live = Color(0xFF30D158);
   static const success = Color(0xFF237A4B);
   static const warning = Color(0xFF98620E);
   static const error = Color(0xFFB42332);
 }
 
 class BzColorsDark {
-  static const background = Color(0xFF08090B);
-  static const surfacePrimary = Color(0xFF121417);
-  static const surfaceSecondary = Color(0xFF1B1F24);
-  static const surfaceElevated = Color(0xFF252A31);
-  static const textPrimary = Color(0xFFF5F7FA);
-  static const textSecondary = Color(0xFFA1A9B3);
-  static const separator = Color(0xFF2C323A);
-  static const brandOnDark = Color(0xFFF5F7FA);
-  static const accent = Color(0xFFFF6670);
+  static const background = Color(0xFF000000); // OLED pure black
+  static const surfacePrimary = Color(0xFF1C1C1E); // cards, sheets, panels
+  static const surfaceSecondary = Color(0xFF2C2C2E); // hover, secondary buttons
+  static const surfaceElevated = Color(0xFF1C1C1E);
+  static const textPrimary = Color(0xFFFFFFFF);
+  static const textSecondary = Color(0xFFB3B3B8); // ~rgba(255,255,255,0.7)
+  static const textTertiary = Color(0xFF737378); // ~rgba(255,255,255,0.45)
+  static const separator = Color(0x1AFFFFFF); // 10% white hairline
+  static const brandOnDark = Color(0xFFFFFFFF);
+  static const accent = Color(0xFF0A84FF); // dark-mode Apple blue
+  static const accentOnTint = Color(0xFF409CFF);
+  static const live = Color(0xFF30D158);
   static const success = Color(0xFF55C88A);
   static const warning = Color(0xFFEAB95C);
   static const error = Color(0xFFFF6574);
 
   // Atmosphere material overlays (§20.1)
-  static const atmoRegular = Color(0xB8121417); // 72% surface-1
-  static const atmoClear = Color(0x2E08090B); // 18% background
-  static const softDiffuse = Color(0x80121417); // 50% surface-1
+  // pill-scrolled state: 85-95% near-opaque surface + saturate/blur.
+  static const atmoRegular = Color(0xE01C1C1E); // 88% surface-1
+  // clear state: sparse large controls over rich media only.
+  static const atmoClear = Color(0x2E000000); // 18% background
+  // media-overlay: demoted overlay-chrome recipe (55%).
+  static const softDiffuse = Color(0x8C1C1C1E); // 55% surface-1
 }
 
 class BzColorsLightAtmo {
-  static const atmoRegular = Color(0xB8FFFFFF); // 72% white
-  static const atmoClear = Color(0x2EFFFFFF); // 18% white
-  static const softDiffuse = Color(0x80F4F5F7); // 50% surface-1
+  // pill-scrolled light equivalent: 88% white + blur.
+  static const atmoRegular = Color(0xE0FFFFFF); // 88% white
+  static const atmoClear = Color(0x2EF5F5F7); // 18% ground
+  static const softDiffuse = Color(0x8CFFFFFF); // 55% white
 }
 
 /// Spacing — 8pt grid, 4pt micro (§21.5).
@@ -61,13 +79,13 @@ class BzSpacing {
 
 /// Radius (§21.6).
 class BzRadius {
-  static const double button = 8;
-  static const double input = 10;
-  static const double artwork = 12;
-  static const double card = 18;
-  static const double sheet = 22;
-  static const double modal = 28;
-  static const double capsule = 999;
+  static const double button = 8; // buttons, list rows, sidebar selection
+  static const double input = 12; // search field
+  static const double artwork = 12; // artwork cards
+  static const double card = 12;
+  static const double sheet = 20; // floating panels, bottom sheets
+  static const double modal = 32; // large immersive overlays
+  static const double capsule = 999; // search pill, player pill, tab indicator
 }
 
 /// Elevation (§21.7).
@@ -89,6 +107,10 @@ class BzMotion {
   static const int expandMs = 420;
   static const int sheetMs = 320;
   static const int morphMs = 450;
+
+  /// Scroll-adaptive bars animate background-color/opacity ONLY
+  /// (never size, radius, padding, or layout on a blurred bar).
+  static const int barAdaptMs = 200;
 }
 
 /// Type scale (§21.3).
@@ -105,11 +127,10 @@ class BzType {
   static const double caption = 11;
 }
 
-
 /// Shared responsive breakpoints for the adaptive Flutter shell.
 class BzBreakpoints {
   static const double compact = 600;
-  static const double medium = 840;
+  static const double medium = 810;
   static const double expanded = 1200;
   static const double wide = 1600;
   static const double contentMaxWidth = 1440;
