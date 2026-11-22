@@ -4,14 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
+import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
-
-bool _isMetadataOnlySourceTrack(String id) =>
-    id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:'));
 
 final _appleTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
@@ -58,7 +55,7 @@ class TrackDetailScreen extends ConsumerWidget {
         .toList();
     final queueTracks = (relatedTracks.isEmpty ? [track] : relatedTracks)
         .where((item) =>
-            !_isMetadataOnlySourceTrack(item.id))
+            !isMetadataOnlyTrackId(item.id))
         .toList();
     final queue = [
       for (final item in queueTracks)
@@ -139,7 +136,7 @@ class TrackDetailScreen extends ConsumerWidget {
                   runSpacing: 10,
                   children: [
                     FilledButton.icon(
-                      onPressed: _isMetadataOnlySourceTrack(track.id)
+                      onPressed: isMetadataOnlyTrackId(track.id)
                           ? null
                           : () async {
                         await ref.read(playerControllerProvider.notifier).playTrack(
@@ -151,7 +148,7 @@ class TrackDetailScreen extends ConsumerWidget {
                         );
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
-                      label: Text(_isMetadataOnlySourceTrack(track.id) ? 'Playback unavailable' : 'Play'),
+                      label: Text(isMetadataOnlyTrackId(track.id) ? 'Playback unavailable' : 'Play'),
                     ),
                     OutlinedButton.icon(
                       onPressed: saveToLibrary,
@@ -159,7 +156,7 @@ class TrackDetailScreen extends ConsumerWidget {
                       label: const Text('Add to Library'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _isMetadataOnlySourceTrack(track.id)
+                      onPressed: isMetadataOnlyTrackId(track.id)
                           ? null
                           : () => ref.read(playerControllerProvider.notifier).playNext(
                                 TrackInfo(id: track.id, title: track.title, artist: track.artist, artworkUrl: track.artworkUrl, duration: track.duration),
@@ -844,12 +841,12 @@ class AlbumDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final queue = tracks.where((track) => !_isMetadataOnlySourceTrack(track.id)).toList();
+    final queue = tracks.where((track) => !isMetadataOnlyTrackId(track.id)).toList();
 
     Future<void> playAt(int index, {bool shuffle = false}) async {
       if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
       final track = tracks[index];
-      if (_isMetadataOnlySourceTrack(track.id)) {
+      if (isMetadataOnlyTrackId(track.id)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
         );
@@ -870,7 +867,7 @@ class AlbumDetailScreen extends ConsumerWidget {
 
     Future<void> play({bool shuffle = false}) async {
       if (tracks.isEmpty) return;
-      final nativeIndex = tracks.indexWhere((item) => !_isMetadataOnlySourceTrack(item.id));
+      final nativeIndex = tracks.indexWhere((item) => !isMetadataOnlyTrackId(item.id));
       if (nativeIndex >= 0) {
         await playAt(nativeIndex, shuffle: shuffle);
       } else {
