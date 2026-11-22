@@ -291,7 +291,7 @@ class _SupportRequestPanelState extends ConsumerState<_SupportRequestPanel> {
               style: theme.textTheme.titleLarge),
           const SizedBox(height: 6),
           Text(
-            'Send a request without leaving the app. Replies and request status will be shown here when available.',
+            'Send a request without leaving the app. Your request status will appear here when available.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.bzText2,
             ),
@@ -404,7 +404,7 @@ class _SupportRequestPanelState extends ConsumerState<_SupportRequestPanel> {
                   subtitle: Text(
                     '${_categories[request['category']] ?? 'Support'} · ${request['status'] ?? 'open'}',
                   ),
-                  trailing: const Icon(Icons.chevron_right),
+                  trailing: Text(request['status'] as String? ?? 'open'),
                 ),
           ],
         ],
