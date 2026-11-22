@@ -63,7 +63,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     if (auth is AuthSignedIn) {
       try {
         await albumStore.syncWithCloud(
-          ownerId, ref.read(authSessionProvider.notifier).api,
+          ownerId,
+          ref.read(authSessionProvider.notifier).api,
+          ownerStillActive: () {
+            if (!mounted) return false;
+            final active = ref.read(authSessionProvider);
+            return active is AuthSignedIn && active.userId == ownerId;
+          },
         );
         savedAlbums = await albumStore.load(ownerId);
       } catch (_) {
@@ -518,7 +524,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 if (auth is AuthSignedIn && auth.userId == owner) {
                   try {
                     await store.syncWithCloud(
-                      owner, ref.read(authSessionProvider.notifier).api,
+                      owner,
+                      ref.read(authSessionProvider.notifier).api,
+                      ownerStillActive: () {
+                        if (!mounted) return false;
+                        final active = ref.read(authSessionProvider);
+                        return active is AuthSignedIn && active.userId == owner;
+                      },
                     );
                   } catch (_) {
                     if (mounted) {
