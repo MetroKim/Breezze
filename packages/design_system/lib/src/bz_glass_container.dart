@@ -1,18 +1,32 @@
-import 'dart:ui';
-
 import 'package:material_ui/material_ui.dart';
 
+import 'bz_glass_material.dart';
 import 'bz_theme.dart';
 
-/// BzGlassContainer — the one glass surface every floating widget uses.
+/// BzGlassContainer — legacy glass surface, now delegating to the named
+/// Liquid Glass materials (§2.2).
 ///
-/// Translucent fill + backdrop blur + hairline border. Degrades to a
-/// solid surface when the caller requests reduced transparency or the
-/// platform enables high-contrast accessibility mode.
+/// The public API is preserved for existing call sites. The legacy
+/// parameters map onto the material contract:
+/// - default fill (atmoRegular) → [BzGlassState.pillScrolled]
+/// - atmoClear fill → [BzGlassState.mediaOverlay]
+/// - a blur of 12 or less over a calm zone → [BzGlassState.pillAtTop]
+///
+/// The old recipe (generic blur 24, no saturation boost) is retired: the
+/// saturation boost is what separates Liquid Glass from generic
+/// translucency.
 class BzGlassContainer extends StatelessWidget {
   final Widget child;
   final double radius;
+
+  /// Legacy. The material contract now owns blur; values <= 12 select
+  /// the pillAtTop material, anything larger selects the state derived
+  /// from the fill color.
   final double blur;
+
+  /// Legacy. When null (the default) the theme's pill-scrolled fill is
+  /// used. When it matches the theme's media-overlay fill the
+  /// media-overlay material is selected.
   final Color? fillColor;
   final Color? borderColor;
   final bool reduceTransparency;
@@ -29,39 +43,24 @@ class BzGlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.bz;
+    final colors = Theme.of(context).bz;
+    final fill = fillColor;
+    final isMediaOverlay = fill != null &&
+        (fill.value == colors.atmoClear.value ||
+            fill.value == colors.softDiffuse.value);
 
-    final fill = fillColor ?? colors.atmoRegular;
-    final border = borderColor ?? colors.separator;
+    final state = isMediaOverlay
+        ? (blur <= 12
+              ? BzGlassState.pillAtTop
+              : BzGlassState.mediaOverlay)
+        : (blur <= 12 ? BzGlassState.pillAtTop : BzGlassState.pillScrolled);
 
-    final useSolidSurface = reduceTransparency ||
-        MediaQuery.highContrastOf(context);
-
-    if (useSolidSurface) {
-      return Container(
-        decoration: BoxDecoration(
-          color: colors.surface1,
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: border),
-        ),
-        child: child,
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: border, width: 0.5),
-          ),
-          child: child,
-        ),
-      ),
+    return BzGlassMaterial(
+      state: state,
+      radius: radius,
+      reduceTransparency: reduceTransparency,
+      shadows: const [],
+      child: child,
     );
   }
 }
