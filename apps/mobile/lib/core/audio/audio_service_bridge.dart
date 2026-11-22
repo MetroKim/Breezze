@@ -179,8 +179,7 @@ class AudioServiceBridge extends audio.BaseAudioHandler
   }
 }
 
-/// Starts audio_service with our handler; call once from bootstrap
-/// before the first frame.
+/// Starts audio_service with our handler; called once by the app root.
 Future<BackgroundAudioBridge> startBackgroundAudio(
     ProviderContainer container) async {
   if (defaultTargetPlatform == TargetPlatform.fuchsia) {
