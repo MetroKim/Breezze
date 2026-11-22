@@ -195,12 +195,18 @@ class LiveResolver implements PlaybackResolver {
           providerTrackId: providerIdentity.$2,
           canonicalTrackId: catalogId,
         );
-        final playback = session['playback'];
-        if (playback is! Map) return null;
-        final streamUrl = playback['streamUrl'] as String?;
-        final expiresAt = DateTime.tryParse(playback['expiresAt'] as String? ?? '');
         final sessionId = session['id'] as String?;
-        if (streamUrl == null || expiresAt == null || sessionId == null) return null;
+        final playback = session['playback'];
+        final streamUrl = playback is Map ? playback['streamUrl'] as String? : null;
+        final expiresAt = playback is Map
+            ? DateTime.tryParse(playback['expiresAt'] as String? ?? '')
+            : null;
+        if (streamUrl == null || expiresAt == null || sessionId == null) {
+          if (sessionId != null) {
+            try { await api.stopPlaybackSession(sessionId); } catch (_) {}
+          }
+          return null;
+        }
         return PlayableSource(
           trackId: track.id,
           streamUrl: streamUrl,
@@ -215,12 +221,18 @@ class LiveResolver implements PlaybackResolver {
         trackId: catalogId,
         requestedQuality: preferences.streamingQuality,
       );
-      final playback = session['playback'];
-      if (playback is! Map) return null;
-      final streamUrl = playback['streamUrl'] as String?;
-      final expiresAt = DateTime.tryParse(playback['expiresAt'] as String? ?? '');
       final sessionId = session['id'] as String?;
-      if (streamUrl == null || expiresAt == null || sessionId == null) return null;
+      final playback = session['playback'];
+      final streamUrl = playback is Map ? playback['streamUrl'] as String? : null;
+      final expiresAt = playback is Map
+          ? DateTime.tryParse(playback['expiresAt'] as String? ?? '')
+          : null;
+      if (streamUrl == null || expiresAt == null || sessionId == null) {
+        if (sessionId != null) {
+          try { await api.stopPlaybackSession(sessionId); } catch (_) {}
+        }
+        return null;
+      }
 
       return PlayableSource(
         trackId: track.id,
