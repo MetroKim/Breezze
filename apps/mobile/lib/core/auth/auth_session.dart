@@ -20,7 +20,8 @@ class AuthSignedOut extends AuthState {
 }
 
 class AuthSigningIn extends AuthState {
-  const AuthSigningIn();
+  final bool social;
+  const AuthSigningIn({this.social = false});
 }
 
 class AuthSignedIn extends AuthState {
@@ -182,7 +183,7 @@ class AuthSessionController extends Notifier<AuthState> {
     Map<String, dynamic>? preparedFlow,
   }) async {
     final attempt = ++_socialAttempt;
-    state = const AuthSigningIn();
+    state = const AuthSigningIn(social: true);
     try {
       // Preloaded flow keeps launchUrl on the original pointer activation
       // for browsers that block asynchronous popups.
