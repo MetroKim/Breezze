@@ -229,9 +229,14 @@ describe('PlaybackSessionService', () => {
     await expect(service.stop('user-1', 'session-uuid')).resolves.toMatchObject({
       qualifiedPlayRecorded: false, accumulatedMs: 29_999,
     });
-    expect(tx.playbackSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ accumulatedMs: { increment: 0 } }),
-    }));
+    expect(tx.playbackSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 'session-uuid', userId: 'user-1', status: 'paused' },
+      data: {
+        status: 'stopped',
+        stoppedAt: expect.any(Date),
+        accumulatedMs: { increment: 0 },
+      },
+    });
     expect(tx.listeningEvent.create).not.toHaveBeenCalled();
   });
 
