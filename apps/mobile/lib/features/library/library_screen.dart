@@ -554,7 +554,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 }
 
 /// Library section pill — capsule (spec --radius-pill) with a solid
-/// text1 fill when active, plain text2 when not. 44pt-min hit target.
+/// text1 fill when active, surface2 when not. 36pt visual height with
+/// a generous hit area for the 44pt minimum.
 class _LibraryPill extends StatelessWidget {
   final String label;
   final bool active;
@@ -582,7 +583,7 @@ class _LibraryPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? theme.bzText1 : theme.bzSurfaceSecondary,
+            color: active ? theme.bzText1 : theme.bzSurface2,
             borderRadius: BorderRadius.circular(BzRadius.capsule),
           ),
           child: Text(
