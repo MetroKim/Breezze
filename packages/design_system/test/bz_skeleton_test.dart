@@ -61,4 +61,56 @@ void main() {
     );
     expect(desktopInset, 24);
   });
+
+  // --- Liquid Glass material contract (PRT-09) ---
+  // Glass is never mandatory: under high contrast the container must
+  // render its solid-surface branch with no BackdropFilter in the tree.
+  testWidgets('glass container falls back to solid surface on high contrast',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: bzLightTheme(),
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(390, 844),
+            highContrast: true,
+          ),
+          child: const Scaffold(
+            body: Center(
+              child: BzGlassContainer(
+                radius: 999,
+                child: SizedBox(width: 40, height: 40),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('glass container renders backdrop filter in normal mode',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: bzDarkTheme(),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(390, 844)),
+          child: const Scaffold(
+            body: Center(
+              child: BzGlassContainer(
+                radius: 999,
+                child: SizedBox(width: 40, height: 40),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
