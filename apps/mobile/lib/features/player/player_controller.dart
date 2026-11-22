@@ -112,6 +112,19 @@ class PlayerController extends Notifier<PlayerState> {
     _pendingHeartbeatEventId = null;
   }
 
+  Future<void> _pauseServerSession() async {
+    _pauseHeartbeatTimer();
+    final sessionId = _playbackSessionId;
+    if (sessionId == null) return;
+    try {
+      await _sessionClient.pause(sessionId);
+    } catch (_) {
+      // Do not keep crediting an active server session after an unconfirmed
+      // pause. A later resume obtains a fresh authorized session.
+      await _closePlaybackSession();
+    }
+  }
+
   /// Track info remembered for the current queue, keyed by track id.
   final Map<String, TrackInfo> _trackInfos = {};
 
@@ -163,6 +176,7 @@ class PlayerController extends Notifier<PlayerState> {
       if (engineState == PlaybackState.interrupted &&
           _machine.state == PlaybackState.playing) {
         _machine.dispatch(InterruptionDetected());
+        unawaited(_pauseServerSession());
         return;
       }
       if (engineState == PlaybackState.paused &&
@@ -173,6 +187,7 @@ class PlayerController extends Notifier<PlayerState> {
       if (engineState == PlaybackState.paused &&
           _machine.state == PlaybackState.playing) {
         _machine.dispatch(PausePressed());
+        unawaited(_pauseServerSession());
         return;
       }
       state = state.copyWith(playbackState: engineState);
@@ -184,6 +199,9 @@ class PlayerController extends Notifier<PlayerState> {
         // single app-wide queue here so playback continues without requiring
         // the user to tap Next. The guard prevents duplicate completed events
         // from advancing more than once for the same item.
+        if (engineState == PlaybackState.ended) {
+          unawaited(_closePlaybackSession());
+        }
         if (engineState == PlaybackState.ended &&
             currentTrackId != null &&
             _autoAdvancedTrackId != currentTrackId) {
@@ -197,6 +215,7 @@ class PlayerController extends Notifier<PlayerState> {
   void detachEngine() {
     final currentTrackId = state.currentTrack?.id;
     if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+    unawaited(_closePlaybackSession());
     _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
@@ -307,13 +326,11 @@ class PlayerController extends Notifier<PlayerState> {
     _pauseHeartbeatTimer();
     try {
       await _serializeEngineOperation(() => engine.pause());
-      final sessionId = _playbackSessionId;
-      if (sessionId != null) {
-        try { await _sessionClient.pause(sessionId); } catch (_) {}
-      }
+      await _pauseServerSession();
     } catch (_) {
       final currentTrackId = state.currentTrack?.id;
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+      await _closePlaybackSession();
       _machine.dispatch(SourceResolutionFailed('PAUSE_FAILED', requestId: _machine.activeRequestId));
     }
   }
@@ -330,10 +347,15 @@ class PlayerController extends Notifier<PlayerState> {
       return;
     }
     final sessionId = _playbackSessionId;
+    if (activeSource?.sessionId != null && sessionId == null && currentTrack != null) {
+      await _resolveAndPlay(currentTrack, initialPosition: state.position);
+      return;
+    }
     if (sessionId != null) {
       try {
         await _sessionClient.resume(sessionId);
       } catch (_) {
+        await _closePlaybackSession();
         return;
       }
     }
@@ -351,7 +373,11 @@ class PlayerController extends Notifier<PlayerState> {
           },
         ));
       });
+      if (sessionId != null && state.playbackState == PlaybackState.playing) {
+        _startHeartbeatTimer();
+      }
     } catch (_) {
+      await _closePlaybackSession();
       final currentTrackId = state.currentTrack?.id;
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
       _machine.dispatch(SourceResolutionFailed(
@@ -519,7 +545,12 @@ class PlayerController extends Notifier<PlayerState> {
               isLocal: true,
             )
           : await ref.read(playbackResolverProvider).resolve(info);
-      if (!_isCurrentRequest(requestId)) return;
+      if (!_isCurrentRequest(requestId)) {
+        if (source?.sessionId != null) {
+          try { await _sessionClient.stop(source!.sessionId!); } catch (_) {}
+        }
+        return;
+      }
 
       if (source == null) {
         _activeSource = null;
@@ -537,10 +568,14 @@ class PlayerController extends Notifier<PlayerState> {
         source.streamUrl,
         requestId: requestId,
       ));
-      if (_machine.state != PlaybackState.loading) return;
+      if (_machine.state != PlaybackState.loading) {
+        await _closePlaybackSession();
+        return;
+      }
 
       final engine = _engine;
       if (engine == null) {
+        await _closePlaybackSession();
         _machine.dispatch(SourceResolutionFailed(
           'AUDIO_ENGINE_UNAVAILABLE',
           requestId: requestId,
