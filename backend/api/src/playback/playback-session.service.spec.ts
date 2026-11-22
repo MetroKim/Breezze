@@ -36,16 +36,14 @@ describe('PlaybackSessionService', () => {
     });
     prisma.playbackHeartbeat.findUnique.mockResolvedValue(null);
     prisma.playbackHeartbeat.create.mockResolvedValue({});
-    tx.playbackSession.findUnique.mockResolvedValue({
+    tx.playbackSession.findUnique.mockResolvedValueOnce({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
       status: 'active', territory: 'TZ', expiresAt: new Date(Date.now() + 60_000),
       lastSequence: 0, lastHeartbeatAt: new Date(Date.now() - 10_000), accumulatedMs: 0,
     });
+    tx.playbackSession.findUnique.mockResolvedValue({ accumulatedMs: 10_000 });
     tx.playbackSession.updateMany.mockResolvedValue({ count: 1 });
     tx.playbackHeartbeat.create.mockResolvedValue({});
-    tx.playbackSession.findUnique.mockResolvedValue({
-      accumulatedMs: 10_000,
-    });
     tx.listeningEvent.findUnique.mockResolvedValue(null);
     tx.listeningEvent.create.mockResolvedValue({});
     tx.recentlyPlayed.upsert.mockResolvedValue({});
