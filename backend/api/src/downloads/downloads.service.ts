@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotAcceptableException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from '../playback/media-signer.service';
+import { ProviderRegistry } from '../providers/provider-registry.service';
 
 @Injectable()
 export class DownloadsService {
@@ -9,12 +14,52 @@ export class DownloadsService {
     private readonly prisma: PrismaService,
     private readonly rights: RightsDecisionService,
     private readonly signer: MediaSigner,
+    private readonly providers: ProviderRegistry,
   ) {}
+
+  private async providerAllowsDownload(
+    trackId: string,
+    territory: string,
+  ): Promise<boolean> {
+    const track = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: { id: true, source: true },
+    });
+    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
+
+    // Breezze-hosted assets are authorized by the rights engine and signed
+    // media service. External providers must explicitly support downloads.
+    if (!track.source || track.source === 'breezze_internal') return true;
+
+    const provider = this.providers.get(track.source);
+    if (
+      !provider ||
+      !provider.capabilities.download ||
+      !provider.capabilities.availability
+    ) {
+      return false;
+    }
+
+    const availability = await provider.getAvailability(
+      trackId.startsWith('bz:') ? trackId.slice(trackId.lastIndexOf(':') + 1) : trackId,
+      territory,
+    );
+    return availability.kind === 'ok' && availability.value.available;
+  }
 
   async authorizeAndRecord(
     userId: string,
     dto: { trackId: string; territory: string },
   ) {
+    const supported = await this.providerAllowsDownload(dto.trackId, dto.territory);
+    if (!supported) {
+      return {
+        allowed: false,
+        reason: 'PROVIDER_DOWNLOAD_UNSUPPORTED',
+        url: null,
+      };
+    }
+
     const decision = await this.rights.decide({
       userId,
       trackId: dto.trackId,
@@ -70,6 +115,15 @@ export class DownloadsService {
       select: { id: true },
     });
     if (!existing) return { allowed: false, reason: 'DOWNLOAD_NOT_FOUND' };
+
+    const supported = await this.providerAllowsDownload(trackId, territory);
+    if (!supported) {
+      await this.prisma.downloadRecord.updateMany({
+        where: { userId, trackId, status: 'active' },
+        data: { status: 'revoked', expiresAt: new Date() },
+      });
+      return { allowed: false, reason: 'PROVIDER_DOWNLOAD_UNSUPPORTED' };
+    }
 
     const decision = await this.rights.decide({
       userId, trackId, action: 'download', territory,
