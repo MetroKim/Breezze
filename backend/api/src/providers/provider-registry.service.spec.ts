@@ -5,6 +5,7 @@ import { AudiusAdapter } from './audius.adapter';
 import { JamendoAdapter } from './jamendo.adapter';
 
 describe('ProviderRegistry', () => {
+  beforeEach(() => jest.clearAllMocks());
   const internal = {
     providerId: 'breezze_internal',
     displayName: 'Breezze Internal Catalog',
