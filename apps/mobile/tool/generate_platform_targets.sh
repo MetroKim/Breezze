@@ -86,6 +86,26 @@ if manifest_path.exists():
 
     tree.write(manifest_path, encoding="utf-8", xml_declaration=True)
 
+# audio_service requires the generated Android Activity to use its
+# FlutterEngine-aware base class so notification callbacks reach the app.
+kotlin_activity = app_dir / "android" / "app" / "src" / "main" / "kotlin" / "com" / "breezze" / "breezze" / "MainActivity.kt"
+if kotlin_activity.exists():
+    source = kotlin_activity.read_text()
+    source = source.replace(
+        "import io.flutter.embedding.android.FlutterActivity",
+        "import com.ryanheise.audioservice.AudioServiceActivity",
+    ).replace(": FlutterActivity()", ": AudioServiceActivity()")
+    kotlin_activity.write_text(source)
+
+java_activity = app_dir / "android" / "app" / "src" / "main" / "java" / "com" / "breezze" / "breezze" / "MainActivity.java"
+if java_activity.exists():
+    source = java_activity.read_text()
+    source = source.replace(
+        "import io.flutter.embedding.android.FlutterActivity;",
+        "import com.ryanheise.audioservice.AudioServiceActivity;",
+    ).replace("extends FlutterActivity", "extends AudioServiceActivity")
+    java_activity.write_text(source)
+
 ios_plist = app_dir / "ios" / "Runner" / "Info.plist"
 if ios_plist.exists():
     with ios_plist.open("rb") as source:
