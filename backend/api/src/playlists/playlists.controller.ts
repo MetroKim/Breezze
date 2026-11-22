@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsString, MaxLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsString, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PlaylistsService } from './playlists.service';
@@ -28,6 +28,13 @@ export class RenamePlaylistDto {
 export class AddTrackDto {
   @IsString()
   trackId!: string;
+}
+
+export class ReorderPlaylistDto {
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  trackIds!: string[];
 }
 
 @Controller('playlists')
@@ -74,6 +81,15 @@ export class PlaylistsController {
     @Body() dto: AddTrackDto,
   ) {
     return this.playlists.addTrack(userId, id, dto.trackId);
+  }
+
+  @Patch(':id/tracks/order')
+  reorderTracks(
+    @CurrentUser() userId: string,
+    @Param('id') id: string,
+    @Body() dto: ReorderPlaylistDto,
+  ) {
+    return this.playlists.reorderTracks(userId, id, dto.trackIds);
   }
 
   @Delete(':id/tracks/:trackId')
