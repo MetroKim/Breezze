@@ -93,7 +93,7 @@ describe('RecommendationsService', () => {
     });
     rights.filterFullStream.mockResolvedValue(new Set(['a-1', 'a-2', 'a-3', 'b-1', 'b-2']));
 
-    const result = await service.forUser('user-1');
+    const result = await service.forUser('user-1', 'TZ');
 
     expect(result.slice(0, 3).map((item) => item.trackId)).toEqual(['a-1', 'b-1', 'a-2']);
     expect(result.filter((item) => item.trackId.startsWith('a-'))).toHaveLength(2);
