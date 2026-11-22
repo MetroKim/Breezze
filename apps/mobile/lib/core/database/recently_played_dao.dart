@@ -23,12 +23,13 @@ class RecentlyPlayedDao {
   }) async {
     final query = _db.select(_db.recentlyPlayed)
       ..orderBy([(t) => OrderingTerm.desc(t.playedAt)]);
-    if (ownerId == 'guest') {
-      query.where((t) => t.id.notLike('%::%'));
-    } else {
+    if (ownerId != 'guest') {
       query.where((t) => t.id.like('$ownerId::%'));
     }
-    final rows = await query.get();
+    final fetched = await query.get();
+    final rows = ownerId == 'guest'
+        ? fetched.where((row) => !row.id.contains('::')).toList()
+        : fetched;
     return rows
         .map((r) => RecentlyPlayedCompanion.insert(
               id: _trackId(ownerId, r.id),
@@ -72,12 +73,13 @@ class RecentlyPlayedDao {
   Future<void> _trim(String ownerId) async {
     final query = _db.select(_db.recentlyPlayed)
       ..orderBy([(t) => OrderingTerm.desc(t.playedAt)]);
-    if (ownerId == 'guest') {
-      query.where((t) => t.id.notLike('%::%'));
-    } else {
+    if (ownerId != 'guest') {
       query.where((t) => t.id.like('$ownerId::%'));
     }
-    final rows = await query.get();
+    final fetched = await query.get();
+    final rows = ownerId == 'guest'
+        ? fetched.where((row) => !row.id.contains('::')).toList()
+        : fetched;
     if (rows.length <= _cap) return;
     final toDelete = rows.skip(_cap).map((r) => r.id).toList();
     await (_db.delete(_db.recentlyPlayed)
