@@ -97,7 +97,7 @@ export class JamendoAdapter implements ProviderAdapter {
       artist: track.artist_name.trim(),
       artworkUrl: track.album_image || track.image || undefined,
       durationSec: Number.isFinite(duration) && duration > 0 ? duration : undefined,
-      sourceUrl: track.shareurl || `https://www.jamendo.com/track/${track.id}`,
+      sourceUrl: this.safeTrackUrl(track.shareurl, String(track.id)),
     };
   }
 
@@ -150,24 +150,44 @@ export class JamendoAdapter implements ProviderAdapter {
     }
   }
 
+  private safeTrackUrl(value: string | undefined, trackId: string): string {
+    if (value) {
+      try {
+        const url = new URL(value);
+        if (url.protocol === 'https:' && (url.hostname === 'jamendo.com' || url.hostname.endsWith('.jamendo.com'))) {
+          return url.toString();
+        }
+      } catch {
+        // Fall through to the canonical Jamendo track page.
+      }
+    }
+    return `https://www.jamendo.com/track/${trackId}`;
+  }
+
   private licenseAllowsStreaming(licenseUrl: string | undefined): boolean {
     if (!licenseUrl) return false;
-    const license = licenseUrl.toLowerCase().replace(/^http:/, 'https:');
-    if (license.includes('creativecommons.org/publicdomain/zero/')) return true;
+    let license: URL;
+    try {
+      license = new URL(licenseUrl);
+    } catch {
+      return false;
+    }
+    if (license.protocol !== 'https:' || license.hostname !== 'creativecommons.org') return false;
+    const path = license.pathname.toLowerCase();
+    if (path.startsWith('/publicdomain/zero/')) return true;
 
     const commercial = [
       '/licenses/by/',
       '/licenses/by-sa/',
       '/licenses/by-nd/',
-    ].some((path) => license.includes(path));
+    ].some((prefix) => path.startsWith(prefix));
     if (commercial) return true;
 
     const nonCommercial = [
       '/licenses/by-nc/',
       '/licenses/by-nc-sa/',
       '/licenses/by-nc-nd/',
-      '/licenses/by-nc-nd/',
-    ].some((path) => license.includes(path));
+    ].some((prefix) => path.startsWith(prefix));
     return nonCommercial && process.env.BREEZZE_NONCOMMERCIAL === 'true';
   }
 
