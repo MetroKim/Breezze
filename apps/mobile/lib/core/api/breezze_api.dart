@@ -320,8 +320,14 @@ class BreezzeApi {
   Future<List<Map<String, dynamic>>> homeFeed() async =>
       _asMapList(await _get('/home'));
 
+  Future<Map<String, dynamic>> recordRecent(String trackId) =>
+      _post('/home/recent', {'trackId': trackId});
+
+  /// Backwards-compatible history sync. It no longer submits a qualified
+  /// ListeningEvent; those are recorded only by server-authorized sessions.
+  @Deprecated('Use recordRecent; qualified plays require a playback session')
   Future<Map<String, dynamic>> recordPlay(String trackId) =>
-      _post('/home/plays', {'trackId': trackId});
+      recordRecent(trackId);
 
   Future<Map<String, dynamic>> replaySummary() => _get('/replay');
 
