@@ -16,6 +16,11 @@ class BzSvgIcon extends StatelessWidget {
   });
 
   static const _paths = <String, String>{
+    'eye': '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/>',
+    'eye-off': '<path d="M3 3 21 21M10.6 6.1a10.4 10.4 0 0 1 1.4-.1c6 0 9.5 6 9.5 6a15 15 0 0 1-3 3.6M6.1 7.9C3.8 9.5 2.5 12 2.5 12s3.5 6 9.5 6c1.1 0 2.1-.2 3-.5"/><path d="M10 10a2.8 2.8 0 0 0 4 4"/>',
+    'lock': '<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
+    'mail': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
+    'shield-check': '<path d="M12 2 4.5 5v6c0 5 3.5 8.5 7.5 11 4-2.5 7.5-6 7.5-11V5L12 2Z"/><path d="m9 12 2 2 4-4"/>',
     'info': '<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>',
     'help-circle': '<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.7c-1.1 1-1.9 1.4-1.9 3.1M12 17.5h.01"/>',
     'wifi-off': '<path d="M3 3 21 21M8.5 8.5A12 12 0 0 1 21 12M5 12a12 12 0 0 1 2.2-1.2M2 8a16 16 0 0 1 3.2-2M12 20h.01" />',
@@ -95,7 +100,10 @@ class BzSvgIcon extends StatelessWidget {
   }
 }
 
-/// Breezze app mark rendered from its SVG source.
+/// The exact monochrome Breezze symbol from the provided brand asset pack.
+///
+/// This is the official abstract mark, not the previous B-note approximation.
+/// Uses the theme's foreground so light/dark/high-contrast modes agree.
 class BzBnoteMark extends StatelessWidget {
   final double size;
   final Color? color;
@@ -105,9 +113,11 @@ class BzBnoteMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SvgPicture.asset(
-      'assets/icons/b-note-mark.svg',
+      'assets/icons/breezze-symbol-white.svg',
       width: size,
       height: size,
+      fit: BoxFit.contain,
+      semanticsLabel: 'Breezze',
       colorFilter: ColorFilter.mode(
         color ?? Theme.of(context).colorScheme.onSurface,
         BlendMode.srcIn,
@@ -116,7 +126,29 @@ class BzBnoteMark extends StatelessWidget {
   }
 }
 
-/// Ribbon wordmark. Kept as a brand illustration, not an interface icon.
+/// The official rounded black Breezze app icon in the user-supplied SVG.
+class BzAppIcon extends StatelessWidget {
+  final double size;
+  const BzAppIcon({super.key, this.size = 64});
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(size * 0.213),
+    child: SvgPicture.asset(
+      'assets/icons/breezze-app-icon.svg',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      semanticsLabel: 'Breezze app icon',
+    ),
+  );
+}
+
+/// Compatible name retained for existing screens. Uses the new actual brand
+/// symbol plus a clean heavy wordmark rather than the legacy ribbon painter.
+/// The supplied raw logo SVG also lives in assets for export/design use;
+/// Flutter builds the wordmark as accessible text rather than an unsupported
+/// SVG <text> element.
 class BzRibbonLogo extends StatelessWidget {
   final double width;
   final Color? color;
@@ -125,67 +157,40 @@ class BzRibbonLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? Theme.of(context).colorScheme.onSurface;
+    final foreground = color ?? Theme.of(context).colorScheme.onSurface;
     return SizedBox(
       width: width,
-      height: width * 0.8,
-      child: CustomPaint(painter: _RibbonPainter(c)),
+      height: width * 0.29,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SvgPicture.asset(
+            'assets/icons/breezze-symbol-white.svg',
+            width: width * 0.17,
+            height: width * 0.28,
+            fit: BoxFit.contain,
+            colorFilter: ColorFilter.mode(foreground, BlendMode.srcIn),
+            excludeFromSemantics: true,
+          ),
+          SizedBox(width: width * 0.05),
+          Expanded(
+            child: FittedBox(
+              alignment: Alignment.centerLeft,
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Breezze',
+                maxLines: 1,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: width * 0.23,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -width * 0.008,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
-}
-
-class _RibbonPainter extends CustomPainter {
-  final Color color;
-  _RibbonPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..color = color
-      ..strokeWidth = size.width * 0.03
-      ..strokeCap = StrokeCap.round;
-
-    final w = size.width;
-    final h = size.height;
-
-    final stem = Path()
-      ..moveTo(w * 0.22, h * 0.23)
-      ..lineTo(w * 0.22, h * 0.77);
-    canvas.drawPath(stem, paint);
-
-    final upper = Path()
-      ..moveTo(w * 0.22, h * 0.23)
-      ..lineTo(w * 0.44, h * 0.23)
-      ..arcToPoint(Offset(w * 0.44, h * 0.51),
-          radius: Radius.circular(w * 0.14), clockwise: true)
-      ..lineTo(w * 0.22, h * 0.51);
-    canvas.drawPath(upper, paint);
-
-    final lower = Path()
-      ..moveTo(w * 0.22, h * 0.51)
-      ..lineTo(w * 0.49, h * 0.51)
-      ..arcToPoint(Offset(w * 0.49, h * 0.69),
-          radius: Radius.circular(w * 0.16), clockwise: true)
-      ..lineTo(w * 0.22, h * 0.69);
-    canvas.drawPath(lower, paint);
-
-    final wave1 = Path()
-      ..moveTo(w * 0.60, h * 0.50)
-      ..cubicTo(w * 0.64, h * 0.43, w * 0.68, h * 0.43, w * 0.72, h * 0.48);
-    canvas.drawPath(wave1, paint);
-
-    final wave2 = Path()
-      ..moveTo(w * 0.60, h * 0.58)
-      ..cubicTo(w * 0.65, h * 0.66, w * 0.71, h * 0.67, w * 0.76, h * 0.62);
-    canvas.drawPath(wave2, paint);
-
-    final wave3 = Path()
-      ..moveTo(w * 0.60, h * 0.42)
-      ..cubicTo(w * 0.64, h * 0.35, w * 0.69, h * 0.34, w * 0.73, h * 0.38);
-    canvas.drawPath(wave3, paint);
-  }
-
-  @override
-  bool shouldRepaint(_RibbonPainter oldDelegate) => oldDelegate.color != color;
 }

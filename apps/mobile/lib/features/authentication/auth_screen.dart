@@ -358,9 +358,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         onPressed: () => setState(
                           () => _revealPassword = !_revealPassword,
                         ),
-                        icon: Icon(_revealPassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined),
+                        icon: BzSvgIcon(
+                          name: _revealPassword ? 'eye-off' : 'eye',
+                          size: 20,
+                          color: theme.bzText2,
+                        ),
                       ),
                       onSubmitted: (_) => !busy ? _submit() : null,
                     ),
@@ -577,7 +579,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             _field(
                               controller: _password,
                               hint: 'Current password',
-                              icon: Icons.lock_outline,
+                              icon: 'lock',
                               obscure: true,
                             ),
                             const SizedBox(height: 16),
@@ -607,7 +609,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             _field(
                               controller: _mfaCode,
                               hint: '6-digit code or recovery code',
-                              icon: Icons.verified_user_outlined,
+                              icon: 'shield-check',
                               keyboard: TextInputType.text,
                             ),
                             const SizedBox(height: 16),
@@ -734,7 +736,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget _field({
     required TextEditingController controller,
     required String hint,
-    required IconData icon,
+    required String icon,
     bool obscure = false,
     TextInputType? keyboard,
   }) {
@@ -745,7 +747,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       keyboardType: keyboard,
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon: Icon(icon),
+        prefixIcon: BzSvgIcon(name: icon, size: 20),
         filled: true,
         fillColor: theme.bzSurface1,
         border: OutlineInputBorder(

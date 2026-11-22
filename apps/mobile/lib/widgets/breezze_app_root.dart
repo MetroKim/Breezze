@@ -7,6 +7,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/auth/auth_session.dart';
+import '../core/settings/bz_theme_preference.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
 import '../../core/audio/audio_service_bridge.dart';
 import '../../core/audio/background_audio.dart';
@@ -41,6 +42,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _container = ProviderScope.containerOf(context, listen: false);
+    unawaited(_container!.read(bzThemePreferenceProvider.notifier).restore());
     _audioEngine = JustAudioEngineAdapter();
     _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
     unawaited(_startBackgroundAudio());
@@ -130,6 +132,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authSessionProvider);
+    final themeMode = ref.watch(bzThemePreferenceProvider);
 
     // Keep one MaterialApp/Navigator above every auth state. Previously the
     // signed-out gate rendered AuthScreen before the shell's nested
@@ -140,6 +143,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
       debugShowCheckedModeBanner: false,
       theme: bzLightTheme(),
       darkTheme: bzDarkTheme(),
+      themeMode: themeMode,
       home: Builder(
         builder: (context) {
           if (auth is AuthUninitialized) {

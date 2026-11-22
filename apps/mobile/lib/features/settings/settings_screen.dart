@@ -1,6 +1,7 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/settings/bz_theme_preference.dart';
 
 import '../../app/download_preferences.dart';
 import '../../app/search_history_store.dart';
@@ -115,6 +116,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final auth = ref.watch(authSessionProvider);
     final email = auth is AuthSignedIn ? auth.email : null;
     final sleepTimerEndsAt = ref.watch(sleepTimerProvider);
+    final activeAppearance = ref.watch(bzThemePreferenceProvider);
 
     return SafeArea(
       child: ListView(
@@ -154,6 +156,58 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: () {
                 ref.read(authSessionProvider.notifier).signOut();
               },
+            ),
+          ]),
+          _section(theme, 'Appearance', [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Display theme',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      )),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Match your device, or choose Breezze in light or dark monochrome.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.bzText2,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<ThemeMode>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: ThemeMode.system,
+                          label: Text('System'),
+                          icon: BzSvgIcon(name: 'smartphone', size: 18),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.light,
+                          label: Text('Light'),
+                          icon: BzSvgIcon(name: 'sun', size: 18),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.dark,
+                          label: Text('Dark'),
+                          icon: BzSvgIcon(name: 'moon', size: 18),
+                        ),
+                      ],
+                      selected: {activeAppearance},
+                      onSelectionChanged: (modes) {
+                        if (modes.isNotEmpty) {
+                          ref.read(bzThemePreferenceProvider.notifier)
+                              .setMode(modes.first);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ]),
           _section(theme, 'Audio Quality', [

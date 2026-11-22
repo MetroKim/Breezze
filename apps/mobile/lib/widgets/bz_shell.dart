@@ -514,7 +514,14 @@ class _MiniScrubberState extends State<_MiniScrubber> {
     return Semantics(
       slider: true,
       label: 'Playback position',
+      value: '${(_value * 100).round()}%',
       enabled: widget.enabled,
+      onIncrease: widget.enabled
+          ? () => widget.onSeek((_value + 0.05).clamp(0.0, 1.0))
+          : null,
+      onDecrease: widget.enabled
+          ? () => widget.onSeek((_value - 0.05).clamp(0.0, 1.0))
+          : null,
       child: SizedBox(
         height: 14,
         child: LayoutBuilder(
@@ -522,9 +529,13 @@ class _MiniScrubberState extends State<_MiniScrubber> {
             final width = constraints.maxWidth;
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTapDown: (details) {
-                if (!widget.enabled) return;
-                _updateFromPosition(details.localPosition, width);
+              // A tap must actually seek. Previously it only wrote an
+              // unused drag preview, leaving the user's action ineffective.
+              onTapUp: (details) {
+                if (!widget.enabled || width <= 0) return;
+                widget.onSeek(
+                  (details.localPosition.dx / width).clamp(0.0, 1.0),
+                );
               },
               onHorizontalDragStart: (details) {
                 if (!widget.enabled) return;
@@ -663,10 +674,15 @@ class _TabBar extends StatelessWidget {
   }
 
   void _selectFromGlobalX(double globalX, BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width - 24;
-    final localX = (globalX - 12).clamp(0.0, width - 1);
-    final next = (localX / (width / tabs.length)).floor();
-    onChanged(next.clamp(0, tabs.length - 1).toInt());
+    // Use the measured bar rather than the device width: SafeArea,
+    // landscape layouts and app split-screen all change the real bounds.
+    final render = context.findRenderObject();
+    if (render is! RenderBox || !render.hasSize || render.size.width <= 0) {
+      return;
+    }
+    final localX = render.globalToLocal(Offset(globalX, 0)).dx;
+    final fraction = (localX / render.size.width).clamp(0.0, 0.999999);
+    onChanged((fraction * tabs.length).floor());
   }
 }
 
@@ -703,7 +719,9 @@ class _TabButton extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   AnimatedContainer(
-                    duration: const Duration(milliseconds: BzMotion.fastMs),
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: BzMotion.fastMs),
                     curve: const Cubic(0.22, 1, 0.36, 1),
                     width: 42,
                     height: 42,
@@ -720,12 +738,16 @@ class _TabButton extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    destination.label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                      color: color,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      destination.label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                        color: color,
+                      ),
                     ),
                   ),
                 ],
