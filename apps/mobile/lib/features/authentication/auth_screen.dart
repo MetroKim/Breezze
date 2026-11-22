@@ -92,6 +92,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final theme = Theme.of(context);
     final auth = ref.watch(authSessionProvider);
     final busy = auth is AuthSigningIn;
+    final socialBusy = auth is AuthSigningIn && auth.social;
     final error = auth is AuthError ? auth.code : null;
 
     if (auth is AuthMfaRequired) return _buildMfaRequired(context, auth);
@@ -117,7 +118,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     ),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 480),
-                      child: _loginPanel(context, busy: busy, error: error),
+                      child: _loginPanel(context, busy: busy, error: error,
+                        socialBusy: socialBusy),
                     ),
                   ),
                 ),
@@ -206,6 +208,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   Widget _loginPanel(BuildContext context, {
     required bool busy,
+    required bool socialBusy,
     required String? error,
   }) {
     final theme = Theme.of(context);
@@ -404,7 +407,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   color: theme.bzText2,
                 ),
               ),
-              if (busy) ...[
+              if (socialBusy) ...[
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: () => ref.read(authSessionProvider.notifier)
