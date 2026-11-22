@@ -27,6 +27,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _recent = RecentStore();
   List<RecentEntry> _recentlyPlayed = [];
   List<FavoriteTrack> _favorites = [];
+  List<TrackInfo> _madeForYou = [];
   Map<String, dynamic>? _replay;
   bool _loading = true;
 
@@ -40,17 +41,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final recent = await _recent.load();
     final favorites = await ref.read(favoritesStoreProvider).load();
     Map<String, dynamic>? replay;
+    var madeForYou = <TrackInfo>[];
     if (ref.read(authSessionProvider) is AuthSignedIn) {
+      final api = ref.read(authSessionProvider.notifier).api;
       try {
-        replay = await ref.read(authSessionProvider.notifier).api.replaySummary();
+        final sections = await api.homeFeed();
+        final personalized = sections.where((section) =>
+            section['sectionType'] == 'personalized').firstOrNull;
+        final rawIds = personalized?['trackIds'];
+        final ids = rawIds is List
+            ? rawIds.whereType<String>().where((id) => id.isNotEmpty).take(12)
+            : const <String>[];
+        final resolved = await Future.wait(ids.map((id) async {
+          try {
+            final song = await api.catalogSong(id);
+            final artistData = song['artist'];
+            final duration = song['duration'];
+            return TrackInfo(
+              id: song['id'] as String? ?? id,
+              title: song['title'] as String? ?? '',
+              artist: artistData is Map
+                  ? artistData['name'] as String? ?? ''
+                  : '',
+              artworkUrl: song['artworkUrl'] as String?,
+              duration: Duration(
+                seconds: duration is num ? duration.toInt() : 0,
+              ),
+            );
+          } catch (_) {
+            // A track can become unavailable between ranking and display.
+            return null;
+          }
+        }));
+        madeForYou = resolved.whereType<TrackInfo>()
+            .where((track) => track.title.isNotEmpty)
+            .toList(growable: false);
       } catch (_) {
-        // Local listening history remains available during an API outage.
+        // Personalized content is optional; local listening history remains.
+      }
+      try {
+        replay = await api.replaySummary();
+      } catch (_) {
+        // Replay is an independent home section.
       }
     }
     if (!mounted) return;
     setState(() {
       _recentlyPlayed = recent;
       _favorites = favorites;
+      _madeForYou = madeForYou;
       _replay = replay;
       _loading = false;
     });
@@ -212,6 +251,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 18),
             const BzSkeletonArtworkGrid(itemCount: 4),
           ],
+          if (!_loading && _madeForYou.isNotEmpty) ...[
+            _Rail(
+              title: 'Made for You',
+              tracks: _madeForYou,
+              onPlay: _play,
+            ),
+            const SizedBox(height: 24),
+          ],
           if (!_loading && _recentlyPlayed.isNotEmpty) ...[
             _Rail(
               title: 'Recently Played',
@@ -263,12 +310,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             status: 'SHARED MUSIC',
           ),
           const SizedBox(height: 24),
-          const _FeedPlaceholder(
-            title: 'Your Mixes',
-            description:
-                'Personalized mixes will appear here as your listening profile and recommendation service become available.',
-            status: 'MADE FOR YOU',
-          ),
+          if (!_loading && _madeForYou.isEmpty)
+            const _FeedPlaceholder(
+              title: 'Made for You',
+              description:
+                  'Personalized recommendations will appear here when Breezze has enough eligible listening signals in your region.',
+              status: 'PERSONALIZED LISTENING',
+            ),
           const SizedBox(height: 24),
           if (_replay != null && ((_replay!['totalPlays'] as num?)?.toInt() ?? 0) > 0)
             _ReplayCard(summary: _replay!)
