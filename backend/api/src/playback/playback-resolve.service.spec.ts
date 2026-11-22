@@ -1,4 +1,7 @@
-import { NotAcceptableException } from '@nestjs/common';
+import {
+  NotAcceptableException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from './media-signer.service';
@@ -19,6 +22,12 @@ describe('PlaybackResolveService', () => {
     trackId: 'track-1',
     territory: 'TZ',
     requestedQuality: 'AAC_256',
+  };
+  const providerRequest = {
+    providerId: 'audius',
+    providerTrackId: 'track123',
+    canonicalTrackId: 'canonical-1',
+    territory: 'TZ',
   };
 
   beforeEach(() => {
@@ -86,58 +95,94 @@ describe('PlaybackResolveService', () => {
     });
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });
-  it('resolves an enabled provider source without accepting a client-supplied URL', async () => {
+
+  const validAdapter = () => ({
+    capabilities: { playback: true, availability: true },
+    getAvailability: jest.fn().mockResolvedValue({
+      kind: 'ok',
+      value: { available: true },
+      attribution: 'Audius public catalogue',
+    }),
+    resolvePlayback: jest.fn().mockResolvedValue({
+      kind: 'ok',
+      value: {
+        url: 'https://api.audius.co/v1/tracks/track123/stream',
+        expiresAt: new Date(Date.now() + 600_000),
+        mimeType: 'audio/mpeg',
+      },
+      attribution: 'Audius public catalogue',
+    }),
+  });
+
+  const prepareCanonicalTrack = () => {
     prisma.track.findUnique.mockResolvedValue({
       id: 'canonical-1',
       source: 'audius',
       externalId: 'bz:audius:track123',
     });
     prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
-    const adapter = {
-      capabilities: { playback: true },
-      resolvePlayback: jest.fn().mockResolvedValue({
-        kind: 'ok',
-        value: {
-          url: 'https://api.audius.co/v1/tracks/track123/stream',
-          expiresAt: new Date(Date.now() + 600_000),
-          mimeType: 'audio/mpeg',
-        },
-        attribution: 'Audius public catalogue',
-      }),
-    };
+  };
+
+  it('rechecks provider availability before resolving a playback URL', async () => {
+    prepareCanonicalTrack();
+    const adapter = validAdapter();
     providers.get.mockReturnValue(adapter);
 
-    await expect(service.resolveProvider({
-      providerId: 'audius',
-      providerTrackId: 'track123',
-      canonicalTrackId: 'canonical-1',
-      territory: 'TZ',
-    })).resolves.toMatchObject({
+    await expect(service.resolveProvider(providerRequest)).resolves.toMatchObject({
       providerId: 'audius',
       providerTrackId: 'track123',
       streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
+      attribution: 'Audius public catalogue',
     });
-    expect(adapter.resolvePlayback).toHaveBeenCalled();
-  });
-
-  it('rejects provider playback when an active takedown exists', async () => {
-    prisma.track.findUnique.mockResolvedValue({
-      id: 'canonical-1',
-      source: 'audius',
-      externalId: 'bz:audius:track123',
-    });
-    prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'takedown-1' });
-    providers.get.mockReturnValue({
-      capabilities: { playback: true },
-      resolvePlayback: jest.fn(),
-    });
-
-    await expect(service.resolveProvider({
-      providerId: 'audius',
+    expect(adapter.getAvailability).toHaveBeenCalledWith('track123', 'TZ');
+    expect(adapter.resolvePlayback).toHaveBeenCalledWith(expect.objectContaining({
       providerTrackId: 'track123',
       canonicalTrackId: 'canonical-1',
       territory: 'TZ',
-    })).rejects.toBeInstanceOf(NotAcceptableException);
+      authorization: expect.objectContaining({ action: 'stream.full' }),
+    }));
+  });
+
+  it('rejects gated or unavailable provider tracks before resolving playback', async () => {
+    prepareCanonicalTrack();
+    const adapter = validAdapter();
+    adapter.getAvailability.mockResolvedValue({
+      kind: 'ok',
+      value: { available: false },
+    });
+    providers.get.mockReturnValue(adapter);
+
+    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+      NotAcceptableException,
+    );
+    expect(adapter.resolvePlayback).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when provider availability cannot be verified', async () => {
+    prepareCanonicalTrack();
+    const adapter = validAdapter();
+    adapter.getAvailability.mockResolvedValue({
+      kind: 'error',
+      code: 'AUDIUS_AVAILABILITY_FAILED',
+      retryable: true,
+      message: 'Provider unavailable',
+    });
+    providers.get.mockReturnValue(adapter);
+
+    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(adapter.resolvePlayback).not.toHaveBeenCalled();
+  });
+
+  it('rejects provider playback when an active takedown exists', async () => {
+    prepareCanonicalTrack();
+    prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'takedown-1' });
+    providers.get.mockReturnValue(validAdapter());
+
+    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+      NotAcceptableException,
+    );
     expect(providers.get).not.toHaveBeenCalled();
   });
 
@@ -148,14 +193,44 @@ describe('PlaybackResolveService', () => {
       externalId: 'bz:youtube_music:track123',
     });
 
-    await expect(service.resolveProvider({
-      providerId: 'audius',
-      providerTrackId: 'track123',
-      canonicalTrackId: 'canonical-1',
-      territory: 'TZ',
-    })).rejects.toBeInstanceOf(NotAcceptableException);
+    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+      NotAcceptableException,
+    );
     expect(prisma.contentTakedownCase.findFirst).not.toHaveBeenCalled();
     expect(providers.get).not.toHaveBeenCalled();
   });
 
+  it('rejects an insecure URL returned by a provider adapter', async () => {
+    prepareCanonicalTrack();
+    const adapter = validAdapter();
+    adapter.resolvePlayback.mockResolvedValue({
+      kind: 'ok',
+      value: {
+        url: 'http://example.com/audio',
+        expiresAt: new Date(Date.now() + 600_000),
+      },
+    });
+    providers.get.mockReturnValue(adapter);
+
+    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('rejects an expired provider URL', async () => {
+    prepareCanonicalTrack();
+    const adapter = validAdapter();
+    adapter.resolvePlayback.mockResolvedValue({
+      kind: 'ok',
+      value: {
+        url: 'https://api.audius.co/v1/tracks/track123/stream',
+        expiresAt: new Date(Date.now() - 1000),
+      },
+    });
+    providers.get.mockReturnValue(adapter);
+
+    await expect(service.resolveProvider(providerRequest)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
 });
