@@ -184,17 +184,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ButtonSegment(
                           value: ThemeMode.system,
                           label: Text('System'),
-                          icon: Icon(Icons.brightness_auto_outlined),
+                          icon: BzSvgIcon(name: 'smartphone', size: 18),
                         ),
                         ButtonSegment(
                           value: ThemeMode.light,
                           label: Text('Light'),
-                          icon: Icon(Icons.light_mode_outlined),
+                          icon: BzSvgIcon(name: 'sun', size: 18),
                         ),
                         ButtonSegment(
                           value: ThemeMode.dark,
                           label: Text('Dark'),
-                          icon: Icon(Icons.dark_mode_outlined),
+                          icon: BzSvgIcon(name: 'moon', size: 18),
                         ),
                       ],
                       selected: {activeAppearance},
