@@ -8,6 +8,8 @@ describe('RecommendationsService', () => {
     favorite: { findMany: jest.fn() },
     listeningEvent: { groupBy: jest.fn() },
     track: { findMany: jest.fn() },
+    artist: { findMany: jest.fn() },
+    userPreference: { findUnique: jest.fn() },
   };
   const rights = { filterFullStream: jest.fn() };
   let service: RecommendationsService;
@@ -16,6 +18,8 @@ describe('RecommendationsService', () => {
     jest.clearAllMocks();
     prisma.recentlyPlayed.findMany.mockResolvedValue([]);
     prisma.favorite.findMany.mockResolvedValue([]);
+    prisma.artist.findMany.mockResolvedValue([]);
+    prisma.userPreference.findUnique.mockResolvedValue({ favoriteArtists: [] });
     prisma.listeningEvent.groupBy.mockResolvedValue([
       { trackId: 'listened-a', _count: { trackId: 5 } },
       { trackId: 'listened-b', _count: { trackId: 3 } },
@@ -112,6 +116,41 @@ describe('RecommendationsService', () => {
         expect.arrayContaining(['recent-1', 'favorite-1']),
       );
     }
+  });
+
+  it('uses onboarding favorite artists for cold-start recommendations', async () => {
+    prisma.listeningEvent.groupBy.mockResolvedValueOnce([]);
+    prisma.userPreference.findUnique.mockResolvedValue({
+      favoriteArtists: ['  Artist X  '],
+    });
+    prisma.artist.findMany.mockResolvedValue([
+      { id: 'artist-x', name: 'Artist X' },
+    ]);
+    prisma.track.findMany.mockResolvedValue([
+      { id: 'preferred-1', artistId: 'artist-x' },
+      { id: 'preferred-2', artistId: 'artist-x' },
+    ]);
+    rights.filterFullStream.mockResolvedValue(
+      new Set(['preferred-1', 'preferred-2']),
+    );
+
+    await expect(service.forUser('new-user', 'TZ')).resolves.toEqual([
+      { trackId: 'preferred-1', reason: 'Because you chose this artist' },
+      { trackId: 'preferred-2', reason: 'Because you chose this artist' },
+    ]);
+
+    expect(prisma.userPreference.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'new-user' },
+      select: { favoriteArtists: true },
+    });
+    expect(prisma.artist.findMany).toHaveBeenCalledWith({
+      where: { name: { in: ['Artist X'], mode: 'insensitive' } },
+      select: { id: true, name: true },
+    });
+    expect(rights.filterFullStream).toHaveBeenCalledWith(
+      ['preferred-1', 'preferred-2'],
+      'TZ',
+    );
   });
 
   it('uses rights-filtered popular tracks for a new listener', async () => {
