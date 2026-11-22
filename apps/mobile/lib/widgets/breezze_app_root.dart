@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart' show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:audio_service/audio_service.dart' as audio;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/auth/auth_session.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
+import '../../core/audio/breezze_audio_handler.dart';
 import '../../core/database/migrate_to_drift.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
@@ -32,13 +35,17 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
   GlobalKey? _shellKey;
   ProviderContainer? _container;
   JustAudioEngineAdapter? _audioEngine;
+  BreezzeAudioHandler? _audioHandler;
+  ProviderSubscription<PlayerState>? _playerStateSubscription;
 
   @override
   void initState() {
     super.initState();
     _container = ProviderScope.containerOf(context, listen: false);
     _audioEngine = JustAudioEngineAdapter();
-    _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
+    final playerController = _container!.read(playerControllerProvider.notifier);
+    playerController.attachEngine(_audioEngine!);
+    unawaited(_initializeMediaSession(playerController));
     unawaited(migrateJsonStoresToDrift(_container!));
     unawaited(_container!.read(authSessionProvider.notifier).restoreSession());
     ref.listenManual(authSessionProvider, (prev, next) {
@@ -55,8 +62,49 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
     });
   }
 
+  Future<void> _initializeMediaSession(PlayerController controller) async {
+    // audio_service provides the native Android/iOS media session. Other
+    // targets continue using Breezze's shared in-app player without trying to
+    // start an unsupported platform service.
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
+
+    try {
+      final initialized = await audio.AudioService.init(
+        builder: () => BreezzeAudioHandler(controller),
+        config: const audio.AudioServiceConfig(
+          androidNotificationChannelId: 'com.breezze.audio',
+          androidNotificationChannelName: 'Breezze playback',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: false,
+        ),
+      );
+      if (!mounted) {
+        await initialized.stop();
+        return;
+      }
+      final handler = initialized as BreezzeAudioHandler;
+      _audioHandler = handler;
+      handler.updateFromPlayerState(
+        _container!.read(playerControllerProvider),
+        controller,
+      );
+      _playerStateSubscription = ref.listenManual<PlayerState>(
+        playerControllerProvider,
+        (previous, next) => handler.updateFromPlayerState(next, controller),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Breezze native media session unavailable: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
   @override
   void dispose() {
+    _playerStateSubscription?.close();
     _container?.read(playerControllerProvider.notifier).detachEngine();
     final engine = _audioEngine;
     if (engine != null) unawaited(engine.dispose());
