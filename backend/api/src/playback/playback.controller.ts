@@ -31,8 +31,11 @@ export class ResolveDto {
   @IsString()
   trackId!: string;
 
+  // Deprecated compatibility field. Playback authorization uses only the
+  // country injected by the trusted Cloudflare Worker.
+  @IsOptional()
   @IsString()
-  territory!: string;
+  territory?: string;
 
   @IsOptional()
   @IsIn(['AAC_128', 'AAC_256', 'LOSSLESS', 'HI_RES'])
