@@ -12,7 +12,7 @@ import '../player/player_controller.dart';
 
 /// Now Playing — premium edition: ambient artwork backdrop (content is
 /// the colour), breathing artwork on the calm 2s loop, word-synced
-/// karaoke lyrics, scrolling marquee for long titles, a drag-reorderable
+/// karaoke lyrics, a scrolling marquee for long titles, a drag-reorderable
 /// Playing Next queue, and immersive chrome that recedes to 0.15 opacity
 /// after 3s without input and restores instantly on any interaction
 /// (spec §4.2 / FR-005 / §A.4).
@@ -139,7 +139,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               title: const Text('Playing Next'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                _openPlayingNextNext();
+                _openPlayingNext();
               },
             ),
             ListTile(
@@ -276,15 +276,14 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Apple Music scrolls long titles in a
-                                    // continuous marquee; short ones stay
-                                    // still. Reduced motion keeps it static.
-                                    BzMarquee(
+                                    // Long titles scroll in a marquee
+                                    // (Apple Music); short ones stay put.
+                                    _BzMarquee(
                                       text: track.title ?? 'Unknown track',
                                       style: theme.textTheme.titleLarge!,
                                     ),
                                     const SizedBox(height: 4),
-                                    BzMarquee(
+                                    _BzMarquee(
                                       text: track.artist ?? '',
                                       style: TextStyle(
                                         fontSize: BzType.body,
@@ -441,84 +440,83 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Scrolling marquee for overflowing titles — the Apple Music treatment
-/// for long song names. Still under reduced motion, where the text just
-/// ellipsizes. No package: a simple two-state clip translation.
-class BzMarquee extends StatefulWidget {
+/// Scrolling marquee for overflowing text — the Apple Music treatment for
+/// long song names. Pauses 2s, scrolls linearly through the overflow,
+/// pauses, snaps home, repeats. Static ellipsized text when the content
+/// fits, or under reduced motion (§11).
+class _BzMarquee extends StatefulWidget {
   final String text;
   final TextStyle style;
-  final Duration pauseDuration;
-  final Duration scrollDuration;
 
-  const BzMarquee({
-    super.key,
-    required this.text,
-    required this.style,
-    this.pauseDuration = const Duration(seconds: 2),
-    this.scrollDuration = const Duration(seconds: 6),
-  });
+  const _BzMarquee({required this.text, required this.style});
 
   @override
-  State<BzMarquee> createState() => _BzMarqueeState();
+  State<_BzMarquee> createState() => _BzMarqueeState();
 }
 
-class _BzMarqueeState extends State<BzMarquee> {
-  bool _needsScroll = false;
-  double _textWidth = 0;
-  double _containerWidth = 0;
+class _BzMarqueeState extends State<_BzMarquee> {
+  final ScrollController _controller = ScrollController();
   Timer? _timer;
-  double _offset = 0;
+  bool _disposed = false;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _measure();
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleCycle());
   }
 
-  void _measure() {
-    final textPainter = TextPainter(
-      text: TextSpan(text: widget.text, style: widget.style),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    _textWidth = textPainter.width;
-    _needsScroll = _textWidth > _containerWidth && _containerWidth > 0;
-    if (!_needsScroll) {
+  @override
+  void didUpdateWidget(covariant _BzMarquee oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
       _timer?.cancel();
       _timer = null;
-      _offset = 0;
-      return;
+      if (_controller.hasClients) _controller.jumpTo(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleCycle());
     }
-    _startCycle();
   }
 
-  void _startCycle() {
+  void _scheduleCycle() {
+    if (_disposed) return;
     _timer?.cancel();
-    _timer = Timer(widget.pauseDuration, _scroll);
+    _timer = Timer(const Duration(seconds: 2), _scrollToEnd);
   }
 
-  void _scroll() {
-    if (!mounted) return;
-    setState(() {
-      _offset = 0;
-      _needsScroll = true;
-    });
-    Future.delayed(widget.scrollDuration, () {
-      if (!mounted) return;
-      setState(() => _offset = 0);
-      _timer = Timer(widget.pauseDuration, _scroll);
-    });
+  Future<void> _scrollToEnd() async {
+    if (_disposed || !_controller.hasClients) return;
+    final extent = _controller.position.maxScrollExtent;
+    if (extent <= 0) return;
+    await _controller.animateTo(
+      extent,
+      duration: const Duration(milliseconds: 6000),
+      curve: Curves.linear,
+    );
+    if (_disposed) return;
+    _timer = Timer(const Duration(seconds: 2), _snapHome);
+  }
+
+  Future<void> _snapHome() async {
+    if (_disposed || !_controller.hasClients) return;
+    await _controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOut,
+    );
+    if (_disposed) return;
+    _timer = Timer(const Duration(seconds: 2), _scrollToEnd);
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _timer?.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    if (reduceMotion) {
+    if (MediaQuery.disableAnimationsOf(context)) {
       return Text(
         widget.text,
         maxLines: 1,
@@ -526,37 +524,22 @@ class _BzMarqueeState extends State<BzMarquee> {
         style: widget.style,
       );
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        _containerWidth = constraints.maxWidth;
-        return ClipRect(
-          child: Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              AnimatedSlide(
-                offset:
-                    _needsScroll ? Offset(_offset, 0) : Offset.zero,
-                duration: widget.scrollDuration,
-                curve: Curves.linear,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 32),
-                  child: Text(
-                    widget.text,
-                    maxLines: 1,
-                    style: widget.style,
-                  ),
-                ),
-                onEnd: () {
-                  if (_needsScroll && _offset == 0) {
-                    // First pass complete: snap to start and schedule the
-                    // next cycle after the pause.
-                  }
-                },
-              ),
-            ],
+    return SizedBox(
+      height: widget.style.fontSize != null ? widget.style.fontSize! * 1.6 : 24,
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.only(right: 32),
+          child: Text(
+            widget.text,
+            maxLines: 1,
+            softWrap: false,
+            style: widget.style,
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -615,7 +598,7 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
   void dispose() {
     _controller.dispose();
     super.dispose();
-effect  }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -629,7 +612,7 @@ effect  }
           scale: _controller,
           child: Container(
             width: side,
-            artworkUrlheight: side,
+            height: side,
             decoration: BoxDecoration(
               color: colors.surface2,
               borderRadius: BorderRadius.circular(BzRadius.artwork),
@@ -643,7 +626,7 @@ effect  }
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(Bz8669Radius.artwork),
+              borderRadius: BorderRadius.circular(BzRadius.artwork),
               child: widget.artworkUrl != null
                   ? Image.network(
                       widget.artworkUrl!,
@@ -703,7 +686,7 @@ class _PlayPauseButton extends StatelessWidget {
 /// Apple Music karaoke treatment where focus tracks the voice.
 class _LyricsView extends StatelessWidget {
   final Lyrics? lyrics;
-  final final String mode;
+  final String mode;
   final Duration position;
 
   const _LyricsView({
@@ -722,7 +705,7 @@ class _LyricsView extends StatelessWidget {
         children: [
           BzSkeleton(width: 220, height: 14, radius: 5),
           SizedBox(height: 14),
-          BzSkeleton(width: 280, height: quee 14, radius: 5),
+          BzSkeleton(width: 280, height: 14, radius: 5),
           SizedBox(height: 14),
           BzSkeleton(width: 190, height: 14, radius: 5),
         ],
@@ -789,7 +772,7 @@ class _LyricsView extends StatelessWidget {
             children: [
               for (var w = 0; w < line.words.length; w++)
                 Padding(
-padding: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.only(right: 6),
                   child: AnimatedDefaultTextStyle(
                     duration: const Duration(milliseconds: 200),
                     style: TextStyle(
@@ -821,7 +804,7 @@ class _FavoriteButton extends ConsumerStatefulWidget {
   ConsumerState<_FavoriteButton> createState() => _FavoriteButtonState();
 }
 
-class _FavoriteButtonState extends State<_FavoriteButton> {
+class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
   bool _isFavorite = false;
 
   @override
@@ -879,9 +862,10 @@ class _FavoriteButtonState extends State<_FavoriteButton> {
 }
 
 /// Drag-reorderable Playing Next queue (blueprint §A.4). Long-press and
-/// drag any upcoming row — the sheet calls the tested QueueManager
-/// .reorder() with stable entry IDs, so playback position is preserved.
-/// Swipe-to-remove stays available as the fast path.
+/// drag any upcoming row: the sheet maps up-next-local indices to
+/// absolute positions and calls the tested QueueManager.reorder(), which
+/// preserves stable entry IDs and the current playback position.
+/// Swipe-to-remove stays as the fast path.
 class _PlayingNextSheet extends ConsumerWidget {
   const _PlayingNextSheet();
 
@@ -893,8 +877,8 @@ class _PlayingNextSheet extends ConsumerWidget {
     final upcoming = queue.upNext;
     final theme = Theme.of(context);
     final current = player.currentTrack;
-    // Absolute index of the first up-next entry inside the full entry
-    // list; queue.reorder() works on absolute positions.
+    // Absolute position of the first up-next entry; queue.reorder() works
+    // on absolute positions over the full entry list.
     final baseIndex = queue.length - upcoming.length;
 
     return SafeArea(
@@ -999,16 +983,16 @@ class _PlayingNextSheet extends ConsumerWidget {
                       ),
                     )
                   : ReorderableListView.builder(
-                      buildDefaultDragHandles: false,
                       itemCount: upcoming.length,
                       onReorder: (oldIndex, newIndex) {
-                        // Map the up-next-local indices to absolute queue
-                        // positions before calling the tested reorder API.
-                        final from = baseIndex + oldIndex;
-                        var to = baseIndex + newIndex;
-                        if (newIndex > oldIndex) to -= 1;
+                        // ReorderableListView reports the would-be insert
+                        // position when moving down; normalize first.
+                        var target = newIndex;
+                        if (target > oldIndex) target -= 1;
+                        // Map up-next-local indices to absolute queue
+                        // positions for the tested reorder API.
                         final entryId = upcoming[oldIndex].entryId;
-                        queue.reorder(entryId, to);
+                        queue.reorder(entryId, baseIndex + target);
                       },
                       itemBuilder: (context, index) {
                         final entry = upcoming[index];
@@ -1040,16 +1024,13 @@ class _PlayingNextSheet extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: ReorderableDragStartListener(
-                              index: index,
-                              child: IconButton(
-                                tooltip: 'Reorder',
-                                icon: BzSvgIcon(
-                                  name: 'grip',
-                                  color: theme.bzText2,
-                                  size: 20,
-                                ),
-                                onPressed: null,
+                            trailing: IconButton(
+                              tooltip: 'Remove from queue',
+                              onPressed: () => queue.remove(entry.entryId),
+                              icon: BzSvgIcon(
+                                name: 'close',
+                                color: theme.bzText2,
+                                size: 18,
                               ),
                             ),
                           ),
