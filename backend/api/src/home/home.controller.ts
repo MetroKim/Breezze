@@ -1,12 +1,18 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { IsString } from 'class-validator';
+import { IsInt, IsUUID, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { HomeService } from './home.service';
 
 export class RecordPlayDto {
-  @IsString()
+  @IsUUID()
   trackId!: string;
+
+  // Only count a listening event after the minimum qualifying play duration.
+  @IsInt()
+  @Min(30_000)
+  @Max(24 * 60 * 60 * 1000)
+  playedMs!: number;
 }
 
 @Controller('home')
@@ -24,6 +30,6 @@ export class HomeController {
     @CurrentUser() userId: string,
     @Body() dto: RecordPlayDto,
   ) {
-    return this.home.recordPlay(userId, dto.trackId);
+    return this.home.recordPlay(userId, dto.trackId, dto.playedMs);
   }
 }
