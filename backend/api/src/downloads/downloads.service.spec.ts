@@ -29,6 +29,19 @@ describe('DownloadsService', () => {
     );
   });
 
+  it('fails closed when trusted edge territory is missing or invalid', async () => {
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1',
+      territory: '',
+    })).rejects.toThrow('DOWNLOAD_TERRITORY_UNAVAILABLE');
+
+    await expect(service.revalidateOfflineLease('user-1', 'track-1', 'not-a-country'))
+      .rejects.toThrow('DOWNLOAD_TERRITORY_UNAVAILABLE');
+
+    expect(prisma.track.findUnique).not.toHaveBeenCalled();
+    expect(rights.decide).not.toHaveBeenCalled();
+  });
+
   it('revokes an existing offline lease when rights are no longer valid', async () => {
     prisma.downloadRecord.findFirst.mockResolvedValue({ id: 'download-1' });
     rights.decide.mockResolvedValue({
