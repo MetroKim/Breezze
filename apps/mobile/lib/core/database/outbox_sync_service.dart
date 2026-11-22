@@ -73,7 +73,7 @@ class OutboxSyncService {
         source: _sourceForExternalId(externalId),
         title: info['title'] as String? ?? '',
         artistName: info['artist'] as String? ?? '',
-        durationSec: (durationMs ~/ 1000).clamp(1, 86400),
+        durationSec: (durationMs ~/ 1000).clamp(1, 86400).toInt(),
       );
       final catalogId = resolved['id'] as String?;
       if (catalogId == null || catalogId.isEmpty) {
