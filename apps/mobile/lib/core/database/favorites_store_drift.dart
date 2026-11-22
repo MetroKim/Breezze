@@ -12,8 +12,8 @@ class FavoritesStoreDrift {
   final FavoritesDao _dao;
   FavoritesStoreDrift(this._dao);
 
-  Future<List<FavoriteTrack>> load() async {
-    final rows = await _dao.list();
+  Future<List<FavoriteTrack>> load({String ownerId = 'guest'}) async {
+    final rows = await _dao.list(ownerId: ownerId);
     return rows
         .map((r) => FavoriteTrack(
               id: r.id.value,
@@ -25,9 +25,9 @@ class FavoritesStoreDrift {
         .toList();
   }
 
-  Future<bool> toggle(FavoriteTrack track) async {
-    if (await _dao.contains(track.id)) {
-      await _dao.remove(track.id);
+  Future<bool> toggle(FavoriteTrack track, {String ownerId = 'guest'}) async {
+    if (await _dao.contains(track.id, ownerId: ownerId)) {
+      await _dao.remove(track.id, ownerId: ownerId);
       return false;
     }
     await _dao.add(
@@ -36,15 +36,17 @@ class FavoritesStoreDrift {
       artist: track.artist,
       artworkUrl: track.artworkUrl,
       durationMs: track.durationMs,
+      ownerId: ownerId,
     );
     return true;
   }
 
-  Future<bool> isFavorite(String id) => _dao.contains(id);
+  Future<bool> isFavorite(String id, {String ownerId = 'guest'}) =>
+      _dao.contains(id, ownerId: ownerId);
 
   /// One-time legacy import: JSON file → SQLite. Safe to call on
   /// every startup — already-imported rows are updated, not duplicated.
-  Future<void> migrateFromJson(List<FavoriteTrack> legacy) async {
+  Future<void> migrateFromJson(List<FavoriteTrack> legacy, {String ownerId = 'guest'}) async {
     for (final t in legacy) {
       await _dao.add(
         id: t.id,
@@ -52,6 +54,7 @@ class FavoritesStoreDrift {
         artist: t.artist,
         artworkUrl: t.artworkUrl,
         durationMs: t.durationMs,
+        ownerId: ownerId,
       );
     }
   }

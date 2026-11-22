@@ -7,8 +7,10 @@ import 'package:path_provider/path_provider.dart';
 /// Local, device-scoped search history. Search terms are personal UI state,
 /// not catalog data, so they stay on this device and are never synced.
 class SearchHistoryStore {
-  SearchHistoryStore({Future<File> Function()? fileProvider})
-      : _fileProvider = fileProvider ?? _defaultFile;
+  SearchHistoryStore({
+    String ownerId = 'guest',
+    Future<File> Function()? fileProvider,
+  }) : _fileProvider = fileProvider ?? (() => _defaultFile(ownerId));
 
   static const int maxEntries = 10;
   static const String _fileName = 'breezze_search_history.json';
@@ -16,9 +18,13 @@ class SearchHistoryStore {
   final Future<File> Function() _fileProvider;
   Future<void> _mutationQueue = Future<void>.value();
 
-  static Future<File> _defaultFile() async {
+  static Future<File> _defaultFile(String ownerId) async {
     final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/$_fileName');
+    if (ownerId == 'guest') {
+      return File('${directory.path}/$_fileName');
+    }
+    final safeOwnerId = ownerId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    return File('${directory.path}/breezze_search_history_$safeOwnerId.json');
   }
 
   Future<List<String>> load() async {

@@ -24,9 +24,15 @@ class OutboxSyncService {
       final outbox = _ref.read(syncOutboxDaoProvider);
       final api = _ref.read(authSessionProvider.notifier).api;
 
-      final ops = await outbox.pending();
+      final ownerId = auth.userId;
+      final ops = await outbox.pending(ownerId: ownerId);
+      final ownerPrefix = '$ownerId::';
       for (final op in ops) {
-        final resolution = await _resolveCatalogId(api, op.trackId);
+        if (!_isActiveOwner(ownerId)) return;
+        if (!op.trackId.startsWith(ownerPrefix)) continue;
+        final externalId = op.trackId.substring(ownerPrefix.length);
+        final resolution = await _resolveCatalogId(api, externalId, ownerId);
+        if (!_isActiveOwner(ownerId)) return;
         final catalogId = resolution.catalogId;
         if (catalogId == null) {
           // Only malformed/orphaned local operations are discarded. A
@@ -38,7 +44,7 @@ class OutboxSyncService {
           return;
         }
 
-        final ok = await _apply(api, op.op, catalogId);
+        final ok = await _apply(api, op.op, catalogId, ownerId);
         if (!ok) return;
         await outbox.remove(op.id);
       }
@@ -47,9 +53,15 @@ class OutboxSyncService {
     }
   }
 
+  bool _isActiveOwner(String ownerId) {
+    final current = _ref.read(authSessionProvider);
+    return current is AuthSignedIn && current.userId == ownerId;
+  }
+
   Future<({String? catalogId, bool discard})> _resolveCatalogId(
     BreezzeApi api,
     String externalId,
+    String ownerId,
   ) async {
     final mapDao = _ref.read(catalogIdMapDaoProvider);
     final cached = await mapDao.lookup(externalId);
@@ -61,7 +73,7 @@ class OutboxSyncService {
       return (catalogId: externalId, discard: false);
     }
 
-    final info = await _localTrackInfo(externalId);
+    final info = await _localTrackInfo(externalId, ownerId);
     if (info == null) {
       return (catalogId: null, discard: true);
     }
@@ -98,11 +110,14 @@ class OutboxSyncService {
 
   /// Display metadata is read only from local rows; it is never treated as
   /// proof that a provider grants playback rights.
-  Future<Map<String, Object?>?> _localTrackInfo(String externalId) async {
+  Future<Map<String, Object?>?> _localTrackInfo(
+    String externalId,
+    String ownerId,
+  ) async {
     final db = _ref.read(breezzeDatabaseProvider);
 
     final favorite = await (db.select(db.favoriteTracks)
-          ..where((t) => t.id.equals(externalId)))
+          ..where((t) => t.id.equals('$ownerId::$externalId')))
         .getSingleOrNull();
     if (favorite != null) {
       return {
@@ -113,7 +128,7 @@ class OutboxSyncService {
     }
 
     final recent = await (db.select(db.recentlyPlayed)
-          ..where((t) => t.id.equals(externalId)))
+          ..where((t) => t.id.equals('$ownerId::$externalId')))
         .getSingleOrNull();
     if (recent != null) {
       return {
@@ -126,7 +141,13 @@ class OutboxSyncService {
     return null;
   }
 
-  Future<bool> _apply(BreezzeApi api, String op, String catalogId) async {
+  Future<bool> _apply(
+    BreezzeApi api,
+    String op,
+    String catalogId,
+    String ownerId,
+  ) async {
+    if (!_isActiveOwner(ownerId)) return false;
     try {
       switch (op) {
         case 'favorite.add':

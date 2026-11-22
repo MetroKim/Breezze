@@ -11,8 +11,8 @@ class RecentStore {
   final RecentlyPlayedDao _dao =
       RecentlyPlayedDao(breezzeDb);
 
-  Future<List<RecentEntry>> load() async {
-    final rows = await _dao.list();
+  Future<List<RecentEntry>> load({String ownerId = 'guest'}) async {
+    final rows = await _dao.list(ownerId: ownerId);
     return [
       for (final r in rows)
         RecentEntry(
@@ -25,7 +25,7 @@ class RecentStore {
     ];
   }
 
-  Future<void> record(String id, String title, String artist,
+  Future<void> record(String ownerId, String id, String title, String artist,
       String? artworkUrl, Duration duration) {
     return _dao.record(
       id: id,
@@ -33,6 +33,7 @@ class RecentStore {
       artist: artist,
       artworkUrl: artworkUrl,
       durationMs: duration.inMilliseconds,
+      ownerId: ownerId,
     );
   }
 }

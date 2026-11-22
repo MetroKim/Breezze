@@ -38,8 +38,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    final recent = await _recent.load();
-    final favorites = await ref.read(favoritesStoreProvider).load();
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final recent = await _recent.load(ownerId: ownerId);
+    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
     if (ref.read(authSessionProvider) is AuthSignedIn) {
@@ -90,7 +92,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Replay is an independent home section.
       }
     }
-    if (!mounted) return;
+    final currentAuth = ref.read(authSessionProvider);
+    final currentOwnerId =
+        currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
+    if (!mounted || currentOwnerId != ownerId) return;
     setState(() {
       _recentlyPlayed = recent;
       _favorites = favorites;
@@ -161,6 +166,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
 
     return SafeArea(

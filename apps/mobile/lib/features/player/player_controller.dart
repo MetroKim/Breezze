@@ -5,6 +5,7 @@ import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/recent_store.dart';
+import '../../core/auth/auth_session.dart';
 import 'playback_session_client.dart';
 
 /// Global PlayerController — spec §51.3, §53.1.
@@ -650,8 +651,11 @@ class PlayerController extends Notifier<PlayerState> {
       _startHeartbeatTimer();
 
       if (info.title != null) {
+        final auth = ref.read(authSessionProvider);
+        final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
         unawaited(_recent
             .record(
+              ownerId,
               info.id,
               info.title!,
               info.artist ?? '',

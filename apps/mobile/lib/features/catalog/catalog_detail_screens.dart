@@ -73,15 +73,17 @@ class TrackDetailScreen extends ConsumerWidget {
     final selectedIndex = queueTracks.indexWhere((item) => item.id == track.id);
 
     Future<void> saveToLibrary() async {
+      final auth = ref.read(authSessionProvider);
+      final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
       final favorites = ref.read(favoritesStoreProvider);
-      if (!await favorites.isFavorite(track.id)) {
+      if (!await favorites.isFavorite(track.id, ownerId: ownerId)) {
         await favorites.toggle(FavoriteTrack(
           id: track.id,
           title: trackTitle,
           artist: artistName,
           artworkUrl: track.artworkUrl,
           durationMs: track.duration.inMilliseconds,
-        ));
+        ), ownerId: ownerId);
         await ref.read(outboxSyncProvider).drainIfSignedIn();
       }
       if (!context.mounted) return;
