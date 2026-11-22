@@ -29,6 +29,7 @@ model User {
   downloads      DownloadRecord[]
   recentlyPlayed RecentlyPlayed[]
   listeningEvents ListeningEvent[]
+  playbackSessions PlaybackSession[]
   preference     UserPreference?
   following      Follow[]          @relation("follower")
   followers      Follow[]          @relation("following")
@@ -141,6 +142,7 @@ model Track {
   favorites Favorite[]
   recentlyPlayed RecentlyPlayed[]
   listeningEvents ListeningEvent[]
+  playbackSessions PlaybackSession[]
   playlistItems PlaylistItem[]
   downloads DownloadRecord[]
   lyrics Lyrics?
@@ -222,6 +224,39 @@ model ListeningEvent {
 
   @@index([userId, trackId])
   @@index([trackId, createdAt])
+}
+
+model PlaybackSession {
+  id               String              @id @default(uuid())
+  userId           String
+  trackId          String
+  providerId       String?
+  territory        String
+  status           String              @default("active")
+  startedAt        DateTime            @default(now())
+  lastHeartbeatAt  DateTime            @default(now())
+  expiresAt        DateTime
+  stoppedAt        DateTime?
+  lastSequence     Int                 @default(0)
+  accumulatedMs    Int                 @default(0)
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track            Track               @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  heartbeats       PlaybackHeartbeat[]
+
+  @@index([userId, status, expiresAt])
+  @@index([trackId, startedAt])
+}
+
+model PlaybackHeartbeat {
+  id          String          @id
+  sessionId   String
+  sequence    Int
+  elapsedMs   Int
+  createdAt   DateTime        @default(now())
+  session     PlaybackSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, sequence])
+  @@index([sessionId, createdAt])
 }
 
 model Playlist {
