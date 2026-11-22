@@ -313,11 +313,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: Text('Available when Breezze recommendations are connected.'),
               enabled: false,
             ),
-            const ListTile(
-              leading: BzSvgIcon(name: 'clock'),
-              title: Text('Sleep timer'),
-              subtitle: Text('A playback timer will be added with the player controls.'),
-              enabled: false,
+            ListTile(
+              leading: const BzSvgIcon(name: 'clock'),
+              title: const Text('Sleep timer'),
+              subtitle: Text(
+                sleepTimerEndsAt == null
+                    ? 'Pause playback after a set time.'
+                    : 'Playback will pause at ' + TimeOfDay.fromDateTime(sleepTimerEndsAt).format(context) + '.',
+              ),
+              trailing: sleepTimerEndsAt == null
+                  ? const BzSvgIcon(name: 'chevron-right')
+                  : TextButton(
+                      onPressed: () => ref.read(sleepTimerProvider.notifier).cancel(),
+                      child: const Text('Turn off'),
+                    ),
+              onTap: _configureSleepTimer,
             ),
           ]),
           _section(theme, 'Appearance & Accessibility', [
