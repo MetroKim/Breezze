@@ -29,12 +29,17 @@ describe('RecommendationsService', () => {
           { id: 'listened-b', artistId: 'artist-b' },
         ]);
       }
-      return Promise.resolve([
-        { id: 'a-1', artistId: 'artist-a' },
-        { id: 'a-2', artistId: 'artist-a' },
-        { id: 'a-3', artistId: 'artist-a' },
-        { id: 'b-1', artistId: 'artist-b' },
-      ]);
+      if (where.artistId === 'artist-a') {
+        return Promise.resolve([
+          { id: 'a-1', artistId: 'artist-a' },
+          { id: 'a-2', artistId: 'artist-a' },
+          { id: 'a-3', artistId: 'artist-a' },
+        ]);
+      }
+      if (where.artistId === 'artist-b') {
+        return Promise.resolve([{ id: 'b-1', artistId: 'artist-b' }]);
+      }
+      return Promise.resolve([]);
     });
     rights.filterFullStream.mockImplementation((ids: string[]) => Promise.resolve(new Set(ids)));
     service = new RecommendationsService(
@@ -65,16 +70,47 @@ describe('RecommendationsService', () => {
     );
   });
 
+  it('interleaves artist candidates so one prolific artist cannot starve the others', async () => {
+    prisma.track.findMany.mockImplementation(({ where }: any) => {
+      if (where.id?.in) {
+        return Promise.resolve([
+          { id: 'listened-a', artistId: 'artist-a' },
+          { id: 'listened-b', artistId: 'artist-b' },
+        ]);
+      }
+      if (where.artistId === 'artist-a') {
+        return Promise.resolve([
+          { id: 'a-1', artistId: 'artist-a' },
+          { id: 'a-2', artistId: 'artist-a' },
+          { id: 'a-3', artistId: 'artist-a' },
+        ]);
+      }
+      return Promise.resolve([
+        { id: 'b-1', artistId: 'artist-b' },
+        { id: 'b-2', artistId: 'artist-b' },
+      ]);
+    });
+    rights.filterFullStream.mockResolvedValue(new Set(['a-1', 'a-2', 'a-3', 'b-1', 'b-2']));
+
+    const result = await service.forUser('user-1');
+
+    expect(result.slice(0, 3).map((item) => item.trackId)).toEqual(['a-1', 'b-1', 'a-2']);
+    expect(result.filter((item) => item.trackId.startsWith('a-'))).toHaveLength(2);
+  });
+
   it('excludes recently played and favorited tracks before checking candidates', async () => {
     prisma.recentlyPlayed.findMany.mockResolvedValue([{ trackId: 'recent-1' }]);
     prisma.favorite.findMany.mockResolvedValue([{ trackId: 'favorite-1' }]);
 
     await service.forUser('user-1');
 
-    const candidateQuery = prisma.track.findMany.mock.calls[1][0];
-    expect(candidateQuery.where.id.notIn).toEqual(
-      expect.arrayContaining(['recent-1', 'favorite-1']),
-    );
+    const candidateQueries = prisma.track.findMany.mock.calls.slice(1).map(([query]) => query);
+    expect(candidateQueries.length).toBeGreaterThan(0);
+    for (const candidateQuery of candidateQueries) {
+      expect(candidateQuery.where.id.notIn).toEqual(
+        expect.arrayContaining(['recent-1', 'favorite-1']),
+      );
+    }
   });
 
   it('uses rights-filtered popular tracks for a new listener', async () => {
