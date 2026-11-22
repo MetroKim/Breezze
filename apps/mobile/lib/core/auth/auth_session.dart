@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/breezze_api.dart';
+import '../../features/player/player_controller.dart';
 
 /// Auth session state — what the UI renders.
 sealed class AuthState {
@@ -222,6 +223,11 @@ class AuthSessionController extends Notifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    // Stop the global player while the access token is still valid so its
+    // server-authorized playback session is closed before account logout.
+    try {
+      await ref.read(playerControllerProvider.notifier).stop();
+    } catch (_) {}
     String? refreshToken;
     try {
       refreshToken = await _secureStorage.read(key: _refreshTokenKey);
