@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -19,7 +20,8 @@ class AuthSignedOut extends AuthState {
 }
 
 class AuthSigningIn extends AuthState {
-  const AuthSigningIn();
+  final bool social;
+  const AuthSigningIn({this.social = false});
 }
 
 class AuthSignedIn extends AuthState {
@@ -65,6 +67,7 @@ class AuthError extends AuthState {
 /// iOS Keychain / Android Keystore-backed secure storage.
 class AuthSessionController extends Notifier<AuthState> {
   Future<bool>? _refreshInFlight;
+  int _socialAttempt = 0;
   static const _refreshTokenKey = 'breezze.refresh_token';
   static const _secureStorage = FlutterSecureStorage();
 
@@ -175,6 +178,70 @@ class AuthSessionController extends Notifier<AuthState> {
     }
   }
 
+  Future<void> socialLogin(
+    String provider, {
+    Map<String, dynamic>? preparedFlow,
+  }) async {
+    final attempt = ++_socialAttempt;
+    state = const AuthSigningIn(social: true);
+    try {
+      // Preloaded flow keeps launchUrl on the original pointer activation
+      // for browsers that block asynchronous popups.
+      final flow = preparedFlow ?? await _api.startSocialLogin(provider);
+      if (attempt != _socialAttempt) return;
+      final flowId = flow['id'];
+      final pollSecret = flow['secret'];
+      final authorizationUrl = Uri.tryParse(flow['authorizationUrl'] as String? ?? '');
+      if (flowId is! String || pollSecret is! String ||
+          authorizationUrl == null || authorizationUrl.scheme != 'https') {
+        throw const BreezzeApiException(
+          code: 'SOCIAL_FLOW_INVALID',
+          message: 'The sign-in provider returned an invalid authorization URL.',
+        );
+      }
+      if (!await launchUrl(authorizationUrl, mode: LaunchMode.externalApplication)) {
+        throw const BreezzeApiException(
+          code: 'SOCIAL_BROWSER_UNAVAILABLE',
+          message: 'Cannot open the secure system browser for sign-in.',
+        );
+      }
+      // The system browser never sees Breezze refresh tokens. The app
+      // redeems a single-use random pairing secret through the own backend.
+      for (var n = 0; n < 150; n++) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (attempt != _socialAttempt) return;
+        final result = await _api.pollSocialLogin(flowId: flowId, secret: pollSecret);
+        if (attempt != _socialAttempt) return;
+        if (result['status'] == 'pending') continue;
+        if (result['status'] == 'completed' && result['session'] is Map) {
+          final session = AuthResponse.fromJson(
+            Map<String, dynamic>.from(result['session'] as Map),
+          );
+          if (attempt != _socialAttempt) return;
+          await _persistSession(session);
+          return;
+        }
+        throw BreezzeApiException(
+          code: result['code'] as String? ?? 'SOCIAL_AUTH_FAILED',
+          message: 'The identity provider could not complete the sign-in.',
+        );
+      }
+      throw const BreezzeApiException(
+        code: 'SOCIAL_AUTH_EXPIRED',
+        message: 'The browser sign-in timed out. You can try again.',
+      );
+    } on BreezzeApiException catch (e) {
+      if (attempt == _socialAttempt) state = AuthError(e.code);
+    } catch (_) {
+      if (attempt == _socialAttempt) state = const AuthError('SOCIAL_AUTH_FAILED');
+    }
+  }
+
+  void cancelSocialLogin() {
+    ++_socialAttempt;
+    if (state is AuthSigningIn) state = const AuthSignedOut();
+  }
+
   Future<void> beginMfaSetup(String password) async {
     final current = state;
     if (current is! AuthMfaRequired || !current.setupRequired) return;
@@ -227,6 +294,7 @@ class AuthSessionController extends Notifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    ++_socialAttempt;
     // Stop the global player while the access token is still valid so its
     // server-authorized playback session is closed before account logout.
     try {

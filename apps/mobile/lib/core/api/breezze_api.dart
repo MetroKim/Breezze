@@ -70,6 +70,7 @@ class BreezzeApi {
         path != '/auth/refresh' &&
         path != '/auth/login' &&
         path != '/auth/register' &&
+        !path.startsWith('/auth/social/') &&
         !path.startsWith('/auth/mfa/') &&
         onUnauthorized != null &&
         await onUnauthorized!()) {
@@ -268,6 +269,27 @@ class BreezzeApi {
     });
     return AuthResponse.fromJson(data);
   }
+
+  /// Universal system-browser OAuth pairing: same backend on Android,
+  /// iOS, macOS, Windows, Linux and web. The app never receives provider
+  /// access tokens and the browser never receives Breezze session tokens.
+  Future<Map<String, dynamic>> socialProviders() =>
+      _get('/auth/social/providers');
+
+  Future<Map<String, dynamic>> startSocialLogin(String provider) {
+    if (provider != 'google' && provider != 'apple') {
+      throw ArgumentError.value(provider, 'provider');
+    }
+    return _post('/auth/social/$provider/start', {});
+  }
+
+  Future<Map<String, dynamic>> pollSocialLogin({
+    required String flowId,
+    required String secret,
+  }) => _post('/auth/social/poll', {
+    'id': flowId,
+    'secret': secret,
+  });
 
   Future<AuthResponse> login(String email, String password) async {
     final data = await _post('/auth/login', {
