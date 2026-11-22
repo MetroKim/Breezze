@@ -43,4 +43,24 @@ describe('MediaSignerFactory', () => {
       'CDN_BASE_URL_MUST_USE_HTTPS',
     );
   });
+  it('rejects a production CDN URL with a path prefix', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.MEDIA_SIGNING_KEY = 'x'.repeat(40);
+    process.env.CDN_BASE_URL = 'https://cdn.example/media';
+
+    expect(() => new MediaSignerFactory().create()).toThrow(
+      'CDN_BASE_URL_MUST_BE_ORIGIN_ONLY',
+    );
+  });
+
+  it('uses the media Worker origin as the development fallback', () => {
+    process.env.NODE_ENV = 'development';
+    delete process.env.MEDIA_SIGNING_KEY;
+    delete process.env.CDN_BASE_URL;
+
+    const signer = new MediaSignerFactory().create();
+    expect(signer.createPlaybackUrl('track-1', 'AAC_256').url)
+      .toContain('http://localhost:8787/audio/track-1/AAC_256?');
+  });
+
 });
