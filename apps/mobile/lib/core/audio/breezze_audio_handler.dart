@@ -11,6 +11,8 @@ class BreezzeAudioHandler extends audio.BaseAudioHandler {
   BreezzeAudioHandler(this._controller);
 
   final PlayerController _controller;
+  String? _lastTrackId;
+  int? _lastQueueVersion;
 
   Future<void> play() => _controller.resume();
 
@@ -40,19 +42,24 @@ class BreezzeAudioHandler extends audio.BaseAudioHandler {
         state.playbackState == contracts.PlaybackState.loading ||
         state.playbackState == contracts.PlaybackState.resolving;
 
-    if (track == null) {
-      mediaItem.add(null);
-      queue.add(const <audio.MediaItem>[]);
-    } else {
-      final currentItem = _toMediaItem(track);
-      mediaItem.add(currentItem);
-
-      final upcoming = <audio.MediaItem>[];
-      for (final entry in controller.queue.upNext) {
-        final info = controller.trackInfoFor(entry.trackId);
-        if (info != null) upcoming.add(_toMediaItem(info));
+    final trackChanged = track?.id != _lastTrackId;
+    final queueChanged = state.queueVersion != _lastQueueVersion;
+    if (trackChanged) {
+      _lastTrackId = track?.id;
+      mediaItem.add(track == null ? null : _toMediaItem(track));
+    }
+    if (trackChanged || queueChanged) {
+      if (track == null) {
+        queue.add(const <audio.MediaItem>[]);
+      } else {
+        final items = <audio.MediaItem>[_toMediaItem(track)];
+        for (final entry in controller.queue.upNext) {
+          final info = controller.trackInfoFor(entry.trackId);
+          if (info != null) items.add(_toMediaItem(info));
+        }
+        queue.add(items);
       }
-      queue.add([currentItem, ...upcoming]);
+      _lastQueueVersion = state.queueVersion;
     }
 
     final controls = <audio.MediaControl>[
