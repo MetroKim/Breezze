@@ -8,12 +8,13 @@
 
 Breezze uses a provider-neutral resolver behind the NestJS API. No client or screen calls a music source directly. Provider adapters are independently enabled, health-checked and replaceable.
 
-| Role | Candidate | Decision |
+| Role | Provider | Decision |
 |---|---|---|
-| Catalog search and cross-service matching | MusicAPI Core | Preferred integration candidate, pending account credentials, plan/rate-limit review and terms review |
-| YouTube Music catalog/search | `ytmusicapi` | Optional adapter for discovery/metadata experiments; unofficial dependency with rate-limit and compatibility risk |
-| Playback source | Provider-specific authorized stream resolver | Enable only when the provider permits Breezze's intended playback use and returns a playable source |
-| Desktop fallback | Liner Desktop | Not an embeddable or server-side fallback; no code, assets, algorithms or private API behavior may be reused without written authorization |
+| Native playback | Audius official API | First third-party playback adapter; public, ungated and API-accessible tracks only; gated/restricted tracks are rejected |
+| YouTube Music catalog/search | `ytmusicapi` | Metadata/discovery only; never a native audio source or download path |
+| Apple RSS / iTunes | Official public catalog feeds/APIs | Metadata, charts and release discovery only; no full-track playback authorization |
+| MusicAPI Core | Optional future catalog integration | Not connected; credentials, plan, coverage, rate limits and terms must be reviewed before implementation |
+| Liner Desktop | External desktop product | Not an embeddable/server-side fallback; no code, assets, algorithms or private API behavior may be reused without written authorization |
 
 Audius is the first official third-party playback adapter in the current Breezze implementation. It is deliberately restricted to public, ungated tracks that the official API allows the app to access. This is not a complete commercial music catalog. `ytmusicapi` is an unofficial YouTube Music client API and is metadata/discovery only; it does not provide Breezze with a streaming licence. MusicAPI Core remains an optional future catalog candidate and is not connected.
 
@@ -29,9 +30,11 @@ Therefore Breezze must not:
 - extract its resolver, signer, audio processing, lyrics synchronization, shaders, assets or distinctive UI;
 - depend on private Liner endpoints or credentials.
 
-A separate Breezze-native fallback is implemented through the provider adapter contract. Liner may be evaluated as a standalone third-party desktop product by a human, but it is not a Breezze runtime dependency. Revisit only if the rights holder grants explicit written permission covering the exact intended use.
+Breezze uses its own provider adapter contract and does not depend on Liner as a fallback. Do not enable provider failover until the alternate source is verified as the same recording and independently passes rights, territory and source-validation checks. Liner may be evaluated as a standalone third-party desktop product by a human, but it is not a Breezze runtime dependency.
 
-## 3. Optional future MusicAPI credentials and UUID semantics\n\nMusicAPI is not connected in the current release. This section is retained only for a future integration after credentials, plan limits and terms are reviewed.
+## 3. Optional future MusicAPI credentials and UUID semantics
+
+MusicAPI is not connected in the current release. This section is retained only for a future integration after credentials, plan limits and terms are reviewed.
 
 MusicAPI documents these distinct values:
 - **Client ID:** identifies the Breezze integration; public catalog routes accept it as a Token credential.
