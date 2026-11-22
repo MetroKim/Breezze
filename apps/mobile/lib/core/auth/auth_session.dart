@@ -177,11 +177,16 @@ class AuthSessionController extends Notifier<AuthState> {
     }
   }
 
-  Future<void> socialLogin(String provider) async {
+  Future<void> socialLogin(
+    String provider, {
+    Map<String, dynamic>? preparedFlow,
+  }) async {
     final attempt = ++_socialAttempt;
     state = const AuthSigningIn();
     try {
-      final flow = await _api.startSocialLogin(provider);
+      // Preloaded flow keeps launchUrl on the original pointer activation
+      // for browsers that block asynchronous popups.
+      final flow = preparedFlow ?? await _api.startSocialLogin(provider);
       if (attempt != _socialAttempt) return;
       final flowId = flow['id'];
       final pollSecret = flow['secret'];
