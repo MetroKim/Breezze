@@ -411,6 +411,22 @@ class BreezzeApi {
     await _delete('/playlists/${Uri.encodeComponent(playlistId)}');
   }
 
+  // ---- in-app support ----
+
+  Future<Map<String, dynamic>> createSupportRequest({
+    required String category,
+    required String subject,
+    required String message,
+  }) =>
+      _post('/support/requests', {
+        'category': category,
+        'subject': subject,
+        'message': message,
+      });
+
+  Future<List<Map<String, dynamic>>> supportRequests() async =>
+      _asMapList(await _get('/support/requests'));
+
   // ---- notifications ----
 
   Future<List<Map<String, dynamic>>> notifications() async =>
