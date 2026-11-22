@@ -1,8 +1,18 @@
 import { NotFoundException } from '@nestjs/common';
 import { PlaylistsService } from './playlists.service';
 
-describe('PlaylistsService tenant isolation', () => {
+describe('PlaylistsService tenant isolation and ordering', () => {
+  const tx = {
+    $queryRaw: jest.fn(),
+    track: { findUnique: jest.fn() },
+    playlistItem: {
+      findFirst: jest.fn(),
+      aggregate: jest.fn(),
+      create: jest.fn(),
+    },
+  };
   const prisma = {
+    $transaction: jest.fn(),
     playlist: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -10,19 +20,26 @@ describe('PlaylistsService tenant isolation', () => {
       updateMany: jest.fn(),
       deleteMany: jest.fn(),
     },
-    track: { findUnique: jest.fn() },
-    playlistItem: {
-      count: jest.fn(),
-      create: jest.fn(),
-      deleteMany: jest.fn(),
-    },
+    playlistItem: { deleteMany: jest.fn() },
   };
 
   let service: PlaylistsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.track.findUnique.mockResolvedValue({ id: 'track-1' });
+    tx.$queryRaw.mockResolvedValue([{ id: 'playlist-a' }]);
+    tx.track.findUnique.mockResolvedValue({ id: 'track-1' });
+    tx.playlistItem.findFirst.mockResolvedValue(null);
+    tx.playlistItem.aggregate.mockResolvedValue({ _max: { position: 3 } });
+    tx.playlistItem.create.mockResolvedValue({
+      id: 'item-1',
+      playlistId: 'playlist-a',
+      trackId: 'track-1',
+      position: 4,
+    });
+    prisma.$transaction.mockImplementation(
+      (callback: (value: typeof tx) => unknown) => callback(tx),
+    );
     service = new PlaylistsService(prisma as any);
   });
 
@@ -46,24 +63,48 @@ describe('PlaylistsService tenant isolation', () => {
   });
 
   it('rejects adding a track that is not in the canonical catalog', async () => {
-    prisma.playlist.findFirst.mockResolvedValue({ id: 'playlist-a', userId: 'user-a' });
-    prisma.track.findUnique.mockResolvedValue(null);
+    tx.track.findUnique.mockResolvedValue(null);
 
     await expect(service.addTrack('user-a', 'playlist-a', 'missing-track'))
       .rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.playlistItem.count).not.toHaveBeenCalled();
-    expect(prisma.playlistItem.create).not.toHaveBeenCalled();
+    expect(tx.playlistItem.aggregate).not.toHaveBeenCalled();
+    expect(tx.playlistItem.create).not.toHaveBeenCalled();
   });
 
   it('does not mutate a playlist owned by another user', async () => {
-    prisma.playlist.findFirst.mockResolvedValue(null);
+    tx.$queryRaw.mockResolvedValue([]);
+
     await expect(service.addTrack('user-a', 'playlist-owned-by-b', 'track-1'))
       .rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.playlistItem.count).not.toHaveBeenCalled();
-    expect(prisma.playlistItem.create).not.toHaveBeenCalled();
+    expect(tx.track.findUnique).not.toHaveBeenCalled();
+    expect(tx.playlistItem.create).not.toHaveBeenCalled();
   });
 
-  it('scopes playlist deletion to an owned playlist before removing tracks', async () => {
+  it('locks the owned playlist and appends after the highest position', async () => {
+    await expect(service.addTrack('user-a', 'playlist-a', 'track-1'))
+      .resolves.toMatchObject({ position: 4 });
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.playlistItem.aggregate).toHaveBeenCalledWith({
+      where: { playlistId: 'playlist-a' },
+      _max: { position: true },
+    });
+    expect(tx.playlistItem.create).toHaveBeenCalledWith({
+      data: { playlistId: 'playlist-a', trackId: 'track-1', position: 4 },
+    });
+  });
+
+  it('does not create a duplicate when a client retries an add', async () => {
+    const existing = { id: 'existing-item', playlistId: 'playlist-a', trackId: 'track-1', position: 2 };
+    tx.playlistItem.findFirst.mockResolvedValue(existing);
+
+    await expect(service.addTrack('user-a', 'playlist-a', 'track-1'))
+      .resolves.toBe(existing);
+    expect(tx.playlistItem.aggregate).not.toHaveBeenCalled();
+    expect(tx.playlistItem.create).not.toHaveBeenCalled();
+  });
+
+  it('scopes playlist removal to an owned playlist', async () => {
     prisma.playlist.findFirst.mockResolvedValue(null);
     await expect(service.removeTrack('user-a', 'playlist-owned-by-b', 'track-1'))
       .rejects.toBeInstanceOf(NotFoundException);
