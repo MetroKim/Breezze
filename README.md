@@ -11,7 +11,7 @@ Breezze is an independent product. It is not affiliated with or endorsed by YouT
 - No artist portal, artist upload workflow, subscriptions, billing, memberships or paywalls in this release.
 - Artist and album pages are listener-facing catalog experiences only.
 - Search metadata is not a playback licence. Playback requires a backend-authorized source with applicable rights.
-- YouTube Music through `ytmusicapi` is metadata/discovery only. Audius is the first official third-party playback adapter and is limited to public, ungated, API-accessible tracks.
+- YouTube Music through `ytmusicapi` is metadata/discovery only. Audius is an in-app playback source for eligible public, ungated, API-accessible tracks. Breezze owns the playback UI and queue; provider sources never require opening another app.
 - Breezze does not extract YouTube audio, bypass provider access controls, or re-host third-party recordings.
 
 ## Repository layout
