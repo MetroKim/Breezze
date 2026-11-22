@@ -102,6 +102,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     try {
       await ref.read(authSessionProvider.notifier).api.updateProfile(
             displayName: name,
+            includePreferences: true,
             country: country.isEmpty ? null : country,
             language: language.isEmpty ? null : language,
             genres: genres,
