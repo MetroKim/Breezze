@@ -10,7 +10,9 @@ import '../player/player_controller.dart';
 
 /// Now Playing — premium edition: ambient artwork backdrop (content is
 /// the colour), breathing artwork on the calm 2s loop, word-synced
-/// karaoke lyrics.
+/// karaoke lyrics, and immersive chrome that recedes to 0.15 opacity
+/// after 3s without input and restores instantly on any interaction
+/// (spec §4.2 / FR-005).
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -23,11 +25,41 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   String _lyricsMode = 'none';
   int _lyricsRequestGeneration = 0;
   bool _lyricsVisible = true;
+  bool _chromeReceded = false;
+  Timer? _recedeTimer;
 
   @override
   void initState() {
     super.initState();
     _loadLyrics();
+    _scheduleRecede();
+  }
+
+  @override
+  void dispose() {
+    _recedeTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Chrome recedes after 3s without input (FR-005).
+  void _scheduleRecede() {
+    _recedeTimer?.cancel();
+    if (MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context)) {
+      return;
+    }
+    setState(() => _chromeReceded = false);
+    _recedeTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _chromeReceded = true);
+    });
+  }
+
+  /// Any interaction restores chrome instantly (FR-005).
+  void _onUserInteraction() {
+    if (_chromeReceded) {
+      setState(() => _chromeReceded = false);
+    }
+    _scheduleRecede();
   }
 
   Future<void> _loadLyrics() async {
@@ -83,7 +115,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       builder: (_) => const _PlayingNextSheet(),
     );
   }
-
 
   void _showPlayerActions(
     BuildContext context,
@@ -174,18 +205,28 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     return Scaffold(
       body: BzAmbientBackdrop(
         artworkUrl: track.artworkUrl,
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: SizedBox.expand(
-                child: Column(
-                  children: [
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onUserInteraction,
+          onPanDown: (_) => _onUserInteraction(),
+          onScaleStart: (_) => _onUserInteraction(),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: BzMotion.navMs),
+            curve: const Cubic(0.22, 1, 0.36, 1),
+            opacity: _chromeReceded ? 0.15 : 1.0,
+            child: SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: SizedBox.expand(
+                    child: Column(
+                      children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Row(
                   children: [
                     IconButton(
+                      tooltip: 'Close',
                       icon: BzSvgIcon(name: 'chevron-down'),
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
@@ -205,6 +246,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                       ),
                     ),
                     IconButton(
+                      tooltip: 'More actions',
                       icon: BzSvgIcon(name: 'more-vertical'),
                       onPressed: () => _showPlayerActions(context, controller),
                     ),
@@ -264,8 +306,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         max: player.duration.inMilliseconds > 0
                             ? player.duration.inMilliseconds.toDouble()
                             : 1,
-                        onChanged: (v) => controller
-                            .seekTo(Duration(milliseconds: v.toInt())),
+                        onChanged: (v) {
+                          _onUserInteraction();
+                          controller.seekTo(Duration(milliseconds: v.toInt()));
+                        },
                       ),
                     ),
                     Row(
@@ -332,8 +376,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               Row(
                 children: [
                   TextButton.icon(
-                    onPressed: () =>
-                        setState(() => _lyricsVisible = !_lyricsVisible),
+                    onPressed: () {
+                      _onUserInteraction();
+                      setState(() => _lyricsVisible = !_lyricsVisible);
+                    },
                     icon: BzSvgIcon(name: 'lyrics', size: 18),
                     label: Text(_lyricsVisible ? 'Hide Lyrics' : 'Show Lyrics'),
                   ),
@@ -366,6 +412,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               ),
             ),
           ),
+          ),
+        ),
         ),
       ),
     );
@@ -444,6 +492,14 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
             decoration: BoxDecoration(
               color: colors.surface2,
               borderRadius: BorderRadius.circular(BzRadius.artwork),
+              // Gentle lift: --shadow-glass-soft, never a hard drop shadow.
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x1F000000),
+                  blurRadius: 32,
+                  offset: Offset(0, 8),
+                ),
+              ],
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(BzRadius.artwork),
@@ -499,6 +555,9 @@ class _PlayPauseButton extends StatelessWidget {
   }
 }
 
+/// Lyrics with depth-of-field: the active line is bold and fully opaque,
+/// surrounding lines fall back through two levels of softness — the
+/// Apple Music karaoke treatment where focus tracks the voice.
 class _LyricsView extends StatelessWidget {
   final Lyrics? lyrics;
   final String mode;
@@ -548,6 +607,24 @@ class _LyricsView extends StatelessWidget {
         final activeWord =
             active && isSynced ? lyrics!.activeWordIndex(i, position) : -1;
 
+        // Depth-of-field: distance from the active line sets softness.
+        final distance = (i - activeIndex).abs();
+        final Color lineColor;
+        final FontWeight lineWeight;
+        if (active) {
+          lineColor = theme.bzText1;
+          lineWeight = FontWeight.w700;
+        } else if (distance <= 1) {
+          lineColor = theme.bzText2;
+          lineWeight = FontWeight.w600;
+        } else if (distance <= 3) {
+          lineColor = theme.bzText2.withValues(alpha: 0.7);
+          lineWeight = FontWeight.w400;
+        } else {
+          lineColor = theme.bzText2.withValues(alpha: 0.45);
+          lineWeight = FontWeight.w400;
+        }
+
         if (line.words.isEmpty) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -555,8 +632,8 @@ class _LyricsView extends StatelessWidget {
               duration: const Duration(milliseconds: 200),
               style: TextStyle(
                 fontSize: BzType.headline,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w400,
-                color: active ? theme.bzText1 : theme.bzText2,
+                fontWeight: lineWeight,
+                color: lineColor,
               ),
               child: Text(line.text),
             ),
@@ -574,10 +651,12 @@ class _LyricsView extends StatelessWidget {
                     duration: const Duration(milliseconds: 200),
                     style: TextStyle(
                       fontSize: BzType.headline,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w400,
+                      fontWeight: lineWeight,
                       color: active
-                          ? (w <= activeWord ? theme.bzText1 : theme.bzText2)
-                          : theme.bzText2,
+                          ? (w <= activeWord
+                              ? theme.bzText1
+                              : theme.bzText2)
+                          : lineColor,
                     ),
                     child: Text(line.words[w].text),
                   ),
@@ -653,7 +732,6 @@ class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
     );
   }
 }
-
 
 class _PlayingNextSheet extends ConsumerWidget {
   const _PlayingNextSheet();
