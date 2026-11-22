@@ -1,20 +1,31 @@
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from '../playback/media-signer.service';
+import { ProviderRegistry } from '../providers/provider-registry.service';
 import { DownloadsService } from './downloads.service';
 
 describe('DownloadsService', () => {
-  const prisma = { downloadRecord: { upsert: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() } };
+  const prisma = {
+    track: { findUnique: jest.fn() },
+    downloadRecord: {
+      upsert: jest.fn(),
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
+    },
+  };
   const rights = { decide: jest.fn() };
   const signer = { createPlaybackUrl: jest.fn() };
+  const providers = { get: jest.fn() };
   let service: DownloadsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source: null, externalId: null });
     service = new DownloadsService(
       prisma as unknown as PrismaService,
       rights as unknown as RightsDecisionService,
       signer as unknown as MediaSigner,
+      providers as unknown as ProviderRegistry,
     );
   });
 
@@ -118,5 +129,49 @@ describe('DownloadsService', () => {
     });
 
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'download', null);
+  });
+
+  it('does not issue download URLs for providers that do not support downloads', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'track-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    providers.get.mockReturnValue({
+      capabilities: { download: false, availability: true },
+      getAvailability: jest.fn(),
+    });
+
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1',
+      territory: 'TZ',
+    })).resolves.toEqual({
+      allowed: false,
+      reason: 'PROVIDER_DOWNLOAD_UNSUPPORTED',
+      url: null,
+    });
+    expect(rights.decide).not.toHaveBeenCalled();
+    expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+  });
+
+  it('revokes existing external downloads when provider capability is removed', async () => {
+    prisma.downloadRecord.findFirst.mockResolvedValue({ id: 'download-1' });
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'track-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    providers.get.mockReturnValue({
+      capabilities: { download: false, availability: true },
+    });
+
+    await expect(service.revalidateOfflineLease('user-1', 'track-1', 'TZ'))
+      .resolves.toEqual({ allowed: false, reason: 'PROVIDER_DOWNLOAD_UNSUPPORTED' });
+    expect(prisma.downloadRecord.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', trackId: 'track-1', status: 'active' },
+      data: expect.objectContaining({ status: 'revoked', expiresAt: expect.any(Date) }),
+    });
+    expect(rights.decide).not.toHaveBeenCalled();
   });
 });
