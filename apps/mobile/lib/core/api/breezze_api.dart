@@ -195,12 +195,14 @@ class BreezzeApi {
 
   Future<Map<String, dynamic>> startPlaybackSession({
     String? trackId,
+    String? requestedQuality,
     String? providerId,
     String? providerTrackId,
     String? canonicalTrackId,
   }) =>
       _post('/playback/sessions', {
         if (trackId != null) 'trackId': trackId,
+        if (requestedQuality != null) 'requestedQuality': requestedQuality,
         if (providerId != null) 'providerId': providerId,
         if (providerTrackId != null) 'providerTrackId': providerTrackId,
         if (canonicalTrackId != null) 'canonicalTrackId': canonicalTrackId,
