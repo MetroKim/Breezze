@@ -58,6 +58,20 @@ class BackgroundAudioSync {
   void start() {
     _subscription = ref.listen(playerControllerProvider, (prev, next) {
       final track = next.currentTrack;
+      final trackChanged = prev?.currentTrack?.id != track?.id;
+      final playbackChanged = prev?.playbackState != next.playbackState;
+      final queueChanged = prev?.queueVersion != next.queueVersion;
+      final pausedSeekChanged = prev != null &&
+          prev.position != next.position &&
+          next.playbackState != PlaybackState.playing &&
+          next.playbackState != PlaybackState.buffering &&
+          next.playbackState != PlaybackState.loading &&
+          next.playbackState != PlaybackState.resolving;
+      // audio_service projects position from elapsed wall time. Do not publish
+      // every player position tick; only send state/track/queue/seek changes.
+      if (!trackChanged && !playbackChanged && !queueChanged && !pausedSeekChanged) {
+        return;
+      }
       final bridge = ref.read(backgroundBridgeProvider);
       if (next.playbackState == PlaybackState.idle || track == null) {
         // Clear OS metadata without invoking the handler's user-requested
