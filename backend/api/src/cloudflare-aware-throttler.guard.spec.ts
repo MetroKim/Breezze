@@ -72,6 +72,29 @@ describe('CloudflareAwareThrottlerGuard', () => {
   });
 
 
+  it('shares the login account quota across different source IPs', async () => {
+    process.env.API_RATE_LIMIT = '100';
+    process.env.LOGIN_ACCOUNT_RATE_LIMIT = '100';
+    redis.eval.mockResolvedValue([1, 60000]);
+
+    const email = 'target@example.com';
+    await expect(guard.canActivate(context(
+      '192.0.2.10',
+      { email },
+      '/api/v1/auth/login',
+    ))).resolves.toBe(true);
+    await expect(guard.canActivate(context(
+      '198.51.100.20',
+      { email: 'TARGET@example.com' },
+      '/api/v1/auth/login',
+    ))).resolves.toBe(true);
+
+    const firstAccountKey = redis.eval.mock.calls[1][2] as string;
+    const secondAccountKey = redis.eval.mock.calls[3][2] as string;
+    expect(firstAccountKey).toBe(secondAccountKey);
+    expect(firstAccountKey).not.toContain(email);
+  });
+
   it('applies a strict shared Redis quota to MFA code verification', async () => {
     process.env.API_RATE_LIMIT = '100';
     (guard as any).mfaAttemptLimit = 1;
