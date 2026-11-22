@@ -21,9 +21,9 @@ export class DiscoveryService {
     return /^[a-z]{2}$/.test(normalized) && normalized !== 'ww' ? normalized : 'us';
   }
 
-  private async appleFeed(kind: 'songs' | 'albums', feed: 'most-played' | 'new-releases', country?: string) {
+  private async appleFeed(kind: 'songs' | 'albums', country?: string) {
     const territory = this.country(country);
-    const url = `https://rss.marketingtools.apple.com/api/v2/${territory}/music/${feed}/100/${kind}.json`;
+    const url = `https://rss.marketingtools.apple.com/api/v2/${territory}/music/most-played/100/${kind}.json`;
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) {
       throw new Error(`APPLE_RSS_HTTP_${response.status}`);
@@ -35,7 +35,7 @@ export class DiscoveryService {
       source: 'Apple Music RSS',
       sourceUrl: url,
       territory: territory.toUpperCase(),
-      title: payload.feed?.title ?? (feed === 'most-played' ? 'Top Songs' : 'New Releases'),
+      title: payload.feed?.title ?? 'Most Played',
       fetchedAt: new Date().toISOString(),
       items: results.map((item, index) => ({
         id: item.id ?? null,
@@ -44,7 +44,7 @@ export class DiscoveryService {
         artworkUrl: item.artworkUrl100 ?? null,
         releaseDate: item.releaseDate ?? null,
         genres: (item.genres ?? []).map((genre) => genre.name).filter(Boolean),
-        rank: feed === 'most-played' ? index + 1 : null,
+        rank: index + 1,
         url: item.url ?? null,
         playback: 'external_catalog_only',
       })),
@@ -96,11 +96,23 @@ export class DiscoveryService {
   }
 
   songsChart(country?: string) {
-    return this.appleFeed('songs', 'most-played', country);
+    return this.appleFeed('songs', country);
+  }
+
+  async recentChartReleases(kind: 'songs' | 'albums', country?: string) {
+    const chart = await this.appleFeed(kind, country);
+    const now = Date.now();
+    const earliest = now - 30 * 24 * 60 * 60 * 1000;
+    const items = chart.items.filter(item => {
+      const released = Date.parse(item.releaseDate ?? '');
+      return released >= earliest && released <= now;
+    }).sort((a, b) => Date.parse(b.releaseDate!) - Date.parse(a.releaseDate!));
+    return { ...chart, title: 'Recent releases in the regional chart',
+      items: items.map(item => ({ ...item, rank: null })) };
   }
 
   newReleases(country?: string) {
-    return this.appleFeed('albums', 'new-releases', country);
+    return this.recentChartReleases('albums', country);
   }
 
   async artistAlbums(artistId: string) {

@@ -418,8 +418,8 @@ class _BrowseDestination {
 }
 
 const _browseDestinations = <_BrowseDestination>[
-  _BrowseDestination('Latest Songs', 'Recently added tracks from verified catalog sources.', 'music-note'),
-  _BrowseDestination('New Releases', 'New albums and singles with confirmed release dates.', 'disc-3'),
+  _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
+  _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
   _BrowseDestination('Daily Top 100', 'Apple Music Daily Global Top 100 for the selected territory.', 'star'),
   _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
@@ -455,12 +455,13 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   String? _catalogTerritory;
   DateTime? _catalogFetchedAt;
 
+  bool get _latestSongs => widget.destination.title == 'Latest Songs';
   bool get _appleChart => widget.destination.title == 'Charts';
   bool get _dailyChart => widget.destination.title == 'Daily Top 100';
   bool get _appleReleases => widget.destination.title == 'New Releases';
   bool get _videoFeed => widget.destination.title == 'Music Videos';
   bool get _concertFeed => widget.destination.title == 'Upcoming Concerts';
-  bool get _liveProviderCatalog => _appleChart || _dailyChart || _appleReleases || _videoFeed || _concertFeed;
+  bool get _liveProviderCatalog => _latestSongs || _appleChart || _dailyChart || _appleReleases || _videoFeed || _concertFeed;
 
   bool get _genre => widget.destination.title == 'Browse by Genre';
   bool get _mood => widget.destination.title == 'Moods & Activities';
@@ -495,7 +496,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       final territory = configuredTerritory.length == 2 && configuredTerritory != 'ww'
           ? configuredTerritory
           : 'us';
-      final data = _appleReleases
+      final data = _latestSongs
+          ? await api.discoveryLatestSongs(country: territory)
+          : _appleReleases
           ? await api.discoveryNewReleases(country: territory)
           : _dailyChart
               ? await api.discoveryDailyTop100(country: territory)
@@ -542,7 +545,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       ));
       return;
     }
-    if ((_appleChart || _dailyChart) && itemId != null) {
+    if ((_latestSongs || _appleChart || _dailyChart) && itemId != null) {
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => TrackDetailScreen(
           track: TrackInfo(
@@ -800,8 +803,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   }
 
   Widget _appleCatalogContent(ThemeData theme) {
-    final isReleaseFeed = _appleReleases;
-    final isDailyChart = _dailyChart;
+    final isReleaseFeed = _appleReleases || _latestSongs;
     final isVideoFeed = _videoFeed;
     final isConcertFeed = _concertFeed;
     return Column(
@@ -814,18 +816,6 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
             children: [
               Text(widget.destination.description, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 8),
-              Text(
-                isReleaseFeed
-                    ? 'Newly released albums from Apple Music'
-                    : isDailyChart
-                        ? 'Apple Music Daily Global Top 100'
-                        : isVideoFeed
-                        ? 'Original music videos classified by YouTube Music'
-                        : isConcertFeed
-                            ? 'Upcoming live events from JamBase Data'
-                            : 'Apple Music most-played songs chart',
-                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
-              ),
               if (_catalogSource != null || _catalogTerritory != null) ...[
                 const SizedBox(height: 5),
                 Text(
@@ -834,32 +824,6 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
                 ),
               ],
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(11),
-                decoration: BoxDecoration(
-                  color: theme.bzSurface1,
-                  borderRadius: BorderRadius.circular(BzRadius.card),
-                  border: Border.all(color: theme.bzSeparator),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    BzSvgIcon(name: 'info', size: 17, color: theme.bzText2),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        isVideoFeed
-                            ? "Results are filtered to YouTube Music's Original Music Video (OMV) classification, which identifies videos uploaded by the original artist. Links open on YouTube; Breezze does not rehost or relay them."
-                            : isConcertFeed
-                                ? 'Event listings are supplied by JamBase. Dates and ticket availability can change; verify details with the event and ticket provider before attending.'
-                                : 'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; browse inside Breezze, while native playback requires an authorized source.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),

@@ -8,7 +8,7 @@ import 'package:material_ui/material_ui.dart';
 /// 2026-11 revision ("Liquid Glass" alignment):
 /// - Light mode ground is a cool grey (#f5f5f7), never warm cream.
 /// - Dark mode collapses to pure black (#000000) for OLED efficiency.
-/// - Accent is a single blue family (#0071e3 light / #0a84ff dark),
+/// - Accent is a monochrome ink or silver,
 ///   reserved for primary music actions and active navigation only.
 /// - Separators are hairlines (7% black / 10% white), not solid greys.
 /// - Accent is NEVER used as a background wash.
@@ -22,8 +22,8 @@ class BzColorsLight {
   static const textTertiary = Color(0xFF86868B);
   static const separator = Color(0x12000000); // 7% black hairline
   static const brandMonochrome = Color(0xFF1D1D1F);
-  static const accent = Color(0xFF0071E3); // light-mode Apple blue
-  static const accentOnTint = Color(0xFF0066CC);
+  static const accent = Color(0xFF29292C);
+  static const accentOnTint = Color(0xFF353539);
   static const live = Color(0xFF30D158);
   static const success = Color(0xFF237A4B);
   static const warning = Color(0xFF98620E);
@@ -40,8 +40,8 @@ class BzColorsDark {
   static const textTertiary = Color(0xFF737378); // ~rgba(255,255,255,0.45)
   static const separator = Color(0x1AFFFFFF); // 10% white hairline
   static const brandOnDark = Color(0xFFFFFFFF);
-  static const accent = Color(0xFF0A84FF); // dark-mode Apple blue
-  static const accentOnTint = Color(0xFF409CFF);
+  static const accent = Color(0xFFE9E9ED);
+  static const accentOnTint = Color(0xFFDEDEE4);
   static const live = Color(0xFF30D158);
   static const success = Color(0xFF55C88A);
   static const warning = Color(0xFFEAB95C);

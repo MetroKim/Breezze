@@ -4,7 +4,8 @@ publish_to: 'none'
 version: 0.1.0
 
 environment:
-  sdk: '>=3.5.0 <4.0.0'
+  sdk: '>=3.10.0 <4.0.0'
+  flutter: '>=3.38.0'
 
 dependencies:
   flutter:
@@ -44,6 +45,10 @@ dependencies:
   youtube_player_iframe: 5.2.2
   connectivity_plus: ^6.1.0
   flutter_secure_storage: ^9.2.4
+  # Device-local YouTube Music session connection. Cookies remain in the
+  # platform WebView/secure storage and are never sent to the Breezze API.
+  webview_flutter: ^4.14.0
+  crypto: ^3.0.6
 
   # App-private storage locations
   path_provider: ^2.1.3

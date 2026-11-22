@@ -38,6 +38,20 @@ describeIntegration('Saved albums PostgreSQL ownership and idempotency', () => {
     return row.id;
   }
 
+  it('scopes artist follows to the listener and handles repeated taps', async () => {
+    const listener = await createUser();
+    const other = await createUser();
+    const key = 'apple:21';
+    await Promise.all([service.setFollowing(listener, key, true),
+      service.setFollowing(listener, key, true)]);
+    expect(await service.artistStatus(listener, key)).toEqual({ following: true });
+    expect(await service.artistStatus(other, key)).toEqual({ following: false });
+    await service.setFollowing(other, key, false);
+    expect(await service.artistStatus(listener, key)).toEqual({ following: true });
+    await service.setFollowing(listener, key, false);
+    expect(await service.artistStatus(listener, key)).toEqual({ following: false });
+  });
+
   it('keeps the same public album ID separate for two users', async () => {
     const a = await createUser();
     const b = await createUser();

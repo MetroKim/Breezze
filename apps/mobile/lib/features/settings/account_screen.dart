@@ -3,6 +3,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_session.dart';
+import '../../core/auth/guest_mode.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
@@ -27,7 +28,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (ref.read(authSessionProvider) is AuthSignedIn) _load();
   }
 
   @override
@@ -186,6 +187,31 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(authSessionProvider) is! AuthSignedIn) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Account')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Sign in to sync your library across devices.'),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    final guestMode = ref.read(guestModeProvider.notifier);
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    guestMode.state = false;
+                  },
+                  child: const Text('Sign in or create an account'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(

@@ -3,8 +3,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/download_preferences.dart';
+import '../../app/appearance_controller.dart';
 import '../../app/search_history_store.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/auth/youtube_music_session.dart';
+import '../authentication/youtube_music_connect_screen.dart';
 import 'account_screen.dart';
 import 'help_support_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -109,12 +112,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Future<void> _manageYouTubeMusic(bool connected) async {
+    if (!connected) {
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => const YouTubeMusicConnectScreen(),
+        ),
+      );
+      return;
+    }
+    final disconnect = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Disconnect YouTube Music?'),
+        content: const Text(
+          'Breezze will remove the saved YouTube Music session from this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (disconnect == true) {
+      await ref.read(youtubeMusicSessionProvider.notifier).disconnect();
+      await clearYouTubeMusicWebSession();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final auth = ref.watch(authSessionProvider);
     final email = auth is AuthSignedIn ? auth.email : null;
     final sleepTimerEndsAt = ref.watch(sleepTimerProvider);
+    final youtubeMusic = ref.watch(youtubeMusicSessionProvider);
+    final youtubeMusicConnected =
+        youtubeMusic.valueOrNull?.connected == true;
+    final youtubeMusicName = youtubeMusic.valueOrNull?.displayName;
 
     return SafeArea(
       child: ListView(
@@ -148,12 +189,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const NotificationsScreen()),
               ),
             ),
-            ListTile(
+            if (auth is AuthSignedIn) ListTile(
               leading: BzSvgIcon(name: 'logout'),
               title: const Text('Sign out'),
               onTap: () {
                 ref.read(authSessionProvider.notifier).signOut();
               },
+            ),
+          ]),
+          _section(theme, 'Connected Services', [
+            ListTile(
+              leading: const BzSvgIcon(name: 'music-note'),
+              title: const Text('YouTube Music'),
+              subtitle: Text(
+                youtubeMusic.isLoading
+                    ? 'Checking this device…'
+                    : youtubeMusicConnected
+                        ? youtubeMusicName == null
+                            ? 'Connected on this device'
+                            : 'Connected as $youtubeMusicName'
+                        : 'Connect without a Breezze API key',
+              ),
+              trailing: youtubeMusicConnected
+                  ? const Text('Connected')
+                  : const BzSvgIcon(name: 'chevron-right'),
+              onTap: youtubeMusic.isLoading
+                  ? null
+                  : () => _manageYouTubeMusic(youtubeMusicConnected),
             ),
           ]),
           _section(theme, 'Audio Quality', [
@@ -335,7 +397,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ListTile(
               leading: const BzSvgIcon(name: 'moon'),
               title: const Text('Appearance'),
-              subtitle: const Text('Follows your device light or dark theme.'),
+              trailing: DropdownButton<ThemeMode>(
+                value: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.system,
+                items: const [
+                  DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
+                  DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
+                  DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+                ],
+                onChanged: ref.watch(appearanceProvider).isLoading ? null : (mode) async {
+                  if (mode == null) return;
+                  try {
+                    await ref.read(appearanceProvider.notifier).select(mode);
+                  } catch (_) {
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not save appearance. Try again.')),
+                    );
+                  }
+                },
+              ),
             ),
             ListTile(
               leading: const BzSvgIcon(name: 'settings'),
@@ -356,11 +435,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: const BzSvgIcon(name: 'chevron-right'),
               onTap: _clearSearchHistory,
             ),
-            const ListTile(
-              leading: BzSvgIcon(name: 'trash'),
-              title: Text('Cache management'),
-              subtitle: Text('Artwork cache controls are not available yet.'),
-              enabled: false,
+            ListTile(
+              leading: const BzSvgIcon(name: 'trash'),
+              title: const Text('Clear artwork cache'),
+              subtitle: const Text('Free memory used by album artwork.'),
+              onTap: () {
+                PaintingBinding.instance.imageCache.clear();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Artwork cache cleared.')),
+                );
+              },
             ),
           ]),
           _section(theme, 'Help & Support', [

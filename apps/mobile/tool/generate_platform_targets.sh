@@ -133,6 +133,20 @@ if windows_cmake.exists():
         )
         windows_cmake.write_text(cmake)
 
+linux_runner = app_dir / "linux" / "runner" / "my_application.cc"
+if linux_runner.exists():
+    source = linux_runner.read_text()
+    anchor = "  g_autoptr(FlDartProject) project = fl_dart_project_new();"
+    if "gtk_window_set_icon_from_file" not in source:
+        if anchor not in source:
+            raise SystemExit("Cannot locate Linux runner initialization")
+        source = source.replace(anchor, anchor + """
+  const gchar* assets = fl_dart_project_get_assets_path(project);
+  g_autofree gchar* icon = g_build_filename(assets, "assets", "icons", "launcher.png", nullptr);
+  gtk_window_set_icon_from_file(window, icon, nullptr);
+  gtk_window_set_title(window, "Breezze");""")
+        linux_runner.write_text(source)
+
 ios_plist = app_dir / "ios" / "Runner" / "Info.plist"
 if ios_plist.exists():
     with ios_plist.open("rb") as source:
