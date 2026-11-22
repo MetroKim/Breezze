@@ -27,6 +27,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   String _lyricsMode = 'none';
   int _lyricsRequestGeneration = 0;
   bool _lyricsVisible = true;
+  // Artwork-first playback and a dedicated lyric-reading mode share the
+  // same player and synced lyric state, without duplicate audio sessions.
+  bool _lyricsFocus = false;
   bool _chromeReceded = false;
   Timer? _recedeTimer;
 
@@ -55,7 +58,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     }
     setState(() => _chromeReceded = false);
     _recedeTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _chromeReceded = true);
+      if (mounted && !_lyricsFocus) setState(() => _chromeReceded = true);
     });
   }
 
@@ -162,7 +165,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               title: Text(_lyricsVisible ? 'Hide lyrics' : 'Show lyrics'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                setState(() => _lyricsVisible = !_lyricsVisible);
+                setState(() {
+                  _lyricsVisible = !_lyricsVisible;
+                  if (!_lyricsVisible) _lyricsFocus = false;
+                });
               },
             ),
           ],
@@ -260,13 +266,26 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                             ],
                           ),
                         ),
-                        const Spacer(),
-                        _BreathingArtwork(
-                          playing: playing,
-                          artworkUrl: track.artworkUrl,
-                          fallbackColor: theme.bzText2,
-                        ),
-                        const Spacer(),
+                        // Portrait artwork mode follows the cover-led design.
+                        // Focus mode gives the actual synced lyrics the full
+                        // reading surface while retaining playback controls.
+                        if (!_lyricsFocus) const Spacer(),
+                        if (!_lyricsFocus)
+                          _BreathingArtwork(
+                            playing: playing,
+                            artworkUrl: track.artworkUrl,
+                            fallbackColor: theme.bzText2,
+                          ),
+                        if (!_lyricsFocus) const Spacer(),
+                        if (_lyricsFocus)
+                          Expanded(
+                            child: _LyricsView(
+                              lyrics: _lyrics,
+                              mode: _lyricsMode,
+                              position: player.position,
+                              focusMode: true,
+                            ),
+                          ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Row(
@@ -391,8 +410,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                             TextButton.icon(
                               onPressed: () {
                                 _onUserInteraction();
-                                setState(
-                                    () => _lyricsVisible = !_lyricsVisible);
+                                setState(() {
+                                  _lyricsVisible = !_lyricsVisible;
+                                  if (!_lyricsVisible) _lyricsFocus = false;
+                                });
                               },
                               icon: BzSvgIcon(name: 'lyrics', size: 18),
                               label: Text(_lyricsVisible
@@ -400,6 +421,27 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                   : 'Show Lyrics'),
                             ),
                             const Spacer(),
+                            IconButton(
+                              tooltip: _lyricsFocus
+                                  ? 'Show artwork'
+                                  : 'Focus lyrics',
+                              icon: BzSvgIcon(
+                                name: _lyricsFocus ? 'album' : 'lyrics',
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                _onUserInteraction();
+                                setState(() {
+                                  _lyricsFocus = !_lyricsFocus;
+                                  if (_lyricsFocus) {
+                                    _lyricsVisible = true;
+                                    _chromeReceded = false;
+                                    _recedeTimer?.cancel();
+                                  }
+                                });
+                                if (!_lyricsFocus) _scheduleRecede();
+                              },
+                            ),
                             TextButton.icon(
                               onPressed: _openPlayingNext,
                               icon: BzSvgIcon(name: 'queue', size: 18),
@@ -408,7 +450,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Expanded(
+                        if (!_lyricsFocus)
+                          Expanded(
                           child: _lyricsVisible
                               ? _LyricsView(
                                   lyrics: _lyrics,
@@ -497,8 +540,10 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
     final colors = Theme.of(context).bz;
     return LayoutBuilder(
       builder: (context, constraints) {
+        final heightCap = (MediaQuery.sizeOf(context).height * 0.43)
+            .clamp(144.0, 420.0).toDouble();
         final side = (constraints.maxWidth * 0.72)
-            .clamp(220.0, 420.0)
+            .clamp(144.0, heightCap)
             .toDouble();
         return ScaleTransition(
           scale: _controller,
@@ -580,11 +625,13 @@ class _LyricsView extends StatelessWidget {
   final Lyrics? lyrics;
   final String mode;
   final Duration position;
+  final bool focusMode;
 
   const _LyricsView({
     required this.lyrics,
     required this.mode,
     required this.position,
+    this.focusMode = false,
   });
 
   @override
@@ -617,7 +664,7 @@ class _LyricsView extends StatelessWidget {
     final isSynced = mode == 'synced';
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      padding: EdgeInsets.fromLTRB(24, focusMode ? 28 : 8, 24, 24),
       itemCount: lyrics!.lines.length,
       itemBuilder: (context, i) {
         final line = lyrics!.lines[i];
@@ -645,11 +692,11 @@ class _LyricsView extends StatelessWidget {
 
         if (line.words.isEmpty) {
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: focusMode ? 12 : 6),
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 200),
               style: TextStyle(
-                fontSize: BzType.headline,
+                fontSize: focusMode ? BzType.title1 : BzType.headline,
                 fontWeight: lineWeight,
                 color: lineColor,
               ),
@@ -659,7 +706,7 @@ class _LyricsView extends StatelessWidget {
         }
 
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: EdgeInsets.symmetric(vertical: focusMode ? 12 : 6),
           child: Wrap(
             children: [
               for (var w = 0; w < line.words.length; w++)
@@ -668,7 +715,7 @@ class _LyricsView extends StatelessWidget {
                   child: AnimatedDefaultTextStyle(
                     duration: const Duration(milliseconds: 200),
                     style: TextStyle(
-                      fontSize: BzType.headline,
+                      fontSize: focusMode ? BzType.title1 : BzType.headline,
                       fontWeight: lineWeight,
                       color: active
                           ? (w <= activeWord
