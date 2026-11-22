@@ -103,7 +103,7 @@ describe('RecommendationsService', () => {
     prisma.recentlyPlayed.findMany.mockResolvedValue([{ trackId: 'recent-1' }]);
     prisma.favorite.findMany.mockResolvedValue([{ trackId: 'favorite-1' }]);
 
-    await service.forUser('user-1');
+    await service.forUser('user-1', 'TZ');
 
     const candidateQueries = prisma.track.findMany.mock.calls.slice(1).map(([query]) => query);
     expect(candidateQueries.length).toBeGreaterThan(0);
