@@ -1,5 +1,6 @@
 import {
   Body,
+  Headers,
   Controller,
   HttpCode,
   HttpStatus,
@@ -21,8 +22,9 @@ export class ProviderResolveDto {
   @IsString()
   canonicalTrackId!: string;
 
+  @IsOptional()
   @IsString()
-  territory!: string;
+  territory?: string;
 }
 
 export class ResolveDto {
@@ -44,14 +46,22 @@ export class PlaybackController {
   @Post('provider/resolve')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  resolveProvider(@Body() dto: ProviderResolveDto) {
-    return this.resolver.resolveProvider(dto);
+  resolveProvider(
+    @CurrentUser() userId: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+    @Body() dto: ProviderResolveDto,
+  ) {
+    return this.resolver.resolveProvider(userId, dto, edgeCountry);
   }
 
   @Post('resolve')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  resolve(@CurrentUser() userId: string, @Body() dto: ResolveDto) {
-    return this.resolver.resolve(userId, dto);
+  resolve(
+    @CurrentUser() userId: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+    @Body() dto: ResolveDto,
+  ) {
+    return this.resolver.resolve(userId, dto, edgeCountry);
   }
 }
