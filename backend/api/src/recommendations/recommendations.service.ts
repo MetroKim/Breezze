@@ -133,29 +133,18 @@ export class RecommendationsService {
   ): Promise<RecommendationItem[]> {
     const selected: RecommendationItem[] = [];
     const artistCounts = new Map<string, number>();
+    const playableIds = await this.rights.filterFullStream(
+      candidates.map((track) => track.id),
+      territory,
+    );
 
-    // Bound concurrent rights checks so a large candidate pool cannot fan
-    // out an unbounded burst of database queries.
-    for (let offset = 0; offset < candidates.length && selected.length < 12; offset += 5) {
-      const batch = candidates.slice(offset, offset + 5);
-      const decisions = await Promise.all(batch.map((track) =>
-        this.rights.decide({
-          userId: null,
-          trackId: track.id,
-          action: 'stream.full',
-          territory,
-        }),
-      ));
-
-      for (let index = 0; index < batch.length && selected.length < 12; index += 1) {
-        const track = batch[index];
-        const decision = decisions[index];
-        if (!decision.allowed || decision.previewOnly) continue;
-        const count = artistCounts.get(track.artistId) ?? 0;
-        if (count >= 2) continue;
-        artistCounts.set(track.artistId, count + 1);
-        selected.push({ trackId: track.id, reason: reasonFor(track) });
-      }
+    for (const track of candidates) {
+      if (selected.length >= 12) break;
+      if (!playableIds.has(track.id)) continue;
+      const count = artistCounts.get(track.artistId) ?? 0;
+      if (count >= 2) continue;
+      artistCounts.set(track.artistId, count + 1);
+      selected.push({ trackId: track.id, reason: reasonFor(track) });
     }
     return selected;
   }
