@@ -629,11 +629,17 @@ class _FirstRunCard extends StatelessWidget {
         children: [
           BzBnoteMark(size: 56, color: theme.bzText2),
           const SizedBox(height: 16),
-          Text('Nothing here yet', style: theme.textTheme.titleMedium),
+          Text('Find your first song', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          Text('Search for a song and play it — it will show up here.',
+          Text('The music you play appears in Recently Played.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onSearch,
+            icon: BzSvgIcon(name: 'search', size: 18, color: theme.colorScheme.onPrimary),
+            label: const Text('Search music'),
+          ),
         ],
       ),
     );

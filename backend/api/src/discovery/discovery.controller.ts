@@ -22,6 +22,12 @@ export class DiscoveryController {
     catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
   }
 
+  @Get('releases/songs')
+  async latestSongs(@Query('country') country?: string) {
+    try { return await this.discovery.recentChartReleases('songs', country); }
+    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
+  }
+
   @Get('releases/albums')
   async newReleases(@Query('country') country?: string) {
     try { return await this.discovery.newReleases(country); }
