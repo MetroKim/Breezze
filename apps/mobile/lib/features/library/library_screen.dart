@@ -258,8 +258,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ],
             ),
           ),
+          // Capsule pill section selector — spec §2.3 tab indicators use
+          // --radius-pill. Solid active fill, no outline chips: the Apple
+          // Music Library filter treatment (quiet chrome, artwork forward).
           SizedBox(
-            height: 42,
+            height: 36,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
@@ -268,19 +271,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               itemBuilder: (context, index) {
                 final section = sections[index];
                 final active = section == _selected;
-                return ChoiceChip(
-                  label: Text(section),
-                  selected: active,
-                  onSelected: (_) => setState(() => _selected = section),
-                  selectedColor: theme.bzSurface2,
-                  side: BorderSide(
-                    color: active ? theme.bzAccent : theme.bzSeparator,
-                  ),
-                  labelStyle: TextStyle(
-                    color: active ? theme.bzText1 : theme.bzText2,
-                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                  showCheckmark: false,
+                return _LibraryPill(
+                  label: section,
+                  active: active,
+                  onTap: () => setState(() => _selected = section),
                 );
               },
             ),
@@ -559,3 +553,48 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 }
 
+/// Library section pill — capsule (spec --radius-pill) with a solid
+/// text1 fill when active, plain text2 when not. 44pt-min hit target.
+class _LibraryPill extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _LibraryPill({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: BzMotion.fastMs),
+          curve: const Cubic(0.22, 1, 0.36, 1),
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? theme.bzText1 : theme.bzSurfaceSecondary,
+            borderRadius: BorderRadius.circular(BzRadius.capsule),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: BzType.subheadline,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: active ? theme.bzBackground : theme.bzText2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
