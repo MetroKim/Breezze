@@ -172,7 +172,7 @@ describe('PlaybackSessionService', () => {
   it('does not create a qualified event for a short session', async () => {
     tx.playbackSession.findUnique.mockResolvedValue({
       id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
-      status: 'active', accumulatedMs: 29_999, lastHeartbeatAt: new Date(Date.now() - 10_000),
+      status: 'active', accumulatedMs: 19_999, lastHeartbeatAt: new Date(Date.now() - 10_000),
     });
     await expect(service.stop('user-1', 'session-uuid')).resolves.toMatchObject({
       qualifiedPlayRecorded: false,
