@@ -14,13 +14,13 @@
 - Database: **PostgreSQL + Prisma**.
 - Cache/coordination: **Redis**; global API IP rate limits now use atomic shared Redis counters across API replicas.
 - Edge/CDN/WAF: **Cloudflare**.
-- Media storage: **Cloudflare R2**, only for Breezze-owned or rights-cleared media.
+- Media storage: **no third-party audio hosting in the current release**. R2 is optional future infrastructure only for Breezze-owned or separately rights-cleared assets; do not provision R2 or route provider audio through it for this release.
 - Mobile token storage: **iOS Keychain / Android Keystore** via Flutter secure storage; access tokens remain memory-only.
 - Logging: **request IDs and structured logging foundation**; centralized immutable audit storage and alerting remain.
 
 > A checked code item is not proof of a secure production deployment. Cloudflare rules, TLS, secret-manager values, private networking, backups, restore drills and app-store signing must be verified in actual environments.
 
-## 1. Authentication
+## Current media-delivery decision\n\nThe current release streams approved provider audio directly from the provider host to the Flutter audio engine. Do not proxy third-party audio through Cloudflare Workers/NestJS or store it in R2. A private media Worker may remain in the repository for a future, separately approved Breezze-owned/licensed media workflow, but its presence is not evidence that an R2 bucket is deployed or that third-party catalog hosting is permitted.\n\n## 1. Authentication
 - [~] Identity provider: custom NestJS auth exists; federate with a mature OIDC provider before enterprise SSO/high-risk launch.
 - [~] Protocol: JWT bearer access tokens; key rotation, key IDs and multi-key verification are not implemented.
 - [x] Access-token lifetime: 15 minutes.

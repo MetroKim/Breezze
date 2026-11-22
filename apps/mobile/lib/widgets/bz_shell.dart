@@ -4,9 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/audio/audio_service_bridge.dart';
 import 'bz_brand_icons.dart';
-import '../core/audio/background_audio.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/radio/radio_screen.dart';
 import '../features/home/home_screen.dart';
@@ -24,30 +22,8 @@ class BreezzeShell extends StatelessWidget {
   Widget build(BuildContext context) => const _BreezzeRoot();
 }
 
-class _BreezzeRoot extends ConsumerStatefulWidget {
+class _BreezzeRoot extends StatelessWidget {
   const _BreezzeRoot();
-
-  @override
-  ConsumerState<_BreezzeRoot> createState() => _BreezzeRootState();
-}
-
-class _BreezzeRootState extends ConsumerState<_BreezzeRoot> {
-  @override
-  void initState() {
-    super.initState();
-    _startBackgroundAudio();
-  }
-
-  Future<void> _startBackgroundAudio() async {
-    final container = ProviderScope.containerOf(context, listen: false);
-    try {
-      final bridge = await startBackgroundAudio(container);
-      container.read(backgroundBridgeProvider.notifier).state = bridge;
-      container.read(backgroundSyncProvider);
-    } catch (_) {
-      // Background audio is optional — playback still works without it.
-    }
-  }
 
   @override
   Widget build(BuildContext context) => const BzHome();

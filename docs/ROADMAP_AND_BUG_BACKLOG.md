@@ -1,5 +1,7 @@
 # Breezze Engineering Backlog — Completion Plan & Critical Defect Register
 
+> **Current-release override — 2026-11-22:** This backlog contains older implementation snapshots. The current product and provider decisions are defined by [the gap register](audit/gap-register.md), [the multi-source provider architecture](architecture/BREEZZE_MULTISOURCE_PROVIDER_ARCHITECTURE.md), and [the third-party code policy](legal/BREEZZE_THIRD_PARTY_CODE_POLICY.md). Breezze's current release is listener-only: no artist portal, artist upload workflow, subscription, billing, membership or paywall. BitChord is an architectural reference only (GPL-3.0); do not copy its code, assets, tests or private endpoints. YouTube Music via `ytmusicapi` is metadata/discovery only, not an audio source. Audius is the first official third-party playback adapter and is limited to public, ungated, API-accessible tracks. Historical references below to BitChord parsers/adapters, YouTube Explode playback, Liner fallback, membership tiers or artist tooling are not current implementation approval and must not be used to reintroduce those paths.
+
 ## Current implementation status — 21 November 2026
 
 This snapshot reflects source commit `f91932317315` and GitHub Actions run

@@ -7,6 +7,9 @@ Breezze is a free, listener-first music app built with one Flutter/Dart applicat
 - Search track metadata through Breezze's backend-connected discovery adapter.
 - Play tracks only after the Breezze backend resolves a canonical catalog track and authorizes playback for the account and territory.
 - Persistent mini-player, Now Playing, queue controls, favorites and local listening history.
+- Cross-platform OS media-session integration: Android notifications, iOS lock screen, macOS Now Playing, Web Media Session, Windows SMTC and Linux MPRIS. Play/pause, previous/next and stop route through the single global PlayerController; seek support depends on the platform adapter.
+- Android foreground media playback service declarations and iOS audio background mode are applied by `tool/generate_platform_targets.sh` when native runners are generated.
+- Mobile audio focus is configured for music playback; calls/other exclusive interruptions pause playback without auto-resuming, and headphone/Bluetooth route removal pauses to prevent speaker leakage.
 - Local playlists with account-scoped storage and optional backend synchronization.
 - Offline downloads through backend authorization and signed media URLs.
 - LRCLIB lyrics lookup with track-change-safe loading.
@@ -33,7 +36,7 @@ flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-The runner bootstrap creates Android, iOS, Web, Linux, macOS and Windows platform folders around the shared `lib/` code. It does not install platform SDKs, configure signing, guarantee plugin support or replace native platform validation.
+The runner bootstrap creates Android, iOS, Web, Linux, macOS and Windows platform folders around the shared `lib/` code, then adds the Android foreground media service/permissions and iOS `UIBackgroundModes=audio` declarations required for background playback. It does not install platform SDKs, configure signing, guarantee plugin support or replace native platform validation. Media-session platform adapters are registered for Android/iOS/macOS/Web through `audio_service`, Linux through `audio_service_mpris`, and Windows through `audio_service_win`. Linux MPRIS currently has platform-level seek limitations. Build and test each target on its supported host.
 
 ## Configure the API
 

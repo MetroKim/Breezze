@@ -47,52 +47,46 @@ void main() {
     });
   });
 
-  group('SourceChain (§52.7)', () {
-    test('primary source serves first', () async {
-      final chain = SourceChain([
-        _StubSource('primary', canPlay: true),
-        _StubSource('fallback', canPlay: true),
-      ]);
-      final result = await chain.resolve('t1', _ctx);
-      expect(result, isA<SourceChainOk>());
-      expect((result as SourceChainOk).fromSourceId, 'primary');
+  group('Metadata SourceChain (§52.7)', () {
+    test('searches each metadata adapter and deduplicates title and artist',
+        () async {
+      final primary = _StubSource('primary');
+      final fallback = _StubSource('fallback');
+      final chain = SourceChain([primary, fallback]);
+
+      final results = await chain.searchAll('Nightcall');
+
+      expect(primary.lastQuery, 'Nightcall');
+      expect(fallback.lastQuery, 'Nightcall');
+      expect(results, hasLength(1));
+      expect(results.single.id, 'bz-1');
+      expect(results.single.title, 'Nightcall');
+      expect(results.single.artist, 'Kavinsky');
     });
 
-    test('falls back when primary cannot play', () async {
-      final chain = SourceChain([
-        _StubSource('primary', canPlay: false),
-        _StubSource('fallback', canPlay: true),
-      ]);
-      final result = await chain.resolve('t1', _ctx);
-      expect((result as SourceChainOk).fromSourceId, 'fallback');
-    });
+    test('skips unsupported metadata adapters without failing the chain',
+        () async {
+      final unavailable = _StubSource(
+        'unavailable',
+        result: ProviderUnsupported('catalogue_unavailable'),
+      );
+      final available = _StubSource('available');
+      final chain = SourceChain([unavailable, available]);
 
-    test('unavailable when no source can serve', () async {
-      final chain = SourceChain([_StubSource('a', canPlay: false)]);
-      final result = await chain.resolve('t1', _ctx);
-      expect(result, isA<SourceChainUnavailable>());
-    });
+      final results = await chain.searchAll('Nightcall');
 
-    test('search deduplicates across sources', () async {
-      final chain = SourceChain([
-        _StubSource('primary', canPlay: true),
-        _StubSource('fallback', canPlay: true, duplicateSearch: true),
-      ]);
-      final results = await chain.searchAll('query');
-      expect(results.length, 1);
+      expect(results, hasLength(1));
+      expect(available.lastQuery, 'Nightcall');
     });
   });
 }
 
-final _ctx = ProviderUserContext(
-    userId: 'u1', territory: 'IN', subscriptionTier: 'premium');
-
 class _StubSource implements ProviderAdapter {
-  final String id;
-  final bool canPlay;
-  final bool duplicateSearch;
+  _StubSource(this.id, {this.result});
 
-  _StubSource(this.id, {required this.canPlay, this.duplicateSearch = false});
+  final String id;
+  final ProviderOp<List<ProviderTrack>>? result;
+  String? lastQuery;
 
   @override
   String get providerId => id;
@@ -101,36 +95,22 @@ class _StubSource implements ProviderAdapter {
   String get adapterVersion => '1.0.0';
 
   @override
-  bool get supportsPlayback => canPlay;
-
-  @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
-    return ProviderOk([
-      ProviderTrack(
-        breezzeTrackId: 'bz-1',
-        providerTrackId: 'p-1',
-        title: 'Nightcall',
-        artist: 'Kavinsky',
-        duration: const Duration(seconds: 254),
-      )
-    ]);
+    lastQuery = query;
+    return result ??
+        ProviderOk([
+          ProviderTrack(
+            breezzeTrackId: 'bz-1',
+            providerTrackId: 'provider-track-1',
+            title: 'Nightcall',
+            artist: 'Kavinsky',
+            duration: const Duration(seconds: 254),
+          ),
+        ]);
   }
 
   @override
   Future<ProviderOp<ProviderTrack>> getTrack(String providerTrackId) async {
     return ProviderUnsupported('not_implemented');
-  }
-
-  @override
-  Future<ProviderOp<String>> resolvePlayback(
-      String providerTrackId, ProviderUserContext userContext) async {
-    if (!canPlay) return ProviderUnsupported('no_rights');
-    return ProviderOk('https://cdn.example/audio.flac');
-  }
-
-  @override
-  Future<ProviderOp<String>> getAttributionRequirements(
-      String providerTrackId) async {
-    return ProviderOk('Breezze');
   }
 }

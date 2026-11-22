@@ -27,6 +27,7 @@ class PlayerController extends Notifier<PlayerState> {
   final RecentStore _recent = RecentStore();
 
   AudioEngineAdapter? _engine;
+  PlayableSource? _activeSource;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlaybackState>? _engineStateSub;
   int _requestGeneration = 0;
@@ -45,6 +46,7 @@ class PlayerController extends Notifier<PlayerState> {
       _positionSub?.cancel();
       _engineStateSub?.cancel();
       _engine = null;
+      _activeSource = null;
     });
     return PlayerState.initial();
   }
@@ -77,6 +79,23 @@ class PlayerController extends Notifier<PlayerState> {
           state.playbackState == PlaybackState.transitioning) {
         return;
       }
+      // Keep the state machine authoritative when the OS pauses audio
+      // because of a call, another exclusive session, or route removal.
+      if (engineState == PlaybackState.interrupted &&
+          _machine.state == PlaybackState.playing) {
+        _machine.dispatch(InterruptionDetected());
+        return;
+      }
+      if (engineState == PlaybackState.paused &&
+          _machine.state == PlaybackState.interrupted) {
+        _machine.dispatch(InterruptionEnded());
+        return;
+      }
+      if (engineState == PlaybackState.paused &&
+          _machine.state == PlaybackState.playing) {
+        _machine.dispatch(PausePressed());
+        return;
+      }
       state = state.copyWith(playbackState: engineState);
       if (engineState == PlaybackState.ended ||
           engineState == PlaybackState.failed) {
@@ -105,6 +124,7 @@ class PlayerController extends Notifier<PlayerState> {
     _positionSub = null;
     _engineStateSub = null;
     _engine = null;
+    _activeSource = null;
   }
 
   bool _isMetadataOnlyProviderTrack(String id) =>
@@ -185,6 +205,7 @@ class PlayerController extends Notifier<PlayerState> {
     if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
     _queue.clear(keepCurrent: false);
     _trackInfos.clear();
+    _activeSource = null;
     _machine.dispatch(StopRequested(requestId: requestId));
     state = state.copyWith(
       clearCurrentTrack: true,
@@ -215,6 +236,14 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> resume() async {
     final engine = _engine;
     if (engine == null || state.playbackState != PlaybackState.paused) return;
+    final activeSource = _activeSource;
+    final currentTrack = state.currentTrack;
+    if (activeSource != null && activeSource.isExpired && currentTrack != null) {
+      // Provider grants are short-lived. Resolve a fresh grant instead of
+      // attempting to resume a stale URL after a long pause/background.
+      await _resolveAndPlay(currentTrack, initialPosition: state.position);
+      return;
+    }
     _machine.dispatch(PlayPressed());
     try {
       await _serializeEngineOperation(() async {
@@ -249,13 +278,15 @@ class PlayerController extends Notifier<PlayerState> {
 
   Future<void> seekTo(Duration position) async {
     final engine = _engine;
-    if (engine == null || state.playbackState != PlaybackState.playing) {
-      return;
-    }
-    _machine.dispatch(SeekRequested(position));
+    final wasPlaying = state.playbackState == PlaybackState.playing;
+    final wasPaused = state.playbackState == PlaybackState.paused;
+    if (engine == null || (!wasPlaying && !wasPaused)) return;
+
+    if (wasPlaying) _machine.dispatch(SeekRequested(position));
     try {
       await _serializeEngineOperation(() => engine.seek(position));
-      _machine.dispatch(SeekCompleted());
+      state = state.copyWith(position: position);
+      if (wasPlaying) _machine.dispatch(SeekCompleted());
     } catch (_) {
       final currentTrackId = state.currentTrack?.id;
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
@@ -364,7 +395,10 @@ class PlayerController extends Notifier<PlayerState> {
     return result;
   }
 
-  Future<void> _resolveAndPlay(TrackInfo info) async {
+  Future<void> _resolveAndPlay(
+    TrackInfo info, {
+    Duration initialPosition = Duration.zero,
+  }) async {
     // Defensive check for restored or stale queue entries created before the
     // metadata-only provider capability was enforced.
     if (_isMetadataOnlyProviderTrack(info.id) && info.localFilePath == null) return;
@@ -377,7 +411,7 @@ class PlayerController extends Notifier<PlayerState> {
     _trackInfos[info.id] = info;
     state = state.copyWith(
       currentTrack: info,
-      position: Duration.zero,
+      position: initialPosition,
       duration: info.duration,
     );
     _machine.dispatch(StartRequested(info.id, requestId: requestId));
@@ -394,6 +428,7 @@ class PlayerController extends Notifier<PlayerState> {
       if (!_isCurrentRequest(requestId)) return;
 
       if (source == null) {
+        _activeSource = null;
         _machine.dispatch(SourceResolutionFailed(
           'NOT_AVAILABLE',
           requestId: requestId,
@@ -401,6 +436,7 @@ class PlayerController extends Notifier<PlayerState> {
         return;
       }
 
+      _activeSource = source;
       _machine.dispatch(SourceResolved(
         info.id,
         source.streamUrl,
@@ -425,6 +461,12 @@ class PlayerController extends Notifier<PlayerState> {
         await engine.prepare(source);
         if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
           return;
+        }
+        if (initialPosition > Duration.zero) {
+          await engine.seek(initialPosition);
+          if (!_isCurrentRequest(requestId) || !identical(_engine, engine)) {
+            return;
+          }
         }
 
         _machine.dispatch(MediaReady(requestId: requestId));

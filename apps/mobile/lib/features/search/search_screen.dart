@@ -11,12 +11,12 @@ import '../../app/search_history_store.dart';
 import '../../app/playlist_store.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
+import '../player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 bool _isMetadataOnlySourceTrack(String id) =>
     id.startsWith('bzv:') ||
     (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
-import '../player/player_controller.dart';
 
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
