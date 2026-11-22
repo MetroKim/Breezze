@@ -29,7 +29,7 @@ class BreezzeAppRoot extends ConsumerStatefulWidget {
   ConsumerState<BreezzeAppRoot> createState() => _BreezzeAppRootState();
 }
 
-class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
+class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBindingObserver {
   bool _showOnboarding = false;
   GlobalKey? _shellKey;
   ProviderContainer? _container;
@@ -39,6 +39,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _container = ProviderScope.containerOf(context, listen: false);
     _audioEngine = JustAudioEngineAdapter();
     _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
@@ -51,12 +52,20 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
       }
       if (next is AuthSignedIn && prev is! AuthSignedIn) {
         // Replay offline ops now that a session exists.
-        ref.read(outboxSyncProvider).drainIfSignedIn();
+        unawaited(ref.read(outboxSyncProvider).drainIfSignedIn());
 
         // First-time check: has the backend saved preferences yet?
         _checkOnboardingNeeded();
       }
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        ref.read(authSessionProvider) is AuthSignedIn) {
+      unawaited(ref.read(outboxSyncProvider).drainIfSignedIn());
+    }
   }
 
   Future<void> _startBackgroundAudio() async {
@@ -78,6 +87,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_backgroundBridge?.stop() ?? Future<void>.value());
     _container?.read(playerControllerProvider.notifier).detachEngine();
     _audioEngine?.dispose();
