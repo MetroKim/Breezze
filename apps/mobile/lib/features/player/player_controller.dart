@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/recent_store.dart';
 import '../../core/auth/auth_session.dart';
 import 'playback_session_client.dart';
+import 'playback_heartbeat_store.dart';
 
 /// Global PlayerController — spec §51.3, §53.1.
 ///
@@ -76,29 +77,91 @@ class PlayerController extends Notifier<PlayerState> {
 
   Future<void> _sendPlaybackHeartbeat() async {
     final sessionId = _playbackSessionId;
+    final client = _activeSessionClient;
+    final auth = ref.read(authSessionProvider);
     if (sessionId == null ||
+        client == null ||
+        auth is! AuthSignedIn ||
         _heartbeatInFlight ||
         state.playbackState != PlaybackState.playing) {
       return;
     }
     _heartbeatInFlight = true;
-    final eventId = _pendingHeartbeatEventId ??= _newEventId();
+    final store = ref.read(playbackHeartbeatStoreProvider);
     try {
-      final client = _activeSessionClient;
-      if (client == null) return;
+      // Persist the idempotency key and sequence before sending. If the app is
+      // killed while the request is in flight, the same event is replayed.
+      var checkpoint = await store.read(auth.userId, sessionId);
+      checkpoint ??= PlaybackHeartbeatCheckpoint(
+        ownerId: auth.userId,
+        sessionId: sessionId,
+        sequence: _heartbeatSequence,
+      );
+      final eventId = checkpoint.pendingEventId ??
+          _pendingHeartbeatEventId ??
+          _newEventId();
+      checkpoint = PlaybackHeartbeatCheckpoint(
+        ownerId: auth.userId,
+        sessionId: sessionId,
+        sequence: checkpoint.sequence,
+        pendingEventId: eventId,
+      );
+      await store.write(checkpoint);
+      _pendingHeartbeatEventId = eventId;
+      _heartbeatSequence = checkpoint.sequence;
+
       final result = await client.heartbeat(
         sessionId: sessionId,
         eventId: eventId,
-        sequence: _heartbeatSequence,
+        sequence: checkpoint.sequence,
       );
-      if (result['accepted'] == true && _playbackSessionId == sessionId) {
+      if (result['accepted'] == true &&
+          _playbackSessionId == sessionId &&
+          _isActiveHeartbeatOwner(auth.userId)) {
+        final nextSequence = checkpoint.sequence + 1;
+        await store.write(PlaybackHeartbeatCheckpoint(
+          ownerId: auth.userId,
+          sessionId: sessionId,
+          sequence: nextSequence,
+        ));
         _pendingHeartbeatEventId = null;
-        _heartbeatSequence++;
+        _heartbeatSequence = nextSequence;
       }
     } catch (_) {
-      // Keep the same event ID and sequence; the next timer tick retries it.
+      // Leave the durable event ID and sequence untouched for an idempotent
+      // retry on the next tick or after the next app launch.
     } finally {
       _heartbeatInFlight = false;
+    }
+  }
+
+  bool _isActiveHeartbeatOwner(String ownerId) {
+    final auth = ref.read(authSessionProvider);
+    return auth is AuthSignedIn && auth.userId == ownerId;
+  }
+
+  Future<void> _recoverPendingHeartbeats(String ownerId) async {
+    final store = ref.read(playbackHeartbeatStoreProvider);
+    final client = _sessionClient;
+    final pending = await store.pendingForOwner(ownerId);
+    for (final checkpoint in pending) {
+      if (!_isActiveHeartbeatOwner(ownerId)) return;
+      if (checkpoint.sessionId == _playbackSessionId) continue;
+      final eventId = checkpoint.pendingEventId;
+      if (eventId == null) continue;
+      try {
+        // A replay is only an acknowledgement attempt. The server still
+        // validates ownership, session status, sequence and elapsed time.
+        await client.heartbeat(
+          sessionId: checkpoint.sessionId,
+          eventId: eventId,
+          sequence: checkpoint.sequence,
+        );
+        await store.clear(ownerId, checkpoint.sessionId);
+      } catch (_) {
+        // Network failures retain the checkpoint; it is never replayed for
+        // another account because storage keys are owner-scoped.
+      }
     }
   }
 
@@ -114,16 +177,43 @@ class PlayerController extends Notifier<PlayerState> {
     if (client == null) return;
     try {
       await client.stop(sessionId);
+      final auth = ref.read(authSessionProvider);
+      if (auth is AuthSignedIn) {
+        // Once the server confirms stop, no later heartbeat can be credited
+        // to this session; discard its now-unreplayable local checkpoint.
+        await ref
+            .read(playbackHeartbeatStoreProvider)
+            .clear(auth.userId, sessionId);
+      }
     } catch (_) {
-      // The server TTL is the final safety net when the device is offline.
+      // Keep any pending checkpoint. The server TTL is the final safety net
+      // when the device is offline.
     }
   }
 
-  void _adoptPlaybackSession(PlayableSource source) {
+  Future<void> _adoptPlaybackSession(PlayableSource source) async {
     _playbackSessionId = source.sessionId;
     _activeSessionClient = source.sessionId == null ? null : _sessionClient;
     _heartbeatSequence = 1;
     _pendingHeartbeatEventId = null;
+    if (source.sessionId == null) return;
+
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return;
+    await _recoverPendingHeartbeats(auth.userId);
+
+    final store = ref.read(playbackHeartbeatStoreProvider);
+    final current = await store.read(auth.userId, source.sessionId!);
+    if (current == null) {
+      await store.write(PlaybackHeartbeatCheckpoint(
+        ownerId: auth.userId,
+        sessionId: source.sessionId!,
+        sequence: 1,
+      ));
+    } else {
+      _heartbeatSequence = current.sequence;
+      _pendingHeartbeatEventId = current.pendingEventId;
+    }
   }
 
   Future<void> _pauseServerSession() async {
@@ -585,7 +675,7 @@ class PlayerController extends Notifier<PlayerState> {
       }
 
       _activeSource = source;
-      _adoptPlaybackSession(source);
+      await _adoptPlaybackSession(source);
       _machine.dispatch(SourceResolved(
         info.id,
         source.streamUrl,
