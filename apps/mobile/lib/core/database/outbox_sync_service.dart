@@ -121,7 +121,7 @@ class OutboxSyncService {
     }
 
     final recent = await (db.select(db.recentlyPlayed)
-          ..where((t) => t.id.equals(externalId)))
+          ..where((t) => t.id.equals('$ownerId::$externalId')))
         .getSingleOrNull();
     if (recent != null) {
       return {
