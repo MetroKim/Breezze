@@ -187,9 +187,10 @@ class AudioServiceBridge extends audio.BaseAudioHandler
 /// before the first frame.
 Future<BackgroundAudioBridge> startBackgroundAudio(
     ProviderContainer container) async {
-  if (kIsWeb ||
-      (defaultTargetPlatform != TargetPlatform.android &&
-          defaultTargetPlatform != TargetPlatform.iOS)) {
+  if (!kIsWeb &&
+      defaultTargetPlatform != TargetPlatform.android &&
+      defaultTargetPlatform != TargetPlatform.iOS &&
+      defaultTargetPlatform != TargetPlatform.macOS) {
     return NoopBackgroundBridge();
   }
 
@@ -202,7 +203,7 @@ Future<BackgroundAudioBridge> startBackgroundAudio(
           'Playback controls for Breezze',
       androidNotificationIcon: 'mipmap/ic_launcher',
       androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
+      androidStopForegroundOnPause: false,
     ),
   );
   return bridge as AudioServiceBridge;
