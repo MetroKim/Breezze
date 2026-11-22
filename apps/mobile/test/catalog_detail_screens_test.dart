@@ -35,8 +35,8 @@ void main() {
     await tester.scrollUntilVisible(find.text('Upcoming Concerts'), 260);
     expect(find.text('Upcoming Concerts'), findsOneWidget);
     expect(
-      find.textContaining('licensed provider feed is not configured'),
-      findsWidgets,
+      find.text('Retry concert listings'),
+      findsOneWidget,
     );
   });
 

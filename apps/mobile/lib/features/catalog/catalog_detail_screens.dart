@@ -6,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/bootstrap.dart';
 import '../../app/saved_album_store.dart';
 import '../../core/audio/playback_source_policy.dart';
+import '../../core/audio/youtube_player_handoff.dart';
+import '../video/official_music_video_screen.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
@@ -14,6 +16,31 @@ import '../../widgets/bz_brand_icons.dart';
 final _artistFollowing = FutureProvider.autoDispose.family<bool, String>((ref, key) {
   ref.watch(authSessionProvider);
   return ref.read(authSessionProvider.notifier).api.artistFollowing(key);
+});
+
+final _artistVideos = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
+  final data = await ref.read(authSessionProvider.notifier).api
+      .discoveryMusicVideos(query: artist);
+  final name = artist.trim().toLowerCase();
+  return (data['items'] as List).whereType<Map>().where((item) {
+    final id = item['id'];
+    final credit = item['artist'];
+    return id is String && YoutubePlayerHandoff.isValidProviderTrackId(id) &&
+        credit is String && credit.trim().toLowerCase() == name;
+  }).take(8).toList();
+});
+
+final _artistConcerts = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
+  final territory = ref.watch(outboxTerritoryProvider);
+  final data = await ref.read(authSessionProvider.notifier).api.discoveryConcerts(
+    country: territory.length == 2 && territory != 'WW' ? territory : 'US',
+  );
+  final name = artist.trim().toLowerCase();
+  return (data['items'] as List).whereType<Map>().where((event) {
+    final credit = event['artist'];
+    return credit is String &&
+        credit.split(', ').any((part) => part.trim().toLowerCase() == name);
+  }).toList();
 });
 
 final _appleTrackMatchesProvider =
@@ -654,16 +681,71 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                       ],
                     ),
                   ),
-                for (final section in const [
-                  'Music Videos',
-                  'Upcoming Concerts',
-                  'Similar Artists',
-                ])
-                  _CatalogSection(
-                    title: section,
-                    subtitle: 'A licensed provider feed is not configured for this section.',
-                    available: false,
+                ref.watch(_artistVideos(artist)).when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => TextButton.icon(
+                    onPressed: () => ref.invalidate(_artistVideos(artist)),
+                    icon: const BzSvgIcon(name: 'refresh'),
+                    label: const Text('Retry music videos'),
                   ),
+                  data: (videos) => _CatalogSection(
+                    title: 'Music Videos',
+                    subtitle: 'No videos found for this artist.',
+                    available: videos.isNotEmpty,
+                    child: Column(children: [
+                      for (final video in videos)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: _TrackArtwork(url: video['artworkUrl'] as String?, size: 52),
+                          title: Text(video['title'] as String? ?? 'Music video'),
+                          trailing: const BzSvgIcon(name: 'play'),
+                          onTap: () async {
+                            await ref.read(playerControllerProvider.notifier).pause();
+                            if (!context.mounted) return;
+                            await Navigator.of(context).push(MaterialPageRoute<void>(
+                              builder: (_) => OfficialMusicVideoScreen(
+                                videoId: video['id'] as String,
+                                title: video['title'] as String? ?? 'Music video',
+                                artist: artist,
+                                artworkUrl: video['artworkUrl'] as String?,
+                              ),
+                            ));
+                          },
+                        ),
+                    ]),
+                  ),
+                ),
+                ref.watch(_artistConcerts(artist)).when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => _CatalogSection(
+                    title: 'Upcoming Concerts',
+                    subtitle: '',
+                    available: true,
+                    child: TextButton(
+                      onPressed: () => ref.invalidate(_artistConcerts(artist)),
+                      child: const Text('Retry concert listings'),
+                    ),
+                  ),
+                  data: (events) => _CatalogSection(
+                    title: 'Upcoming Concerts',
+                    subtitle: 'No upcoming shows found in your region.',
+                    available: events.isNotEmpty,
+                    child: Column(children: [
+                      for (final event in events)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const BzSvgIcon(name: 'calendar'),
+                          title: Text(event['title'] as String? ?? 'Concert'),
+                          subtitle: Text([
+                            if (event['date'] is String) (event['date'] as String).split('T').first,
+                            if (event['venue'] is String) event['venue'] as String,
+                            if (event['city'] is String) event['city'] as String,
+                          ].join(' · ')),
+                        ),
+                      const Text('Concert data provided by JamBase'),
+                    ]),
+                  ),
+                ),
               ],
             ),
             ),
