@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/recent_store.dart';
+import 'playback_session_client.dart';
 
 /// Global PlayerController — spec §51.3, §53.1.
 ///
@@ -34,6 +36,82 @@ class PlayerController extends Notifier<PlayerState> {
   String? _autoAdvancedTrackId;
   Future<void> _engineOperations = Future<void>.value();
 
+  String? _playbackSessionId;
+  Timer? _heartbeatTimer;
+  int _heartbeatSequence = 1;
+  String? _pendingHeartbeatEventId;
+  bool _heartbeatInFlight = false;
+
+  PlaybackSessionClient get _sessionClient =>
+      ref.read(playbackSessionClientProvider);
+
+  String _newEventId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
+  void _startHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
+    if (_playbackSessionId == null) return;
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (state.playbackState == PlaybackState.playing) {
+        unawaited(_sendPlaybackHeartbeat());
+      }
+    });
+  }
+
+  void _pauseHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  Future<void> _sendPlaybackHeartbeat() async {
+    final sessionId = _playbackSessionId;
+    if (sessionId == null || _heartbeatInFlight ||
+        state.playbackState != PlaybackState.playing) return;
+    _heartbeatInFlight = true;
+    final eventId = _pendingHeartbeatEventId ??= _newEventId();
+    try {
+      final result = await _sessionClient.heartbeat(
+        sessionId: sessionId,
+        eventId: eventId,
+        sequence: _heartbeatSequence,
+      );
+      if (result['accepted'] == true && _playbackSessionId == sessionId) {
+        _pendingHeartbeatEventId = null;
+        _heartbeatSequence++;
+      }
+    } catch (_) {
+      // Keep the same event ID and sequence; the next timer tick retries it.
+    } finally {
+      _heartbeatInFlight = false;
+    }
+  }
+
+  Future<void> _closePlaybackSession() async {
+    _pauseHeartbeatTimer();
+    final sessionId = _playbackSessionId;
+    _playbackSessionId = null;
+    _pendingHeartbeatEventId = null;
+    _heartbeatSequence = 1;
+    if (sessionId == null) return;
+    try {
+      await _sessionClient.stop(sessionId);
+    } catch (_) {
+      // The server TTL is the final safety net when the device is offline.
+    }
+  }
+
+  void _adoptPlaybackSession(PlayableSource source) {
+    _playbackSessionId = source.sessionId;
+    _heartbeatSequence = 1;
+    _pendingHeartbeatEventId = null;
+  }
+
   /// Track info remembered for the current queue, keyed by track id.
   final Map<String, TrackInfo> _trackInfos = {};
 
@@ -41,6 +119,7 @@ class PlayerController extends Notifier<PlayerState> {
   PlayerState build() {
     ref.onDispose(() {
       _requestGeneration++;
+      unawaited(_closePlaybackSession());
       final currentTrackId = state.currentTrack?.id;
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
       _positionSub?.cancel();
@@ -203,6 +282,7 @@ class PlayerController extends Notifier<PlayerState> {
     final engine = _engine;
     final currentTrackId = state.currentTrack?.id;
     if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+    await _closePlaybackSession();
     _queue.clear(keepCurrent: false);
     _trackInfos.clear();
     _activeSource = null;
@@ -224,8 +304,13 @@ class PlayerController extends Notifier<PlayerState> {
     final engine = _engine;
     if (engine == null || state.playbackState != PlaybackState.playing) return;
     _machine.dispatch(PausePressed());
+    _pauseHeartbeatTimer();
     try {
       await _serializeEngineOperation(() => engine.pause());
+      final sessionId = _playbackSessionId;
+      if (sessionId != null) {
+        try { await _sessionClient.pause(sessionId); } catch (_) {}
+      }
     } catch (_) {
       final currentTrackId = state.currentTrack?.id;
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
@@ -243,6 +328,14 @@ class PlayerController extends Notifier<PlayerState> {
       // attempting to resume a stale URL after a long pause/background.
       await _resolveAndPlay(currentTrack, initialPosition: state.position);
       return;
+    }
+    final sessionId = _playbackSessionId;
+    if (sessionId != null) {
+      try {
+        await _sessionClient.resume(sessionId);
+      } catch (_) {
+        return;
+      }
     }
     _machine.dispatch(PlayPressed());
     try {
@@ -399,6 +492,7 @@ class PlayerController extends Notifier<PlayerState> {
     TrackInfo info, {
     Duration initialPosition = Duration.zero,
   }) async {
+    await _closePlaybackSession();
     // Defensive check for restored or stale queue entries created before the
     // metadata-only provider capability was enforced.
     if (_isMetadataOnlyProviderTrack(info.id) && info.localFilePath == null) return;
@@ -437,6 +531,7 @@ class PlayerController extends Notifier<PlayerState> {
       }
 
       _activeSource = source;
+      _adoptPlaybackSession(source);
       _machine.dispatch(SourceResolved(
         info.id,
         source.streamUrl,
@@ -491,8 +586,10 @@ class PlayerController extends Notifier<PlayerState> {
 
       if (!_isCurrentRequest(requestId) ||
           _machine.state != PlaybackState.playing) {
+        await _closePlaybackSession();
         return;
       }
+      _startHeartbeatTimer();
 
       if (info.title != null) {
         unawaited(_recent
@@ -511,6 +608,7 @@ class PlayerController extends Notifier<PlayerState> {
       _scrobbles.onPlay(info.id, DateTime.now().toUtc());
     } catch (_) {
       if (_isCurrentRequest(requestId)) {
+        await _closePlaybackSession();
         _machine.dispatch(SourceResolutionFailed(
           'PLAYBACK_SETUP_FAILED',
           requestId: requestId,
