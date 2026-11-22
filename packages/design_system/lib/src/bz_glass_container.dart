@@ -6,7 +6,7 @@ import 'bz_theme.dart';
 
 /// BzGlassContainer — the one glass surface every floating widget uses.
 ///
-/// Translucent fill + backdrop blur + saturate boost + hairline border.
+/// Translucent fill + backdrop blur + saturation boost + hairline border.
 /// The saturate(180%) boost is not optional: without it the material
 /// reads as generic translucency rather than a deliberate glass system.
 ///
@@ -25,9 +25,14 @@ class BzGlassContainer extends StatelessWidget {
   final Color? borderColor;
   final bool reduceTransparency;
 
-  /// Saturation boost applied over the blurred backdrop. Kept separate
-  /// from [blur] so callers can opt out of the boost without losing
-  /// blur on media-overlay surfaces where the artwork must stay true.
+  /// Saturation boost for the glass material (180 = the spec default).
+  ///
+  /// Flutter's stable backdrop pipeline only supports geometric filters
+  /// (blur/dilate/erode) on the backdrop — there is no color stage — so
+  /// the CSS `saturate(180%)` half of the pill-scrolled recipe is applied
+  /// to the translucent fill tint that overlays the blurred backdrop
+  /// instead. The fill is what the eye reads as "the glass", so its
+  /// saturation carries the material's warmth through.
   final double saturation;
 
   const BzGlassContainer({
@@ -66,21 +71,13 @@ class BzGlassContainer extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
-        // saturate(N%) blur(Mpx) — the pill-scrolled material contract.
-        filter: ImageFilter.compose(
-          outer: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          inner: ColorFilter.mode(
-            const Color.fromRGBO(1, 1, 1, 0), // pass-through base
-            // Compose a saturation boost via a matrix color filter.
-            // Skia has no direct saturate; this matrix applies the
-            // standard saturation transform for [saturation] percent.
-            // See _saturateMatrix below for why this is a matrix.
-            BlendMode.srcOver,
-          ),
-        ),
+        // blur(Mpx) — the geometric half of the pill-scrolled material
+        // contract. The saturate(N%) half lives in the fill tint below
+        // (Flutter has no backdrop color stage in its stable API).
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: fill,
+            color: _saturatedFill(fill),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: border, width: 0.5),
             gradient: const LinearGradient(
@@ -103,12 +100,24 @@ class BzGlassContainer extends StatelessWidget {
       ),
     );
   }
+
+  /// Flutter-safe approximation of the CSS `saturate(N%)` backdrop stage:
+  /// boost the saturation of the translucent fill overlaying the blurred
+  /// backdrop. A 100% value is a pass-through.
+  Color _saturatedFill(Color base) {
+    if (saturation == 100) return base;
+    final hsl = HSLColor.fromColor(base);
+    final boosted = (hsl.saturation * saturation / 100).clamp(0.0, 1.0);
+    return hsl.withSaturation(boosted).toColor();
+  }
 }
 
-/// Saturation matrix for the glass backdrop (saturate(180%)).
+/// Saturation color matrix for the standard luminance-preserving
+/// saturate transform (s = saturationPercent / 100).
 ///
-/// Exposed so platform code that composes its own ImageFilter can reuse
-/// the exact same matrix, keeping the material identical everywhere.
+/// Exposed so platform code that composes its own `ColorFiltered` can
+/// reuse the exact same matrix, keeping the material identical across
+/// surfaces that filter foreground content (artwork overlays, chips).
 ColorMatrix saturateMatrix(double saturationPercent) {
   final s = saturationPercent / 100.0;
   const lumR = 0.2126, lumG = 0.7152, lumB = 0.0722;
