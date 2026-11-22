@@ -18,7 +18,7 @@ Breezze targets the breadth, navigation quality and polish of a mature music ser
 | Home | Personalized picks, Recently Played, mixes, Favorites, Replay, account | Real saved history/favorites, personalized home feed when supplied, replay summary, honest empty states | Personalized quality evaluation, social sharing feed, real-device QA |
 | New | New Releases, Charts, Daily Top 100, Latest/Trending, Genres, Moods, Music Videos, Concerts, upcoming and editorial | Genre/mood discovery search, provider-supplied releases/charts/videos/concert metadata for supported routes; album/chart details now navigate inside Breezze | Verified feeds for remaining headings, no fake ranking, editorial source, concert regional coverage |
 | Radio | Station directory, show schedule | API-backed information and schedule | Licensed station stream resolver, media-session and interruption QA, live indicators from actual stream |
-| Library | Playlists, Artists, Albums, Songs, Genres, Compilations, Downloaded | Account-scoped favorites/playlists, artist grouping, save/remove album metadata, user section preferences, download library | Canonical genre/compilation mapping, full cloud album sync, offline entitlement validation across devices |
+| Library | Playlists, Artists, Albums, Songs, Genres, Compilations, Downloaded | Account-scoped favorites/playlists, artist grouping, save/remove album metadata, verified-source genre grouping and compilation filtering, user section preferences, download library | Full cloud album sync, legacy album metadata backfill, cross-device conflict resolution, offline entitlement validation across devices |
 | Search | Song/artist/catalog discovery, search history, Saved Library scope, official Music Videos | Federated song search, local saved-track search, explicit video mode with user query, account-scoped history | Artist/album type tabs; better result grouping and personalized ranking; embedded official video where platform allows |
 | Player | Artwork, lyrics, queue, transport, sleep timer | Native transport, synced/plain lyrics, focus mode, artwork, background-media bridge, queue mechanics | Real-device audible QA, resilient URL renewal, platform audio focus, advanced audio formats |
 | Social | Share, profiles, collaborative playlists, listening together | Account/profile and basic playlist flows | Collaboration/SharePlay-equivalent, real-time sync, privacy controls |
@@ -47,3 +47,14 @@ Breezze targets the breadth, navigation quality and polish of a mature music ser
 - Central UI permission guard excludes retired Audius and other discovery-only tracks from native playback/queue/download actions.
 
 **Not a 100% completion certificate.** The sections above remain tracked in the existing master completion issue; this document defines the target and what evidence is needed before making a full-parity claim.
+
+
+## Release-network and album category hardening
+
+- The generated Android **main** manifest now explicitly requests `android.permission.INTERNET` and `ACCESS_NETWORK_STATE`. Debug-only permissions are not sufficient evidence for the release APK.
+- Generated macOS DebugProfile and Release entitlements explicitly enable `com.apple.security.network.client`; existing sandbox entitlement keys are preserved.
+- The CI cross-platform build runs `tool/verify_platform_network_permissions.py --android --macos` after generator and compiles an Android **release** APK as well as debug APK.
+- iTunes album detail metadata carries `primaryGenreName` and an explicit `isCompilation` boolean; an absent flag does **not** imply compilation.
+- Album genres and compilation flags round-trip through account-scoped saved album storage, including default-safe decoding of older saved albums.
+- Library Genres displays saved album groups when genuine classification exists; Compilations filters explicitly marked compilations. Empty categories remain honest rather than being populated with fabricated data.
+- Existing saved albums may lack these newer fields until re-saved or genuinely re-fetched. These changes do **not** establish music rights, cloud album sync, physical-device audible playback or radio station stream licensing.
