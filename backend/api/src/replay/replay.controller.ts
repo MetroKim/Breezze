@@ -11,7 +11,7 @@ export class ReplayController {
   @Get()
   summary(
     @CurrentUser() userId: string,
-    @Headers('x-breezzze-country') edgeCountry: string | undefined,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
   ) {
     return this.replay.summary(userId, edgeCountry);
   }
