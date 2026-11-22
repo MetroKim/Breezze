@@ -203,12 +203,21 @@ class SavedAlbumStore {
   ///
   /// Existing pre-sync local albums are migrated *once*, without making
   /// remote deletions reappear on every subsequent device login.
-  Future<void> syncWithCloud(String ownerId, BreezzeApi api) =>
-      _serialize(() async {
+  Future<void> syncWithCloud(
+    String ownerId,
+    BreezzeApi api, {
+    required bool Function() ownerStillActive,
+  }) => _serialize(() async {
         _key(ownerId); // Require explicit owner; never use shared cache keys.
-        if (api.accessToken == null) {
-          throw StateError('Cloud album sync requires a signed-in account');
+        final ownerToken = api.accessToken;
+        void ensureOwner() {
+          if (!ownerStillActive() ||
+              ownerToken == null ||
+              api.accessToken != ownerToken) {
+            throw StateError('Saved album sync owner or token changed');
+          }
         }
+        ensureOwner();
         final ops = await _readOps(ownerId);
         if (await _storage.read(key: _cloudReadyKey(ownerId)) != 'ready') {
           final legacy = await load(ownerId);
@@ -227,6 +236,7 @@ class SavedAlbumStore {
         }
 
         for (final entry in ops.entries.toList()) {
+          ensureOwner();
           final item = entry.value;
           if (item['action'] == 'delete') {
             await api.deleteSavedAlbum(entry.key);
@@ -247,6 +257,7 @@ class SavedAlbumStore {
             // Damaged outbox entries must not be silently discarded.
             throw const FormatException('Invalid saved album sync operation');
           }
+          ensureOwner();
           ops.remove(entry.key);
           await _writeOps(ownerId, ops);
         }
@@ -256,7 +267,9 @@ class SavedAlbumStore {
         String? cursor;
         // Bounded cursor traversal avoids infinite loops on API errors.
         for (var page = 0; page < 50; page++) {
+          ensureOwner();
           final response = await api.getSavedAlbums(cursor: cursor);
+          ensureOwner();
           final items = response['items'];
           if (items is! List) {
             throw const FormatException('Invalid saved album API response');
@@ -270,6 +283,7 @@ class SavedAlbumStore {
           }
           final next = response['nextCursor'];
           if (next == null) {
+            ensureOwner();
             await _storage.write(
               key: _key(ownerId),
               value: jsonEncode(remote.map((album) => album.toJson()).toList()),
