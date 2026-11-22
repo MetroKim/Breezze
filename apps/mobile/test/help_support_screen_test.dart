@@ -19,14 +19,19 @@ void main() {
     expect(find.text('Help & Support'), findsOneWidget);
     expect(find.text('Why can I find a song but not play it?'), findsOneWidget);
     expect(find.text('Why are some Browse collections empty?'), findsOneWidget);
-    expect(find.text('Contact Breezze Support'), findsOneWidget);
-    expect(find.text('Sign in to submit a support request and view your request history.'), findsOneWidget);
-
     await tester.tap(find.text('Why can I find a song but not play it?'));
     await tester.pumpAndSettle();
 
     expect(
       find.textContaining('Playback starts only after the backend confirms'),
+      findsOneWidget,
+    );
+
+    await tester.drag(find.byType(ListView), const Offset(0, -1200));
+    await tester.pumpAndSettle();
+    expect(find.text('Contact Breezze Support'), findsOneWidget);
+    expect(
+      find.text('Sign in to submit a support request and view your request history.'),
       findsOneWidget,
     );
   });
