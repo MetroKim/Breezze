@@ -32,6 +32,8 @@ export class ProviderResolveDto {
 
 export class StartPlaybackSessionDto {
   @IsOptional() @IsUUID() trackId?: string;
+  @IsOptional() @IsIn(['AAC_128', 'AAC_256', 'LOSSLESS', 'HI_RES'])
+  requestedQuality?: string;
   @IsOptional() @IsString() providerId?: string;
   @IsOptional() @IsString() providerTrackId?: string;
   @IsOptional() @IsUUID() canonicalTrackId?: string;

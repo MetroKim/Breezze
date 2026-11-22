@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:breezze/features/player/player_controller.dart';
+import 'package:breezze/features/player/playback_session_client.dart';
 
 void main() {
   test('metadata-only provider tracks never enter the native resolver', () async {
@@ -90,6 +91,86 @@ void main() {
     expect(player.state.position, const Duration(seconds: 55));
     expect(player.state.playbackState, PlaybackState.playing);
   });
+  test('server session follows pause, resume, track switch and stop', () async {
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'bz:audius:session-one',
+          streamUrl: 'https://media.example/one.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          sessionId: 'session-one',
+        ),
+        PlayableSource(
+          trackId: 'bz:audius:session-two',
+          streamUrl: 'https://media.example/two.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          sessionId: 'session-two',
+        ),
+      ];
+    final client = _FakePlaybackSessionClient();
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackSessionClientProvider.overrideWithValue(client),
+      playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(hours: 1)),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const first = TrackInfo(id: 'bz:audius:session-one', title: 'One');
+    const second = TrackInfo(id: 'bz:audius:session-two', title: 'Two');
+
+    await player.playTrack(trackId: first.id, queue: const [first]);
+    await player.pause();
+    expect(client.paused, ['session-one']);
+    await player.resume();
+    expect(client.resumed, ['session-one']);
+
+    await player.playTrack(trackId: second.id, queue: const [second]);
+    expect(client.stopped, ['session-one']);
+    await player.stop();
+    expect(client.stopped, ['session-one', 'session-two']);
+  });
+
+  test('heartbeat retries reuse the same event ID and sequence until acknowledged', () async {
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'bz:audius:heartbeat',
+          streamUrl: 'https://media.example/heartbeat.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          sessionId: 'heartbeat-session',
+        ),
+      ];
+    final client = _FakePlaybackSessionClient()..failFirstHeartbeat = true;
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackSessionClientProvider.overrideWithValue(client),
+      playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(milliseconds: 5)),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const track = TrackInfo(id: 'bz:audius:heartbeat', title: 'Heartbeat');
+    await player.playTrack(trackId: track.id, queue: const [track]);
+    await Future<void>.delayed(const Duration(milliseconds: 35));
+    await player.pause();
+
+    expect(client.heartbeatCalls.length, greaterThanOrEqualTo(2));
+    expect(client.heartbeatCalls[0]['eventId'], client.heartbeatCalls[1]['eventId']);
+    expect(client.heartbeatCalls[0]['sequence'], client.heartbeatCalls[1]['sequence']);
+    await player.stop();
+  });
+
   test('OS audio interruption pauses and requires an explicit resume', () async {
     final resolver = _FakeResolver();
     final engine = _FakeAudioEngine();
@@ -170,6 +251,40 @@ void main() {
     expect(resolver.calls, 2);
   });
 
+}
+
+class _FakePlaybackSessionClient implements PlaybackSessionClient {
+  final List<String> paused = [];
+  final List<String> resumed = [];
+  final List<String> stopped = [];
+  final List<Map<String, Object>> heartbeatCalls = [];
+  bool failFirstHeartbeat = false;
+
+  @override
+  Future<Map<String, dynamic>> heartbeat({
+    required String sessionId,
+    required String eventId,
+    required int sequence,
+  }) async {
+    heartbeatCalls.add({
+      'sessionId': sessionId,
+      'eventId': eventId,
+      'sequence': sequence,
+    });
+    if (failFirstHeartbeat && heartbeatCalls.length == 1) {
+      throw StateError('temporary network failure');
+    }
+    return {'accepted': true};
+  }
+
+  @override
+  Future<void> pause(String sessionId) async { paused.add(sessionId); }
+
+  @override
+  Future<void> resume(String sessionId) async { resumed.add(sessionId); }
+
+  @override
+  Future<void> stop(String sessionId) async { stopped.add(sessionId); }
 }
 
 class _FakeResolver implements PlaybackResolver {

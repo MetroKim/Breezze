@@ -12,6 +12,9 @@ class PlayableSource {
   final String trackId;
   final String streamUrl;
 
+  /// Authenticated server playback session associated with this grant.
+  final String? sessionId;
+
   /// Short-lived signed URL; the engine must never cache it (§29.9).
   final DateTime expiresAtUtc;
 
@@ -27,6 +30,7 @@ class PlayableSource {
     required this.trackId,
     required this.streamUrl,
     required this.expiresAtUtc,
+    this.sessionId,
     this.codec,
     this.sampleRateHz,
     this.bitDepth,

@@ -6,6 +6,7 @@ import 'app/bootstrap.dart';
 import 'core/auth/auth_session.dart';
 import 'core/database/database_providers.dart';
 import 'features/player/player_controller.dart';
+import 'features/player/playback_session_client.dart';
 import 'widgets/breezze_app_root.dart';
 
 void main() async {
@@ -17,6 +18,11 @@ void main() async {
   runApp(
     ProviderScope(
       overrides: [
+        playbackSessionClientProvider.overrideWith(
+          (ref) => ApiPlaybackSessionClient(
+            ref.read(authSessionProvider.notifier).api,
+          ),
+        ),
         playbackResolverProvider.overrideWith(
           (ref) => ref.watch(liveResolverProvider),
         ),

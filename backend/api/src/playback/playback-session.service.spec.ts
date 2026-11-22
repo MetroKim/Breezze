@@ -75,6 +75,18 @@ describe('PlaybackSessionService', () => {
     expect(result.playback).toEqual({ streamUrl: 'https://cdn.example/audio' });
   });
 
+  it('passes the requested streaming quality into full-track authorization', async () => {
+    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/audio' });
+    await service.start('user-1', 'tz', {
+      trackId: 'track-1',
+      requestedQuality: 'LOSSLESS',
+    });
+    expect(resolver.resolve).toHaveBeenCalledWith('user-1', {
+      trackId: 'track-1',
+      requestedQuality: 'LOSSLESS',
+    }, 'TZ');
+  });
+
   it('rejects missing trusted territory before creating a session', async () => {
     await expect(service.start('user-1', undefined, { trackId: 'track-1' }))
       .rejects.toThrow('PLAYBACK_TERRITORY_UNAVAILABLE');

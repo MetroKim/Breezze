@@ -193,6 +193,43 @@ class BreezzeApi {
         'durationSec': durationSec,
       });
 
+  Future<Map<String, dynamic>> startPlaybackSession({
+    String? trackId,
+    String? requestedQuality,
+    String? providerId,
+    String? providerTrackId,
+    String? canonicalTrackId,
+  }) =>
+      _post('/playback/sessions', {
+        if (trackId != null) 'trackId': trackId,
+        if (requestedQuality != null) 'requestedQuality': requestedQuality,
+        if (providerId != null) 'providerId': providerId,
+        if (providerTrackId != null) 'providerTrackId': providerTrackId,
+        if (canonicalTrackId != null) 'canonicalTrackId': canonicalTrackId,
+      });
+
+  Future<Map<String, dynamic>> playbackHeartbeat({
+    required String sessionId,
+    required String eventId,
+    required int sequence,
+  }) =>
+      _post('/playback/sessions/${Uri.encodeComponent(sessionId)}/heartbeat', {
+        'eventId': eventId,
+        'sequence': sequence,
+      });
+
+  Future<void> pausePlaybackSession(String sessionId) async {
+    await _post('/playback/sessions/${Uri.encodeComponent(sessionId)}/pause', const {});
+  }
+
+  Future<void> resumePlaybackSession(String sessionId) async {
+    await _post('/playback/sessions/${Uri.encodeComponent(sessionId)}/resume', const {});
+  }
+
+  Future<void> stopPlaybackSession(String sessionId) async {
+    await _post('/playback/sessions/${Uri.encodeComponent(sessionId)}/stop', const {});
+  }
+
   Future<Map<String, dynamic>> resolveProviderPlayback({
     required String providerId,
     required String providerTrackId,

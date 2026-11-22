@@ -11,7 +11,6 @@ import '../core/api/breezze_api.dart';
 import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
-import '../core/database/outbox_sync_service.dart';
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
@@ -190,38 +189,56 @@ class LiveResolver implements PlaybackResolver {
 
       final providerIdentity = _providerIdentity(track.id);
       if (providerIdentity != null) {
-        final result = await api.resolveProviderPlayback(
+        final session = await api.startPlaybackSession(
           providerId: providerIdentity.$1,
           providerTrackId: providerIdentity.$2,
           canonicalTrackId: catalogId,
-          territory: _ref.read(outboxTerritoryProvider),
         );
-        final streamUrl = result['streamUrl'] as String?;
-        final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
-        if (streamUrl == null || expiresAt == null) return null;
+        final sessionId = session['id'] as String?;
+        final playback = session['playback'];
+        final streamUrl = playback is Map ? playback['streamUrl'] as String? : null;
+        final expiresAt = playback is Map
+            ? DateTime.tryParse(playback['expiresAt'] as String? ?? '')
+            : null;
+        if (streamUrl == null || expiresAt == null || sessionId == null) {
+          if (sessionId != null) {
+            try { await api.stopPlaybackSession(sessionId); } catch (_) {}
+          }
+          return null;
+        }
         return PlayableSource(
           trackId: track.id,
           streamUrl: streamUrl,
           expiresAtUtc: expiresAt.toUtc(),
-          codec: result['codec'] as String?,
+          sessionId: sessionId,
+          codec: playback['codec'] as String?,
         );
       }
 
       final preferences = await DownloadPreferencesStore().load();
-      final result = await api.resolvePlayback(
+      final session = await api.startPlaybackSession(
         trackId: catalogId,
-        territory: _ref.read(outboxTerritoryProvider),
         requestedQuality: preferences.streamingQuality,
       );
-      final streamUrl = result['streamUrl'] as String?;
-      final expiresAt = DateTime.tryParse(result['expiresAt'] as String? ?? '');
-      if (streamUrl == null || expiresAt == null) return null;
+      final sessionId = session['id'] as String?;
+      final playback = session['playback'];
+      final streamUrl = playback is Map ? playback['streamUrl'] as String? : null;
+      final expiresAt = playback is Map
+          ? DateTime.tryParse(playback['expiresAt'] as String? ?? '')
+          : null;
+      if (streamUrl == null || expiresAt == null || sessionId == null) {
+        if (sessionId != null) {
+          try { await api.stopPlaybackSession(sessionId); } catch (_) {}
+        }
+        return null;
+      }
 
       return PlayableSource(
         trackId: track.id,
         streamUrl: streamUrl,
         expiresAtUtc: expiresAt.toUtc(),
-        codec: result['codec'] as String?,
+        sessionId: sessionId,
+        codec: playback['codec'] as String?,
       );
     } catch (_) {
       // Rights denials and backend/network failures are unavailable playback,
