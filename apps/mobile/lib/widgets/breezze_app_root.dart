@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
+import '../../app/appearance_controller.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
-import 'package:http/http.dart' as http;
+import '../../core/api/breezze_api.dart';
+import '../../features/onboarding/onboarding_controller.dart';
 
 import '../../core/auth/auth_session.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
@@ -31,6 +32,7 @@ class BreezzeAppRoot extends ConsumerStatefulWidget {
 
 class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBindingObserver {
   bool _showOnboarding = false;
+  int _accountVersion = 0;
   GlobalKey? _shellKey;
   ProviderContainer? _container;
   JustAudioEngineAdapter? _audioEngine;
@@ -47,15 +49,24 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     unawaited(migrateJsonStoresToDrift(_container!));
     unawaited(_container!.read(authSessionProvider.notifier).restoreSession());
     ref.listenManual(authSessionProvider, (prev, next) {
-      if (prev is AuthSignedIn && next is AuthSignedOut) {
+      final before = prev is AuthSignedIn ? prev.userId : null;
+      final after = next is AuthSignedIn ? next.userId : null;
+      if (before != after) {
+        _accountVersion++;
+        _showOnboarding = false;
+        _shellKey = GlobalKey();
+        ref.invalidate(onboardingProvider);
+        ref.read(outboxTerritoryProvider.notifier).state = 'WW';
+      }
+      if (prev is AuthSignedIn && before != after) {
         unawaited(ref.read(playerControllerProvider.notifier).stop());
       }
-      if (next is AuthSignedIn && prev is! AuthSignedIn) {
+      if (next is AuthSignedIn && before != after) {
         // Replay offline ops now that a session exists.
         unawaited(ref.read(outboxSyncProvider).drainIfSignedIn());
 
         // First-time check: has the backend saved preferences yet?
-        _checkOnboardingNeeded();
+        _checkOnboardingNeeded(_accountVersion);
       }
     });
   }
@@ -94,36 +105,19 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     super.dispose();
   }
 
-  Future<void> _checkOnboardingNeeded() async {
+  Future<void> _checkOnboardingNeeded(int version) async {
     final api = ref.read(authSessionProvider.notifier).api;
     try {
-      final res = await http.get(
-        Uri.parse('${api.baseUrl}/api/v1/onboarding/preferences'),
-        headers: {
-          if (api.accessToken != null)
-            'Authorization': 'Bearer ${api.accessToken}',
-        },
-      );
-      if (!mounted) return;
-
-      if (res.statusCode == 404 || res.statusCode == 204) {
-        // No saved preferences: first-time user.
-        _shellKey = GlobalKey();
-        setState(() => _showOnboarding = true);
-        return;
-      }
-      if (res.statusCode >= 400) return;
-
-      // Onboarded: set territory from the saved country.
-      final body = jsonDecode(res.body);
-      final data =
-          body is Map && body['data'] is Map ? body['data'] : body;
-      final country =
-          data is Map ? data['country'] as String? : null;
+      final preferences = await api.onboardingPreferences();
+      if (!mounted || version != _accountVersion) return;
       ref.read(outboxTerritoryProvider.notifier).state =
-          country ?? 'WW';
+          preferences['country'] as String? ?? 'WW';
+    } on BreezzeApiException catch (error) {
+      if (mounted && version == _accountVersion && error.code == 'HTTP_404') {
+        setState(() => _showOnboarding = true);
+      }
     } catch (_) {
-      // Network issue: don't block the app on the check.
+      // A listener can still open the cached library while offline.
     }
   }
 
@@ -138,6 +132,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     return MaterialApp(
       title: 'Breezze',
       debugShowCheckedModeBanner: false,
+      themeMode: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.system,
       theme: bzLightTheme(),
       darkTheme: bzDarkTheme(),
       home: Builder(

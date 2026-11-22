@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/download_preferences.dart';
+import '../../app/appearance_controller.dart';
 import '../../app/search_history_store.dart';
 import '../../core/auth/auth_session.dart';
 import 'account_screen.dart';
@@ -335,7 +336,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ListTile(
               leading: const BzSvgIcon(name: 'moon'),
               title: const Text('Appearance'),
-              subtitle: const Text('Follows your device light or dark theme.'),
+              trailing: DropdownButton<ThemeMode>(
+                value: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.system,
+                items: const [
+                  DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
+                  DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
+                  DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+                ],
+                onChanged: ref.watch(appearanceProvider).isLoading ? null : (mode) async {
+                  if (mode == null) return;
+                  try {
+                    await ref.read(appearanceProvider.notifier).select(mode);
+                  } catch (_) {
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not save appearance. Try again.')),
+                    );
+                  }
+                },
+              ),
             ),
             ListTile(
               leading: const BzSvgIcon(name: 'settings'),
@@ -356,11 +374,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: const BzSvgIcon(name: 'chevron-right'),
               onTap: _clearSearchHistory,
             ),
-            const ListTile(
-              leading: BzSvgIcon(name: 'trash'),
-              title: Text('Cache management'),
-              subtitle: Text('Artwork cache controls are not available yet.'),
-              enabled: false,
+            ListTile(
+              leading: const BzSvgIcon(name: 'trash'),
+              title: const Text('Clear artwork cache'),
+              subtitle: const Text('Free memory used by album artwork.'),
+              onTap: () {
+                PaintingBinding.instance.imageCache.clear();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Artwork cache cleared.')),
+                );
+              },
             ),
           ]),
           _section(theme, 'Help & Support', [

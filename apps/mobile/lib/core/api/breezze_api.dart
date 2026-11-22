@@ -260,6 +260,9 @@ class BreezzeApi {
     await _delete('/library/albums/${Uri.encodeComponent(externalAlbumId)}');
   }
 
+  Future<Map<String, dynamic>> onboardingPreferences() =>
+      _get('/onboarding/preferences');
+
   Future<void> saveOnboardingPreferences({
     required String country,
     required List<String> genres,
