@@ -54,7 +54,7 @@ export class DownloadsService {
     dto: { trackId: string; territory: string },
   ) {
     const territory = this.requireTerritory(dto.territory);
-    const supported = await this.providerAllowsDownload(dto.trackId, territory);
+    const supported = await this.providerAllowsDownload(dto.trackId);
     if (!supported) {
       return {
         allowed: false,
