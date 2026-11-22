@@ -45,3 +45,8 @@ class ApiPlaybackSessionClient implements PlaybackSessionClient {
 final playbackSessionClientProvider = Provider<PlaybackSessionClient>((ref) {
   throw UnimplementedError('Playback session client must be overridden');
 });
+
+/// Configurable interval keeps heartbeat scheduling deterministic in tests.
+final playbackHeartbeatIntervalProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 15),
+);
