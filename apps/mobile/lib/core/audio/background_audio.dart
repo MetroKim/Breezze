@@ -59,11 +59,12 @@ class BackgroundAudioSync {
     _subscription = ref.listen(playerControllerProvider, (prev, next) {
       final track = next.currentTrack;
       final bridge = ref.read(backgroundBridgeProvider);
-      if (next.playbackState == PlaybackState.idle) {
-        bridge.stop();
+      if (next.playbackState == PlaybackState.idle || track == null) {
+        // Clear OS metadata without invoking the handler's user-requested
+        // stop action (which also stops the PlayerController).
+        bridge.update(title: '', artist: '', playing: false);
         return;
       }
-      if (track == null) return;
       bridge.update(
         title: track.title ?? 'Unknown track',
         artist: track.artist ?? '',
