@@ -25,7 +25,7 @@ export class RecommendationsService {
     // never the editable country preference stored in the user's profile.
     if (!territory || !/^[A-Z]{2}$/.test(territory)) return [];
 
-    const [recent, favorites, listening] = await Promise.all([
+    const [recent, favorites, listening, preference] = await Promise.all([
       this.prisma.recentlyPlayed.findMany({
         where: { userId },
         orderBy: { playedAt: 'desc' },
@@ -45,6 +45,10 @@ export class RecommendationsService {
         orderBy: { _count: { trackId: 'desc' } },
         take: 100,
       }),
+      this.prisma.userPreference.findUnique({
+        where: { userId },
+        select: { favoriteArtists: true },
+      }),
     ]);
 
     const excludedIds = new Set([
@@ -52,31 +56,59 @@ export class RecommendationsService {
       ...favorites.map((item) => item.trackId),
     ]);
 
-    if (listening.length === 0) {
-      return this.popularFallback(territory, excludedIds);
-    }
+    // Onboarding artist choices are a first-class cold-start signal. Genre
+    // preferences are not applied yet because the canonical Track schema has
+    // no verified genre taxonomy; do not infer genres from titles/providers.
+    const favoriteArtistNames = [
+      ...new Set(
+        (preference?.favoriteArtists ?? [])
+          .map((name) => name.trim())
+          .filter(Boolean),
+      ),
+    ];
+    const preferredArtists = favoriteArtistNames.length > 0
+      ? await this.prisma.artist.findMany({
+          where: {
+            name: { in: favoriteArtistNames, mode: 'insensitive' },
+          },
+          select: { id: true, name: true },
+        })
+      : [];
+    const preferredByName = new Map(
+      preferredArtists.map((artist) => [artist.name.toLowerCase(), artist.id]),
+    );
+    const preferredArtistIds = favoriteArtistNames
+      .map((name) => preferredByName.get(name.toLowerCase()))
+      .filter((id): id is string => Boolean(id));
 
-    const listenedTrackIds = listening.map((item) => item.trackId);
-    const listenedTracks = await this.prisma.track.findMany({
-      where: { id: { in: listenedTrackIds } },
-      select: { id: true, artistId: true },
-    });
-    const artistByTrack = new Map(listenedTracks.map((track) => [track.id, track.artistId]));
     const artistCounts = new Map<string, number>();
-    for (const event of listening) {
-      const artistId = artistByTrack.get(event.trackId);
-      if (artistId) {
-        artistCounts.set(artistId, (artistCounts.get(artistId) ?? 0) + event._count.trackId);
+    if (listening.length > 0) {
+      const listenedTrackIds = listening.map((item) => item.trackId);
+      const listenedTracks = await this.prisma.track.findMany({
+        where: { id: { in: listenedTrackIds } },
+        select: { id: true, artistId: true },
+      });
+      const artistByTrack = new Map(listenedTracks.map((track) => [track.id, track.artistId]));
+      for (const event of listening) {
+        const artistId = artistByTrack.get(event.trackId);
+        if (artistId) {
+          artistCounts.set(artistId, (artistCounts.get(artistId) ?? 0) + event._count.trackId);
+        }
       }
     }
-    const artistIds = [...artistCounts.entries()]
+    const listenedArtistIds = [...artistCounts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 5)
       .map(([artistId]) => artistId);
+    const artistIds = [...new Set([
+      ...preferredArtistIds,
+      ...listenedArtistIds,
+    ])].slice(0, 8);
 
     if (artistIds.length === 0) {
       return this.popularFallback(territory, excludedIds);
     }
+    const preferredArtistIdSet = new Set(preferredArtistIds);
 
     // Fetch a bounded candidate window per artist. A single globally ordered
     // LIMIT can be monopolized by one prolific artist and starve every other
@@ -102,8 +134,12 @@ export class RecommendationsService {
       }
     }
 
-    return this.selectPlayable(rankedCandidates, territory, () =>
-      'Because you listen to this artist',
+    return this.selectPlayable(
+      rankedCandidates,
+      territory,
+      (track) => preferredArtistIdSet.has(track.artistId)
+          ? 'Because you chose this artist'
+          : 'Because you listen to this artist',
     );
   }
 
