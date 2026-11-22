@@ -168,6 +168,29 @@ describe('DownloadsService', () => {
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 
+  it('does not sign Breezze storage URLs for external providers even if download is advertised', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'track-1',
+      source: 'audius',
+      externalId: 'bz:audius:track123',
+    });
+    providers.get.mockReturnValue({
+      capabilities: { download: true, availability: true },
+      getAvailability: jest.fn().mockResolvedValue({ kind: 'ok', value: { available: true } }),
+    });
+
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1',
+      territory: 'TZ',
+    })).resolves.toEqual({
+      allowed: false,
+      reason: 'PROVIDER_DOWNLOAD_UNSUPPORTED',
+      url: null,
+    });
+    expect(rights.decide).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+  });
+
   it('revokes existing external downloads when provider capability is removed', async () => {
     prisma.downloadRecord.findFirst.mockResolvedValue({ id: 'download-1' });
     prisma.track.findUnique.mockResolvedValue({
