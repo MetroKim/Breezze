@@ -43,7 +43,7 @@ void main() async {
             await ref
                 .read(authSessionProvider.notifier)
                 .api
-                .recordPlay(catalogTrackId);
+                .recordRecent(catalogTrackId);
           };
         }),
       ],
