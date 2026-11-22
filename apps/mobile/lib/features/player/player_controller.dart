@@ -79,6 +79,23 @@ class PlayerController extends Notifier<PlayerState> {
           state.playbackState == PlaybackState.transitioning) {
         return;
       }
+      // Keep the state machine authoritative when the OS pauses audio
+      // because of a call, another exclusive session, or route removal.
+      if (engineState == PlaybackState.interrupted &&
+          _machine.state == PlaybackState.playing) {
+        _machine.dispatch(InterruptionDetected());
+        return;
+      }
+      if (engineState == PlaybackState.paused &&
+          _machine.state == PlaybackState.interrupted) {
+        _machine.dispatch(InterruptionEnded());
+        return;
+      }
+      if (engineState == PlaybackState.paused &&
+          _machine.state == PlaybackState.playing) {
+        _machine.dispatch(PausePressed());
+        return;
+      }
       state = state.copyWith(playbackState: engineState);
       if (engineState == PlaybackState.ended ||
           engineState == PlaybackState.failed) {
