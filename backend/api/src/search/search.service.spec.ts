@@ -1,6 +1,7 @@
 import { PrismaService } from '../prisma.service';
 import { SearchService } from './search.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
+import { RightsDecisionService } from '../rights/rights-decision.service';
 
 describe('SearchService', () => {
   const tracks = [{ id: 'track-1', title: 'Amapiano Nights' }];
@@ -23,6 +24,7 @@ describe('SearchService', () => {
     get: jest.fn().mockReturnValue(youtubeMusic),
   };
 
+  const rights = { filterMetadataDisplay: jest.fn() };
   let service: SearchService;
 
   beforeEach(() => {
@@ -30,11 +32,12 @@ describe('SearchService', () => {
     prisma.track.findMany.mockResolvedValue(tracks);
     prisma.artist.findMany.mockResolvedValue(artists);
     prisma.album.findMany.mockResolvedValue(albums);
-    service = new SearchService(prisma as unknown as PrismaService, providers as unknown as ProviderRegistry);
+    rights.filterMetadataDisplay.mockResolvedValue(new Set(['track-1']));
+    service = new SearchService(prisma as unknown as PrismaService, providers as unknown as ProviderRegistry, rights as unknown as RightsDecisionService);
   });
 
   it('returns empty result groups for queries shorter than two characters', async () => {
-    await expect(service.search(' a ')).resolves.toEqual({
+    await expect(service.search(' a ', 'TZ')).resolves.toEqual({
       tracks: [],
       artists: [],
       albums: [],
@@ -49,7 +52,7 @@ describe('SearchService', () => {
   });
 
   it('trims the query and searches tracks, artists and albums with bounded results', async () => {
-    await expect(service.search('  Amapiano  ')).resolves.toEqual({
+    await expect(service.search('  Amapiano  ', 'TZ')).resolves.toEqual({
       tracks,
       artists,
       albums,
@@ -68,6 +71,7 @@ describe('SearchService', () => {
       take: 5,
     });
     expect(youtubeMusic.search).toHaveBeenCalledWith('Amapiano');
+    expect(rights.filterMetadataDisplay).toHaveBeenCalledWith(['track-1'], 'TZ');
     expect(prisma.album.findMany).toHaveBeenCalledWith({
       where: { title: { contains: 'Amapiano', mode: 'insensitive' } },
       take: 5,
