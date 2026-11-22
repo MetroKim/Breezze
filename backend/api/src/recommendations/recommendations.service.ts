@@ -19,14 +19,10 @@ export class RecommendationsService {
     private readonly rights: RightsDecisionService,
   ) {}
 
-  async forUser(userId: string): Promise<RecommendationItem[]> {
-    const preference = await this.prisma.userPreference.findUnique({
-      where: { userId },
-      select: { country: true },
-    });
-    const territory = preference?.country?.trim().toUpperCase();
-    // A recommendation must never imply playback availability in an
-    // unknown territory. Ask the user to set a country before personalizing.
+  async forUser(userId: string, edgeTerritory?: string): Promise<RecommendationItem[]> {
+    const territory = edgeTerritory?.trim().toUpperCase();
+    // Rights-sensitive recommendations use only the trusted edge country,
+    // never the editable country preference stored in the user's profile.
     if (!territory || !/^[A-Z]{2}$/.test(territory)) return [];
 
     const [recent, favorites, listening] = await Promise.all([
