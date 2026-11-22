@@ -17,8 +17,9 @@ import '../features/player/player_controller.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// YouTube Music is metadata-only. Audius public streams and Breezze-owned
-/// licensed media are resolved by the backend; gated Audius tracks are denied.
+/// YouTube Music, Deezer and SoundCloud are metadata/discovery sources only.
+/// Full-track playback is resolved separately through an approved provider
+/// grant or Breezze-owned licensed media; catalogue metadata never grants it.
 /// Downloads remain rights-gated. Lyrics
 /// lookup remains keyless through LRCLIB.
 
