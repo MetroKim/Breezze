@@ -64,15 +64,39 @@ class BreezzeDatabase extends _$BreezzeDatabase {
   static QueryExecutor _openConnection() => connection.createDatabaseConnection();
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
+        onCreate: (m) async {
+          await m.createAll();
+          await customStatement('''
+            CREATE TABLE playback_heartbeat_outbox (
+              owner_id TEXT NOT NULL,
+              session_id TEXT NOT NULL,
+              event_id TEXT NOT NULL UNIQUE,
+              sequence INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY (session_id, sequence)
+            )
+          ''');
+        },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             // catalog_id_map table added — existing data untouched.
             await m.createTable(catalogIdMap);
+          }
+          if (from < 3) {
+            await customStatement('''
+              CREATE TABLE playback_heartbeat_outbox (
+                owner_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                event_id TEXT NOT NULL UNIQUE,
+                sequence INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (session_id, sequence)
+              )
+            ''');
           }
         },
       );
