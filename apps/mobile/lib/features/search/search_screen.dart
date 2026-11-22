@@ -17,9 +17,7 @@ import '../../widgets/bz_brand_icons.dart';
 
 bool _isMetadataOnlySourceTrack(String id) =>
     id.startsWith('bzv:') ||
-    (id.startsWith('bz:') &&
-        !id.startsWith('bz:audius:') &&
-        !id.startsWith('bz:jamendo:'));
+    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:'));
 
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
@@ -611,11 +609,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            track.id.startsWith('bz:audius:')
-                                                ? '${track.artist} · Audius'
-                                                : _isMetadataOnlySourceTrack(track.id)
-                                                    ? '${track.artist} · YouTube Music · Catalogue only'
-                                                    : track.artist,
+                                            track.id.startsWith('bz:deezer:')
+                                                ? '${track.artist} · Deezer · Catalogue only'
+                                                : track.id.startsWith('bz:youtube_music:')
+                                                        ? '${track.artist} · YouTube Music · Catalogue only'
+                                                        : track.id.startsWith('bz:jamendo:')
+                                                            ? '${track.artist} · Jamendo'
+                                                            : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -623,11 +623,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          tooltip: 'Play',
+                                          tooltip: track.id.startsWith('bzv:') ? 'Watch music video' : 'Play',
                                           icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
-                                          onPressed: _isMetadataOnlySourceTrack(track.id)
-                                              ? null
-                                              : () => _play(track),
+                                          onPressed: (track.id.startsWith('bzv:') || !_isMetadataOnlySourceTrack(track.id))
+                                              ? () => _play(track)
+                                              : null,
                                         ),
                                         PopupMenuButton<String>(
                                           tooltip: 'Track actions',
