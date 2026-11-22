@@ -357,6 +357,11 @@ class BreezzeApi {
   Future<List<Map<String, dynamic>>> homeFeed() async =>
       _asMapList(await _get('/home'));
 
+  /// Fetches canonical, territory-filtered track metadata for a home-feed item.
+  /// Playback still requires a separate authorized playback session.
+  Future<Map<String, dynamic>> catalogSong(String trackId) =>
+      _get('/catalog/songs/${Uri.encodeComponent(trackId)}');
+
   Future<Map<String, dynamic>> recordRecent(String trackId) =>
       _post('/home/recent', {'trackId': trackId});
 
