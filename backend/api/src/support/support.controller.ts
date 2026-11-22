@@ -23,7 +23,7 @@ const SUPPORT_CATEGORIES = [
   'bug',
   'feedback',
   'other',
-] as const;
+];
 
 export class CreateSupportRequestDto {
   @IsString()
