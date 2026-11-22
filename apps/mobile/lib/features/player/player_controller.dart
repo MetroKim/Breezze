@@ -57,7 +57,8 @@ class PlayerController extends Notifier<PlayerState> {
   void _startHeartbeatTimer() {
     _heartbeatTimer?.cancel();
     if (_playbackSessionId == null) return;
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _heartbeatTimer = Timer.periodic(
+      ref.read(playbackHeartbeatIntervalProvider), (_) {
       if (state.playbackState == PlaybackState.playing) {
         unawaited(_sendPlaybackHeartbeat());
       }
@@ -637,9 +638,14 @@ class PlayerController extends Notifier<PlayerState> {
             )
             .catchError((_) {}));
       }
-      unawaited(
-        ref.read(playHistoryReporterProvider)(info).catchError((_) {}),
-      );
+      // Session stop is now the authoritative qualified-play event.
+      // Keep the legacy reporter only for local/offline media, which has no
+      // server playback session.
+      if (source.sessionId == null) {
+        unawaited(
+          ref.read(playHistoryReporterProvider)(info).catchError((_) {}),
+        );
+      }
       _scrobbles.onPlay(info.id, DateTime.now().toUtc());
     } catch (_) {
       if (_isCurrentRequest(requestId)) {
