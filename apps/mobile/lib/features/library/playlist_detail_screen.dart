@@ -405,16 +405,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -1093,16 +1087,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -1754,16 +1742,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -2442,16 +2424,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -2920,16 +2896,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -3608,16 +3578,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -4269,16 +4233,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -4957,16 +4915,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -5409,16 +5361,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -6097,16 +6043,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -6758,16 +6698,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -7446,16 +7380,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -7924,16 +7852,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -8612,16 +8534,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -9273,16 +9189,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
@@ -9961,16 +9871,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (rawTrack is! Map) continue;
             final track = Map<String, dynamic>.from(rawTrack);
             final artist = track['artist'];
-            final album = track['album'];
             tracks.add(FavoriteTrack(
               id: track['id'] as String? ?? item['trackId'] as String? ?? '',
               title: track['title'] as String? ?? '',
-              artist: artist is Map
-                  ? artist['name'] as String? ?? ''
-                  : '',
-              artworkUrl: album is Map
-                  ? album['artworkUrl'] as String?
-                  : null,
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
               durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
             ));
           }
