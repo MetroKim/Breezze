@@ -61,7 +61,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         // Local cache remains usable while offline; cloud changes sync next refresh.
       }
     }
-    if (!mounted) return;
+    final currentAuth = ref.read(authSessionProvider);
+    final currentOwnerId =
+        currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
+    if (!mounted || currentOwnerId != ownerId) return;
     setState(() {
       _ownerId = ownerId;
       _favorites = favorites;
