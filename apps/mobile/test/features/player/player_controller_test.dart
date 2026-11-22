@@ -363,7 +363,6 @@ class _FakeAudioEngine implements AudioEngineAdapter {
     _position = Duration.zero;
   }
 
-  @override
   bool failPlay = false;
 
   @override
