@@ -89,6 +89,22 @@ void main() {
     expect(userBOps.map((op) => op.trackId), ['user-b::track-2']);
   });
 
+  test('removing a favorite before sync cancels its queued add', () async {
+    await favorites.add(
+      id: 'new-track',
+      title: 'New song',
+      artist: 'Artist',
+      ownerId: 'user-a',
+    );
+
+    expect((await outbox.pending(ownerId: 'user-a')).length, 1);
+
+    await favorites.remove('new-track', ownerId: 'user-a');
+
+    expect(await outbox.pending(ownerId: 'user-a'), isEmpty);
+    expect(await favorites.list(ownerId: 'user-a'), isEmpty);
+  });
+
   test('legacy unscoped rows remain visible only in the guest namespace', () async {
     await favorites.add(
       id: 'legacy-track',
