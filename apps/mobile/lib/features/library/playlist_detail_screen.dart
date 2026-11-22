@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart' show FavoriteTrack;
 import '../../app/playlist_store.dart';
+import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
@@ -81,14 +82,14 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   List<TrackInfo> _queue(UserPlaylist playlist) => [
         for (final item in playlist.tracks)
-          if ((!item.id.startsWith('bz:') || item.id.startsWith('bz:audius:'))) item.toTrackInfo(),
+          if (canQueueTrackId(item.id)) item.toTrackInfo(),
       ];
 
   Future<void> _playAll(UserPlaylist playlist) async {
     if (playlist.tracks.isEmpty) return;
-    final nativeIndex = playlist.tracks.indexWhere((item) => (!(item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:')) || item.id.startsWith('bz:audius:')));
+    final nativeIndex = playlist.tracks.indexWhere((item) => canQueueTrackId(item.id));
     if (nativeIndex >= 0) {
-      if (playlist.tracks.any((item) => (item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:'))) && mounted) {
+      if (playlist.tracks.any((item) => !canQueueTrackId(item.id)) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
@@ -96,12 +97,16 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       await _playTrack(playlist, nativeIndex);
       return;
     }
-    await _playTrack(playlist, 0);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This playlist contains no currently playable songs.')),
+      );
+    }
   }
 
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
     final track = playlist.tracks[index];
-    if ((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))) {
+    if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This playlist item has metadata only; native playback is unavailable.')),

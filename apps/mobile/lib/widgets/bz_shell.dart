@@ -12,6 +12,8 @@ import '../features/library/library_screen.dart';
 import '../features/player/now_playing_screen.dart';
 import '../features/player/player_controller.dart';
 import '../features/search/search_screen.dart';
+import '../features/settings/settings_screen.dart';
+import '../features/settings/account_screen.dart';
 
 /// Breezze's five-destination shell. Downloads live inside Library and
 /// Settings are reached from the profile surface; neither is a top-level tab.
@@ -41,7 +43,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
 
   static const _tabs = [
     _TabDestination('Home', 'assets/icons/home.svg'),
-    _TabDestination('Browse', 'assets/icons/browse.svg'),
+    _TabDestination('New', 'assets/icons/new.svg'),
     _TabDestination('Radio', 'assets/icons/radio.svg'),
     _TabDestination('Library', 'assets/icons/library.svg'),
     _TabDestination('Search', 'assets/icons/search.svg'),
@@ -88,6 +90,12 @@ class _BzHomeState extends ConsumerState<BzHome> {
                 index: _index,
                 tabs: _tabs,
                 onChanged: (i) => setState(() => _index = i),
+                onOpenAccount: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AccountScreen()),
+                ),
+                onOpenSettings: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
               ),
               Expanded(
                 child: Stack(
@@ -158,11 +166,15 @@ class _DesktopNavigation extends StatelessWidget {
   final int index;
   final List<_TabDestination> tabs;
   final ValueChanged<int> onChanged;
+  final VoidCallback onOpenAccount;
+  final VoidCallback onOpenSettings;
 
   const _DesktopNavigation({
     required this.index,
     required this.tabs,
     required this.onChanged,
+    required this.onOpenAccount,
+    required this.onOpenSettings,
   });
 
   @override
@@ -205,6 +217,18 @@ class _DesktopNavigation extends StatelessWidget {
                   onTap: () => onChanged(i),
                 ),
               const Spacer(),
+              Divider(color: theme.bzSeparator),
+              _DesktopUtilityLink(
+                label: 'Account',
+                iconName: 'user-round',
+                onTap: onOpenAccount,
+              ),
+              _DesktopUtilityLink(
+                label: 'Settings',
+                iconName: 'settings',
+                onTap: onOpenSettings,
+              ),
+              const SizedBox(height: 10),
               Text(
                 'YOUR MUSIC. YOUR SPACE.',
                 style: TextStyle(
@@ -215,6 +239,45 @@ class _DesktopNavigation extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopUtilityLink extends StatelessWidget {
+  final String label;
+  final String iconName;
+  final VoidCallback onTap;
+
+  const _DesktopUtilityLink({
+    required this.label,
+    required this.iconName,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(BzRadius.button),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                BzSvgIcon(name: iconName, size: 21, color: theme.bzText2),
+                const SizedBox(width: 13),
+                Text(label,
+                    style: TextStyle(color: theme.bzText2, fontSize: 14)),
+              ],
+            ),
           ),
         ),
       ),

@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
+import '../../core/audio/playback_source_policy.dart';
+import '../../core/audio/youtube_player_handoff.dart';
+import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../app/downloads_controller.dart';
@@ -98,7 +101,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    if ((selected.id.startsWith('bz:') && !selected.id.startsWith('bz:audius:'))) {
+    if (!canQueueTrackId(selected.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
@@ -107,7 +110,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       return;
     }
     final playableTracks = _tracks
-        .where((track) => !((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:')) || track.id.startsWith('bzv:')))
+        .where((track) => canQueueTrackId(track.id))
         .toList();
     final queue = [
       for (final track in playableTracks)
@@ -144,9 +147,9 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Browse', style: theme.textTheme.displayMedium),
+                  Text('New', style: theme.textTheme.displayMedium),
                   const SizedBox(height: 6),
-                  Text('Explore music and discovery collections.', style: theme.textTheme.bodyMedium),
+                  Text('New releases, music videos, charts, genres and more.', style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 18),
                   Text('Explore by genre', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 10),
@@ -295,7 +298,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                           : IconButton(
                               tooltip: 'Download',
                               icon: const BzSvgIcon(name: 'download', size: 20),
-                              onPressed: track.id.startsWith('bz:')
+                              onPressed: !canRequestOfflineDownload(track.id)
                                   ? null
                                   : () => ref.read(downloadProgressProvider.notifier).download(track),
                             ),
@@ -524,11 +527,88 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     }
   }
 
-  Future<void> _openExternalCatalogItem(Map<String, dynamic> item) async {
-    final rawUrl = item['url'];
-    final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
-    if (uri == null || !['https'].contains(uri.scheme)) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _openCatalogItem(Map<String, dynamic> item) async {
+    final itemId = item['id']?.toString();
+    final title = item['title'] as String? ?? 'Untitled';
+    final artist = item['artist'] as String? ?? 'Unknown artist';
+    final artwork = item['artworkUrl'] as String?;
+    if (_appleReleases && itemId != null &&
+        RegExp(r'^[0-9]{1,20}$').hasMatch(itemId)) {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => AppleAlbumCatalogScreen(
+          albumId: itemId, title: title, artist: artist,
+          artworkUrl: artwork, appleUrl: item['url'] as String?,
+        ),
+      ));
+      return;
+    }
+    if ((_appleChart || _dailyChart) && itemId != null) {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => TrackDetailScreen(
+          track: TrackInfo(
+            id: 'bz:apple_catalog:$itemId',
+            title: title, artist: artist,
+            artworkUrl: artwork, duration: Duration.zero,
+          ),
+          origin: 'new',
+        ),
+      ));
+      return;
+    }
+    if (_videoFeed && itemId != null) {
+      try {
+        final opened = await YoutubePlayerHandoff.openProviderTrackId(itemId);
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('The official video player is unavailable.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('This video could not be opened.')),
+          );
+        }
+      }
+      return;
+    }
+    if (!mounted) return;
+    // Event details remain in Breezze; a ticket link is user-selected.
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(artist),
+              if (item['venue'] is String)
+                Text('Venue: ' + item['venue'].toString()),
+              if (item['city'] is String)
+                Text('City: ' + item['city'].toString()),
+              if (item['date'] is String)
+                Text('Date: ' + item['date'].toString()),
+              const SizedBox(height: 16),
+              if (item['url'] is String)
+                TextButton.icon(
+                  icon: const BzSvgIcon(name: 'arrow-up-right'),
+                  label: const Text('Official event details'),
+                  onPressed: () async {
+                    final uri = Uri.tryParse(item['url'] as String);
+                    if (uri == null || uri.scheme != 'https') return;
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _search(String choice) async {
@@ -571,7 +651,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    if ((selected.id.startsWith('bz:') && !selected.id.startsWith('bz:audius:'))) {
+    if (!canQueueTrackId(selected.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
@@ -580,7 +660,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       return;
     }
     final playableTracks = _tracks
-        .where((track) => !((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:')) || track.id.startsWith('bzv:')))
+        .where((track) => canQueueTrackId(track.id))
         .toList();
     final queue = [for (final track in playableTracks) TrackInfo(
       id: track.id, title: track.title, artist: track.artist,
@@ -606,7 +686,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       appBar: AppBar(
         title: Text(widget.destination.title),
         leading: IconButton(
-          tooltip: 'Back to Browse',
+          tooltip: 'Back to New',
           icon: const BzSvgIcon(name: 'chevron-left'),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
@@ -705,7 +785,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                                 : IconButton(
                                                     tooltip: 'Download',
                                                     icon: const BzSvgIcon(name: 'download', size: 20),
-                                                    onPressed: (track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))
+                                                    onPressed: !canRequestOfflineDownload(track.id)
                                                         ? null
                                                         : () => ref.read(downloadProgressProvider.notifier).download(track),
                                                   ),
@@ -777,7 +857,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                             ? "Results are filtered to YouTube Music's Original Music Video (OMV) classification, which identifies videos uploaded by the original artist. Links open on YouTube; Breezze does not rehost or relay them."
                             : isConcertFeed
                                 ? 'Event listings are supplied by JamBase. Dates and ticket availability can change; verify details with the event and ticket provider before attending.'
-                                : 'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; open an item in Apple Music. Breezze playback remains subject to its own provider rights checks.',
+                                : 'Catalog metadata is provided by Apple. Full-track playback is not included in this feed; browse inside Breezze, while native playback requires an authorized source.',
                         style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
                       ),
                     ),
@@ -875,11 +955,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                     ? 'Open on YouTube'
                                     : isConcertFeed
                                         ? 'Open event details'
-                                        : 'Open in Apple Music',
+                                        : 'View details in Breezze',
                                 icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
-                                onPressed: () => _openExternalCatalogItem(item),
+                                onPressed: () => _openCatalogItem(item),
                               ),
-                              onTap: () => _openExternalCatalogItem(item),
+                              onTap: () => _openCatalogItem(item),
                             );
                           },
                         ),

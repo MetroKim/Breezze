@@ -4,7 +4,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../../core/audio/playback_source_policy.dart';
 import '../../app/playlist_store.dart';
+import '../../app/saved_album_store.dart';
+import '../../app/library_section_preferences_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
@@ -39,6 +42,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   String _ownerId = 'guest';
   List<UserPlaylist> _playlists = [];
   List<FavoriteTrack> _favorites = [];
+  List<SavedAlbum> _albums = [];
   var _loading = true;
 
   @override
@@ -52,6 +56,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     var playlists = await _playlistStore.load(ownerId);
+    final savedAlbums = await SavedAlbumStore().load(ownerId);
+    final visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
     if (auth is AuthSignedIn) {
       try {
         final remote = await ref.read(authSessionProvider.notifier).api.playlists();
@@ -69,6 +75,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       _ownerId = ownerId;
       _favorites = favorites;
       _playlists = playlists;
+      _albums = savedAlbums;
+      _visibleSections = visibleSections;
+      if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
+        _selected = _allSections.firstWhere(_visibleSections.contains);
+      }
       _loading = false;
     });
   }
@@ -134,14 +145,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   List<TrackInfo> _queue() => [
         for (final f in _favorites)
-          if ((!f.id.startsWith('bz:') || f.id.startsWith('bz:audius:'))) f.toTrackInfo(),
+          if (canQueueTrackId(f.id)) f.toTrackInfo(),
       ];
 
   Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
-    final nativeIndex = _favorites.indexWhere((item) => (!item.id.startsWith('bz:') || item.id.startsWith('bz:audius:')));
+    final nativeIndex = _favorites.indexWhere((item) => canQueueTrackId(item.id));
     if (nativeIndex >= 0) {
-      if (_favorites.any((item) => (item.id.startsWith('bz:') && !item.id.startsWith('bz:audius:'))) && mounted) {
+      if (_favorites.any((item) => !canQueueTrackId(item.id)) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
         );
@@ -149,12 +160,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       await _playOne(nativeIndex);
       return;
     }
-    await _playOne(0);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No saved songs have an authorized playback source yet.')),
+      );
+    }
   }
 
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
-    if ((track.id.startsWith('bz:') && !track.id.startsWith('bz:audius:'))) {
+    if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This saved item has metadata only; Breezze cannot play it from this source.')),
@@ -223,6 +238,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
     );
     if (result == null || result.isEmpty || !mounted) return;
+    try {
+      await LibrarySectionPreferencesStore().save(_ownerId, result);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save Library section preferences.')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _visibleSections = result;
       if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
@@ -235,6 +261,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
     ref.listen<int>(playlistRefreshSignalProvider, (previous, next) => _refresh());
+    ref.listen<int>(savedAlbumRefreshProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
     final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
@@ -291,6 +318,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     ? _buildSongs(theme)
                     : _selected == 'Playlists'
                         ? _buildPlaylists(theme)
+                        : _selected == 'Albums'
+                            ? _buildAlbums(theme)
                         : _selected == 'Artists'
                             ? _buildArtists(theme)
                             : _buildEmptySection(theme, _selected),
@@ -379,6 +408,99 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
           trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
           onTap: () => _openPlaylist(playlist),
+        );
+      },
+    );
+  }
+
+  Widget _buildAlbums(ThemeData theme) {
+    if (_loading) {
+      return ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: 6,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+      );
+    }
+    if (_albums.isEmpty) {
+      return _emptyState(
+        theme,
+        'No saved albums',
+        'Open an album in New or an artist page, then choose Add to Library.',
+      );
+    }
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(
+        8, 4, 8, BzBreakpoints.bottomClearance(context, compact: 150),
+      ),
+      itemCount: _albums.length,
+      itemBuilder: (context, index) {
+        final album = _albums[index];
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(BzRadius.artwork),
+            child: album.artworkUrl == null
+                ? Container(
+                    width: 54, height: 54, color: theme.bzSurface2,
+                    alignment: Alignment.center,
+                    child: BzBnoteMark(size: 28, color: theme.bzText2),
+                  )
+                : Image.network(
+                    album.artworkUrl!, width: 54, height: 54,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        BzBnoteMark(size: 54, color: theme.bzText2),
+                  ),
+          ),
+          title: Text(album.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(album.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => AppleAlbumCatalogScreen(
+              albumId: album.id,
+              title: album.title,
+              artist: album.artist,
+              artworkUrl: album.artworkUrl,
+              appleUrl: album.catalogUrl,
+            ),
+          )),
+          trailing: IconButton(
+            tooltip: 'Remove saved album',
+            icon: const BzSvgIcon(name: 'more-vertical'),
+            onPressed: () async {
+              final shouldRemove = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('Remove album?'),
+                  content: Text('Remove "${album.title}" from your library?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ),
+              );
+              if (shouldRemove != true || !mounted) return;
+              try {
+                await SavedAlbumStore().remove(_ownerId, album.id);
+                ref.invalidate(isAlbumSavedProvider(
+                  (ownerId: _ownerId, albumId: album.id),
+                ));
+                ref.read(savedAlbumRefreshProvider.notifier).state++;
+              } catch (_) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not remove saved album.')),
+                  );
+                }
+              }
+            },
+          ),
         );
       },
     );
