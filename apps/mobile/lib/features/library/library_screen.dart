@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/bootstrap.dart';
 import '../../app/playlist_store.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
@@ -505,6 +506,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ),
                   onPressed: () async {
                     await ref.read(favoritesStoreProvider).toggle(fav);
+                    await ref.read(outboxSyncProvider).drainIfSignedIn();
                     _refresh();
                   },
                 ),
