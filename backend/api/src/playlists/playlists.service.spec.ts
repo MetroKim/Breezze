@@ -60,7 +60,16 @@ describe('PlaylistsService tenant isolation and ordering', () => {
       .rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.playlist.findFirst).toHaveBeenCalledWith({
       where: { id: 'playlist-owned-by-b', userId: 'user-a' },
-      include: { items: { orderBy: { position: 'asc' } } },
+      include: {
+        items: {
+          orderBy: { position: 'asc' },
+          include: {
+            track: {
+              include: { artist: true, album: true },
+            },
+          },
+        },
+      },
     });
   });
 
