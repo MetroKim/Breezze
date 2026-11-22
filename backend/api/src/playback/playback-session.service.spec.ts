@@ -144,6 +144,25 @@ describe('PlaybackSessionService', () => {
       .rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('does not acknowledge a raced duplicate heartbeat to a non-owner', async () => {
+    tx.playbackSession.findUnique.mockReset().mockResolvedValue({
+      id: 'session-uuid', userId: 'user-1', trackId: 'track-1',
+      status: 'active', expiresAt: new Date(Date.now() + 60_000),
+      lastSequence: 0, lastHeartbeatAt: new Date(Date.now() - 10_000), accumulatedMs: 0,
+    });
+    tx.playbackSession.updateMany.mockResolvedValue({ count: 1 });
+    tx.playbackHeartbeat.create.mockRejectedValue({ code: 'P2002' });
+    prisma.playbackHeartbeat.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        sessionId: 'session-uuid', sequence: 1, elapsedMs: 10_000,
+      });
+    prisma.playbackSession.findUnique.mockResolvedValue({ userId: 'other-user' });
+
+    await expect(service.heartbeat('user-1', 'session-uuid', 'event-uuid', 1))
+      .rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('rejects reuse of a heartbeat ID for a different session or sequence', async () => {
     prisma.playbackHeartbeat.findUnique.mockResolvedValue({
       sessionId: 'other-session', sequence: 1, elapsedMs: 10_000,
