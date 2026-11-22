@@ -7,6 +7,7 @@ import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../app/playlist_store.dart';
 import '../../app/saved_album_store.dart';
+import '../../app/library_section_preferences_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
@@ -56,6 +57,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     var playlists = await _playlistStore.load(ownerId);
     final savedAlbums = await SavedAlbumStore().load(ownerId);
+    final visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
     if (auth is AuthSignedIn) {
       try {
         final remote = await ref.read(authSessionProvider.notifier).api.playlists();
@@ -74,6 +76,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       _favorites = favorites;
       _playlists = playlists;
       _albums = savedAlbums;
+      _visibleSections = visibleSections;
+      if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
+        _selected = _allSections.firstWhere(_visibleSections.contains);
+      }
       _loading = false;
     });
   }
@@ -232,6 +238,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
     );
     if (result == null || result.isEmpty || !mounted) return;
+    try {
+      await LibrarySectionPreferencesStore().save(_ownerId, result);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save Library section preferences.')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _visibleSections = result;
       if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
