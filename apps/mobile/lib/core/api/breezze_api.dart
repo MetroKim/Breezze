@@ -385,6 +385,15 @@ class BreezzeApi {
         'trackId': trackId,
       });
 
+  Future<Map<String, dynamic>> reorderPlaylistTracks(
+    String playlistId,
+    List<String> trackIds,
+  ) =>
+      _patch(
+        '/playlists/${Uri.encodeComponent(playlistId)}/tracks/order',
+        {'trackIds': trackIds},
+      );
+
   Future<void> removePlaylistTrack(String playlistId, String trackId) async {
     await _delete(
       '/playlists/${Uri.encodeComponent(playlistId)}/tracks/'
