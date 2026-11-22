@@ -3,16 +3,16 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:breezze_audio_contracts/audio_contracts.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 
 /// Native audio engine — implements the Breezze engine contract over
 /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
 class JustAudioEngineAdapter implements AudioEngineAdapter {
-  final AudioPlayer _player = AudioPlayer();
+  final ja.AudioPlayer _player = ja.AudioPlayer();
   final StreamController<PlaybackState> _states =
       StreamController<PlaybackState>.broadcast();
-  late final StreamSubscription<PlaybackEvent> _errorSubscription;
-  late final StreamSubscription<PlayerState> _stateSubscription;
+  late final StreamSubscription<ja.PlaybackEvent> _errorSubscription;
+  late final StreamSubscription<ja.PlayerState> _stateSubscription;
   StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
   StreamSubscription<void>? _becomingNoisySubscription;
   bool _disposed = false;
@@ -28,10 +28,10 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       PlaybackState mapped;
       final processing = state.processingState;
 
-      if (processing == ProcessingState.loading ||
-          processing == ProcessingState.buffering) {
+      if (processing == ja.ProcessingState.loading ||
+          processing == ja.ProcessingState.buffering) {
         mapped = PlaybackState.buffering;
-      } else if (processing == ProcessingState.completed) {
+      } else if (processing == ja.ProcessingState.completed) {
         mapped = PlaybackState.ended;
       } else if (state.playing) {
         mapped = PlaybackState.playing;
