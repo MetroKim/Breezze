@@ -79,6 +79,9 @@ class _BzHomeState extends ConsumerState<BzHome> {
           final expanded = constraints.maxWidth >= BzBreakpoints.medium;
           if (!expanded) return pages;
 
+          // Apple Music 7.0 desktop: content fills the pane and the glass
+          // player pill floats above it, anchored bottom: 20, centered,
+          // auto-width — never a docked full-width bar (spec §4.1).
           return Row(
             children: [
               _DesktopNavigation(
@@ -87,22 +90,24 @@ class _BzHomeState extends ConsumerState<BzHome> {
                 onChanged: (i) => setState(() => _index = i),
               ),
               Expanded(
-                child: Column(
+                child: Stack(
                   children: [
-                    Expanded(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: BzBreakpoints.contentMaxWidth,
-                          ),
-                          child: pages,
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: BzBreakpoints.contentMaxWidth,
                         ),
+                        child: pages,
                       ),
                     ),
                     if (hasPlayer)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
-                        child: _MiniPlayer(onTap: _openNowPlaying),
+                      Positioned(
+                        left: 24,
+                        right: 24,
+                        bottom: 20,
+                        child: Center(
+                          child: _MiniPlayer(onTap: _openNowPlaying),
+                        ),
                       ),
                   ],
                 ),
@@ -116,7 +121,10 @@ class _BzHomeState extends ConsumerState<BzHome> {
           : SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                // Floating Liquid Glass bottom chrome: wider margins so the
+                // capsule tab bar and mini-player read as undocked layers,
+                // not edge-to-edge bars (Apple Music 7.0 pattern).
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
