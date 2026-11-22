@@ -28,6 +28,13 @@ class AppleCallbackDto {
   @MaxLength(2048)
   code?: string;
 
+  // Apple sends a URL-encoded profile on first consent. Identity and email
+  // continue to come exclusively from the verified ID token.
+  @IsOptional()
+  @IsString()
+  @MaxLength(8192)
+  user?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(128)
