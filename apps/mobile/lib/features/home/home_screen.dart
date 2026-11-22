@@ -92,7 +92,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Replay is an independent home section.
       }
     }
-    if (!mounted) return;
+    final currentAuth = ref.read(authSessionProvider);
+    final currentOwnerId =
+        currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
+    if (!mounted || currentOwnerId != ownerId) return;
     setState(() {
       _recentlyPlayed = recent;
       _favorites = favorites;
