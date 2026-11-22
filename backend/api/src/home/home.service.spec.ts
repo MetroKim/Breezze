@@ -7,7 +7,7 @@ describe('HomeService listening history', () => {
   const prisma = {
     track: { findUnique: jest.fn() },
     listeningEvent: { findUnique: jest.fn() },
-    recentlyPlayed: { findMany: jest.fn() },
+    recentlyPlayed: { findMany: jest.fn(), upsert: jest.fn() },
     favorite: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -21,6 +21,7 @@ describe('HomeService listening history', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.track.findUnique.mockResolvedValue({ id: 'track-1' });
+    prisma.recentlyPlayed.upsert.mockResolvedValue({ id: 'recent-1' });
     prisma.listeningEvent.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation((callback: (value: typeof tx) => unknown) => callback(tx));
     tx.recentlyPlayed.upsert.mockResolvedValue({ id: 'recent-1' });
@@ -30,6 +31,19 @@ describe('HomeService listening history', () => {
       prisma as unknown as PrismaService,
       recommendations as unknown as RecommendationsService,
     );
+  });
+
+  it('syncs recent history without counting an unqualified listening event', async () => {
+    await expect(service.recordRecent('user-1', 'track-1'))
+      .resolves.toEqual({ recorded: true });
+
+    expect(prisma.recentlyPlayed.upsert).toHaveBeenCalledWith({
+      where: { userId_trackId: { userId: 'user-1', trackId: 'track-1' } },
+      create: { userId: 'user-1', trackId: 'track-1' },
+      update: { playedAt: expect.any(Date) },
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.listeningEvent.create).not.toHaveBeenCalled();
   });
 
   it('records an event and recent history atomically using the supplied event ID', async () => {
