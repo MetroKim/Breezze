@@ -160,9 +160,19 @@ export class PlaybackSessionService {
         });
         return { stopped: true, duplicate: true, qualifiedPlayRecorded: Boolean(event) };
       }
+      const stoppedAt = new Date();
+      const finalCreditMs = Math.max(0, Math.min(
+        MAX_HEARTBEAT_CREDIT_MS,
+        stoppedAt.getTime() - session.lastHeartbeatAt.getTime(),
+      ));
+      const totalAccumulatedMs = session.accumulatedMs + finalCreditMs;
       const stopped = await tx.playbackSession.updateMany({
         where: { id: sessionId, userId, status: 'active' },
-        data: { status: 'stopped', stoppedAt: new Date() },
+        data: {
+          status: 'stopped',
+          stoppedAt,
+          accumulatedMs: { increment: finalCreditMs },
+        },
       });
       if (stopped.count !== 1) {
         const latest = await tx.playbackSession.findUnique({ where: { id: sessionId } });
@@ -175,14 +185,14 @@ export class PlaybackSessionService {
         }
         throw new ConflictException('PLAYBACK_SESSION_STOP_RACE');
       }
-      const qualified = session.accumulatedMs >= 30_000;
+      const qualified = totalAccumulatedMs >= 30_000;
       if (qualified) {
         await tx.listeningEvent.create({
           data: {
             id: session.id,
             userId,
             trackId: session.trackId,
-            playedMs: session.accumulatedMs,
+            playedMs: totalAccumulatedMs,
           },
         });
         await tx.recentlyPlayed.upsert({
@@ -195,7 +205,7 @@ export class PlaybackSessionService {
         stopped: true,
         duplicate: false,
         qualifiedPlayRecorded: qualified,
-        accumulatedMs: session.accumulatedMs,
+        accumulatedMs: totalAccumulatedMs,
       };
     });
   }
