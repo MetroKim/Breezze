@@ -28,9 +28,11 @@ class OutboxSyncService {
       final ops = await outbox.pending(ownerId: ownerId);
       final ownerPrefix = '$ownerId::';
       for (final op in ops) {
+        if (!_isActiveOwner(ownerId)) return;
         if (!op.trackId.startsWith(ownerPrefix)) continue;
         final externalId = op.trackId.substring(ownerPrefix.length);
         final resolution = await _resolveCatalogId(api, externalId, ownerId);
+        if (!_isActiveOwner(ownerId)) return;
         final catalogId = resolution.catalogId;
         if (catalogId == null) {
           // Only malformed/orphaned local operations are discarded. A
@@ -42,13 +44,18 @@ class OutboxSyncService {
           return;
         }
 
-        final ok = await _apply(api, op.op, catalogId);
+        final ok = await _apply(api, op.op, catalogId, ownerId);
         if (!ok) return;
         await outbox.remove(op.id);
       }
     } finally {
       _draining = false;
     }
+  }
+
+  bool _isActiveOwner(String ownerId) {
+    final current = _ref.read(authSessionProvider);
+    return current is AuthSignedIn && current.userId == ownerId;
   }
 
   Future<({String? catalogId, bool discard})> _resolveCatalogId(
@@ -134,7 +141,13 @@ class OutboxSyncService {
     return null;
   }
 
-  Future<bool> _apply(BreezzeApi api, String op, String catalogId) async {
+  Future<bool> _apply(
+    BreezzeApi api,
+    String op,
+    String catalogId,
+    String ownerId,
+  ) async {
+    if (!_isActiveOwner(ownerId)) return false;
     try {
       switch (op) {
         case 'favorite.add':
