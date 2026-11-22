@@ -151,12 +151,13 @@ void main() {
         ),
       ];
     final client = _FakePlaybackSessionClient()..failFirstHeartbeat = true;
+    final store = _MemoryHeartbeatStore();
     final engine = _FakeAudioEngine();
     final container = ProviderContainer(overrides: [
       playbackResolverProvider.overrideWithValue(resolver),
       playbackSessionClientProvider.overrideWithValue(client),
       authSessionProvider.overrideWith(_SignedInAuthController.new),
-      playbackHeartbeatStoreProvider.overrideWithValue(_MemoryHeartbeatStore()),
+      playbackHeartbeatStoreProvider.overrideWithValue(store),
       playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(milliseconds: 5)),
     ]);
     addTearDown(() async {
@@ -174,6 +175,10 @@ void main() {
     expect(client.heartbeatCalls.length, greaterThanOrEqualTo(2));
     expect(client.heartbeatCalls[0]['eventId'], client.heartbeatCalls[1]['eventId']);
     expect(client.heartbeatCalls[0]['sequence'], client.heartbeatCalls[1]['sequence']);
+    final checkpoint = await store.read('listener-1', 'heartbeat-session');
+    expect(checkpoint, isNotNull);
+    expect(checkpoint!.sequence, greaterThan(1));
+    expect(checkpoint.pendingEventId, isNull);
     await player.stop();
   });
 
