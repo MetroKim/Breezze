@@ -391,19 +391,111 @@ class _MiniPlayer extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 2,
-                    backgroundColor: theme.bzSeparator,
-                    color: theme.bzAccent,
+                // Scrubber (blueprint §5.2): pointer-drag seek, not just a
+                // passive indicator. The drag fraction dispatches seekTo
+                // through the player store — UI never touches the engine.
+                _MiniScrubber(
+                  progress: progress,
+                  enabled: player.duration > Duration.zero,
+                  onSeek: (fraction) => controller.seekTo(
+                    Duration(
+                      milliseconds:
+                          (fraction * player.duration.inMilliseconds).toInt(),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Draggable progress strip on the mini-player pill. Tap or drag seeks;
+/// the fill uses the accent token (action/state color) per the accent
+/// discipline contract. Disabled while duration is unknown.
+class _MiniScrubber extends StatefulWidget {
+  final double progress;
+  final bool enabled;
+  final ValueChanged<double> onSeek;
+
+  const _MiniScrubber({
+    required this.progress,
+    required this.enabled,
+    required this.onSeek,
+  });
+
+  @override
+  State<_MiniScrubber> createState() => _MiniScrubberState();
+}
+
+class _MiniScrubberState extends State<_MiniScrubber> {
+  double? _dragValue;
+  bool _dragging = false;
+
+  double get _value =>
+      _dragging && _dragValue != null ? _dragValue! : widget.progress;
+
+  void _updateFromPosition(Offset localPosition, double width) {
+    if (width <= 0) return;
+    final fraction = (localPosition.dx / width).clamp(0.0, 1.0);
+    setState(() => _dragValue = fraction);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      slider: true,
+      label: 'Playback position',
+      enabled: widget.enabled,
+      child: SizedBox(
+        height: 14,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) {
+                if (!widget.enabled) return;
+                _updateFromPosition(details.localPosition, width);
+              },
+              onHorizontalDragStart: (details) {
+                if (!widget.enabled) return;
+                _dragging = true;
+                _updateFromPosition(details.localPosition, width);
+              },
+              onHorizontalDragUpdate: (details) {
+                if (!widget.enabled) return;
+                _updateFromPosition(details.localPosition, width);
+              },
+              onHorizontalDragEnd: (_) {
+                if (!widget.enabled || !_dragging) return;
+                final value = _dragValue;
+                _dragging = false;
+                setState(() => _dragValue = null);
+                if (value != null) widget.onSeek(value);
+              },
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: SizedBox(
+                    height: 3,
+                    width: double.infinity,
+                    child: LinearProgressIndicator(
+                      value: _value,
+                      minHeight: 3,
+                      backgroundColor: theme.bzSeparator,
+                      color: theme.bzAccent,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
