@@ -2,14 +2,11 @@ import 'package:material_ui/material_ui.dart';
 
 import 'tokens.dart';
 
-/// Breezze theme — spec §21.
+/// Breezze theme — Apple Music "Liquid Glass" contract.
 ///
-/// Builds the light and dark Material themes from the §21.1 tokens, and
+/// Builds the light and dark Material themes from the §2.1 tokens, and
 /// exposes the semantic Breezze colors as ThemeData extensions so screens
 /// consume only tokens (no literal colors anywhere else).
-///
-/// This file was missing from the branch while the barrel exported it —
-/// the root cause of the analyzer error cascade.
 
 /// Semantic Breezze colors for the active theme (light or dark).
 class BzThemeColors extends ThemeExtension<BzThemeColors> {
@@ -30,6 +27,12 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
   final Color atmoClear;
   final Color softDiffuse;
 
+  // Liquid Glass additions (§2.1).
+  final Color text3; // --color-text-tertiary: captions, quality badges
+  final Color text4; // --color-text-quaternary: placeholders, faint numbers
+  final Color hairline; // --color-hairline: dividers, list separators
+  final Color accentOnTint; // --color-accent-on-tint
+
   const BzThemeColors({
     required this.background,
     required this.surface1,
@@ -45,6 +48,10 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
     required this.atmoRegular,
     required this.atmoClear,
     required this.softDiffuse,
+    required this.text3,
+    required this.text4,
+    required this.hairline,
+    required this.accentOnTint,
   });
 
   static const light = BzThemeColors(
@@ -62,6 +69,10 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
     atmoRegular: BzColorsLightAtmo.atmoRegular,
     atmoClear: BzColorsLightAtmo.atmoClear,
     softDiffuse: BzColorsLightAtmo.softDiffuse,
+    text3: BzColorsLight.textTertiary,
+    text4: BzColorsLight.textQuaternary,
+    hairline: BzColorsLight.separator,
+    accentOnTint: BzColorsLight.accentOnTint,
   );
 
   static const dark = BzThemeColors(
@@ -79,6 +90,10 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
     atmoRegular: BzColorsDark.atmoRegular,
     atmoClear: BzColorsDark.atmoClear,
     softDiffuse: BzColorsDark.softDiffuse,
+    text3: BzColorsDark.textTertiary,
+    text4: BzColorsDark.textQuaternary,
+    hairline: BzColorsDark.separator,
+    accentOnTint: BzColorsDark.accentOnTint,
   );
 
   @override
@@ -97,6 +112,10 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
     Color? atmoRegular,
     Color? atmoClear,
     Color? softDiffuse,
+    Color? text3,
+    Color? text4,
+    Color? hairline,
+    Color? accentOnTint,
   }) {
     return BzThemeColors(
       background: background ?? this.background,
@@ -110,9 +129,13 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
       success: success ?? this.success,
       warning: warning ?? this.warning,
       error: error ?? this.error,
-    atmoRegular: atmoRegular ?? this.atmoRegular,
+      atmoRegular: atmoRegular ?? this.atmoRegular,
       atmoClear: atmoClear ?? this.atmoClear,
       softDiffuse: softDiffuse ?? this.softDiffuse,
+      text3: text3 ?? this.text3,
+      text4: text4 ?? this.text4,
+      hairline: hairline ?? this.hairline,
+      accentOnTint: accentOnTint ?? this.accentOnTint,
     );
   }
 
@@ -134,6 +157,10 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
       atmoRegular: Color.lerp(atmoRegular, other.atmoRegular, t)!,
       atmoClear: Color.lerp(atmoClear, other.atmoClear, t)!,
       softDiffuse: Color.lerp(softDiffuse, other.softDiffuse, t)!,
+      text3: Color.lerp(text3, other.text3, t)!,
+      text4: Color.lerp(text4, other.text4, t)!,
+      hairline: Color.lerp(hairline, other.hairline, t)!,
+      accentOnTint: Color.lerp(accentOnTint, other.accentOnTint, t)!,
     );
   }
 }
@@ -197,8 +224,12 @@ extension BzThemeX on ThemeData {
   Color get bzSurface2 => bz.surface2;
   Color get bzText1 => bz.text1;
   Color get bzText2 => bz.text2;
+  Color get bzText3 => bz.text3;
+  Color get bzText4 => bz.text4;
+  Color get bzHairline => bz.hairline;
   Color get bzSeparator => bz.separator;
   Color get bzAccent => bz.accent;
+  Color get bzAccentOnTint => bz.accentOnTint;
   Color get bzError => bz.error;
   Color get bzSuccess => bz.success;
   Color get bzWarning => bz.warning;
