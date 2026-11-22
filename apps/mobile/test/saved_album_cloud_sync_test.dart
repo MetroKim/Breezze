@@ -25,6 +25,7 @@ class _FakeCloud extends BreezzeApi {
   int upserts = 0;
   int removals = 0;
   bool failNextUpsert = false;
+  bool failNextList = false;
   void Function()? onUpsert;
 
   @override
@@ -65,6 +66,10 @@ class _FakeCloud extends BreezzeApi {
 
   @override
   Future<Map<String, dynamic>> getSavedAlbums({String? cursor}) async {
+    if (failNextList) {
+      failNextList = false;
+      throw Exception('Network unavailable during cloud read');
+    }
     if (cursor != null) throw StateError('Unexpected page');
     return {
       'items': albums.values.toList(),
@@ -121,6 +126,22 @@ void main() {
     expect(api.albums.keys, contains('456'));
     expect((await restored.load(owner)).single.id, '456');
     expect(api.upserts, 2); // 1 failed, 1 acknowledged
+  });
+
+  test('cloud read failure does not wipe an existing local album', () async {
+    final memory = _MemoryStore();
+    final api = _FakeCloud();
+    final store = SavedAlbumStore(keyValueStore: memory);
+    await store.save(owner, _album('111'));
+    api.failNextList = true;
+    await expectLater(
+      store.syncWithCloud(owner, api, ownerStillActive: () => true),
+      throwsException,
+    );
+    expect((await store.load(owner)).single.id, '111');
+
+    await store.syncWithCloud(owner, api, ownerStillActive: () => true);
+    expect((await store.load(owner)).single.id, '111');
   });
 
   test('pending removal stays deleted locally and reaches cloud', () async {
