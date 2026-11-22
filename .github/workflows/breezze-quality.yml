@@ -112,11 +112,15 @@ jobs:
 
       - name: Build Linux desktop
         working-directory: apps/mobile
-        run: flutter build linux --debug
+        run: flutter build linux --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+
+      - name: Package Linux desktop build
+        working-directory: apps/mobile
+        run: tar -C build/linux/x64/debug -czf build/breezze-linux-debug.tar.gz bundle
 
       - name: Build Android APK
         working-directory: apps/mobile
-        run: flutter build apk --debug
+        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
 
       - name: Prepare Drift WebAssembly database assets
         working-directory: apps/mobile
@@ -124,7 +128,18 @@ jobs:
 
       - name: Build Web
         working-directory: apps/mobile
-        run: flutter build web --release
+        run: flutter build web --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+
+      - name: Publish installable test builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: breezze-test-builds-${{ github.sha }}
+          path: |
+            apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+            apps/mobile/build/breezze-linux-debug.tar.gz
+            apps/mobile/build/web/
+          if-no-files-found: error
+          retention-days: 14
 
   flutter_macos:
     name: Flutter macOS and iOS builds
