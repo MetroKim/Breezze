@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/audio/youtube_player_handoff.dart';
+import '../../core/audio/playback_source_policy.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
@@ -14,10 +15,6 @@ import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
-
-bool _isMetadataOnlySourceTrack(String id) =>
-    id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:'));
 
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
@@ -36,6 +33,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   var _loading = false;
   var _searched = false;
   var _searchLibrary = false;
+  var _searchVideos = false;
   String? _error;
 
   static const _suggestedSearches = <String, String>{
@@ -142,12 +140,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     try {
-      final isVideoSearch = normalized.toLowerCase() == 'music videos';
+      final isVideoSearch = _searchVideos && !_searchLibrary;
       if (isVideoSearch) {
         // The video discovery endpoint only returns YouTube Music's
         // Original Music Video classification, not UGC or static-art tracks.
         final data = await ref.read(authSessionProvider.notifier).api
-            .discoveryMusicVideos(query: 'official music video');
+            .discoveryMusicVideos(query: normalized.toLowerCase() == 'music videos'
+                ? 'official music video'
+                : normalized);
         final rawItems = data['items'];
         final videos = rawItems is List ? rawItems.whereType<Map>() : const <Map>[];
         if (!mounted || generation != _searchGeneration) return;
@@ -164,9 +164,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               duration: Duration(seconds: duration is num ? duration.toInt() : 0),
             );
           }).where((track) => track.id.length > 9).toList();
-          if (_results.isEmpty) {
-            _error = 'No official music videos were found for this search.';
-          }
         });
       } else {
         final op = await ref.read(catalogSourceProvider).search(normalized);
@@ -212,6 +209,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _reuseSearch(String query) {
+    if (query.trim().toLowerCase() == 'music videos') {
+      setState(() {
+        _searchVideos = true;
+        _searchLibrary = false;
+      });
+    }
     _controller.text = query;
     _controller.selection = TextSelection.collapsed(offset: query.length);
     _search(query);
@@ -402,7 +405,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
       return;
     }
-    if (_isMetadataOnlySourceTrack(track.id)) {
+    if (isMetadataOnlyTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
@@ -412,7 +415,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     final playableTracks = _results
-        .where((item) => !_isMetadataOnlySourceTrack(item.id))
+        .where((item) => !isMetadataOnlyTrackId(item.id))
         .toList();
     final queue = [
       for (final item in playableTracks)
@@ -472,7 +475,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   onSubmitted: _search,
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
-                    hintText: 'Songs, artists and more',
+                    hintText: _searchVideos && !_searchLibrary
+                        ? 'Search official music videos'
+                        : 'Songs, artists and more',
                     prefixIcon: BzSvgIcon(name: 'search', color: theme.bzText2),
                     suffixIcon: _controller.text.isEmpty
                         ? null
@@ -533,6 +538,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                   ],
                 ),
+                if (!_searchLibrary) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _SearchScopePill(
+                        label: 'Songs',
+                        active: !_searchVideos,
+                        onTap: () {
+                          if (_searchVideos) {
+                            setState(() => _searchVideos = false);
+                            if (_controller.text.trim().isNotEmpty) {
+                              _search(_controller.text);
+                            }
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _SearchScopePill(
+                        label: 'Music Videos',
+                        active: _searchVideos,
+                        onTap: () {
+                          if (!_searchVideos) {
+                            setState(() => _searchVideos = true);
+                            if (_controller.text.trim().isNotEmpty) {
+                              _search(_controller.text);
+                            }
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -560,7 +597,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         : _results.isEmpty
                             ? Center(
                                 child: Text(
-                                  'No results for "${_controller.text.trim()}"',
+                                  (_searchVideos && !_searchLibrary
+                                      ? 'No official videos found for "${_controller.text.trim()}"'
+                                      : 'No results for "${_controller.text.trim()}"'),
                                   style: theme.textTheme.titleMedium,
                                 ),
                               )
@@ -625,7 +664,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         IconButton(
                                           tooltip: track.id.startsWith('bzv:') ? 'Watch music video' : 'Play',
                                           icon: BzSvgIcon(name: 'play', color: theme.bzText1, size: 19),
-                                          onPressed: (track.id.startsWith('bzv:') || !_isMetadataOnlySourceTrack(track.id))
+                                          onPressed: (track.id.startsWith('bzv:') || !isMetadataOnlyTrackId(track.id))
                                               ? () => _play(track)
                                               : null,
                                         ),
@@ -668,7 +707,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             }
                                           },
                                           itemBuilder: (context) => [
-                                            if (!_isMetadataOnlySourceTrack(track.id)) ...[
+                                            if (!isMetadataOnlyTrackId(track.id)) ...[
                                               const PopupMenuItem(
                                                 value: 'play_next',
                                                 child: Text('Play Next'),
@@ -706,7 +745,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                   name: 'download',
                                                   color: theme.bzText1,
                                                 ),
-                                                onPressed: (track.id.startsWith('bz:') || track.id.startsWith('bzv:'))
+                                                onPressed: !canRequestOfflineDownload(track.id)
                                                     ? null
                                                     : () => _download(track),
                                               ),
