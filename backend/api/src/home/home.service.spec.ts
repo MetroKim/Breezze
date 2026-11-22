@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { HomeService } from './home.service';
+import { RecommendationsService } from '../recommendations/recommendations.service';
 
 describe('HomeService listening history', () => {
   const prisma = {
@@ -13,6 +14,7 @@ describe('HomeService listening history', () => {
     recentlyPlayed: { upsert: jest.fn() },
     listeningEvent: { create: jest.fn() },
   };
+  const recommendations = { forUser: jest.fn() };
   let service: HomeService;
 
   beforeEach(() => {
@@ -21,7 +23,11 @@ describe('HomeService listening history', () => {
     prisma.$transaction.mockImplementation((callback: (value: typeof tx) => unknown) => callback(tx));
     tx.recentlyPlayed.upsert.mockResolvedValue({ id: 'recent-1' });
     tx.listeningEvent.create.mockResolvedValue({ id: 'event-1' });
-    service = new HomeService(prisma as unknown as PrismaService);
+    recommendations.forUser.mockResolvedValue([]);
+    service = new HomeService(
+      prisma as unknown as PrismaService,
+      recommendations as unknown as RecommendationsService,
+    );
   });
 
   it('records recent history and listening analytics atomically', async () => {
@@ -51,5 +57,34 @@ describe('HomeService listening history', () => {
     await expect(service.recordPlay('user-1', 'track-1', 29_999))
       .rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomeService personalized feed integration', () => {
+  const prisma = {
+    recentlyPlayed: { findMany: jest.fn().mockResolvedValue([]) },
+    favorite: { findMany: jest.fn().mockResolvedValue([]) },
+  };
+  const recommendations = { forUser: jest.fn() };
+
+  it('includes the recommendation service output as a personalized home shelf', async () => {
+    recommendations.forUser.mockResolvedValue([
+      { trackId: 'recommended-1', reason: 'Because you listen to this artist' },
+      { trackId: 'recommended-2', reason: 'Popular on Breezze' },
+    ]);
+    const service = new HomeService(
+      prisma as unknown as PrismaService,
+      recommendations as unknown as RecommendationsService,
+    );
+
+    await expect(service.feed('user-1')).resolves.toEqual([
+      {
+        sectionType: 'personalized',
+        title: 'Made for You',
+        layout: 'rail',
+        trackIds: ['recommended-1', 'recommended-2'],
+      },
+    ]);
+    expect(recommendations.forUser).toHaveBeenCalledWith('user-1');
   });
 });
