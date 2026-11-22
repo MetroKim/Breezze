@@ -130,6 +130,9 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> {
       debugShowCheckedModeBanner: false,
       theme: bzLightTheme(),
       darkTheme: bzDarkTheme(),
+      // Shell chrome demotes its glass to solids while a fullscreen route
+      // covers it (NFR-007 blur budget across route transitions).
+      navigatorObservers: [bzRouteObserver],
       home: Builder(
         builder: (context) {
           if (auth is AuthUninitialized) {
