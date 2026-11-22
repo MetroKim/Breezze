@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -81,6 +82,7 @@ class TrackDetailScreen extends ConsumerWidget {
           artworkUrl: track.artworkUrl,
           durationMs: track.duration.inMilliseconds,
         ));
+        await ref.read(outboxSyncProvider).drainIfSignedIn();
       }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
