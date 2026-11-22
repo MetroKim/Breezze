@@ -45,7 +45,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
   final Ref _ref;
 
   @override
-  String get providerId => 'youtube_music';
+  String get providerId => 'federated_catalog';
 
   @override
   String get adapterVersion => '1.0.0';
@@ -55,7 +55,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
     final duration = value['durationSec'];
     return ProviderTrack(
       breezzeTrackId: 'bz:$providerId:$trackId',
-      providerTrackId: trackId,
+      providerTrackId: '$providerId:$trackId',
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
       artworkUrl: value['artworkUrl'] as String?,
@@ -134,13 +134,19 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
   @override
   Future<ProviderOp<ProviderTrack>> getTrack(String providerTrackId) async {
     try {
+      final separator = providerTrackId.indexOf(':');
+      if (separator <= 0 || separator == providerTrackId.length - 1) {
+        return ProviderError('invalid_provider_track_id');
+      }
+      final source = providerTrackId.substring(0, separator);
+      final sourceTrackId = providerTrackId.substring(separator + 1);
       final data = await _ref.read(authSessionProvider.notifier).api
-          .getProviderTrack(providerId, providerTrackId);
+          .getProviderTrack(source, sourceTrackId);
       final value = data['value'];
       if (data['kind'] != 'ok' || value is! Map) {
         return ProviderError('track_metadata_unavailable');
       }
-      return ProviderOk(_trackFromJson(value, providerId: providerId));
+      return ProviderOk(_trackFromJson(value, providerId: source));
     } catch (_) {
       return ProviderError('network_error');
     }
@@ -163,7 +169,7 @@ final sourceChainProvider = Provider<SourceChain>((ref) => SourceChain([
 
 /// The playback resolver. Catalog metadata is converged to a canonical
 /// backend track ID, then full-stream playback is authorized by the backend.
-/// The mobile client never turns a YouTube metadata result directly into a
+/// The mobile client never turns catalogue metadata directly into a
 /// playable stream URL.
 class LiveResolver implements PlaybackResolver {
   final Ref _ref;
