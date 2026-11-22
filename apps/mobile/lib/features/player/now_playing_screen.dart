@@ -12,9 +12,10 @@ import '../player/player_controller.dart';
 
 /// Now Playing — premium edition: ambient artwork backdrop (content is
 /// the colour), breathing artwork on the calm 2s loop, word-synced
-/// karaoke lyrics, and immersive chrome that recedes to 0.15 opacity
+/// karaoke lyrics, scrolling marquee for long titles, a drag-reorderable
+/// Playing Next queue, and immersive chrome that recedes to 0.15 opacity
 /// after 3s without input and restores instantly on any interaction
-/// (spec §4.2 / FR-005).
+/// (spec §4.2 / FR-005 / §A.4).
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -138,7 +139,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               title: const Text('Playing Next'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                _openPlayingNext();
+                _openPlayingNextNext();
               },
             ),
             ListTile(
@@ -275,17 +276,21 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(track.title ?? 'Unknown track',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.titleLarge),
+                                    // Apple Music scrolls long titles in a
+                                    // continuous marquee; short ones stay
+                                    // still. Reduced motion keeps it static.
+                                    BzMarquee(
+                                      text: track.title ?? 'Unknown track',
+                                      style: theme.textTheme.titleLarge!,
+                                    ),
                                     const SizedBox(height: 4),
-                                    Text(track.artist ?? '',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontSize: BzType.body,
-                                            color: theme.bzText2)),
+                                    BzMarquee(
+                                      text: track.artist ?? '',
+                                      style: TextStyle(
+                                        fontSize: BzType.body,
+                                        color: theme.bzText2,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -436,6 +441,126 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
+/// Scrolling marquee for overflowing titles — the Apple Music treatment
+/// for long song names. Still under reduced motion, where the text just
+/// ellipsizes. No package: a simple two-state clip translation.
+class BzMarquee extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final Duration pauseDuration;
+  final Duration scrollDuration;
+
+  const BzMarquee({
+    super.key,
+    required this.text,
+    required this.style,
+    this.pauseDuration = const Duration(seconds: 2),
+    this.scrollDuration = const Duration(seconds: 6),
+  });
+
+  @override
+  State<BzMarquee> createState() => _BzMarqueeState();
+}
+
+class _BzMarqueeState extends State<BzMarquee> {
+  bool _needsScroll = false;
+  double _textWidth = 0;
+  double _containerWidth = 0;
+  Timer? _timer;
+  double _offset = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _measure();
+  }
+
+  void _measure() {
+    final textPainter = TextPainter(
+      text: TextSpan(text: widget.text, style: widget.style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    _textWidth = textPainter.width;
+    _needsScroll = _textWidth > _containerWidth && _containerWidth > 0;
+    if (!_needsScroll) {
+      _timer?.cancel();
+      _timer = null;
+      _offset = 0;
+      return;
+    }
+    _startCycle();
+  }
+
+  void _startCycle() {
+    _timer?.cancel();
+    _timer = Timer(widget.pauseDuration, _scroll);
+  }
+
+  void _scroll() {
+    if (!mounted) return;
+    setState(() {
+      _offset = 0;
+      _needsScroll = true;
+    });
+    Future.delayed(widget.scrollDuration, () {
+      if (!mounted) return;
+      setState(() => _offset = 0);
+      _timer = Timer(widget.pauseDuration, _scroll);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      return Text(
+        widget.text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: widget.style,
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _containerWidth = constraints.maxWidth;
+        return ClipRect(
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              AnimatedSlide(
+                offset:
+                    _needsScroll ? Offset(_offset, 0) : Offset.zero,
+                duration: widget.scrollDuration,
+                curve: Curves.linear,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 32),
+                  child: Text(
+                    widget.text,
+                    maxLines: 1,
+                    style: widget.style,
+                  ),
+                ),
+                onEnd: () {
+                  if (_needsScroll && _offset == 0) {
+                    // First pass complete: snap to start and schedule the
+                    // next cycle after the pause.
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _BreathingArtwork extends StatefulWidget {
   final bool playing;
   final String? artworkUrl;
@@ -490,7 +615,7 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
   void dispose() {
     _controller.dispose();
     super.dispose();
-  }
+effect  }
 
   @override
   Widget build(BuildContext context) {
@@ -504,7 +629,7 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
           scale: _controller,
           child: Container(
             width: side,
-            height: side,
+            artworkUrlheight: side,
             decoration: BoxDecoration(
               color: colors.surface2,
               borderRadius: BorderRadius.circular(BzRadius.artwork),
@@ -518,7 +643,7 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(BzRadius.artwork),
+              borderRadius: BorderRadius.circular(Bz8669Radius.artwork),
               child: widget.artworkUrl != null
                   ? Image.network(
                       widget.artworkUrl!,
@@ -578,7 +703,7 @@ class _PlayPauseButton extends StatelessWidget {
 /// Apple Music karaoke treatment where focus tracks the voice.
 class _LyricsView extends StatelessWidget {
   final Lyrics? lyrics;
-  final String mode;
+  final final String mode;
   final Duration position;
 
   const _LyricsView({
@@ -597,7 +722,7 @@ class _LyricsView extends StatelessWidget {
         children: [
           BzSkeleton(width: 220, height: 14, radius: 5),
           SizedBox(height: 14),
-          BzSkeleton(width: 280, height: 14, radius: 5),
+          BzSkeleton(width: 280, height: quee 14, radius: 5),
           SizedBox(height: 14),
           BzSkeleton(width: 190, height: 14, radius: 5),
         ],
@@ -664,7 +789,7 @@ class _LyricsView extends StatelessWidget {
             children: [
               for (var w = 0; w < line.words.length; w++)
                 Padding(
-                  padding: const EdgeInsets.only(right: 6),
+padding: const EdgeInsets.only(right: 6),
                   child: AnimatedDefaultTextStyle(
                     duration: const Duration(milliseconds: 200),
                     style: TextStyle(
@@ -696,7 +821,7 @@ class _FavoriteButton extends ConsumerStatefulWidget {
   ConsumerState<_FavoriteButton> createState() => _FavoriteButtonState();
 }
 
-class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
+class _FavoriteButtonState extends State<_FavoriteButton> {
   bool _isFavorite = false;
 
   @override
@@ -753,6 +878,10 @@ class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
   }
 }
 
+/// Drag-reorderable Playing Next queue (blueprint §A.4). Long-press and
+/// drag any upcoming row — the sheet calls the tested QueueManager
+/// .reorder() with stable entry IDs, so playback position is preserved.
+/// Swipe-to-remove stays available as the fast path.
 class _PlayingNextSheet extends ConsumerWidget {
   const _PlayingNextSheet();
 
@@ -764,6 +893,9 @@ class _PlayingNextSheet extends ConsumerWidget {
     final upcoming = queue.upNext;
     final theme = Theme.of(context);
     final current = player.currentTrack;
+    // Absolute index of the first up-next entry inside the full entry
+    // list; queue.reorder() works on absolute positions.
+    final baseIndex = queue.length - upcoming.length;
 
     return SafeArea(
       child: SizedBox(
@@ -866,8 +998,18 @@ class _PlayingNextSheet extends ConsumerWidget {
                             ?.copyWith(color: theme.bzText2),
                       ),
                     )
-                  : ListView.builder(
+                  : ReorderableListView.builder(
+                      buildDefaultDragHandles: false,
                       itemCount: upcoming.length,
+                      onReorder: (oldIndex, newIndex) {
+                        // Map the up-next-local indices to absolute queue
+                        // positions before calling the tested reorder API.
+                        final from = baseIndex + oldIndex;
+                        var to = baseIndex + newIndex;
+                        if (newIndex > oldIndex) to -= 1;
+                        final entryId = upcoming[oldIndex].entryId;
+                        queue.reorder(entryId, to);
+                      },
                       itemBuilder: (context, index) {
                         final entry = upcoming[index];
                         final info = controller.trackInfoFor(entry.trackId);
@@ -885,6 +1027,7 @@ class _PlayingNextSheet extends ConsumerWidget {
                           ),
                           onDismissed: (_) => queue.remove(entry.entryId),
                           child: ListTile(
+                            key: ValueKey(entry.entryId),
                             leading:
                                 BzBnoteMark(size: 40, color: theme.bzText2),
                             title: Text(
@@ -897,13 +1040,16 @@ class _PlayingNextSheet extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: IconButton(
-                              tooltip: 'Remove from queue',
-                              onPressed: () => queue.remove(entry.entryId),
-                              icon: BzSvgIcon(
-                                name: 'close',
-                                color: theme.bzText2,
-                                size: 18,
+                            trailing: ReorderableDragStartListener(
+                              index: index,
+                              child: IconButton(
+                                tooltip: 'Reorder',
+                                icon: BzSvgIcon(
+                                  name: 'grip',
+                                  color: theme.bzText2,
+                                  size: 20,
+                                ),
+                                onPressed: null,
                               ),
                             ),
                           ),
