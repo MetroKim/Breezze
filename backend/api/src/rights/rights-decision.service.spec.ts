@@ -5,9 +5,9 @@ describe('RightsDecisionService', () => {
   let fullPermission: any;
   let previewPermission: any;
   const prisma = {
-    territoryAvailability: { findFirst: jest.fn() },
-    contentTakedownCase: { findFirst: jest.fn() },
-    rightsUsagePermission: { findFirst: jest.fn() },
+    territoryAvailability: { findFirst: jest.fn(), findMany: jest.fn() },
+    contentTakedownCase: { findFirst: jest.fn(), findMany: jest.fn() },
+    rightsUsagePermission: { findFirst: jest.fn(), findMany: jest.fn() },
     providerAttribution: { findFirst: jest.fn() },
   };
   let service: RightsDecisionService;
@@ -25,6 +25,9 @@ describe('RightsDecisionService', () => {
         ),
     );
     prisma.providerAttribution.findFirst.mockResolvedValue({ text: 'Licensed via label' });
+    prisma.territoryAvailability.findMany.mockResolvedValue([]);
+    prisma.contentTakedownCase.findMany.mockResolvedValue([]);
+    prisma.rightsUsagePermission.findMany.mockResolvedValue([]);
     service = new RightsDecisionService(prisma as unknown as PrismaService);
   });
 
