@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { HomeService } from './home.service';
 
@@ -49,7 +49,7 @@ describe('HomeService listening history', () => {
 
   it('does not count plays below the 30-second threshold', async () => {
     await expect(service.recordPlay('user-1', 'track-1', 29_999))
-      .rejects.toBeInstanceOf(NotFoundException);
+      .rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
