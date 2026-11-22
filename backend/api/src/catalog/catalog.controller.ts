@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
+  NotAcceptableException,
   Param,
   Post,
   UseGuards,
@@ -32,11 +34,18 @@ export class ResolveTrackDto {
   durationSec!: number;
 }
 
+function requireEdgeTerritory(value?: string): string {
+  const territory = value?.trim().toUpperCase();
+  if (!territory || !/^[A-Z]{2}$/.test(territory)) {
+    throw new NotAcceptableException('CATALOG_TERRITORY_UNAVAILABLE');
+  }
+  return territory;
+}
+
 @Controller('catalog')
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
 
-  // ID convergence: external track → one canonical catalog row.
   @Post('resolve')
   @UseGuards(JwtAuthGuard)
   resolve(@Body() dto: ResolveTrackDto) {
@@ -44,17 +53,26 @@ export class CatalogController {
   }
 
   @Get('songs/:id')
-  song(@Param('id') id: string) {
-    return this.catalog.song(id);
+  song(
+    @Param('id') id: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+  ) {
+    return this.catalog.song(id, requireEdgeTerritory(edgeCountry));
   }
 
   @Get('albums/:id')
-  album(@Param('id') id: string) {
-    return this.catalog.album(id);
+  album(
+    @Param('id') id: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+  ) {
+    return this.catalog.album(id, requireEdgeTerritory(edgeCountry));
   }
 
   @Get('artists/:id')
-  artist(@Param('id') id: string) {
-    return this.catalog.artist(id);
+  artist(
+    @Param('id') id: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+  ) {
+    return this.catalog.artist(id, requireEdgeTerritory(edgeCountry));
   }
 }
