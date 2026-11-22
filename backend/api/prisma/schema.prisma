@@ -144,6 +144,8 @@ model Track {
   playlistItems PlaylistItem[]
   downloads DownloadRecord[]
   lyrics Lyrics?
+
+  @@index([artistId, title])
 }
 
 model TerritoryAvailability {
@@ -172,6 +174,8 @@ model ContentTakedownCase {
   status    String   @default("active")
   createdAt DateTime @default(now())
   track     Track    @relation(fields: [trackId], references: [id])
+
+  @@index([trackId, status])
 }
 
 model ProviderAttribution {
@@ -192,6 +196,7 @@ model Favorite {
   track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
 
   @@unique([userId, trackId])
+  @@index([userId, createdAt])
 }
 
 model RecentlyPlayed {
@@ -203,6 +208,7 @@ model RecentlyPlayed {
   track       Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
 
   @@unique([userId, trackId])
+  @@index([userId, playedAt])
 }
 
 model ListeningEvent {
@@ -213,6 +219,9 @@ model ListeningEvent {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@index([userId, trackId])
+  @@index([trackId, createdAt])
 }
 
 model Playlist {
