@@ -65,6 +65,25 @@ export class HomeService {
     return sections;
   }
 
+  /**
+   * Syncs the local Recently Played shelf without creating a listening
+   * analytics event. Qualified listening events use recordPlay instead.
+   */
+  async recordRecent(userId: string, trackId: string) {
+    const track = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: { id: true },
+    });
+    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
+
+    await this.prisma.recentlyPlayed.upsert({
+      where: { userId_trackId: { userId, trackId } },
+      create: { userId, trackId },
+      update: { playedAt: new Date() },
+    });
+    return { recorded: true };
+  }
+
   async recordPlay(userId: string, eventId: string, trackId: string, playedMs: number) {
     if (!Number.isInteger(playedMs) || playedMs < 30_000 || playedMs > 86_400_000) {
       throw new BadRequestException('PLAY_DURATION_NOT_QUALIFIED');
