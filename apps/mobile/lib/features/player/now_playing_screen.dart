@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
@@ -32,7 +34,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   void initState() {
     super.initState();
     _loadLyrics();
-    _scheduleRecede();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleRecede());
   }
 
   @override
@@ -41,8 +43,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     super.dispose();
   }
 
-  /// Chrome recedes after 3s without input (FR-005).
+  /// Chrome recedes after 3s without input (FR-005). Skipped entirely under
+  /// reduced motion or accessible navigation — the chrome stays put for
+  /// users who depend on it.
   void _scheduleRecede() {
+    if (!mounted) return;
     _recedeTimer?.cancel();
     if (MediaQuery.disableAnimationsOf(context) ||
         MediaQuery.accessibleNavigationOf(context)) {
@@ -412,8 +417,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               ),
             ),
           ),
-          ),
-        ),
         ),
       ),
     );
