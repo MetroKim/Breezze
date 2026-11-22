@@ -165,7 +165,7 @@ class _DesktopNavigation extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.bzSurface1,
         border: Border(
-          right: BorderSide(color: theme.bzSeparator, width: 0.7),
+          right: BorderSide(color: theme.bzSeparator, width: 0.5),
         ),
       ),
       child: SafeArea(
@@ -229,6 +229,9 @@ class _DesktopTabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = active ? theme.bzAccent : theme.bzText2;
+    // Selected rows use a quiet 5% tint fill with an 8px radius —
+    // never a filled capsule at rest (spec: sidebar selection contract).
+    final activeFill = theme.bzText1.withValues(alpha: 0.05);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Semantics(
@@ -238,7 +241,7 @@ class _DesktopTabButton extends StatelessWidget {
         child: Tooltip(
           message: destination.label,
           child: Material(
-            color: active ? theme.bzSurface2 : Colors.transparent,
+            color: active ? activeFill : Colors.transparent,
             borderRadius: BorderRadius.circular(BzRadius.button),
             child: InkWell(
               borderRadius: BorderRadius.circular(BzRadius.button),
@@ -306,11 +309,11 @@ class _MiniPlayer extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(BzRadius.card),
+          borderRadius: BorderRadius.circular(BzRadius.capsule),
           onTap: onTap,
           child: BzGlassContainer(
-          radius: BzRadius.card,
-          blur: 18,
+          radius: BzRadius.capsule,
+          blur: 24,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 8, 7),
             child: Column(
@@ -393,8 +396,8 @@ class _MiniPlayer extends ConsumerWidget {
             ),
           ),
         ),
+        ),
       ),
-    ),
     );
   }
 }
@@ -473,8 +476,8 @@ class _TabBar extends StatelessWidget {
             context,
           ),
           child: BzGlassContainer(
-            radius: BzRadius.card,
-            blur: 18,
+            radius: BzRadius.capsule,
+            blur: 16,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
               child: Row(
