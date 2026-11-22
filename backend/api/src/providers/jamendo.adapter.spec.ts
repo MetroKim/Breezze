@@ -14,6 +14,7 @@ describe('JamendoAdapter', () => {
     jest.clearAllMocks();
     process.env.JAMENDO_CLIENT_ID = 'test-client-id';
     process.env.JAMENDO_API_TERMS_ACCEPTED = 'true';
+    process.env.JAMENDO_BREEZZE_APPROVED = 'true';
     process.env.JAMENDO_ENABLED = 'true';
     delete process.env.BREEZZE_NONCOMMERCIAL;
     adapter = new JamendoAdapter(cache as unknown as ProviderCacheService);
@@ -42,11 +43,21 @@ describe('JamendoAdapter', () => {
     expect(result.value[0]).toMatchObject({
       providerTrackId: '12345', title: 'Open Road', artist: 'Test Artist',
       durationSec: 201, artworkUrl: 'https://usercontent.jamendo.com/cover.jpg',
+      sourceUrl: 'https://www.jamendo.com/track/12345',
     });
     expect(global.fetch).toHaveBeenCalledWith(
       expect.objectContaining({ href: expect.stringContaining('/tracks/?client_id=test-client-id') }),
       expect.any(Object),
     );
+  });
+
+  it('does not enable Jamendo without explicit approval for Breezze distribution', async () => {
+    delete process.env.JAMENDO_BREEZZE_APPROVED;
+    adapter = new JamendoAdapter(cache as unknown as ProviderCacheService);
+    await expect(adapter.search('test')).resolves.toMatchObject({
+      kind: 'unsupported', reason: 'JAMENDO_NOT_CONFIGURED',
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('does not call Jamendo when developer credentials and terms acceptance are missing', async () => {
