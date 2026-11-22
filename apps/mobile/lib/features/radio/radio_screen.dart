@@ -1,10 +1,7 @@
-import 'dart:convert';
-
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
-
+import '../../core/api/breezze_api.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -85,25 +82,9 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
 
     try {
       final api = ref.read(authSessionProvider.notifier).api;
-      final response = await http
-          .get(Uri.parse('${api.baseUrl}/api/v1/radio/stations'))
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode >= 400) {
-        throw Exception('Radio API returned ${response.statusCode}');
-      }
-      final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
-      final payload = decoded is Map<String, dynamic>
-          ? decoded['data'] ?? decoded
-          : decoded;
-      if (payload is! List) {
-        throw const FormatException('Invalid radio station response');
-      }
-
+      final payload = await api.getRadioStations();
       final stations = payload
-          .whereType<Map>()
-          .map((item) => _RadioStation.fromJson(
-                Map<String, dynamic>.from(item),
-              ))
+          .map(_RadioStation.fromJson)
           .where((station) => station.id.isNotEmpty)
           .toList();
 
@@ -122,33 +103,23 @@ class _RadioScreenState extends ConsumerState<RadioScreen> {
   }
 
   Future<List<_RadioProgram>> _loadPrograms(
-    String baseUrl,
+    BreezzeApi api,
     String stationId,
   ) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/api/v1/radio/stations/$stationId'))
-        .timeout(const Duration(seconds: 10));
-    if (response.statusCode >= 400) {
-      throw Exception('Station detail unavailable');
-    }
-    final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
-    final payload = decoded is Map<String, dynamic>
-        ? decoded['data'] ?? decoded
-        : decoded;
-    final rawPrograms =
-        payload is Map<String, dynamic> ? payload['programs'] : null;
+    final station = await api.getRadioStation(stationId);
+    final rawPrograms = station['programs'];
     if (rawPrograms is! List) return const [];
     return rawPrograms
         .whereType<Map>()
         .map((item) => _RadioProgram.fromJson(
               Map<String, dynamic>.from(item),
             ))
-        .toList();
+        .toList(growable: false);
   }
 
   Future<void> _showStation(_RadioStation station) async {
     final api = ref.read(authSessionProvider.notifier).api;
-    final programs = _loadPrograms(api.baseUrl, station.id);
+    final programs = _loadPrograms(api, station.id);
 
     await showModalBottomSheet<void>(
       context: context,
