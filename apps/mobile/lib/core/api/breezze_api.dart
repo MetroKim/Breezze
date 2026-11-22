@@ -360,6 +360,13 @@ class BreezzeApi {
   Future<Map<String, dynamic>> recordRecent(String trackId) =>
       _post('/home/recent', {'trackId': trackId});
 
+  Future<Map<String, dynamic>> addFavorite(String trackId) =>
+      _post('/library/favorites', {'trackId': trackId});
+
+  Future<void> removeFavorite(String trackId) async {
+    await _delete('/library/favorites/${Uri.encodeComponent(trackId)}');
+  }
+
   /// Backwards-compatible history sync. It no longer submits a qualified
   /// ListeningEvent; those are recorded only by server-authorized sessions.
   @Deprecated('Use recordRecent; qualified plays require a playback session')
