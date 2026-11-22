@@ -11,6 +11,8 @@ class SavedAlbum {
   final String artist;
   final String? artworkUrl;
   final String? catalogUrl;
+  final List<String> genres;
+  final bool isCompilation;
   final DateTime addedAt;
 
   const SavedAlbum({
@@ -20,6 +22,8 @@ class SavedAlbum {
     required this.addedAt,
     this.artworkUrl,
     this.catalogUrl,
+    this.genres = const [],
+    this.isCompilation = false,
   });
 
   factory SavedAlbum.fromJson(Map<String, dynamic> json) => SavedAlbum(
@@ -28,6 +32,15 @@ class SavedAlbum {
         artist: json['artist'] as String? ?? 'Unknown artist',
         artworkUrl: json['artworkUrl'] as String?,
         catalogUrl: json['catalogUrl'] as String?,
+        genres: json['genres'] is List
+            ? (json['genres'] as List)
+                .whereType<String>()
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toSet()
+                .toList(growable: false)
+            : const [],
+        isCompilation: json['isCompilation'] == true,
         addedAt: DateTime.tryParse(json['addedAt'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       );
@@ -38,6 +51,8 @@ class SavedAlbum {
         'artist': artist,
         'artworkUrl': artworkUrl,
         'catalogUrl': catalogUrl,
+        'genres': genres,
+        'isCompilation': isCompilation,
         'addedAt': addedAt.toUtc().toIso8601String(),
       };
 }
