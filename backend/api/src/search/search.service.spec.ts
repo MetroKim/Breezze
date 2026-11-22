@@ -5,8 +5,8 @@ import { RightsDecisionService } from '../rights/rights-decision.service';
 
 describe('SearchService', () => {
   const tracks = [{ id: 'track-1', title: 'Amapiano Nights' }];
-  const artists = [{ id: 'artist-1', name: 'Amapiano Collective' }];
-  const albums = [{ id: 'album-1', title: 'Amapiano Sessions' }];
+  const artists = [{ id: 'artist-1', name: 'Amapiano Collective', tracks: [{ id: 'track-1' }] }];
+  const albums = [{ id: 'album-1', title: 'Amapiano Sessions', tracks: [{ id: 'track-1' }] }];
 
   const prisma = {
     track: { findMany: jest.fn() },
@@ -54,8 +54,8 @@ describe('SearchService', () => {
   it('trims the query and searches tracks, artists and albums with bounded results', async () => {
     await expect(service.search('  Amapiano  ', 'TZ')).resolves.toEqual({
       tracks,
-      artists,
-      albums,
+      artists: [{ id: 'artist-1', name: 'Amapiano Collective' }],
+      albums: [{ id: 'album-1', title: 'Amapiano Sessions' }],
       externalTracks: [],
       externalProviderStatus: 'ok',
       providerStatuses: [{ providerId: 'youtube_music', status: 'ok' }],
@@ -68,12 +68,14 @@ describe('SearchService', () => {
     });
     expect(prisma.artist.findMany).toHaveBeenCalledWith({
       where: { name: { contains: 'Amapiano', mode: 'insensitive' } },
+      include: { tracks: { select: { id: true }, take: 100 } },
       take: 5,
     });
     expect(youtubeMusic.search).toHaveBeenCalledWith('Amapiano');
     expect(rights.filterMetadataDisplay).toHaveBeenCalledWith(['track-1'], 'TZ');
     expect(prisma.album.findMany).toHaveBeenCalledWith({
       where: { title: { contains: 'Amapiano', mode: 'insensitive' } },
+      include: { tracks: { select: { id: true }, take: 100 } },
       take: 5,
     });
   });
