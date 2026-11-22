@@ -9,13 +9,16 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   final AudioPlayer _player = AudioPlayer();
   final StreamController<PlaybackState> _states =
       StreamController<PlaybackState>.broadcast();
-  late final StreamSubscription<PlayerException> _errorSubscription;
+  late final StreamSubscription<PlaybackEvent> _errorSubscription;
   late final StreamSubscription<PlayerState> _stateSubscription;
 
   JustAudioEngineAdapter() {
-    _errorSubscription = _player.errorStream.listen((_) {
-      _states.add(PlaybackState.failed);
-    });
+    _errorSubscription = _player.playbackEventStream.listen(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        _states.add(PlaybackState.failed);
+      },
+    );
     _stateSubscription = _player.playerStateStream.listen((state) {
       PlaybackState mapped;
       final processing = state.processingState;
