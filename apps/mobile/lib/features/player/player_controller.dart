@@ -383,6 +383,7 @@ class PlayerController extends Notifier<PlayerState> {
           (Object error, StackTrace stackTrace) {
             final currentTrackId = state.currentTrack?.id;
             if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+            unawaited(_closePlaybackSession());
             _machine.dispatch(SourceResolutionFailed(
               'RESUME_FAILED',
               requestId: _machine.activeRequestId,
@@ -631,6 +632,7 @@ class PlayerController extends Notifier<PlayerState> {
           (Object error, StackTrace stackTrace) {
             if (_isCurrentRequest(requestId)) {
               _scrobbles.onStop(info.id);
+              unawaited(_closePlaybackSession());
               _machine.dispatch(SourceResolutionFailed(
                 'PLAYBACK_FAILED',
                 requestId: requestId,
