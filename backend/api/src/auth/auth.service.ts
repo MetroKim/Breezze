@@ -42,6 +42,10 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
   private hashRefreshToken(token: string): string {
     return createHash('sha256').update(token, 'utf8').digest('hex');
   }
@@ -89,7 +93,11 @@ export class AuthService {
     password: string,
     displayName?: string,
   ): Promise<AuthResult> {
-    const exists = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = this.normalizeEmail(email);
+    const exists = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      select: { id: true },
+    });
     if (exists) throw new ConflictException('EMAIL_TAKEN');
 
     const passwordHash = await argon2.hash(password, {
@@ -98,14 +106,29 @@ export class AuthService {
       timeCost: 2,
       parallelism: 1,
     });
-    const user = await this.prisma.user.create({
-      data: { email, passwordHash, displayName: displayName ?? null },
-    });
+    let user: AuthUser;
+    try {
+      user = await this.prisma.user.create({
+        data: { email: normalizedEmail, passwordHash, displayName: displayName ?? null },
+      });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        (error as { code?: string }).code === 'P2002'
+      ) {
+        throw new ConflictException('EMAIL_TAKEN');
+      }
+      throw error;
+    }
     return this.issueTokens(user);
   }
 
   async login(email: string, password: string): Promise<AuthResult> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+    });
     if (!user) throw new UnauthorizedException('INVALID_CREDENTIALS');
 
     const valid = await argon2
