@@ -173,13 +173,16 @@ Breezze has no subscriptions, tiers, payment flows or artist portal in this rele
 
 ### Phase 3 — Playback
 
-The shared Flutter engine uses `just_audio`; Linux and Windows use the `just_audio_media_kit` platform implementation with the corresponding native audio libraries. Platform build success is not a substitute for real-device playback certification.
+The shared Flutter engine uses `just_audio`; Linux and Windows use the `just_audio_media_kit` platform implementation with the corresponding native audio libraries. Android/iOS expose one `audio_service` media session whose commands delegate to the same global `PlayerController` (there is no second player). The native runner generator configures Android foreground media playback and iOS audio background mode. Platform build success is not a substitute for real-device playback certification. Desktop OS media-key integration is not yet implemented.
 - [x] Add a backend provider playback resolver; Audius uses its official stream endpoint and rejects gated/API-restricted tracks.
 - [ ] Complete canonical recording mappings, territory policy and same-recording failover before enabling additional providers.
 - [ ] Return short-lived, typed playback grants, never provider-specific secrets.
 - [ ] Resolve queue entries when they reach the front.
 - [ ] Implement bounded failover only for the same recording and same rights scope.
-- [ ] Validate background, lock-screen, seek, queue, repeat, shuffle and interruptions on each OS.
+- [x] Add Android/iOS audio_service media-session bridge for lock-screen/notification metadata and play/pause/next/previous/stop/seek commands.
+- [x] Add Android foreground media-service and iOS background-audio declarations to native runner generation.
+- [ ] Validate background, lock-screen, seek, queue, repeat, shuffle and interruptions on physical Android/iOS devices.
+- [ ] Add native system media-key integration for Linux, Windows and macOS.
 - [x] Refresh an expired provider playback grant when resuming a paused queue item.
 - [ ] Validate the just_audio MediaKit Linux/Windows backend and native media controls on real devices.
 
