@@ -94,7 +94,7 @@ Retry only transient failures, with bounded exponential backoff and jitter. Neve
 | Breezze licensed media/CDN | Internal catalogue | Yes, only with explicit rights record | Only with download rights | First-party authorized media |
 | User-owned local files | Local metadata | Yes, on supported platforms | Already local | User-controlled playback |
 | Additional licensed providers | When integrated | Only after rights/terms approval | Only if explicitly licensed | Future pluggable sources |
-| Official YouTube video player | Video metadata/launch | Separate official player; not Breezze audio | No | Optional music-video viewing |
+| Authorized in-app video provider | Video metadata and playback grant | Embedded in Breezze video surface only | No unless separately licensed | Future provider capability; metadata-only sources cannot be played or opened externally |
 
 Do not present an unimplemented provider as connected, available, or production-ready.
 
@@ -130,7 +130,7 @@ The UI displays capability-aware actions:
 - Play is enabled only when Breezze can obtain a playable source.
 - Download is enabled only when download rights and platform storage support exist.
 - Lyrics, radio, AirPlay/casting, lyrics translation, karaoke and crossfade are shown only when implemented and supported by the platform.
-- Music-video playback is clearly separate from the audio queue.
+- Music-video playback uses a dedicated Breezze-owned video surface and is separate from the audio queue. External-player redirects are not an acceptable implementation. Video playback requires an authorized in-app playback grant; metadata-only results remain unavailable for playback.
 
 ## 7. Backend and scale
 
