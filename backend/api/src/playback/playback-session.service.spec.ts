@@ -123,6 +123,15 @@ describe('PlaybackSessionService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('does not acknowledge a duplicate heartbeat to a non-owner', async () => {
+    prisma.playbackHeartbeat.findUnique.mockResolvedValue({
+      sessionId: 'session-uuid', sequence: 1, elapsedMs: 10_000,
+    });
+    prisma.playbackSession.findUnique.mockResolvedValue({ userId: 'other-user' });
+    await expect(service.heartbeat('user-1', 'session-uuid', 'event-uuid', 1))
+      .rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('rejects reuse of a heartbeat ID for a different session or sequence', async () => {
     prisma.playbackHeartbeat.findUnique.mockResolvedValue({
       sessionId: 'other-session', sequence: 1, elapsedMs: 10_000,
