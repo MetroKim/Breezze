@@ -720,6 +720,17 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                 ),
               ),
               data: (data) {
+                final rawAlbum = data['album'];
+                final albumMetadata = rawAlbum is Map
+                    ? Map<String, dynamic>.from(rawAlbum)
+                    : <String, dynamic>{};
+                final albumGenres = albumMetadata['genres'] is List
+                    ? (albumMetadata['genres'] as List)
+                        .whereType<String>()
+                        .where((value) => value.trim().isNotEmpty)
+                        .toList(growable: false)
+                    : <String>[];
+                final isCompilation = albumMetadata['isCompilation'] == true;
                 final rawItems = data['items'];
                 final items = rawItems is List
                     ? rawItems.whereType<Map>().map((item) =>
@@ -767,6 +778,8 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                                 artist: artist,
                                 artworkUrl: artworkUrl,
                                 catalogUrl: appleUrl,
+                                genres: albumGenres,
+                                isCompilation: isCompilation,
                                 addedAt: DateTime.now().toUtc(),
                               ));
                             }
