@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:breezze/features/player/player_controller.dart';
 import 'package:breezze/features/player/playback_session_client.dart';
+import 'package:breezze/features/player/playback_heartbeat_store.dart';
+import 'package:breezze/core/auth/auth_session.dart';
 
 void main() {
   test('metadata-only provider tracks never enter the native resolver', () async {
@@ -112,6 +114,8 @@ void main() {
     final container = ProviderContainer(overrides: [
       playbackResolverProvider.overrideWithValue(resolver),
       playbackSessionClientProvider.overrideWithValue(client),
+      authSessionProvider.overrideWith(_SignedInAuthController.new),
+      playbackHeartbeatStoreProvider.overrideWithValue(_MemoryHeartbeatStore()),
       playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(hours: 1)),
     ]);
     addTearDown(() async {
@@ -151,6 +155,8 @@ void main() {
     final container = ProviderContainer(overrides: [
       playbackResolverProvider.overrideWithValue(resolver),
       playbackSessionClientProvider.overrideWithValue(client),
+      authSessionProvider.overrideWith(_SignedInAuthController.new),
+      playbackHeartbeatStoreProvider.overrideWithValue(_MemoryHeartbeatStore()),
       playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(milliseconds: 5)),
     ]);
     addTearDown(() async {
@@ -168,6 +174,56 @@ void main() {
     expect(client.heartbeatCalls.length, greaterThanOrEqualTo(2));
     expect(client.heartbeatCalls[0]['eventId'], client.heartbeatCalls[1]['eventId']);
     expect(client.heartbeatCalls[0]['sequence'], client.heartbeatCalls[1]['sequence']);
+    await player.stop();
+  });
+
+
+  test('pending heartbeat survives a new player and is replayed for its owner', () async {
+    final store = _MemoryHeartbeatStore();
+    await store.write(const PlaybackHeartbeatCheckpoint(
+      ownerId: 'listener-1',
+      sessionId: 'previous-session',
+      sequence: 7,
+      pendingEventId: 'stable-event-id',
+    ));
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'bz:audius:recovery',
+          streamUrl: 'https://media.example/recovery.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          sessionId: 'new-session',
+        ),
+      ];
+    final client = _FakePlaybackSessionClient();
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackSessionClientProvider.overrideWithValue(client),
+      authSessionProvider.overrideWith(_SignedInAuthController.new),
+      playbackHeartbeatStoreProvider.overrideWithValue(store),
+      playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(hours: 1)),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await player.playTrack(
+      trackId: 'bz:audius:recovery',
+      queue: const [TrackInfo(id: 'bz:audius:recovery', title: 'Recovery')],
+    );
+
+    expect(client.heartbeatCalls, [
+      {
+        'sessionId': 'previous-session',
+        'eventId': 'stable-event-id',
+        'sequence': 7,
+      },
+    ]);
+    expect(await store.read('listener-1', 'previous-session'), isNull);
     await player.stop();
   });
 
@@ -396,5 +452,45 @@ class _FakeAudioEngine implements AudioEngineAdapter {
   Future<void> dispose() async {
     await _positions.close();
     await _states.close();
+  }
+}
+
+
+class _SignedInAuthController extends AuthSessionController {
+  @override
+  AuthState build() => const AuthSignedIn(
+        userId: 'listener-1',
+        email: 'listener@example.test',
+      );
+}
+
+class _MemoryHeartbeatStore implements PlaybackHeartbeatStore {
+  final Map<String, PlaybackHeartbeatCheckpoint> _items = {};
+
+  String _key(String ownerId, String sessionId) => '$ownerId::$sessionId';
+
+  @override
+  Future<PlaybackHeartbeatCheckpoint?> read(
+    String ownerId,
+    String sessionId,
+  ) async => _items[_key(ownerId, sessionId)];
+
+  @override
+  Future<List<PlaybackHeartbeatCheckpoint>> pendingForOwner(
+    String ownerId,
+  ) async =>
+      _items.values
+          .where((item) =>
+              item.ownerId == ownerId && item.pendingEventId != null)
+          .toList(growable: false);
+
+  @override
+  Future<void> write(PlaybackHeartbeatCheckpoint checkpoint) async {
+    _items[_key(checkpoint.ownerId, checkpoint.sessionId)] = checkpoint;
+  }
+
+  @override
+  Future<void> clear(String ownerId, String sessionId) async {
+    _items.remove(_key(ownerId, sessionId));
   }
 }
