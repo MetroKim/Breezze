@@ -68,14 +68,31 @@ class FavoritesDao {
 
   Future<void> remove(String id, {String ownerId = 'guest'}) async {
     final storageId = _storageId(ownerId, id);
-    await (_db.delete(_db.favoriteTracks)..where((t) => t.id.equals(storageId)))
-        .go();
-    await _db.into(_db.syncOutbox).insert(
-          SyncOutboxCompanion.insert(
-            op: 'favorite.remove',
-            trackId: storageId,
-          ),
-        );
+    await _db.transaction(() async {
+      await (_db.delete(_db.favoriteTracks)
+            ..where((t) => t.id.equals(storageId)))
+          .go();
+
+      // If the add has not reached the server yet, cancel it instead of
+      // queuing a remove that would need metadata already deleted locally.
+      final pendingAdds = await (_db.select(_db.syncOutbox)
+            ..where((t) =>
+                t.op.equals('favorite.add') &
+                t.trackId.equals(storageId)))
+          .get();
+      if (pendingAdds.isNotEmpty) {
+        final ids = pendingAdds.map((row) => row.id).toList();
+        await (_db.delete(_db.syncOutbox)..where((t) => t.id.isIn(ids))).go();
+        return;
+      }
+
+      await _db.into(_db.syncOutbox).insert(
+            SyncOutboxCompanion.insert(
+              op: 'favorite.remove',
+              trackId: storageId,
+            ),
+          );
+    });
   }
 
   Future<bool> contains(String id, {String ownerId = 'guest'}) async {
