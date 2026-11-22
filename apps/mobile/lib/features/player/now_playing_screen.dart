@@ -226,193 +226,206 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   child: SizedBox.expand(
                     child: Column(
                       children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Close',
-                      icon: BzSvgIcon(name: 'chevron-down'),
-                      onPressed: () => Navigator.of(context).maybePop(),
-                    ),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text('PLAYING FROM',
-                              style: TextStyle(
-                                  fontSize: BzType.caption,
-                                  letterSpacing: 1,
-                                  color: theme.bzText2)),
-                          Text('Breezze',
-                              style: TextStyle(
-                                  fontSize: BzType.footnote,
-                                  color: theme.bzText1)),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'More actions',
-                      icon: BzSvgIcon(name: 'more-vertical'),
-                      onPressed: () => _showPlayerActions(context, controller),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              _BreathingArtwork(
-                playing: playing,
-                artworkUrl: track.artworkUrl,
-                fallbackColor: theme.bzText2,
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(track.title ?? 'Unknown track',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleLarge),
-                          const SizedBox(height: 4),
-                          Text(track.artist ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: BzType.body,
-                                  color: theme.bzText2)),
-                        ],
-                      ),
-                    ),
-                    _FavoriteButton(track: track),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 6),
-                      ),
-                      child: Slider(
-                        value: player.duration > Duration.zero
-                            ? player.position.inMilliseconds
-                                .clamp(0, player.duration.inMilliseconds)
-                                .toDouble()
-                            : 0,
-                        max: player.duration.inMilliseconds > 0
-                            ? player.duration.inMilliseconds.toDouble()
-                            : 1,
-                        onChanged: (v) {
-                          _onUserInteraction();
-                          controller.seekTo(Duration(milliseconds: v.toInt()));
-                        },
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(_format(player.position),
-                            style: TextStyle(
-                                fontSize: BzType.caption,
-                                color: theme.bzText2)),
-                        Text(_format(player.duration),
-                            style: TextStyle(
-                                fontSize: BzType.caption,
-                                color: theme.bzText2)),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Close',
+                                icon: BzSvgIcon(name: 'chevron-down'),
+                                onPressed: () =>
+                                    Navigator.of(context).maybePop(),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Text('PLAYING FROM',
+                                        style: TextStyle(
+                                            fontSize: BzType.caption,
+                                            letterSpacing: 1,
+                                            color: theme.bzText2)),
+                                    Text('Breezze',
+                                        style: TextStyle(
+                                            fontSize: BzType.footnote,
+                                            color: theme.bzText1)),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'More actions',
+                                icon: BzSvgIcon(name: 'more-vertical'),
+                                onPressed: () =>
+                                    _showPlayerActions(context, controller),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        _BreathingArtwork(
+                          playing: playing,
+                          artworkUrl: track.artworkUrl,
+                          fallbackColor: theme.bzText2,
+                        ),
+                        const Spacer(),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(track.title ?? 'Unknown track',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleLarge),
+                                    const SizedBox(height: 4),
+                                    Text(track.artist ?? '',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: BzType.body,
+                                            color: theme.bzText2)),
+                                  ],
+                                ),
+                              ),
+                              _FavoriteButton(track: track),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            children: [
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 3,
+                                  thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 6),
+                                ),
+                                child: Slider(
+                                  value: player.duration > Duration.zero
+                                      ? player.position.inMilliseconds
+                                          .clamp(
+                                              0, player.duration.inMilliseconds)
+                                          .toDouble()
+                                      : 0,
+                                  max: player.duration.inMilliseconds > 0
+                                      ? player.duration.inMilliseconds.toDouble()
+                                      : 1,
+                                  onChanged: (v) {
+                                    _onUserInteraction();
+                                    controller.seekTo(
+                                        Duration(milliseconds: v.toInt()));
+                                  },
+                                ),
+                              ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(_format(player.position),
+                                      style: TextStyle(
+                                          fontSize: BzType.caption,
+                                          color: theme.bzText2)),
+                                  Text(_format(player.duration),
+                                      style: TextStyle(
+                                          fontSize: BzType.caption,
+                                          color: theme.bzText2)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        BzGlassContainer(
+                          radius: BzRadius.capsule,
+                          blur: 18,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Shuffle',
+                                  icon: BzSvgIcon(name: 'shuffle'),
+                                  onPressed: controller.toggleShuffle,
+                                  color: theme.bzText2,
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  tooltip: 'Previous track',
+                                  icon: BzSvgIcon(
+                                      name: 'skip-previous', size: 34),
+                                  onPressed: controller.previous,
+                                ),
+                                const SizedBox(width: 8),
+                                _PlayPauseButton(
+                                  playing: playing,
+                                  size: 64,
+                                  onTap: controller.togglePlayPause,
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  tooltip: 'Next track',
+                                  icon:
+                                      BzSvgIcon(name: 'skip-next', size: 34),
+                                  onPressed: controller.next,
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  tooltip: 'Repeat',
+                                  icon: BzSvgIcon(name: 'repeat'),
+                                  onPressed: controller.cycleRepeat,
+                                  color: theme.bzText2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () {
+                                _onUserInteraction();
+                                setState(
+                                    () => _lyricsVisible = !_lyricsVisible);
+                              },
+                              icon: BzSvgIcon(name: 'lyrics', size: 18),
+                              label: Text(_lyricsVisible
+                                  ? 'Hide Lyrics'
+                                  : 'Show Lyrics'),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              onPressed: _openPlayingNext,
+                              icon: BzSvgIcon(name: 'queue', size: 18),
+                              label: const Text('Playing Next'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Expanded(
+                          child: _lyricsVisible
+                              ? _LyricsView(
+                                  lyrics: _lyrics,
+                                  mode: _lyricsMode,
+                                  position: player.position,
+                                )
+                              : Center(
+                                  child: Text(
+                                    'Lyrics hidden',
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: theme.bzText2),
+                                  ),
+                                ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              BzGlassContainer(
-                radius: BzRadius.capsule,
-                blur: 18,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        tooltip: 'Shuffle',
-                        icon: BzSvgIcon(name: 'shuffle'),
-                        onPressed: controller.toggleShuffle,
-                        color: theme.bzText2,
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        tooltip: 'Previous track',
-                        icon: BzSvgIcon(name: 'skip-previous', size: 34),
-                        onPressed: controller.previous,
-                      ),
-                      const SizedBox(width: 8),
-                      _PlayPauseButton(
-                        playing: playing,
-                        size: 64,
-                        onTap: controller.togglePlayPause,
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        tooltip: 'Next track',
-                        icon: BzSvgIcon(name: 'skip-next', size: 34),
-                        onPressed: controller.next,
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        tooltip: 'Repeat',
-                        icon: BzSvgIcon(name: 'repeat'),
-                        onPressed: controller.cycleRepeat,
-                        color: theme.bzText2,
-                      ),
-                    ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: () {
-                      _onUserInteraction();
-                      setState(() => _lyricsVisible = !_lyricsVisible);
-                    },
-                    icon: BzSvgIcon(name: 'lyrics', size: 18),
-                    label: Text(_lyricsVisible ? 'Hide Lyrics' : 'Show Lyrics'),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _openPlayingNext,
-                    icon: BzSvgIcon(name: 'queue', size: 18),
-                    label: const Text('Playing Next'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Expanded(
-                child: _lyricsVisible
-                    ? _LyricsView(
-                        lyrics: _lyrics,
-                        mode: _lyricsMode,
-                        position: player.position,
-                      )
-                    : Center(
-                        child: Text(
-                          'Lyrics hidden',
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.bzText2),
-                        ),
-                      ),
-              ),
-                  ],
                 ),
               ),
             ),
@@ -511,11 +524,13 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
                       widget.artworkUrl!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Center(
-                        child: BzBnoteMark(size: 96, color: widget.fallbackColor),
+                        child: BzBnoteMark(
+                            size: 96, color: widget.fallbackColor),
                       ),
                     )
                   : Center(
-                      child: BzBnoteMark(size: 96, color: widget.fallbackColor),
+                      child:
+                          BzBnoteMark(size: 96, color: widget.fallbackColor),
                     ),
             ),
           ),
@@ -697,7 +712,8 @@ class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
   }
 
   Future<void> _loadFavorite() async {
-    final value = await ref.read(favoritesStoreProvider).isFavorite(widget.track.id);
+    final value =
+        await ref.read(favoritesStoreProvider).isFavorite(widget.track.id);
     if (mounted) setState(() => _isFavorite = value);
   }
 
@@ -716,7 +732,8 @@ class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
     setState(() => _isFavorite = added);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(added ? 'Added to favorites' : 'Removed from favorites'),
+        content:
+            Text(added ? 'Added to favorites' : 'Removed from favorites'),
       ),
     );
   }
@@ -868,8 +885,8 @@ class _PlayingNextSheet extends ConsumerWidget {
                           ),
                           onDismissed: (_) => queue.remove(entry.entryId),
                           child: ListTile(
-                            leading: BzBnoteMark(
-                                size: 40, color: theme.bzText2),
+                            leading:
+                                BzBnoteMark(size: 40, color: theme.bzText2),
                             title: Text(
                               info?.title ?? 'Track',
                               maxLines: 1,
