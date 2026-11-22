@@ -37,6 +37,7 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> _engineOperations = Future<void>.value();
 
   String? _playbackSessionId;
+  PlaybackSessionClient? _activeSessionClient;
   Timer? _heartbeatTimer;
   int _heartbeatSequence = 1;
   String? _pendingHeartbeatEventId;
@@ -77,7 +78,9 @@ class PlayerController extends Notifier<PlayerState> {
     _heartbeatInFlight = true;
     final eventId = _pendingHeartbeatEventId ??= _newEventId();
     try {
-      final result = await _sessionClient.heartbeat(
+      final client = _activeSessionClient;
+      if (client == null) return;
+      final result = await client.heartbeat(
         sessionId: sessionId,
         eventId: eventId,
         sequence: _heartbeatSequence,
@@ -96,12 +99,15 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> _closePlaybackSession() async {
     _pauseHeartbeatTimer();
     final sessionId = _playbackSessionId;
+    final client = _activeSessionClient;
     _playbackSessionId = null;
+    _activeSessionClient = null;
     _pendingHeartbeatEventId = null;
     _heartbeatSequence = 1;
     if (sessionId == null) return;
+    if (client == null) return;
     try {
-      await _sessionClient.stop(sessionId);
+      await client.stop(sessionId);
     } catch (_) {
       // The server TTL is the final safety net when the device is offline.
     }
@@ -109,6 +115,7 @@ class PlayerController extends Notifier<PlayerState> {
 
   void _adoptPlaybackSession(PlayableSource source) {
     _playbackSessionId = source.sessionId;
+    _activeSessionClient = source.sessionId == null ? null : _sessionClient;
     _heartbeatSequence = 1;
     _pendingHeartbeatEventId = null;
   }
@@ -116,9 +123,10 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> _pauseServerSession() async {
     _pauseHeartbeatTimer();
     final sessionId = _playbackSessionId;
-    if (sessionId == null) return;
+    final client = _activeSessionClient;
+    if (sessionId == null || client == null) return;
     try {
-      await _sessionClient.pause(sessionId);
+      await client.pause(sessionId);
     } catch (_) {
       // Do not keep crediting an active server session after an unconfirmed
       // pause. A later resume obtains a fresh authorized session.
@@ -200,7 +208,7 @@ class PlayerController extends Notifier<PlayerState> {
         // single app-wide queue here so playback continues without requiring
         // the user to tap Next. The guard prevents duplicate completed events
         // from advancing more than once for the same item.
-        if (engineState == PlaybackState.ended) {
+        if (engineState == PlaybackState.ended || engineState == PlaybackState.failed) {
           unawaited(_closePlaybackSession());
         }
         if (engineState == PlaybackState.ended &&
@@ -354,7 +362,7 @@ class PlayerController extends Notifier<PlayerState> {
     }
     if (sessionId != null) {
       try {
-        await _sessionClient.resume(sessionId);
+        await (_activeSessionClient ?? _sessionClient).resume(sessionId);
       } catch (_) {
         await _closePlaybackSession();
         return;
