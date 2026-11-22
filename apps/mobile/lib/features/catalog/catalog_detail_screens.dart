@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
+import '../../app/saved_album_store.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -677,6 +678,10 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final savedKey = (ownerId: ownerId, albumId: albumId);
+    final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
     final tracks = ref.watch(_appleAlbumTracksProvider(albumId));
     return Scaffold(
       backgroundColor: theme.bzBackground,
@@ -750,6 +755,47 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                       const SizedBox(height: 6),
                       Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
                       const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: isSaved.isLoading ? null : () async {
+                          try {
+                            if (isSaved.valueOrNull == true) {
+                              await SavedAlbumStore().remove(ownerId, albumId);
+                            } else {
+                              await SavedAlbumStore().save(ownerId, SavedAlbum(
+                                id: albumId,
+                                title: title,
+                                artist: artist,
+                                artworkUrl: artworkUrl,
+                                catalogUrl: appleUrl,
+                                addedAt: DateTime.now().toUtc(),
+                              ));
+                            }
+                            ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.read(savedAlbumRefreshProvider.notifier).state++;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(isSaved.valueOrNull == true
+                                    ? 'Album removed from Library'
+                                    : 'Album saved to Library')),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Could not update saved albums.')),
+                              );
+                            }
+                          }
+                        },
+                        icon: BzSvgIcon(
+                          name: isSaved.valueOrNull == true ? 'check' : 'plus',
+                          color: theme.bzBackground,
+                        ),
+                        label: Text(isSaved.valueOrNull == true
+                            ? 'Saved in Library'
+                            : 'Add Album to Library'),
+                      ),
+                      const SizedBox(height: 10),
                       OutlinedButton.icon(
                         onPressed: appleUrl == null ? null : () => _open(appleUrl),
                         icon: const BzSvgIcon(name: 'arrow-up-right'),
