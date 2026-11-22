@@ -1,36 +1,48 @@
 # Breezze
 
-**An open music platform — one Flutter client, one NestJS backend.**
+**A free, listener-first music platform built with Flutter and NestJS.**
 
-Breezze is an independent product. It is not affiliated with, endorsed by, or
-connected to YouTube, Google, Spotify, Apple, or any streaming platform.
+Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
 
-> The `main` branch is the active Breezze project. The earlier Kotlin Multiplatform
-> Chordline prototype has been retired.
+## Product boundaries
+
+- Five primary destinations: Home, Browse, Radio, Library and Search.
+- One global player and queue shared by every screen.
+- No artist portal, artist upload workflow, subscriptions, billing, memberships or paywalls in this release.
+- Artist and album pages are listener-facing catalog experiences only.
+- Search metadata is not a playback licence. Playback requires a backend-authorized source with applicable rights.
+- YouTube Music through `ytmusicapi` is metadata/discovery only. Audius is the first official third-party playback adapter and is limited to public, ungated, API-accessible tracks.
+- Breezze does not extract YouTube audio, bypass provider access controls, or re-host third-party recordings.
 
 ## Repository layout
 
 ```
-apps/mobile/               Flutter client (Riverpod, Drift/SQLite, just_audio, audio_service)
-packages/design_system/    Breezze tokens, themes, Atmosphere materials, components
-packages/audio_contracts/  Playback contracts — state machine, queue, engine adapter, LRC
-packages/api_client/      Provider + download library contracts
-backend/api/               NestJS modular monolith (PostgreSQL, Prisma, Redis, BullMQ)
-infra/cloudflare/          Cloudflare API edge, WAF and public metadata cache
-docs/audit/                Honest per-requirement status (gap register)
+apps/mobile/               Flutter client and platform adapters
+packages/design_system/    Breezze tokens, themes, components and SVG icons
+packages/audio_contracts/  Playback state, queue and engine contracts
+packages/api_client/       Typed Breezze API client
+backend/api/               NestJS API, Prisma/PostgreSQL, Redis and BullMQ
+infra/cloudflare/          API edge, WAF, rate limits and public metadata cache
+docs/                      Product, design, architecture, legal and release records
 ```
 
 ## Quick start
 
-### Mobile
+### Flutter client
+
+From the repository root:
 
 ```bash
 cd apps/mobile
+bash tool/generate_platform_targets.sh
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs
-flutter create .   # first checkout only — platform runners are not committed
-flutter run
+flutter analyze
+flutter test --reporter expanded
+flutter run --dart-define=BREEZZE_API_URL=http://localhost:3000
 ```
+
+The platform generator creates the native runner folders and applies the required Android foreground-media and iOS background-audio declarations. It does not install platform SDKs, configure signing, or certify physical-device playback.
 
 ### Backend
 
@@ -38,26 +50,44 @@ flutter run
 cd backend/api
 npm install
 docker compose up -d
+npx prisma generate
 npx prisma migrate dev
+npm run typecheck
+npm test -- --runInBand
 ```
 
-The API serves `http://localhost:3000/api/v1` (Swagger at `/api/docs`).
+The local API defaults to `http://localhost:3000`; Swagger is exposed at `/api/docs` when enabled. Configure provider credentials only in backend environment/secrets. Never place provider secrets in Flutter or commit them.
 
-## Principles
+## Audio and provider architecture
 
-- **Playback first** — one global PlayerController; screens never own audio.
-- **Honest results** — no fake URLs, no placeholder data presented as real.
-- **Server-side authorization** for everything protected.
-- **Free** — no payments, no paywalls, no subscription tables.
+- Flutter uses one global `PlayerController` backed by the shared audio-engine adapter.
+- The NestJS backend owns canonical track identity, provider selection, rights checks and playback resolution.
+- Audius public ungated tracks may be resolved through its official API; gated or API-restricted tracks are rejected.
+- YouTube Music metadata is never passed to the native audio engine as a playable source.
+- Audio is streamed directly from an approved provider to the device by default. Cloudflare Workers and NestJS do not proxy audio segments.
+- Local files remain user-controlled. Offline downloads require explicit download rights and backend authorization.
 
-## Architecture documentation
+## Platform targets
 
-- [Integrated Design Engineering Architecture](docs/architecture/BREEZZE_INTEGRATED_DESIGN_ENGINEERING_ARCHITECTURE.md) — Flutter layers, Riverpod state, domain/data boundaries, screen-by-screen engineering, API contracts, playback, rights, testing and rollout order.
-- [Cloudflare-first infrastructure](infra/cloudflare/README.md) — Cloudflare API edge, WAF/rate limits, public metadata caching, provider resilience and one-million-active-listener load-test plan.
-- [One-million scaling plan](docs/architecture/BREEZZE_ONE_MILLION_SCALING_PLAN.md) — provider resilience, cache keys/TTLs, Cloudflare edge policy, backend capacity and staged load tests.
-- [Provider integration decision](docs/architecture/BREEZZE_PROVIDER_INTEGRATION_DECISION.md) — MusicAPI credentials/UUIDs, `ytmusicapi` boundary, Liner licence restriction, provider failover and one-million-listener traffic design.
-- [Discovery provider setup](docs/architecture/DISCOVERY_PROVIDER_SETUP.md) — Apple charts/releases/artist catalog, YouTube approved-channel video search, JamBase concerts, required secrets and remaining editorial-source gaps.
-- [Production security and caching checklist](docs/PRODUCTION_SECURITY_AND_CACHING_CHECKLIST.md) — 17-section security, data protection, infrastructure, caching, database, performance and reliability release gate.
-- [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md) — required screen hierarchy, section order, positions and interaction rules.
+The Flutter codebase targets Android, iOS, Web, Linux, macOS and Windows. Build each target on its supported host and validate the actual media-session behavior there. CI compilation is not a substitute for real-device playback, background-audio, Bluetooth-route and lock-screen testing.
 
-See `docs/audit/gap-register.md` for what is implemented and what is not.
+## Documentation index
+
+- [Product experience](docs/PRODUCT_EXPERIENCE.md)
+- [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md)
+- [Integrated design and engineering architecture](docs/architecture/BREEZZE_INTEGRATED_DESIGN_ENGINEERING_ARCHITECTURE.md)
+- [Multi-source provider architecture](docs/architecture/BREEZZE_MULTISOURCE_PROVIDER_ARCHITECTURE.md)
+- [Provider integration decision](docs/architecture/BREEZZE_PROVIDER_INTEGRATION_DECISION.md)
+- [Discovery provider setup](docs/architecture/DISCOVERY_PROVIDER_SETUP.md)
+- [Cloudflare and caching architecture](infra/cloudflare/README.md)
+- [One-million-active-listener scaling plan](docs/architecture/BREEZZE_ONE_MILLION_SCALING_PLAN.md)
+- [Security and production checklist](docs/PRODUCTION_SECURITY_AND_CACHING_CHECKLIST.md)
+- [Current implementation gap register](docs/audit/gap-register.md)
+- [Engineering backlog](docs/ROADMAP_AND_BUG_BACKLOG.md)
+- [Third-party code and provider policy](docs/legal/BREEZZE_THIRD_PARTY_CODE_POLICY.md)
+
+## Current verification
+
+The active implementation branch is `feat/breezze-audio-engine-foundation`; its work is proposed in [PR #8](https://github.com/MetroKim/MetroMusic/pull/8). PR #7 remains a separate, unmerged Audius-provider change. Neither PR is merged. Check the linked workflow runs and the gap register before treating any feature as release-ready.
+
+Breezze's one-million-active-listener goal is an engineering target, not a measured capacity claim. Production deployment, provider rights approval, load testing and physical-device certification remain release gates.
