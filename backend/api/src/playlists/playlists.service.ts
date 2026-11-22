@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -21,7 +21,16 @@ export class PlaylistsService {
   async get(userId: string, playlistId: string) {
     const playlist = await this.prisma.playlist.findFirst({
       where: { id: playlistId, userId },
-      include: { items: { orderBy: { position: 'asc' } } },
+      include: {
+        items: {
+          orderBy: { position: 'asc' },
+          include: {
+            track: {
+              include: { artist: true, album: true },
+            },
+          },
+        },
+      },
     });
     if (!playlist) throw new NotFoundException('PLAYLIST_NOT_FOUND');
     return playlist;
@@ -82,6 +91,44 @@ export class PlaylistsService {
       return tx.playlistItem.create({
         data: { playlistId, trackId, position },
       });
+    });
+  }
+
+  async reorderTracks(
+    userId: string,
+    playlistId: string,
+    orderedTrackIds: string[],
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const owned = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Playlist"
+        WHERE "id" = ${playlistId} AND "userId" = ${userId}
+        FOR UPDATE
+      `;
+      if (owned.length === 0) throw new NotFoundException('PLAYLIST_NOT_FOUND');
+
+      const current = await tx.playlistItem.findMany({
+        where: { playlistId },
+        select: { trackId: true },
+      });
+      const currentIds = new Set(current.map((item) => item.trackId));
+      const requestedIds = new Set(orderedTrackIds);
+      if (
+        currentIds.size !== requestedIds.size ||
+        currentIds.size !== orderedTrackIds.length ||
+        [...currentIds].some((id) => !requestedIds.has(id))
+      ) {
+        throw new BadRequestException('PLAYLIST_ORDER_MISMATCH');
+      }
+
+      for (const [position, trackId] of orderedTrackIds.entries()) {
+        await tx.playlistItem.updateMany({
+          where: { playlistId, trackId },
+          data: { position },
+        });
+      }
+      return { reordered: true, count: orderedTrackIds.length };
     });
   }
 
