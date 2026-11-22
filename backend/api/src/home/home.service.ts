@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { RecommendationsService } from '../recommendations/recommendations.service';
 
 export interface HomeSection {
-  sectionType: 'recently_played' | 'favorites';
+  sectionType: 'personalized' | 'recently_played' | 'favorites';
   title: string;
   layout: 'rail' | 'grid';
   trackIds: string[];
@@ -10,10 +11,13 @@ export interface HomeSection {
 
 @Injectable()
 export class HomeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly recommendations: RecommendationsService,
+  ) {}
 
   async feed(userId: string): Promise<HomeSection[]> {
-    const [recent, favorites] = await Promise.all([
+    const [recent, favorites, recommendations] = await Promise.all([
       this.prisma.recentlyPlayed.findMany({
         where: { userId },
         orderBy: { playedAt: 'desc' },
@@ -26,9 +30,19 @@ export class HomeService {
         take: 12,
         select: { trackId: true },
       }),
+      this.recommendations.forUser(userId),
     ]);
 
     const sections: HomeSection[] = [];
+
+    if (recommendations.length > 0) {
+      sections.push({
+        sectionType: 'personalized',
+        title: 'Made for You',
+        layout: 'rail',
+        trackIds: recommendations.map((item) => item.trackId),
+      });
+    }
 
     if (recent.length > 0) {
       sections.push({
