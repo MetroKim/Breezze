@@ -10,7 +10,7 @@ describe('RecommendationsService', () => {
     listeningEvent: { groupBy: jest.fn() },
     track: { findMany: jest.fn() },
   };
-  const rights = { decide: jest.fn() };
+  const rights = { filterFullStream: jest.fn() };
   let service: RecommendationsService;
 
   beforeEach(() => {
@@ -36,10 +36,7 @@ describe('RecommendationsService', () => {
         { id: 'b-1', artistId: 'artist-b' },
       ]);
     });
-    rights.decide.mockResolvedValue({
-      allowed: true,
-      previewOnly: false,
-    });
+    rights.filterFullStream.mockImplementation((ids: string[]) => Promise.resolve(new Set(ids)));
     service = new RecommendationsService(
       prisma as unknown as PrismaService,
       rights as unknown as RightsDecisionService,
@@ -51,28 +48,21 @@ describe('RecommendationsService', () => {
 
     await expect(service.forUser('user-1')).resolves.toEqual([]);
     expect(prisma.listeningEvent.groupBy).not.toHaveBeenCalled();
-    expect(rights.decide).not.toHaveBeenCalled();
+    expect(rights.filterFullStream).not.toHaveBeenCalled();
   });
 
   it('ranks listening artists, caps each artist at two tracks, and checks full-play rights', async () => {
-    rights.decide.mockImplementation(({ trackId }: { trackId: string }) =>
-      Promise.resolve({
-        allowed: trackId !== 'a-1',
-        previewOnly: trackId === 'a-2',
-      }),
-    );
+    rights.filterFullStream.mockResolvedValue(new Set(['a-3', 'b-1']));
 
     await expect(service.forUser('user-1')).resolves.toEqual([
       { trackId: 'a-3', reason: 'Because you listen to this artist' },
       { trackId: 'b-1', reason: 'Because you listen to this artist' },
     ]);
 
-    expect(rights.decide).toHaveBeenCalledWith({
-      userId: null,
-      trackId: 'a-1',
-      action: 'stream.full',
-      territory: 'TZ',
-    });
+    expect(rights.filterFullStream).toHaveBeenCalledWith(
+      ['a-1', 'a-2', 'a-3', 'b-1'],
+      'TZ',
+    );
   });
 
   it('excludes recently played and favorited tracks before checking candidates', async () => {
@@ -103,6 +93,6 @@ describe('RecommendationsService', () => {
       { trackId: 'popular-1', reason: 'Popular on Breezze' },
       { trackId: 'popular-2', reason: 'Popular on Breezze' },
     ]);
-    expect(rights.decide).toHaveBeenCalledTimes(2);
+    expect(rights.filterFullStream).toHaveBeenCalledWith(['popular-1', 'popular-2'], 'TZ');
   });
 });
