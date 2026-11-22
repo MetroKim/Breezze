@@ -334,8 +334,20 @@ class BreezzeApi {
 
   Future<Map<String, dynamic>> profile() => _get('/users/me');
 
-  Future<Map<String, dynamic>> updateProfile({required String displayName}) =>
-      _patch('/users/me', {'displayName': displayName});
+  Future<Map<String, dynamic>> updateProfile({
+    required String displayName,
+    String? country,
+    String? language,
+    List<String>? genres,
+    List<String>? favoriteArtists,
+  }) =>
+      _patch('/users/me', {
+        'displayName': displayName,
+        if (country != null) 'country': country,
+        if (language != null) 'language': language,
+        if (genres != null) 'genres': genres,
+        if (favoriteArtists != null) 'favoriteArtists': favoriteArtists,
+      });
 
   Future<void> deleteAccount({required String password}) async {
     await _delete('/users/me', body: {'password': password});
