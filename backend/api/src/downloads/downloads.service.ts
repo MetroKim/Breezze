@@ -25,10 +25,7 @@ export class DownloadsService {
     return territory;
   }
 
-  private async providerAllowsDownload(
-    trackId: string,
-    territory: string,
-  ): Promise<boolean> {
+  private async providerAllowsDownload(trackId: string): Promise<boolean> {
     const track = await this.prisma.track.findUnique({
       where: { id: trackId },
       select: { id: true, source: true, externalId: true },
@@ -123,7 +120,7 @@ export class DownloadsService {
     });
     if (!existing) return { allowed: false, reason: 'DOWNLOAD_NOT_FOUND' };
 
-    const supported = await this.providerAllowsDownload(trackId, territory);
+    const supported = await this.providerAllowsDownload(trackId);
     if (!supported) {
       await this.prisma.downloadRecord.updateMany({
         where: { userId, trackId, status: 'active' },
