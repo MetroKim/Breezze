@@ -254,8 +254,11 @@ export class PlaybackSessionService {
         stoppedAt.getTime() - session.lastHeartbeatAt.getTime(),
       ));
       const totalAccumulatedMs = session.accumulatedMs + finalCreditMs;
+      if (session.status !== 'active' && session.status !== 'paused') {
+        throw new GoneException('PLAYBACK_SESSION_NOT_ACTIVE');
+      }
       const stopped = await tx.playbackSession.updateMany({
-        where: { id: sessionId, userId, status: 'active' },
+        where: { id: sessionId, userId, status: session.status },
         data: {
           status: 'stopped',
           stoppedAt,
