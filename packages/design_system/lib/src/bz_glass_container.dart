@@ -9,7 +9,7 @@ import 'bz_theme.dart';
 /// The public API is preserved for existing call sites. The legacy
 /// parameters map onto the material contract:
 /// - default fill (atmoRegular) → [BzGlassState.pillScrolled]
-/// - atmoClear fill → [BzGlassState.mediaOverlay]
+/// - atmoClear / softDiffuse fill → [BzGlassState.mediaOverlay]
 /// - a blur of 12 or less over a calm zone → [BzGlassState.pillAtTop]
 ///
 /// The old recipe (generic blur 24, no saturation boost) is retired: the
@@ -45,15 +45,16 @@ class BzGlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).bz;
     final fill = fillColor;
-    final isMediaOverlay = fill != null &&
-        (fill.value == colors.atmoClear.value ||
-            fill.value == colors.softDiffuse.value);
+    final isMediaOverlayFill = fill != null &&
+        (fill.toARGB32() == colors.atmoClear.toARGB32() ||
+            fill.toARGB32() == colors.softDiffuse.toARGB32());
 
-    final state = isMediaOverlay
-        ? (blur <= 12
-              ? BzGlassState.pillAtTop
-              : BzGlassState.mediaOverlay)
-        : (blur <= 12 ? BzGlassState.pillAtTop : BzGlassState.pillScrolled);
+    final BzGlassState state;
+    if (isMediaOverlayFill) {
+      state = blur <= 12 ? BzGlassState.pillAtTop : BzGlassState.mediaOverlay;
+    } else {
+      state = blur <= 12 ? BzGlassState.pillAtTop : BzGlassState.pillScrolled;
+    }
 
     return BzGlassMaterial(
       state: state,
