@@ -4,6 +4,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { HomeService } from './home.service';
 
+export class RecordRecentDto {
+  @IsUUID()
+  trackId!: string;
+}
+
 export class RecordPlayDto {
   @IsUUID()
   eventId!: string;
@@ -26,6 +31,11 @@ export class HomeController {
   @Get()
   feed(@CurrentUser() userId: string) {
     return this.home.feed(userId);
+  }
+
+  @Post('recent')
+  recordRecent(@CurrentUser() userId: string, @Body() dto: RecordRecentDto) {
+    return this.home.recordRecent(userId, dto.trackId);
   }
 
   @Post('plays')
