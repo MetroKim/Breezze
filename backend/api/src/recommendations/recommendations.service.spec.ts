@@ -62,6 +62,9 @@ describe('RecommendationsService', () => {
       { trackId: 'a-3', reason: 'Because you listen to this artist' },
     ]);
 
+    expect(prisma.listeningEvent.groupBy).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user-1', isServerVerified: true },
+    }));
     expect(rights.filterFullStream).toHaveBeenCalledWith(
       ['a-1', 'b-1', 'a-2', 'a-3'],
       'TZ',
@@ -127,6 +130,9 @@ describe('RecommendationsService', () => {
       { trackId: 'popular-1', reason: 'Popular on Breezze' },
       { trackId: 'popular-2', reason: 'Popular on Breezze' },
     ]);
+    expect(prisma.listeningEvent.groupBy).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: { isServerVerified: true },
+    }));
     expect(rights.filterFullStream).toHaveBeenCalledWith(['popular-1', 'popular-2'], 'TZ');
   });
 });
