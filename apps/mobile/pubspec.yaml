@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 0.1.0
 
 environment:
-  sdk: '>=3.4.0 <4.0.0'
+  sdk: '>=3.5.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -40,6 +40,8 @@ dependencies:
   # HTTP for backend connections
   http: ^1.2.1
   url_launcher: ^6.3.2
+  # Official YouTube IFrame player for supported embedded platforms.
+  youtube_player_iframe: 5.2.2
   connectivity_plus: ^6.1.0
   flutter_secure_storage: ^9.2.4
 
