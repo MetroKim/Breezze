@@ -32,6 +32,10 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
+      - name: Install Breezze native launcher icons
+        working-directory: apps/mobile
+        run: flutter test tool/brand_launcher_icons_test.dart --reporter compact
+
       - name: Generate Drift database code
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
@@ -113,6 +117,10 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
+      - name: Install Breezze native launcher icons
+        working-directory: apps/mobile
+        run: flutter test tool/brand_launcher_icons_test.dart --reporter compact
+
       - name: Generate Drift database code
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
@@ -123,7 +131,10 @@ jobs:
 
       - name: Package Linux desktop build
         working-directory: apps/mobile
-        run: tar -C build/linux/x64/debug -czf build/breezze-linux-debug.tar.gz bundle
+        run: |
+          mkdir -p build/linux/x64/debug/bundle/data/icons
+          cp linux/assets/breezze.png build/linux/x64/debug/bundle/data/icons/breezze.png
+          tar -C build/linux/x64/debug -czf build/breezze-linux-debug.tar.gz bundle
 
       - name: Build Android APK
         working-directory: apps/mobile
@@ -173,6 +184,10 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
+      - name: Install Breezze native launcher icons
+        working-directory: apps/mobile
+        run: flutter test tool/brand_launcher_icons_test.dart --reporter compact
+
       - name: Generate Drift database code
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
@@ -205,6 +220,10 @@ jobs:
       - name: Resolve mobile dependencies
         working-directory: apps/mobile
         run: flutter pub get
+
+      - name: Install Breezze native launcher icons
+        working-directory: apps/mobile
+        run: flutter test tool/brand_launcher_icons_test.dart --reporter compact
 
       - name: Generate Drift database code
         working-directory: apps/mobile
