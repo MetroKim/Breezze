@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
-import { SoundCloudAdapter } from './soundcloud.adapter';
 import { JamendoAdapter } from './jamendo.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
@@ -18,13 +17,11 @@ export class ProviderRegistry {
     internal: InternalCatalogAdapter,
     youtubeMusic: YtMusicAdapter,
     deezer: DeezerAdapter,
-    soundCloud: SoundCloudAdapter,
     jamendo: JamendoAdapter,
   ) {
     this.register(internal);
     this.register(youtubeMusic);
     this.register(deezer);
-    this.register(soundCloud);
     this.register(jamendo);
   }
 
@@ -57,7 +54,7 @@ export class ProviderRegistry {
       return { query: normalized, providers: [] };
     }
     const adapters = [...this.adapters.values()].filter(
-      (adapter) => adapter.enabled !== false && adapter.capabilities.search && adapter.providerId !== 'breezze_internal',
+      (adapter) => adapter.enabled !== false && adapter.capabilities.search,
     );
     const settled = await Promise.allSettled(
       adapters.map(async (adapter) => ({
