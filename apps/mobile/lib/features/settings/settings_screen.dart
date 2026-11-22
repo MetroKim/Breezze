@@ -114,6 +114,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final theme = Theme.of(context);
     final auth = ref.watch(authSessionProvider);
     final email = auth is AuthSignedIn ? auth.email : null;
+    final sleepTimerEndsAt = ref.watch(sleepTimerProvider);
 
     return SafeArea(
       child: ListView(
@@ -177,8 +178,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _saveDownloadPreferences(_downloads.copyWith(streamingQuality: value));
                     }
                   },
-                ),
-              ),
+                ),              ),
               ListTile(
                 title: const Text('Offline download quality'),
                 trailing: DropdownButton<String>(
@@ -357,8 +357,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const ListTile(
               leading: BzSvgIcon(name: 'trash'),
-              title: Text('Cache management'),
-              subtitle: Text('Artwork cache controls are not available yet.'),
+              title: Text('Cache management'),              subtitle: Text('Artwork cache controls are not available yet.'),
               enabled: false,
             ),
           ]),
