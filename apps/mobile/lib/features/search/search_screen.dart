@@ -3,7 +3,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/audio/youtube_player_handoff.dart';
+import '../video/official_music_video_screen.dart';
 import '../../core/audio/playback_source_policy.dart';
 
 import '../../app/bootstrap.dart';
@@ -397,20 +397,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // Only dedicated music-video results may open the official YouTube
     // video player. Song metadata is not a native playback grant.
     if (track.id.startsWith('bzv:')) {
-      try {
-        final opened = await YoutubePlayerHandoff.openProviderTrackId(track.id.substring(4));
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('The official music video player is unavailable.')),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open this music video.')),
-          );
-        }
-      }
+      // A video is watched in the official visible iframe, never extracted
+      // into Breezze's native audio-only playback queue.
+      await ref.read(playerControllerProvider.notifier).pause();
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => OfficialMusicVideoScreen(
+          videoId: track.id.substring(4),
+          title: track.title,
+          artist: track.artist,
+          artworkUrl: track.artworkUrl,
+        ),
+      ));
       return;
     }
     if (isMetadataOnlyTrackId(track.id)) {

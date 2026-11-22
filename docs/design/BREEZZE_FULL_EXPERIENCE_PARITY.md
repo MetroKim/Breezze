@@ -41,7 +41,7 @@ Breezze targets the breadth, navigation quality and polish of a mature music ser
 - Standardized Home / New / Radio / Library / Search navigation.
 - Desktop sidebar now offers Account and Settings.
 - Search Songs vs Music Videos is explicit; the video query is no longer hard-coded to one exact phrase.
-- Album and chart discovery opens Breezze metadata details rather than auto-handing-off to another music app. Videos still use the existing official external player; licensed in-app embed remains its own task.
+- Album and chart discovery opens Breezze metadata details rather than auto-handing-off to another music app. Music video results now open a Breezze route with the official YouTube IFrame player on Android/iOS/macOS/web; Windows/Linux present an explicit official watch-page fallback. Upstream embed restrictions remain enforced. The video player is not a licensed native audio stream.
 - Albums can be saved from metadata details and removed in Library, keyed to the signed-in owner.
 - Library section choices persist by owner.
 - Central UI permission guard excludes retired Audius and other discovery-only tracks from native playback/queue/download actions.
