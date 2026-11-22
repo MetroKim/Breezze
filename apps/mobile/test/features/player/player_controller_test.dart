@@ -171,6 +171,38 @@ void main() {
     await player.stop();
   });
 
+  test('failed native play closes the authorized server session', () async {
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'bz:audius:play-failure',
+          streamUrl: 'https://media.example/failure.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          sessionId: 'play-failure-session',
+        ),
+      ];
+    final client = _FakePlaybackSessionClient();
+    final engine = _FakeAudioEngine()..failPlay = true;
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackSessionClientProvider.overrideWithValue(client),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const track = TrackInfo(id: 'bz:audius:play-failure', title: 'Failure');
+    await player.playTrack(trackId: track.id, queue: const [track]);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.state.playbackState, PlaybackState.failed);
+    expect(client.stopped, ['play-failure-session']);
+  });
+
   test('OS audio interruption pauses and requires an explicit resume', () async {
     final resolver = _FakeResolver();
     final engine = _FakeAudioEngine();
@@ -332,7 +364,12 @@ class _FakeAudioEngine implements AudioEngineAdapter {
   }
 
   @override
-  Future<void> play() async {}
+  bool failPlay = false;
+
+  @override
+  Future<void> play() async {
+    if (failPlay) throw StateError('native play failed');
+  }
 
   @override
   Future<void> pause() async {}
