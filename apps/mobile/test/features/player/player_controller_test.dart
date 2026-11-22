@@ -123,6 +123,53 @@ void main() {
     expect(player.state.playbackState, PlaybackState.playing);
   });
 
+  test('completed track advances the single global queue exactly once', () async {
+    final resolver = _FakeResolver();
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const first = TrackInfo(
+      id: 'bz:audius:queue-first',
+      title: 'First track',
+      artist: 'Example Artist',
+    );
+    const second = TrackInfo(
+      id: 'bz:audius:queue-second',
+      title: 'Second track',
+      artist: 'Example Artist',
+    );
+
+    await player.playTrack(
+      trackId: first.id,
+      queue: const [first, second],
+      startIndex: 0,
+    );
+    expect(player.state.currentTrack?.id, first.id);
+    expect(resolver.calls, 1);
+
+    engine.emit(PlaybackState.ended);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.state.currentTrack?.id, second.id);
+    expect(resolver.calls, 2);
+
+    // Duplicate completion notifications for the same item must not skip
+    // another queue entry or trigger a second resolver request.
+    engine.emit(PlaybackState.ended);
+    await Future<void>.delayed(Duration.zero);
+    expect(player.state.currentTrack?.id, second.id);
+    expect(resolver.calls, 2);
+  });
+
 }
 
 class _FakeResolver implements PlaybackResolver {
