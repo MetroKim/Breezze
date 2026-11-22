@@ -93,10 +93,19 @@ def main() -> None:
             cache[size] = original.resize((size, size), Image.Resampling.LANCZOS)
         return cache[size]
 
-    def write_png(path: Path, size: int) -> None:
+    def write_png(path: Path, size: int, *, opaque: bool = False) -> None:
         if not path.parent.is_dir():
             return
-        resized(size).save(path, format="PNG", optimize=True)
+        artwork = resized(size)
+        if opaque:
+            # iOS's flat AppIcon asset catalog cannot contain an alpha channel.
+            # Preserve the supplied white symbol, flatten only the transparent
+            # corner pixels onto the official #050505 background. iOS applies
+            # its own rounded mask to the resulting opaque icon.
+            canvas = Image.new("RGBA", artwork.size, (5, 5, 5, 255))
+            canvas.alpha_composite(artwork)
+            artwork = canvas.convert("RGB")
+        artwork.save(path, format="PNG", optimize=True)
         print(f"Breezze brand icon {path.relative_to(APP)} ({size}px)")
 
     assets = APP / "build" / "brand"
@@ -132,7 +141,10 @@ def main() -> None:
                 continue
             logical = float(size.split("x")[0])
             pixel_size = int(round(logical * float(scale.rstrip("x"))))
-            write_png(folder / filename, pixel_size)
+            write_png(
+                folder / filename, pixel_size,
+                opaque=folder.relative_to(APP).parts[0] == "ios",
+            )
 
     write_png(APP / "web/favicon.png", 48)
     for name, pixels in (
