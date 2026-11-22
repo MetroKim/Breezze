@@ -79,7 +79,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           }
         }));
         madeForYou = resolved.whereType<TrackInfo>()
-            .where((track) => track.title.isNotEmpty)
+            .where((track) => track.title?.isNotEmpty == true)
             .toList(growable: false);
       } catch (_) {
         // Personalized content is optional; local listening history remains.
