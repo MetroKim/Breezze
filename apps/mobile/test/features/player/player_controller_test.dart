@@ -55,9 +55,9 @@ void main() {
     final container = ProviderContainer(overrides: [
       playbackResolverProvider.overrideWithValue(resolver),
     ]);
-    addTearDown(() {
+    addTearDown(() async {
       container.dispose();
-      engine.dispose();
+      await engine.dispose();
     });
 
     final player = container.read(playerControllerProvider.notifier);
@@ -80,12 +80,14 @@ void main() {
 
     await player.pause();
     expect(player.state.playbackState, PlaybackState.paused);
+    await player.seekTo(const Duration(seconds: 55));
+    expect(player.state.position, const Duration(seconds: 55));
 
     await player.resume();
     expect(resolver.calls, 2);
     expect(engine.prepareCount, 2);
-    expect(engine.lastSeekPosition, const Duration(seconds: 42));
-    expect(player.state.position, const Duration(seconds: 42));
+    expect(engine.lastSeekPosition, const Duration(seconds: 55));
+    expect(player.state.position, const Duration(seconds: 55));
     expect(player.state.playbackState, PlaybackState.playing);
   });
 }
