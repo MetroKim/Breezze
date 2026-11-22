@@ -60,12 +60,12 @@ describe('RecommendationsService', () => {
     rights.filterFullStream.mockResolvedValue(new Set(['a-3', 'b-1']));
 
     await expect(service.forUser('user-1')).resolves.toEqual([
-      { trackId: 'a-3', reason: 'Because you listen to this artist' },
       { trackId: 'b-1', reason: 'Because you listen to this artist' },
+      { trackId: 'a-3', reason: 'Because you listen to this artist' },
     ]);
 
     expect(rights.filterFullStream).toHaveBeenCalledWith(
-      ['a-1', 'a-2', 'a-3', 'b-1'],
+      ['a-1', 'b-1', 'a-2', 'a-3'],
       'TZ',
     );
   });
