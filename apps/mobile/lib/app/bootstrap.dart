@@ -17,7 +17,7 @@ import '../features/player/player_controller.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// YouTube Music, Deezer and SoundCloud are metadata/discovery sources only.
+/// YouTube Music and Deezer are metadata/discovery sources only.
 /// Full-track playback is resolved separately through an approved provider
 /// grant or Breezze-owned licensed media; catalogue metadata never grants it.
 /// Downloads remain rights-gated. Lyrics
@@ -89,6 +89,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
 
       final tracks = <ProviderTrack>[];
       final seen = <String>{};
+      var successfulProviders = 0;
       for (final providerEntry in rawProviders.whereType<Map>()) {
         final providerId = providerEntry['providerId'] as String? ?? '';
         final envelope = providerEntry['result'];
@@ -99,6 +100,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
         }
         final rawTracks = envelope['value'];
         if (rawTracks is! List) continue;
+        successfulProviders++;
         for (final rawTrack in rawTracks.whereType<Map>()) {
           final providerTrackId = rawTrack['providerTrackId'] as String? ?? '';
           final title = rawTrack['title'] as String? ?? '';
@@ -124,7 +126,9 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
           }
         }
       }
-      if (tracks.isEmpty) return ProviderError('empty_result');
+      if (successfulProviders == 0) return ProviderError('all_providers_unavailable');
+      // A successful empty catalogue query is not a network failure.
+      if (tracks.isEmpty) return ProviderOk(<ProviderTrack>[]);
       return ProviderOk(tracks);
     } catch (_) {
       return ProviderError('network_error');
