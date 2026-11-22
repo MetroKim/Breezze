@@ -11,7 +11,7 @@ Breezze is an independent product. It is not affiliated with or endorsed by YouT
 - No artist portal, artist upload workflow, subscriptions, billing, memberships or paywalls in this release.
 - Artist and album pages are listener-facing catalog experiences only.
 - Search metadata is not a playback licence. Playback requires a backend-authorized source with applicable rights.
-- YouTube Music through `ytmusicapi` is metadata/discovery only. Audius is the first official third-party playback adapter and is limited to public, ungated, API-accessible tracks.
+- YouTube Music through `ytmusicapi` is metadata/discovery only. Audius is an in-app playback source for eligible public, ungated, API-accessible tracks. Breezze owns the playback UI and queue; provider sources never require opening another app.
 - Breezze does not extract YouTube audio, bypass provider access controls, or re-host third-party recordings.
 
 ## Repository layout
@@ -88,6 +88,6 @@ The Flutter codebase targets Android, iOS, Web, Linux, macOS and Windows. Build 
 
 ## Current verification
 
-The active implementation branch is `feat/breezze-audio-engine-foundation`; its work is proposed in [PR #8](https://github.com/MetroKim/MetroMusic/pull/8). PR #7 remains a separate, unmerged Audius-provider change. Neither PR is merged. Check the linked workflow runs and the gap register before treating any feature as release-ready.
+The current main baseline includes the merged provider, playback and backend-hardening work through commit `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`. Its post-merge quality workflow [45008430816](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816) passed all 7 jobs. The in-app experience contract is proposed in [PR #33](https://github.com/MetroKim/MetroMusic/pull/33); remaining product implementation and acceptance evidence are tracked in [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27).
 
 Breezze's one-million-active-listener goal is an engineering target, not a measured capacity claim. Production deployment, provider rights approval, load testing and physical-device certification remain release gates.

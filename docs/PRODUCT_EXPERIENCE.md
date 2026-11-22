@@ -9,7 +9,7 @@ This specification applies the supplied music-app feature inventory to Breezze's
 - The global Riverpod PlayerController remains the only playback authority. Navigation must not recreate or reset playback.
 - Use real provider/catalog results. Never fabricate tracks, radio stations, listening history, charts, or recommendations.
 - Keep Breezze free. Do not introduce subscriptions, billing, paywalls, or premium-only controls.
-- Respect source terms and rights. Use official playback surfaces where required; do not extract or re-host media without authorization.
+- Keep the consumer journey inside Breezze: search, detail pages, playback, video viewing, library, playlists, account and support must use Breezze-owned screens and controls. Providers may supply authorized data or media behind the scenes, but core flows must not hand users to an external app or browser. Do not extract or re-host media without authorization.
 - Provide loading, empty, offline, error, and populated states. A blank screen is not an acceptable failure state.
 
 ## Information architecture
@@ -33,11 +33,11 @@ This specification applies the supplied music-app feature inventory to Breezze's
 - Each rail card opens its entity; play starts a queue with the correct origin/context.
 
 ### Search
-- Search the connected catalog source and display real track metadata/artwork.
+- Search connected catalog sources and display real track metadata/artwork. Open results in Breezze-owned detail routes; provider links are provenance, not the primary navigation action.
 - Keep recent searches on-device, newest first, deduplicated case-insensitively, capped at ten, individually removable, and clearable.
 - Handle overlapping requests safely: stale responses must not replace newer results.
 - Distinguish no-results from provider/network failures.
-- Future catalog integration can add album, artist, playlist, video, and station result groups without changing the search-history contract.
+- Catalog integration must support typed album, artist, playlist, video, and station result groups. Video results open a Breezze-owned video detail/player route; if no authorized in-app video source exists, show a clear unavailable state rather than an external-player handoff.
 
 ### Library
 - Favorites and downloads remain distinct. Favorites are saved catalog references; downloads are local media files with provider/rights constraints.
@@ -47,11 +47,11 @@ This specification applies the supplied music-app feature inventory to Breezze's
 ### Browse and Radio
 - Only show editorial rails, charts, concerts, or radio streams when a verified provider/backend returns them.
 - Live badges require a real live-state signal. Schedule times must include a timezone.
-- Station and collection detail routes need real descriptions, artwork, playback state, and save/share actions.
+- Station and collection detail routes need real descriptions, artwork, playback state, and save/share actions. Station playback must use an authorized source rendered by Breezze's global player; schedules alone never imply playability.
 
 ### Player
 - Mini-player displays current track artwork/title/artist and playback progress, and opens the full Now Playing screen.
-- Now Playing exposes transport, seek, shuffle/repeat, queue, lyrics, output route, and volume only where the engine supports them.
+- Now Playing exposes transport, seek, shuffle/repeat, queue, lyrics, output route, and volume only where the engine supports them. No core playback action may launch a provider app or browser.
 - Queue operations use the global PlayerController/QueueManager.
 - Lyrics are shown only when a licensed/authorized lyrics provider returns a matching track.
 

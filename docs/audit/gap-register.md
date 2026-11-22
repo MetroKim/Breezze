@@ -1,18 +1,21 @@
 # Breezze Current Implementation Gap Register
 
 **Last reconciled:** 2026-11-22  
-**Active implementation branch:** `feat/breezze-audio-engine-foundation`  
-**Current proposal:** [PR #8](https://github.com/MetroKim/MetroMusic/pull/8)  
-**Related provider proposal:** [PR #7](https://github.com/MetroKim/MetroMusic/pull/7)
+**Main baseline:** `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`  
+**Post-merge CI:** [45008430816 — all 7 jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816)  
+**In-app experience contract:** [PR #33](https://github.com/MetroKim/MetroMusic/pull/33)  
+**Master implementation checklist:** [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27)
 
 This file is the current release-status reference. A capability is not marked release-ready merely because a class, screen, endpoint or configuration exists. It needs implementation, automated tests, CI evidence, provider/rights approval where relevant, and platform validation.
 
 ## Product scope — current release
 
 - Listener-facing Breezze app only.
-- Five destinations: Home, Browse, Radio, Library and Search.
+- Five primary destinations: Home, Browse, Radio, Library and Search; listener-facing account, profile, settings, support and entity-detail routes are part of the same in-app product.
 - No artist portal, artist upload workflow, subscription, membership, billing, paywall or paid tier.
 - Artist/album/playlist pages, where implemented, are consumer catalog pages—not artist management tools.
+- Core consumer flows must remain inside Breezze: no external-app/browser handoff for playback, video, library, playlist, account or support actions. Providers may supply authorized data/media behind the scenes.
+- Music-video playback requires an authorized in-app video source and Breezze-owned video surface; metadata-only video sources show unavailable state, never an external-player redirect.
 - No third-party audio extraction or unauthorized re-hosting.
 - No R2-hosted third-party music. Approved provider audio is delivered directly to the device by default.
 
@@ -29,8 +32,12 @@ This file is the current release-status reference. A capability is not marked re
 | Expired playback grants | Resume path can request a fresh grant rather than reusing an expired signed URL | PlayerController tests; verify provider expiry behavior against live authorized provider |
 | Search | Search UI and metadata discovery exist; local recent-search behavior is present in the app implementation | Verify history persistence/error states and out-of-order response widget tests |
 | Browse | Genre/discovery UI and backend metadata feeds exist | Curated editorial feeds, full charts and catalog-backed entity routes remain incomplete |
-| Radio | Station directory and program/schedule metadata are exposed | Radio stream playback is not implemented; no station Play action should imply otherwise |
-| Library | Favorites, playlists, history and download-related client/backend foundations exist | Complete account-switch, ownership, offline expiry/revocation and device storage tests before release |
+| Radio | Station directory and program/schedule metadata are exposed | Radio stream playback is not implemented; no station Play action should imply otherwise. In-app playback requires an authorized stream/session contract |
+| Library | Favorites, playlists, history and download-related client/backend foundations exist | Complete account-switch, ownership, playlist sync/conflict handling, offline expiry/revocation and device storage tests before release |
+| Video | Video discovery/detail capability is not verified as a complete feature | Authorized in-app video provider and embedded player are missing; external player handoff is not accepted |
+| Profile/account | Basic account/profile foundations exist | Complete profile editing/avatar, device/session controls, deletion/export and cross-device consistency |
+| Support | Help/FAQ foundations exist | Complete in-app feedback/support submission, status/error handling and privacy-safe diagnostics |
+| Automatic mixes | Recommendation foundation exists | Complete preference-aware ranking, cold-start, stable mix generation, pagination and feedback controls |
 | Provider rights | Provider capability and rights boundaries are documented; backend resolver is the authorization boundary | Production terms/territory evidence and live provider acceptance tests remain required |
 | Cloudflare | API Worker typechecks and implements a narrow public metadata cache path | Worker deployment, domain/origin security, WAF/rate-limit setup and live cache tests remain |
 | Capacity | Cloudflare/NestJS/Redis/PostgreSQL scaling architecture and staged load-test plan are documented | No one-million-user capacity claim until production-like load tests pass |
@@ -50,17 +57,10 @@ A metadata match, preview URL, video result, public endpoint or technically reac
 
 ## Current CI snapshot
 
-Latest commit at this audit: `c9372145cd3527ba98a109e9918a004e65475cbd`.  
-Latest workflow: [44986131001](https://github.com/MetroKim/MetroMusic/actions/runs/44986131001).
+Latest merged baseline: `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`.  
+Post-merge workflow: [45008430816](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816).
 
-At the last observed check:
-- Flutter analysis completed successfully.
-- Flutter tests were still running.
-- Backend/Prisma validation, tests and build completed successfully.
-- Both Cloudflare Worker typechecks completed successfully.
-- Linux/Android/Web, Windows, macOS and iOS build jobs were still running or pending.
-
-Do not describe the complete workflow as green until every job for this exact commit has completed successfully. A later commit requires a new CI result.
+Verified result: all 7 jobs passed, including Flutter analysis/tests, Windows, macOS/iOS, Linux/Android/Web builds, both Cloudflare Worker typechecks, and NestJS/Prisma validation/tests/build. This proves CI compilation and automated checks for that commit; it does not prove physical-device playback, provider licensing, production deployment or load capacity. Every later code commit needs its own fresh CI result.
 
 ## Release blockers / unfinished work
 
