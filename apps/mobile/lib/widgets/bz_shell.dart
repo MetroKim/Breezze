@@ -79,6 +79,9 @@ class _BzHomeState extends ConsumerState<BzHome> {
           final expanded = constraints.maxWidth >= BzBreakpoints.medium;
           if (!expanded) return pages;
 
+          // Apple Music 7.0 desktop: content fills the pane and the glass
+          // player pill floats above it, anchored bottom: 20, centered,
+          // auto-width — never a docked full-width bar (spec §4.1).
           return Row(
             children: [
               _DesktopNavigation(
@@ -87,22 +90,24 @@ class _BzHomeState extends ConsumerState<BzHome> {
                 onChanged: (i) => setState(() => _index = i),
               ),
               Expanded(
-                child: Column(
+                child: Stack(
                   children: [
-                    Expanded(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: BzBreakpoints.contentMaxWidth,
-                          ),
-                          child: pages,
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: BzBreakpoints.contentMaxWidth,
                         ),
+                        child: pages,
                       ),
                     ),
                     if (hasPlayer)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
-                        child: _MiniPlayer(onTap: _openNowPlaying),
+                      Positioned(
+                        left: 24,
+                        right: 24,
+                        bottom: 20,
+                        child: Center(
+                          child: _MiniPlayer(onTap: _openNowPlaying),
+                        ),
                       ),
                   ],
                 ),
@@ -116,7 +121,10 @@ class _BzHomeState extends ConsumerState<BzHome> {
           : SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                // Floating Liquid Glass bottom chrome: wider margins so the
+                // capsule tab bar and mini-player read as undocked layers,
+                // not edge-to-edge bars (Apple Music 7.0 pattern).
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -165,7 +173,7 @@ class _DesktopNavigation extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.bzSurface1,
         border: Border(
-          right: BorderSide(color: theme.bzSeparator, width: 0.7),
+          right: BorderSide(color: theme.bzSeparator, width: 0.5),
         ),
       ),
       child: SafeArea(
@@ -229,6 +237,9 @@ class _DesktopTabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = active ? theme.bzAccent : theme.bzText2;
+    // Selected rows use a quiet 5% tint fill with an 8px radius —
+    // never a filled capsule at rest (spec: sidebar selection contract).
+    final activeFill = theme.bzText1.withValues(alpha: 0.05);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Semantics(
@@ -238,7 +249,7 @@ class _DesktopTabButton extends StatelessWidget {
         child: Tooltip(
           message: destination.label,
           child: Material(
-            color: active ? theme.bzSurface2 : Colors.transparent,
+            color: active ? activeFill : Colors.transparent,
             borderRadius: BorderRadius.circular(BzRadius.button),
             child: InkWell(
               borderRadius: BorderRadius.circular(BzRadius.button),
@@ -306,11 +317,11 @@ class _MiniPlayer extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(BzRadius.card),
+          borderRadius: BorderRadius.circular(BzRadius.capsule),
           onTap: onTap,
           child: BzGlassContainer(
-          radius: BzRadius.card,
-          blur: 18,
+          radius: BzRadius.capsule,
+          blur: 24,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 8, 7),
             child: Column(
@@ -380,21 +391,113 @@ class _MiniPlayer extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 2,
-                    backgroundColor: theme.bzSeparator,
-                    color: theme.bzAccent,
+                // Scrubber (blueprint §5.2): pointer-drag seek, not just a
+                // passive indicator. The drag fraction dispatches seekTo
+                // through the player store — UI never touches the engine.
+                _MiniScrubber(
+                  progress: progress,
+                  enabled: player.duration > Duration.zero,
+                  onSeek: (fraction) => controller.seekTo(
+                    Duration(
+                      milliseconds:
+                          (fraction * player.duration.inMilliseconds).toInt(),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ),
+        ),
       ),
-    ),
+    );
+  }
+}
+
+/// Draggable progress strip on the mini-player pill. Tap or drag seeks;
+/// the fill uses the accent token (action/state color) per the accent
+/// discipline contract. Disabled while duration is unknown.
+class _MiniScrubber extends StatefulWidget {
+  final double progress;
+  final bool enabled;
+  final ValueChanged<double> onSeek;
+
+  const _MiniScrubber({
+    required this.progress,
+    required this.enabled,
+    required this.onSeek,
+  });
+
+  @override
+  State<_MiniScrubber> createState() => _MiniScrubberState();
+}
+
+class _MiniScrubberState extends State<_MiniScrubber> {
+  double? _dragValue;
+  bool _dragging = false;
+
+  double get _value =>
+      _dragging && _dragValue != null ? _dragValue! : widget.progress;
+
+  void _updateFromPosition(Offset localPosition, double width) {
+    if (width <= 0) return;
+    final fraction = (localPosition.dx / width).clamp(0.0, 1.0);
+    setState(() => _dragValue = fraction);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      slider: true,
+      label: 'Playback position',
+      enabled: widget.enabled,
+      child: SizedBox(
+        height: 14,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) {
+                if (!widget.enabled) return;
+                _updateFromPosition(details.localPosition, width);
+              },
+              onHorizontalDragStart: (details) {
+                if (!widget.enabled) return;
+                _dragging = true;
+                _updateFromPosition(details.localPosition, width);
+              },
+              onHorizontalDragUpdate: (details) {
+                if (!widget.enabled) return;
+                _updateFromPosition(details.localPosition, width);
+              },
+              onHorizontalDragEnd: (_) {
+                if (!widget.enabled || !_dragging) return;
+                final value = _dragValue;
+                _dragging = false;
+                setState(() => _dragValue = null);
+                if (value != null) widget.onSeek(value);
+              },
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: SizedBox(
+                    height: 3,
+                    width: double.infinity,
+                    child: LinearProgressIndicator(
+                      value: _value,
+                      minHeight: 3,
+                      backgroundColor: theme.bzSeparator,
+                      color: theme.bzAccent,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -473,8 +576,8 @@ class _TabBar extends StatelessWidget {
             context,
           ),
           child: BzGlassContainer(
-            radius: BzRadius.card,
-            blur: 18,
+            radius: BzRadius.capsule,
+            blur: 16,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
               child: Row(
