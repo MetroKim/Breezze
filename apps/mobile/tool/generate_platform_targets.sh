@@ -106,6 +106,29 @@ if java_activity.exists():
     ).replace("extends FlutterActivity", "extends AudioServiceActivity")
     java_activity.write_text(source)
 
+# The current audio_service_win native plugin still includes Microsoft's
+# deprecated experimental coroutine header. MSVC 14.52 promotes its
+# deprecation to a hard error; silence only this upstream compatibility
+# diagnostic for the generated Windows runner until the plugin is updated.
+windows_cmake = app_dir / "windows" / "CMakeLists.txt"
+if windows_cmake.exists():
+    cmake = windows_cmake.read_text()
+    definition = "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+    if definition not in cmake:
+        project_line = next(
+            (line for line in cmake.splitlines()
+             if line.strip().startswith("project(")),
+            None,
+        )
+        if project_line is None:
+            raise SystemExit("Windows CMakeLists.txt has no project() declaration")
+        cmake = cmake.replace(
+            project_line,
+            project_line + "\\n" + definition,
+            1,
+        )
+        windows_cmake.write_text(cmake)
+
 ios_plist = app_dir / "ios" / "Runner" / "Info.plist"
 if ios_plist.exists():
     with ios_plist.open("rb") as source:
