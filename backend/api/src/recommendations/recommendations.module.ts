@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { RecommendationsController } from './recommendations.controller';
 import { RecommendationsService } from './recommendations.service';
+import { RightsModule } from '../rights/rights.module';
 
 @Module({
+  imports: [RightsModule],
   controllers: [RecommendationsController],
   providers: [RecommendationsService],
   exports: [RecommendationsService],
