@@ -650,8 +650,11 @@ class PlayerController extends Notifier<PlayerState> {
       _startHeartbeatTimer();
 
       if (info.title != null) {
+        final auth = ref.read(authSessionProvider);
+        final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
         unawaited(_recent
             .record(
+              ownerId,
               info.id,
               info.title!,
               info.artist ?? '',
