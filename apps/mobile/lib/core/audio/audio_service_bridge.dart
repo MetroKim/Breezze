@@ -1,6 +1,6 @@
 import 'package:audio_service/audio_service.dart' as audio;
 import 'package:breezze_audio_contracts/audio_contracts.dart' as contracts;
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/player/player_controller.dart';
@@ -182,7 +182,12 @@ class AudioServiceBridge extends audio.BaseAudioHandler
 /// Starts audio_service with our handler; called once by the app root.
 Future<BackgroundAudioBridge> startBackgroundAudio(
     ProviderContainer container) async {
-  if (defaultTargetPlatform == TargetPlatform.fuchsia) {
+  // audio_service is the native Android/iOS media-session bridge. Web and
+  // desktop targets use the audio engine without attempting an unsupported
+  // OS notification/lock-screen integration.
+  if (kIsWeb ||
+      (defaultTargetPlatform != TargetPlatform.android &&
+          defaultTargetPlatform != TargetPlatform.iOS)) {
     return NoopBackgroundBridge();
   }
 
