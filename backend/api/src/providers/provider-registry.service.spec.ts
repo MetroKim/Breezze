@@ -23,15 +23,18 @@ describe('ProviderRegistry', () => {
     jamendo as unknown as JamendoAdapter,
   );
 
-  it('searches enabled external providers and preserves partial failures', async () => {
+  it('searches internal and external providers and preserves partial failures', async () => {
+    internal.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'licensed-1' }] });
     youtube.search.mockResolvedValue({ kind: 'error', code: 'YTMUSIC_UNAVAILABLE', retryable: true, message: 'offline' });
     deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'deezer-1' }] });
     jamendo.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'jamendo-1' }] });
     const result = await registry().searchAll('  afrobeats  ');
     expect(result.query).toBe('afrobeats');
     expect(result.providers.map((item) => item.providerId))
-      .toEqual(['youtube_music', 'deezer', 'jamendo', 'breezze_internal']);
+      .toEqual(['breezze_internal', 'youtube_music', 'deezer', 'jamendo']);
     expect(internal.search).toHaveBeenCalledWith('afrobeats');
+    expect(result.providers.find((item) => item.providerId === 'breezze_internal')?.result)
+      .toMatchObject({ kind: 'ok', value: [{ providerTrackId: 'licensed-1' }] });
     expect(result.providers.find((item) => item.providerId === 'youtube_music')?.result)
       .toMatchObject({ kind: 'error', code: 'YTMUSIC_UNAVAILABLE' });
   });
