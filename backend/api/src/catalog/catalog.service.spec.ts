@@ -12,14 +12,14 @@ describe('CatalogService', () => {
     },
     album: { findUnique: jest.fn() },
   };
-  const rights = { decide: jest.fn() };
+  const rights = { filterMetadataDisplay: jest.fn() };
   let service: CatalogService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.artist.upsert.mockResolvedValue({ id: 'artist-1' });
     prisma.track.upsert.mockResolvedValue({ id: 'track-1' });
-    rights.decide.mockResolvedValue({ allowed: true, reason: 'OK' });
+    rights.filterMetadataDisplay.mockImplementation(async (ids: string[]) => new Set(ids));
     service = new CatalogService(
       prisma as unknown as PrismaService,
       rights as unknown as RightsDecisionService,
@@ -63,16 +63,11 @@ describe('CatalogService', () => {
       artist: { id: 'artist-1' },
       album: null,
     });
-    rights.decide.mockResolvedValue({ allowed: false, reason: 'TAKEDOWN_ACTIVE' });
+    rights.filterMetadataDisplay.mockResolvedValue(new Set());
 
     await expect(service.song('track-1', 'TZ'))
       .rejects.toBeInstanceOf(NotFoundException);
-    expect(rights.decide).toHaveBeenCalledWith({
-      userId: null,
-      trackId: 'track-1',
-      action: 'metadata.display',
-      territory: 'TZ',
-    });
+    expect(rights.filterMetadataDisplay).toHaveBeenCalledWith(['track-1'], 'TZ');
   });
 
   it('filters unavailable and taken-down tracks from public album metadata', async () => {
@@ -82,9 +77,7 @@ describe('CatalogService', () => {
       tracks: [{ id: 'track-1' }, { id: 'track-2' }],
       artist: { id: 'artist-1' },
     });
-    rights.decide.mockImplementation(({ trackId }: { trackId: string }) =>
-      Promise.resolve({ allowed: trackId === 'track-1', reason: 'OK' }),
-    );
+    rights.filterMetadataDisplay.mockResolvedValue(new Set(['track-1']));
 
     await expect(service.album('album-1', 'TZ')).resolves.toMatchObject({
       id: 'album-1',
@@ -98,7 +91,7 @@ describe('CatalogService', () => {
       tracks: [{ id: 'track-1' }],
       artist: { id: 'artist-1' },
     });
-    rights.decide.mockResolvedValue({ allowed: false, reason: 'NOT_AVAILABLE_IN_TERRITORY' });
+    rights.filterMetadataDisplay.mockResolvedValue(new Set());
 
     await expect(service.album('album-1', 'TZ'))
       .rejects.toBeInstanceOf(NotFoundException);
