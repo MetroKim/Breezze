@@ -12,6 +12,7 @@ const MAX_HEARTBEAT_CREDIT_MS = 30_000;
 
 export interface StartPlaybackSessionInput {
   trackId?: string;
+  requestedQuality?: string;
   providerId?: string;
   providerTrackId?: string;
   canonicalTrackId?: string;
@@ -47,7 +48,10 @@ export class PlaybackSessionService {
     } else {
       if (!input.trackId) throw new ConflictException('TRACK_ID_REQUIRED');
       trackId = input.trackId;
-      playback = await this.resolver.resolve(userId, { trackId }, country);
+      playback = await this.resolver.resolve(userId, {
+        trackId,
+        requestedQuality: input.requestedQuality,
+      }, country);
     }
 
     const now = new Date();
