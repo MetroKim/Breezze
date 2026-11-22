@@ -160,10 +160,21 @@ export class PlaybackSessionService {
         });
         return { stopped: true, duplicate: true, qualifiedPlayRecorded: Boolean(event) };
       }
-      await tx.playbackSession.updateMany({
+      const stopped = await tx.playbackSession.updateMany({
         where: { id: sessionId, userId, status: 'active' },
         data: { status: 'stopped', stoppedAt: new Date() },
       });
+      if (stopped.count !== 1) {
+        const latest = await tx.playbackSession.findUnique({ where: { id: sessionId } });
+        const event = await tx.listeningEvent.findUnique({
+          where: { id: sessionId },
+          select: { id: true },
+        });
+        if (latest?.status === 'stopped') {
+          return { stopped: true, duplicate: true, qualifiedPlayRecorded: Boolean(event) };
+        }
+        throw new ConflictException('PLAYBACK_SESSION_STOP_RACE');
+      }
       const qualified = session.accumulatedMs >= 30_000;
       if (qualified) {
         await tx.listeningEvent.create({
