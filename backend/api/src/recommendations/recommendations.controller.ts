@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RecommendationsService } from './recommendations.service';
@@ -9,7 +9,10 @@ export class RecommendationsController {
   constructor(private readonly recs: RecommendationsService) {}
 
   @Get()
-  forUser(@CurrentUser() userId: string) {
-    return this.recs.forUser(userId);
+  forUser(
+    @CurrentUser() userId: string,
+    @Headers('x-breezze-country') edgeCountry: string | undefined,
+  ) {
+    return this.recs.forUser(userId, edgeCountry);
   }
 }

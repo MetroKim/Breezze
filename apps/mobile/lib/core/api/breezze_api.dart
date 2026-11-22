@@ -47,7 +47,7 @@ class BreezzeApi {
 
   Future<Map<String, dynamic>> _get(String path) async {
     Future<http.Response> send() =>
-        _client.get(_uri(path), headers: _headers);
+        _client.get(_uri(path), headers: _headers).timeout(const Duration(seconds: 10));
     var response = await send();
     if (response.statusCode == 401 &&
         onUnauthorized != null &&
@@ -154,6 +154,43 @@ class BreezzeApi {
 
   Future<Map<String, dynamic>> discoveryAlbumTracks(String albumId) =>
       _get('/discovery/albums/${Uri.encodeComponent(albumId)}/tracks');
+
+  // ---- radio directory (metadata only; no stream URLs) ----
+
+  Future<List<Map<String, dynamic>>> getRadioStations() async {
+    final response = await _get('/radio/stations');
+    final payload = response['data'] ?? response;
+    if (payload is! List) {
+      throw const FormatException('Invalid radio station response');
+    }
+    return payload
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> getRadioStation(String stationId) async {
+    final response = await _get(
+      '/radio/stations/${Uri.encodeComponent(stationId)}',
+    );
+    final payload = response['data'] ?? response;
+    if (payload is! Map) {
+      throw const FormatException('Invalid radio station detail response');
+    }
+    return Map<String, dynamic>.from(payload);
+  }
+
+  Future<void> saveOnboardingPreferences({
+    required String country,
+    required List<String> genres,
+    required List<String> favoriteArtists,
+  }) async {
+    await _post('/onboarding/preferences', {
+      'country': country,
+      'genres': genres,
+      'favoriteArtists': favoriteArtists,
+    });
+  }
 
   // ---- auth ----
 
@@ -347,6 +384,15 @@ class BreezzeApi {
       _post('/playlists/${Uri.encodeComponent(playlistId)}/tracks', {
         'trackId': trackId,
       });
+
+  Future<Map<String, dynamic>> reorderPlaylistTracks(
+    String playlistId,
+    List<String> trackIds,
+  ) =>
+      _patch(
+        '/playlists/${Uri.encodeComponent(playlistId)}/tracks/order',
+        {'trackIds': trackIds},
+      );
 
   Future<void> removePlaylistTrack(String playlistId, String trackId) async {
     await _delete(

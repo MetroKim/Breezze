@@ -2,7 +2,9 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/bootstrap.dart' show FavoriteTrack;
 import '../../app/playlist_store.dart';
+import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -28,6 +30,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   final _store = PlaylistStore();
   UserPlaylist? _playlist;
   bool _loading = true;
+  bool _remoteSynced = false;
 
   @override
   void initState() {
@@ -36,12 +39,42 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   }
 
   Future<void> _load() async {
-    final playlists = await _store.load(widget.ownerId);
+    var playlists = await _store.load(widget.ownerId);
+    var remoteSynced = false;
+    final auth = ref.read(authSessionProvider);
+    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(widget.playlistId)) {
+      try {
+        final remote = await ref.read(authSessionProvider.notifier).api.getPlaylist(widget.playlistId);
+        final rawItems = remote['items'];
+        final tracks = <FavoriteTrack>[];
+        if (rawItems is List) {
+          for (final raw in rawItems) {
+            if (raw is! Map) continue;
+            final item = Map<String, dynamic>.from(raw);
+            final rawTrack = item['track'];
+            if (rawTrack is! Map) continue;
+            final track = Map<String, dynamic>.from(rawTrack);
+            final artist = track['artist'];
+            tracks.add(FavoriteTrack(
+              id: track['id'] as String? ?? item['trackId'] as String? ?? '',
+              title: track['title'] as String? ?? '',
+              artist: artist is Map ? artist['name'] as String? ?? '' : '',
+              durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
+            ));
+          }
+        }
+        await _store.replaceTracks(widget.ownerId, widget.playlistId, tracks);
+        playlists = await _store.load(widget.ownerId);
+        remoteSynced = true;
+      } catch (_) {
+        // Preserve the last locally cached playlist while offline.
+      }
+    }
     if (!mounted) return;
     setState(() {
-      final matches =
-          playlists.where((item) => item.id == widget.playlistId).toList();
+      final matches = playlists.where((item) => item.id == widget.playlistId).toList();
       _playlist = matches.isEmpty ? null : matches.first;
+      _remoteSynced = remoteSynced;
       _loading = false;
     });
   }
@@ -114,6 +147,17 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     );
     controller.dispose();
     if (name == null || name.trim().isEmpty) return;
+    final auth = ref.read(authSessionProvider);
+    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
+      try {
+        await ref.read(authSessionProvider.notifier).api.renamePlaylist(playlist.id, name.trim());
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not sync this playlist name. Try again.')),
+        );
+        return;
+      }
+    }
     await _store.rename(widget.ownerId, playlist.id, name);
     await _load();
     widget.onChanged?.call();
@@ -138,6 +182,17 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       ),
     );
     if (confirmed != true) return;
+    final auth = ref.read(authSessionProvider);
+    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
+      try {
+        await ref.read(authSessionProvider.notifier).api.deletePlaylist(playlist.id);
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete the synced playlist. Try again.')),
+        );
+        return;
+      }
+    }
     await _store.delete(widget.ownerId, playlist.id);
     widget.onChanged?.call();
     if (mounted) Navigator.of(context).pop();
@@ -253,7 +308,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     Text(playlist.name, style: theme.textTheme.headlineMedium),
                     const SizedBox(height: 4),
                     Text(
-                      'Playlist · ${playlist.tracks.length} songs · On this device',
+                      'Playlist · ${playlist.tracks.length} songs · ${_remoteSynced ? 'Synced' : 'On this device'}',
                       style: theme.textTheme.bodyMedium
                           ?.copyWith(color: theme.bzText2),
                     ),
@@ -325,12 +380,24 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                   padding: EdgeInsets.zero,
                   itemCount: playlist.tracks.length,
                   onReorderItem: (oldIndex, newIndex) async {
-                    await _store.reorderTracks(
-                      widget.ownerId,
-                      playlist.id,
-                      oldIndex,
-                      newIndex,
-                    );
+                    final orderedTracks = List<FavoriteTrack>.from(playlist.tracks);
+                    final moved = orderedTracks.removeAt(oldIndex);
+                    orderedTracks.insert(newIndex, moved);
+                    final auth = ref.read(authSessionProvider);
+                    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
+                      try {
+                        await ref.read(authSessionProvider.notifier).api.reorderPlaylistTracks(
+                          playlist.id,
+                          orderedTracks.map((track) => track.id).toList(),
+                        );
+                      } catch (_) {
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Could not sync playlist order. Try again.')),
+                        );
+                        return;
+                      }
+                    }
+                    await _store.reorderTracks(widget.ownerId, playlist.id, oldIndex, newIndex);
                     await _load();
                     widget.onChanged?.call();
                   },
@@ -349,11 +416,19 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         ),
                       ),
                       onDismissed: (_) async {
-                        await _store.removeTrack(
-                          widget.ownerId,
-                          playlist.id,
-                          track.id,
-                        );
+                        final auth = ref.read(authSessionProvider);
+                        if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
+                          try {
+                            await ref.read(authSessionProvider.notifier).api.removePlaylistTrack(playlist.id, track.id);
+                          } catch (_) {
+                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Could not remove this synced song. Refresh and try again.')),
+                            );
+                            await _load();
+                            return;
+                          }
+                        }
+                        await _store.removeTrack(widget.ownerId, playlist.id, track.id);
                         await _load();
                         widget.onChanged?.call();
                       },

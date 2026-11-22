@@ -7,8 +7,10 @@ describe('PlaylistsService tenant isolation and ordering', () => {
     track: { findUnique: jest.fn() },
     playlistItem: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       aggregate: jest.fn(),
       create: jest.fn(),
+      updateMany: jest.fn(),
     },
   };
   const prisma = {
@@ -58,7 +60,16 @@ describe('PlaylistsService tenant isolation and ordering', () => {
       .rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.playlist.findFirst).toHaveBeenCalledWith({
       where: { id: 'playlist-owned-by-b', userId: 'user-a' },
-      include: { items: { orderBy: { position: 'asc' } } },
+      include: {
+        items: {
+          orderBy: { position: 'asc' },
+          include: {
+            track: {
+              include: { artist: true, album: true },
+            },
+          },
+        },
+      },
     });
   });
 
@@ -102,6 +113,61 @@ describe('PlaylistsService tenant isolation and ordering', () => {
       .resolves.toBe(existing);
     expect(tx.playlistItem.aggregate).not.toHaveBeenCalled();
     expect(tx.playlistItem.create).not.toHaveBeenCalled();
+  });
+
+  it('reorders only the exact current membership of an owned playlist', async () => {
+    tx.playlistItem.findMany.mockResolvedValue([
+      { trackId: 'track-1' },
+      { trackId: 'track-2' },
+      { trackId: 'track-3' },
+    ]);
+    tx.playlistItem.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(service.reorderTracks(
+      'user-a',
+      'playlist-a',
+      ['track-3', 'track-1', 'track-2'],
+    )).resolves.toEqual({ reordered: true, count: 3 });
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.playlistItem.updateMany).toHaveBeenNthCalledWith(1, {
+      where: { playlistId: 'playlist-a', trackId: 'track-3' },
+      data: { position: 0 },
+    });
+    expect(tx.playlistItem.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { playlistId: 'playlist-a', trackId: 'track-1' },
+      data: { position: 1 },
+    });
+    expect(tx.playlistItem.updateMany).toHaveBeenNthCalledWith(3, {
+      where: { playlistId: 'playlist-a', trackId: 'track-2' },
+      data: { position: 2 },
+    });
+  });
+
+  it('rejects reorder requests that omit or inject playlist items', async () => {
+    tx.playlistItem.findMany.mockResolvedValue([
+      { trackId: 'track-1' },
+      { trackId: 'track-2' },
+    ]);
+
+    await expect(service.reorderTracks(
+      'user-a',
+      'playlist-a',
+      ['track-1', 'track-from-another-playlist'],
+    )).rejects.toThrow('PLAYLIST_ORDER_MISMATCH');
+    expect(tx.playlistItem.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not reorder another account playlist', async () => {
+    tx.$queryRaw.mockResolvedValue([]);
+
+    await expect(service.reorderTracks(
+      'user-a',
+      'playlist-owned-by-b',
+      ['track-1'],
+    )).rejects.toBeInstanceOf(NotFoundException);
+    expect(tx.playlistItem.findMany).not.toHaveBeenCalled();
+    expect(tx.playlistItem.updateMany).not.toHaveBeenCalled();
   });
 
   it('scopes playlist removal to an owned playlist', async () => {
