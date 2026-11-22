@@ -59,3 +59,22 @@ from `apps/mobile`. It downloads the pinned `sqlite3.wasm` and `drift_worker.js`
 runtime assets into `apps/mobile/web/`. The CI Web job runs this script before
 the release build. Keep the pinned release aligned with the resolved Drift and
 sqlite3 dependencies when upgrading them.
+
+
+## Durable playback heartbeat outbox
+
+Playback heartbeat retries are stored separately from user-library sync operations
+in `playback_heartbeat_outbox`. Each row is scoped to the authenticated owner
+and retains the exact server session ID, event UUID and sequence used by the
+original request. The player writes the row before sending a heartbeat, removes
+it only after acknowledgement, and retries the same event identity.
+
+After authentication is restored, Breezze replays pending rows for that same
+account and attempts to stop each abandoned server session. A successful stop
+clears that session's pending rows. Rows belonging to another account are never
+read or replayed during the active account's recovery. The server's session TTL
+remains the final cleanup mechanism when the device stays offline or the
+session is no longer addressable.
+
+Schema version 3 adds this table without changing existing favorites, recent
+history, sync outbox or catalog ID data.

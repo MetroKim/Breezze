@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/recent_store.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/database/database_providers.dart';
+import '../../core/database/playback_heartbeat_outbox_dao.dart';
 import 'playback_session_client.dart';
 
 /// Global PlayerController — spec §51.3, §53.1.
@@ -43,6 +45,10 @@ class PlayerController extends Notifier<PlayerState> {
   int _heartbeatSequence = 1;
   String? _pendingHeartbeatEventId;
   bool _heartbeatInFlight = false;
+  bool _heartbeatRecoveryInFlight = false;
+
+  PlaybackHeartbeatOutboxDao get _heartbeatOutbox =>
+      PlaybackHeartbeatOutboxDao(ref.read(breezzeDatabaseProvider));
 
   PlaybackSessionClient get _sessionClient =>
       ref.read(playbackSessionClientProvider);
@@ -86,12 +92,27 @@ class PlayerController extends Notifier<PlayerState> {
     try {
       final client = _activeSessionClient;
       if (client == null) return;
+      final auth = ref.read(authSessionProvider);
+      if (auth is AuthSignedIn) {
+        // Commit the exact idempotency key and sequence before sending. If
+        // the process dies after the server commits but before the response
+        // arrives, startup recovery can safely replay the same event.
+        await _heartbeatOutbox.save(
+          ownerId: auth.userId,
+          sessionId: sessionId,
+          eventId: eventId,
+          sequence: _heartbeatSequence,
+        );
+      }
       final result = await client.heartbeat(
         sessionId: sessionId,
         eventId: eventId,
         sequence: _heartbeatSequence,
       );
       if (result['accepted'] == true && _playbackSessionId == sessionId) {
+        if (auth is AuthSignedIn) {
+          await _heartbeatOutbox.remove(sessionId: sessionId, eventId: eventId);
+        }
         _pendingHeartbeatEventId = null;
         _heartbeatSequence++;
       }
@@ -114,8 +135,86 @@ class PlayerController extends Notifier<PlayerState> {
     if (client == null) return;
     try {
       await client.stop(sessionId);
+      final auth = ref.read(authSessionProvider);
+      if (auth is AuthSignedIn) {
+        await _heartbeatOutbox.removeSession(
+          ownerId: auth.userId,
+          sessionId: sessionId,
+        );
+      }
     } catch (_) {
-      // The server TTL is the final safety net when the device is offline.
+      // Keep any pending event durable; startup recovery will replay it and
+      // close the session. The server TTL is the final safety net.
+    }
+  }
+
+  Future<void> _recoverPendingHeartbeats(String ownerId) async {
+    if (_heartbeatRecoveryInFlight) return;
+    _heartbeatRecoveryInFlight = true;
+    try {
+      final client = _sessionClient;
+      final entries = await _heartbeatOutbox.pending(ownerId: ownerId);
+      // A session can have multiple queued heartbeat events. Replay every
+      // event in sequence before stopping that session; stopping after the
+      // first row would invalidate later events and lose their credit.
+      final sessions = <String, List<PlaybackHeartbeatOutboxEntry>>{};
+      for (final entry in entries) {
+        sessions.putIfAbsent(entry.sessionId, () => []).add(entry);
+      }
+      for (final session in sessions.entries) {
+        final auth = ref.read(authSessionProvider);
+        if (auth is! AuthSignedIn || auth.userId != ownerId) return;
+        final pendingEvents = session.value
+          ..sort((a, b) => a.sequence.compareTo(b.sequence));
+        var replayFailed = false;
+        for (final entry in pendingEvents) {
+          final currentAuth = ref.read(authSessionProvider);
+          if (currentAuth is! AuthSignedIn || currentAuth.userId != ownerId) {
+            return;
+          }
+          try {
+            // Replay the original key/sequence. The server treats an already
+            // committed heartbeat as an acknowledged duplicate.
+            final result = await client.heartbeat(
+              sessionId: entry.sessionId,
+              eventId: entry.eventId,
+              sequence: entry.sequence,
+            );
+            if (result['accepted'] == true) {
+              await _heartbeatOutbox.remove(
+                sessionId: entry.sessionId,
+                eventId: entry.eventId,
+              );
+            } else {
+              replayFailed = true;
+            }
+          } catch (_) {
+            replayFailed = true;
+          }
+        }
+        // Close only after every queued event for this session was replayed.
+        // If any event could not be acknowledged, retain its row and let the
+        // server TTL expire rather than deleting uncredited retry evidence.
+        if (!replayFailed) {
+          try {
+            await client.stop(session.key);
+            await _heartbeatOutbox.removeSession(
+              ownerId: ownerId,
+              sessionId: session.key,
+            );
+          } catch (_) {
+            // Retain the row for a later authenticated recovery attempt.
+          }
+        }
+      }
+    } catch (_) {
+      // Local database/network failures must not block normal playback.
+    } finally {
+      _heartbeatRecoveryInFlight = false;
+      final current = ref.read(authSessionProvider);
+      if (current is AuthSignedIn && current.userId != ownerId) {
+        unawaited(_recoverPendingHeartbeats(current.userId));
+      }
     }
   }
 
@@ -145,6 +244,15 @@ class PlayerController extends Notifier<PlayerState> {
 
   @override
   PlayerState build() {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      if (next is AuthSignedIn) {
+        unawaited(_recoverPendingHeartbeats(next.userId));
+      }
+    });
+    final auth = ref.read(authSessionProvider);
+    if (auth is AuthSignedIn) {
+      unawaited(_recoverPendingHeartbeats(auth.userId));
+    }
     ref.onDispose(() {
       _requestGeneration++;
       unawaited(_closePlaybackSession());
