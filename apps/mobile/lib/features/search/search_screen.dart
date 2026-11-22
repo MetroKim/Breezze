@@ -11,6 +11,7 @@ import '../../app/search_history_store.dart';
 import '../../app/playlist_store.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/database/outbox_sync_service.dart';
 import '../player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -332,6 +333,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           durationMs: track.duration.inMilliseconds,
         ),
       );
+      await ref.read(outboxSyncProvider).drainIfSignedIn();
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
