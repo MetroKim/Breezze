@@ -4,6 +4,8 @@
 
 Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
 
+> **v6 mainline upgrade:** [Mainline integration contract](docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md) reconciles the new B-module plan with existing code. Advanced AI/DSP, Supabase Auth migration and collaborative features remain phased and unverified until their own tests pass. Do not replace the current player, local Drift data or authentication while migration gates remain open.
+
 ## Active implementation
 
 The production-target client is Flutter in `apps/mobile`, with NestJS in `backend/api` and the Python discovery service in `backend/ytmusicapi`. The unused Kotlin/Chordline app trees have been removed from this checkout; their historical commits remain in Git. License and attribution obligations are retained and must be reviewed before distribution. Run Flutter builds from `apps/mobile`.
