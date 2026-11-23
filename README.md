@@ -4,6 +4,10 @@
 
 Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
 
+## Repository layout
+
+The Flutter app in `apps/mobile`, NestJS API in `backend/api`, and Python discovery service in `backend/ytmusicapi` are the production project. The previous Kotlin client, its license and its notices are preserved in `legacy/kotlin-client/`. Run Flutter builds from `apps/mobile`.
+
 ## Product boundaries
 
 - Four primary destinations: Home, Browse, Library and Search.

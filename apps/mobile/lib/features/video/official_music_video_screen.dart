@@ -31,7 +31,7 @@ class OfficialMusicVideoScreen extends StatefulWidget {
 }
 
 class _OfficialMusicVideoScreenState
-    extends State<OfficialMusicVideoScreen> {
+    extends State<OfficialMusicVideoScreen> with WidgetsBindingObserver {
   YoutubePlayerController? _controller;
 
   bool get _valid =>
@@ -40,6 +40,7 @@ class _OfficialMusicVideoScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (_valid &&
         YoutubePlayerHandoff.supportsEmbeddedPlayer(
           platform: defaultTargetPlatform,
@@ -60,7 +61,13 @@ class _OfficialMusicVideoScreenState
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _controller?.pauseVideo();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.close();
     super.dispose();
   }

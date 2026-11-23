@@ -1,0 +1,337 @@
+name: Breezze Quality
+
+on:
+  # The wrapper workflow (ci.yml) owns push and pull_request triggers.
+  # Keeping this workflow reusable-only avoids duplicate runs cancelling
+  # one another through the shared concurrency group.
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: breezze-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter analysis and tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve mobile dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Generate Drift database code
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Analyze mobile app
+        working-directory: apps/mobile
+        run: flutter analyze
+
+      - name: Test mobile app
+        working-directory: apps/mobile
+        run: flutter test --reporter expanded
+
+      - name: Probe a provider-issued Deezer preview
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          url=$(curl --fail --silent --show-error --max-time 15 'https://api.deezer.com/track/3135556' | jq -er '.preview | select(test("^https://[a-z0-9.-]+\\.dzcdn\\.net/"))')
+          curl --fail --silent --show-error --max-time 20 --range 0-65535 "$url" -o "$RUNNER_TEMP/preview.mp3"
+          python - "$RUNNER_TEMP/preview.mp3" <<'PYTHON'
+          import pathlib, sys
+          data = pathlib.Path(sys.argv[1]).read_bytes()
+          assert len(data) > 1024 and (data.startswith(b'ID3') or data[0] == 255 and data[1] & 224 == 224)
+          print("Received Deezer MP3 preview bytes.")
+          PYTHON
+
+      - name: Resolve API client dependencies
+        working-directory: packages/api_client
+        run: flutter pub get
+
+      - name: Analyze API client
+        working-directory: packages/api_client
+        run: flutter analyze --fatal-infos
+
+      - name: Test API client
+        working-directory: packages/api_client
+        run: flutter test --reporter expanded
+
+      - name: Resolve design system dependencies
+        working-directory: packages/design_system
+        run: flutter pub get
+
+      - name: Analyze design system
+        working-directory: packages/design_system
+        run: flutter analyze --fatal-infos
+
+      - name: Test design system
+        working-directory: packages/design_system
+        run: flutter test --reporter expanded
+
+      - name: Resolve audio contracts dependencies
+        working-directory: packages/audio_contracts
+        run: flutter pub get
+
+      - name: Analyze audio contracts
+        working-directory: packages/audio_contracts
+        run: flutter analyze --fatal-infos
+
+      - name: Test audio contracts
+        working-directory: packages/audio_contracts
+        run: flutter test --reporter expanded
+
+  flutter_linux:
+    name: Flutter Linux, Android and Web builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Linux desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
+
+      - name: Generate platform runners
+        working-directory: apps/mobile
+        run: bash tool/generate_platform_targets.sh
+      - name: Verify generated release-network permissions
+        working-directory: apps/mobile
+        run: python3 tool/verify_platform_network_permissions.py --android --macos
+
+      - name: Keep third-party JSON deprecation warning non-fatal
+        working-directory: apps/mobile
+        run: sed -i 's/target_compile_options(${TARGET} PRIVATE -Wall -Werror)/target_compile_options(${TARGET} PRIVATE -Wall -Werror -Wno-error=deprecated-literal-operator)/' linux/CMakeLists.txt
+
+      - name: Resolve mobile dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Generate Drift database code
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build Linux desktop
+        working-directory: apps/mobile
+        run: flutter build linux --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+
+      - name: Package Linux desktop build
+        working-directory: apps/mobile
+        run: tar -C build/linux/x64/debug -czf build/breezze-linux-debug.tar.gz bundle
+
+      - name: Build Android APK
+        working-directory: apps/mobile
+        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+      - name: Build Android release APK
+        working-directory: apps/mobile
+        run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+
+      - name: Prepare Drift WebAssembly database assets
+        working-directory: apps/mobile
+        run: bash tool/prepare_web_database.sh
+
+      - name: Build Web
+        working-directory: apps/mobile
+        run: flutter build web --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+
+      - name: Publish installable test builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: breezze-test-builds-${{ github.sha }}
+          path: |
+            apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/mobile/build/breezze-linux-debug.tar.gz
+            apps/mobile/build/web/
+          if-no-files-found: error
+          retention-days: 14
+
+  flutter_macos:
+    name: Flutter macOS and iOS builds
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate platform runners
+        working-directory: apps/mobile
+        run: bash tool/generate_platform_targets.sh
+
+      - name: Resolve mobile dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Generate Drift database code
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build macOS desktop
+        working-directory: apps/mobile
+        run: flutter build macos --debug
+
+      - name: Build iOS
+        working-directory: apps/mobile
+        run: flutter build ios --no-codesign
+
+  flutter_windows:
+    name: Flutter Windows desktop build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Windows runner
+        working-directory: apps/mobile
+        run: flutter create --platforms=windows --project-name=breezze --org=com.breezze --no-pub .
+
+      - name: Resolve mobile dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Generate Drift database code
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build Windows desktop
+        working-directory: apps/mobile
+        env:
+          # audio_service_win currently uses the deprecated MSVC experimental
+          # coroutine header; VS 2026 promotes its deprecation to an error.
+          # Silence that upstream compatibility diagnostic for this build.
+          CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+        run: flutter build windows --debug
+
+  backend:
+    name: NestJS and Prisma validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: breezze_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d breezze_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/breezze_ci
+      INTEGRATION_DATABASE_URL: postgresql://ci:ci@localhost:5432/breezze_ci
+    defaults:
+      run:
+        working-directory: backend/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Report dependency advisory summary
+        run: |
+          npm audit --json > /tmp/breezze-npm-audit.json || true
+          node -e "const a=require('/tmp/breezze-npm-audit.json'); console.log('AUDIT_TOTALS', JSON.stringify(a.metadata?.vulnerabilities)); for (const [name, v] of Object.entries(a.vulnerabilities || {})) console.log('AUDIT_PACKAGE', name, JSON.stringify({severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,range:x.range,url:x.url})}));"
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Apply migrations to CI PostgreSQL
+        run: npx prisma migrate deploy
+
+      - name: Typecheck backend
+        run: npm run typecheck
+
+      - name: Test backend
+        run: npm test -- --runInBand
+
+      - name: Test PostgreSQL concurrency constraints
+        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts src/library/saved-albums.integration.spec.ts
+
+      - name: Build backend
+        run: npm run build
+
+  cloudflare_api:
+    name: Cloudflare API Worker typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cloudflare/api-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install API Worker dependencies
+        # Isolate npm's cache for this job; the shared hosted-runner cache can
+        # race during content-addressed cache writes and fail with EEXIST.
+        run: npm install --cache "$RUNNER_TEMP/npm-cache-api-worker" --no-audit --no-fund
+      - name: Typecheck API Worker
+        run: npm run check
+
+  cloudflare_media:
+    name: Cloudflare Worker typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cloudflare/media-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Worker dependencies
+        run: npm install
+      - name: Report Worker dependency advisories
+        run: |
+          npm audit --json > /tmp/breezze-worker-audit.json || true
+          node -e "const a=require('/tmp/breezze-worker-audit.json'); console.log('WORKER_AUDIT_TOTALS', JSON.stringify(a.metadata?.vulnerabilities)); for (const [name, v] of Object.entries(a.vulnerabilities || {})) console.log('WORKER_AUDIT_PACKAGE', name, JSON.stringify({severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,range:x.range,url:x.url})}));"
+      - name: Typecheck Worker
+        run: npm run check
