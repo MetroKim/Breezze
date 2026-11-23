@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/auth/auth_session.dart';
+import '../../core/auth/supabase_auth_bridge.dart';
 import '../../core/api/breezze_api.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -35,6 +36,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   Future<Map<String, dynamic>> _prepareSocialFlows() async {
+    if (SupabaseAuthBridge.enabled) return const <String, dynamic>{};
     try {
       final api = ref.read(authSessionProvider.notifier).api;
       final flags = await api.socialProviders()
@@ -207,6 +209,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 child: const Text('Browse music'),
               ),
               const SizedBox(height: 12),
+              if (!SupabaseAuthBridge.enabled) ...[
               FutureBuilder<Map<String, dynamic>>(
                 future: _socialProviders,
                 builder: (context, snapshot) {
@@ -272,6 +275,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ],
               ),
               const SizedBox(height: 24),
+              ],
               AutofillGroup(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -674,6 +678,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         return 'This sign-in provider is not configured yet.';
       case 'SOCIAL_AUTH_FAILED':
         return 'Secure sign-in did not finish. Please retry or use email.';
+      case 'EMAIL_VERIFICATION_REQUIRED':
+        return 'Check your inbox and verify your email before signing in.';
+      case 'LEGACY_ACCOUNT_LINK_REQUIRED':
+        return 'This email has an existing Breezze account. Use the old sign-in until account linking is available.';
+      case 'SUPABASE_AUTH_FAILED':
+        return 'Secure sign-in could not be completed. Check your details and try again.';
+      case 'SUPABASE_SOCIAL_NOT_READY':
+        return 'Google and Apple sign-in will appear after the native provider setup is verified.';
       default:
         return 'Something went wrong. Try again.';
     }
