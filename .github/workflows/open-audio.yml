@@ -1,0 +1,30 @@
+name: Check full audio recording
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/lib/features/free_music/open_goldberg.dart'
+      - '.github/workflows/open-audio.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode the start of the album through its public stream
+        run: |
+          set -euo pipefail
+          catalog=apps/mobile/lib/features/free_music/open_goldberg.dart
+          collection=$(sed -n "s/.*const _collection = '\([^']*\)';/\1/p" "$catalog")
+          file=$(sed -n "s/^[[:space:]]*'\([^']*\.mp3\)',/\1/p" "$catalog" | sed -n '1p')
+          test -n "$collection" && test -n "$file"
+          curl --fail --location --retry 2 --max-time 40 --range 0-262143 \
+            "https://archive.org/download/$collection/$file" --output "$RUNNER_TEMP/start.mp3"
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -v error -i "$RUNNER_TEMP/start.mp3" -t 1 -ac 1 -ar 16000 -f s16le "$RUNNER_TEMP/start.pcm"
+          test "$(wc -c < "$RUNNER_TEMP/start.pcm")" = 32000

@@ -34,6 +34,13 @@ export class DiscoveryController {
     catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
   }
 
+  @Get('songs/:id/music-video')
+  async musicVideoForSong(@Param('id') id: string) {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) throw new BadRequestException('INVALID_SONG_ID');
+    try { return await this.discovery.musicVideoForSong(id); }
+    catch { throw new ServiceUnavailableException('YTMUSIC_COUNTERPART_UNAVAILABLE'); }
+  }
+
   @Get('videos')
   async musicVideos(@Query('q') query = '') {
     try { return await this.discovery.musicVideos(query); }

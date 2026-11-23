@@ -42,13 +42,13 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:audius:track123',
-          streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
+          trackId: 'bz:youtube_music:abcdefghijk',
+          streamUrl: 'https://cdn.example.com/audio.m4a',
           expiresAtUtc: DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
         ),
         PlayableSource(
-          trackId: 'bz:audius:track123',
-          streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
+          trackId: 'bz:youtube_music:abcdefghijk',
+          streamUrl: 'https://cdn.example.com/audio.m4a',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
         ),
       ];
@@ -64,7 +64,7 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const track = TrackInfo(
-      id: 'bz:audius:track123',
+      id: 'bz:youtube_music:abcdefghijk',
       title: 'Playable track',
       artist: 'Example Artist',
     );
@@ -95,13 +95,13 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:audius:session-one',
+          trackId: 'bz:jamendo:session-one',
           streamUrl: 'https://media.example/one.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'session-one',
         ),
         PlayableSource(
-          trackId: 'bz:audius:session-two',
+          trackId: 'bz:jamendo:session-two',
           streamUrl: 'https://media.example/two.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'session-two',
@@ -121,8 +121,8 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const first = TrackInfo(id: 'bz:audius:session-one', title: 'One');
-    const second = TrackInfo(id: 'bz:audius:session-two', title: 'Two');
+    const first = TrackInfo(id: 'bz:jamendo:session-one', title: 'One');
+    const second = TrackInfo(id: 'bz:jamendo:session-two', title: 'Two');
 
     await player.playTrack(trackId: first.id, queue: const [first]);
     await player.pause();
@@ -140,7 +140,7 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:audius:heartbeat',
+          trackId: 'bz:jamendo:heartbeat',
           streamUrl: 'https://media.example/heartbeat.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'heartbeat-session',
@@ -160,7 +160,7 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const track = TrackInfo(id: 'bz:audius:heartbeat', title: 'Heartbeat');
+    const track = TrackInfo(id: 'bz:jamendo:heartbeat', title: 'Heartbeat');
     await player.playTrack(trackId: track.id, queue: const [track]);
     await Future<void>.delayed(const Duration(milliseconds: 35));
     await player.pause();
@@ -175,7 +175,7 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:audius:play-failure',
+          trackId: 'bz:jamendo:play-failure',
           streamUrl: 'https://media.example/failure.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'play-failure-session',
@@ -194,7 +194,7 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const track = TrackInfo(id: 'bz:audius:play-failure', title: 'Failure');
+    const track = TrackInfo(id: 'bz:jamendo:play-failure', title: 'Failure');
     await player.playTrack(trackId: track.id, queue: const [track]);
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
@@ -217,7 +217,7 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const track = TrackInfo(
-      id: 'bz:audius:interrupt-test',
+      id: 'bz:jamendo:interrupt-test',
       title: 'Interruption test',
       artist: 'Example Artist',
     );
@@ -250,12 +250,12 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const first = TrackInfo(
-      id: 'bz:audius:queue-first',
+      id: 'bz:jamendo:queue-first',
       title: 'First track',
       artist: 'Example Artist',
     );
     const second = TrackInfo(
-      id: 'bz:audius:queue-second',
+      id: 'bz:jamendo:queue-second',
       title: 'Second track',
       artist: 'Example Artist',
     );

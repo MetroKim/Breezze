@@ -417,7 +417,9 @@ class _MiniPlayer extends ConsumerWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            track?.artist ?? 'Breezze',
+                            player.playbackState == PlaybackState.failed
+                                ? 'Audio unavailable'
+                                : track?.artist ?? 'Breezze',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

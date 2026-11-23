@@ -76,7 +76,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
 
   @override
   Future<void> prepare(PlayableSource source) async {
-    if (source.isLocal) {
+    if (source.isLocal && !kIsWeb && !source.streamUrl.startsWith('content://')) {
       await _player.setFilePath(source.streamUrl);
     } else {
       await _player.setUrl(source.streamUrl);

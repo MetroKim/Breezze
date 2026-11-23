@@ -9,6 +9,7 @@ import { PlaybackSessionService } from './playback-session.service';
 
 describe('PlaybackSessionService', () => {
   const prisma = {
+    track: { findUnique: jest.fn() },
     playbackSession: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -73,6 +74,27 @@ describe('PlaybackSessionService', () => {
       select: { id: true, startedAt: true, expiresAt: true, territory: true },
     });
     expect(result.playback).toEqual({ streamUrl: 'https://cdn.example/audio' });
+  });
+
+  it('plays a YouTube discovery result through its exact catalogue recording', async () => {
+    const externalTrackId = 'bz:youtube_music:abcdefghijk';
+    prisma.track.findUnique.mockResolvedValue({ id: 'master-id', source: 'youtube_music' });
+    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/master.m4a' });
+    const session = await service.start('user-1', 'TZ', { externalTrackId, requestedQuality: 'AAC_256' });
+    expect(prisma.track.findUnique).toHaveBeenCalledWith({
+      where: { externalId: externalTrackId }, select: { id: true, source: true },
+    });
+    expect(resolver.resolve).toHaveBeenCalledWith('user-1', {
+      trackId: 'master-id', requestedQuality: 'AAC_256',
+    }, 'TZ');
+    expect(session.playback.streamUrl).toBe('https://cdn.example/master.m4a');
+  });
+
+  it('does not create a session for a song without a matching recording', async () => {
+    prisma.track.findUnique.mockResolvedValue(null);
+    await expect(service.start('user-1', 'TZ', { externalTrackId: 'bz:youtube_music:abcdefghijk' }))
+      .rejects.toThrow('AUDIO_SOURCE_UNAVAILABLE');
+    expect(prisma.playbackSession.create).not.toHaveBeenCalled();
   });
 
   it('passes the requested streaming quality into full-track authorization', async () => {

@@ -174,6 +174,9 @@ class BreezzeApi {
   Future<Map<String, dynamic>> discoveryLatestSongs({required String country}) =>
       _get('/discovery/releases/songs?country=${Uri.encodeQueryComponent(country)}');
 
+  Future<Map<String, dynamic>> musicVideoForSong(String id) =>
+      _get('/discovery/songs/${Uri.encodeComponent(id)}/music-video');
+
   Future<Map<String, dynamic>> discoveryMusicVideos({String query = 'official music video'}) =>
       _get('/discovery/videos?q=${Uri.encodeQueryComponent(query)}');
 
@@ -336,12 +339,14 @@ class BreezzeApi {
 
   Future<Map<String, dynamic>> startPlaybackSession({
     String? trackId,
+    String? externalTrackId,
     String? requestedQuality,
     String? providerId,
     String? providerTrackId,
     String? canonicalTrackId,
   }) =>
       _post('/playback/sessions', {
+        if (externalTrackId != null) 'externalTrackId': externalTrackId,
         if (trackId != null) 'trackId': trackId,
         if (requestedQuality != null) 'requestedQuality': requestedQuality,
         if (providerId != null) 'providerId': providerId,

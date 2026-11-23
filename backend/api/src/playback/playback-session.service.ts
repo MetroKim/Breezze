@@ -12,6 +12,7 @@ const MAX_HEARTBEAT_CREDIT_MS = 30_000;
 
 export interface StartPlaybackSessionInput {
   trackId?: string;
+  externalTrackId?: string;
   requestedQuality?: string;
   providerId?: string;
   providerTrackId?: string;
@@ -33,6 +34,21 @@ export class PlaybackSessionService {
     let trackId: string;
     let providerId: string | null = null;
     let playback: Record<string, unknown>;
+
+    if (input.externalTrackId !== undefined) {
+      if (!/^bz:youtube_music:[A-Za-z0-9_-]{11}$/.test(input.externalTrackId) ||
+          input.trackId || input.providerId || input.providerTrackId || input.canonicalTrackId) {
+        throw new ConflictException('INVALID_EXTERNAL_SESSION_REQUEST');
+      }
+      const track = await this.prisma.track.findUnique({
+        where: { externalId: input.externalTrackId },
+        select: { id: true, source: true },
+      });
+      if (!track || track.source !== 'youtube_music') {
+        throw new NotFoundException('AUDIO_SOURCE_UNAVAILABLE');
+      }
+      input = { trackId: track.id, requestedQuality: input.requestedQuality };
+    }
 
     if (input.providerId || input.providerTrackId || input.canonicalTrackId) {
       if (!input.providerId || !input.providerTrackId || !input.canonicalTrackId || input.trackId) {

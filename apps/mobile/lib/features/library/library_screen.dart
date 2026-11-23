@@ -12,7 +12,6 @@ import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../downloads/downloads_screen.dart';
-import '../video/open_youtube_player.dart';
 import 'playlist_detail_screen.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
@@ -186,14 +185,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
-    final videoId = youtubeEmbeddedVideoId(track.id);
-    if (videoId != null) {
-      await openYouTubePlayer(
-        context: context, ref: ref, videoId: videoId,
-        title: track.title, artist: track.artist, artworkUrl: track.artworkUrl,
-      );
-      return;
-    }
     if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

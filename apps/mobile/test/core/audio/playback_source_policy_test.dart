@@ -30,13 +30,13 @@ void main() {
       expect(canRequestOfflineDownload('catalog-uuid'), isTrue);
     });
 
-    test('YouTube song IDs open only in the official player', () {
+    test('YouTube song IDs can request native playback', () {
       const id = 'bz:youtube_music:dQw4w9WgXcQ';
-      expect(youtubeEmbeddedVideoId(id), 'dQw4w9WgXcQ');
-      expect(canQueueTrackId(id), isFalse);
+      expect(isYouTubeSongId(id), isTrue);
+      expect(canQueueTrackId(id), isTrue);
       expect(canRequestOfflineDownload(id), isFalse);
-      expect(youtubeEmbeddedVideoId('bz:youtube_music:invalid'), isNull);
-      expect(youtubeEmbeddedVideoId('bz:deezer:dQw4w9WgXcQ'), isNull);
+      expect(isYouTubeSongId('bz:youtube_music:invalid'), isFalse);
+      expect(isYouTubeSongId('bz:deezer:dQw4w9WgXcQ'), isFalse);
     });
   });
 }
