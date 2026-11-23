@@ -187,6 +187,20 @@ export class DiscoveryService {
 
 
 
+  async musicVideoForSong(id: string) {
+    const base = process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000';
+    const response = await fetch(new URL(`/tracks/${encodeURIComponent(id)}/music-video`, base), {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error('YTMUSIC_COUNTERPART_UNAVAILABLE');
+    const payload = await response.json() as { videoId?: unknown };
+    if (payload.videoId === null) return { videoId: null };
+    if (typeof payload.videoId !== 'string' || !/^[A-Za-z0-9_-]{11}$/.test(payload.videoId)) {
+      throw new Error('YTMUSIC_INVALID_RESPONSE');
+    }
+    return { videoId: payload.videoId };
+  }
+
   async musicVideos(query = 'official music video') {
     const q = query.trim().slice(0, 100) || 'official music video';
     const baseUrl = (process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');

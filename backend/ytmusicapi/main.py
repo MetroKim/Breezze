@@ -192,3 +192,26 @@ def get_track(video_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
     finally:
         PROVIDER_SLOTS.release()
+
+
+@app.get("/tracks/{video_id}/music-video")
+def music_video_counterpart(video_id: str) -> dict[str, Any]:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_ID")
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="YTMUSIC_CAPACITY_EXCEEDED")
+    try:
+        playlist = YTMusic().get_watch_playlist(videoId=video_id, limit=1)
+        for track in playlist.get("tracks") or []:
+            if not isinstance(track, dict) or track.get("videoId") != video_id:
+                continue
+            counterpart = track.get("counterpart")
+            if isinstance(counterpart, dict) and counterpart.get("videoType") == "MUSIC_VIDEO_TYPE_OMV":
+                candidate = counterpart.get("videoId")
+                if isinstance(candidate, str) and re.fullmatch(r"[A-Za-z0-9_-]{11}", candidate):
+                    return {"videoId": candidate}
+        return {"videoId": None}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()

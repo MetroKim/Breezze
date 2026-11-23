@@ -423,6 +423,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ));
   }
 
+  Future<void> _watchMusicVideo(BzTrack track) async {
+    final generation = _searchGeneration;
+    try {
+      final id = track.id.substring('bz:youtube_music:'.length);
+      final result = await ref.read(authSessionProvider.notifier).api.musicVideoForSong(id);
+      if (!mounted || generation != _searchGeneration) return;
+      final video = result['videoId'];
+      if (video is String) {
+        await openYouTubePlayer(context: context, ref: ref, videoId: video,
+            title: track.title, artist: track.artist, artworkUrl: track.artworkUrl);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No official music video for this recording.')),
+        );
+      }
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load the music video. Try again.')),
+      );
+    }
+  }
+
   Future<void> _play(BzTrack track) async {
     final embeddedId = track.id.startsWith('bzv:')
         ? track.id.substring(4)
@@ -708,7 +731,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             tooltip: 'Song actions',
                                             icon: const BzSvgIcon(name: 'more-vertical', size: 20),
                                             onSelected: (action) {
-                                              if (action == 'playlist') {
+                                              if (action == 'video') {
+                                                _watchMusicVideo(track);
+                                              } else if (action == 'playlist') {
                                                 _showAddToPlaylist(track);
                                               } else if (action == 'favorite') {
                                                 _addFavorite(track);
@@ -736,6 +761,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               }
                                             },
                                             itemBuilder: (context) => [
+                                              if (isYouTubeSongId(track.id))
+                                                const PopupMenuItem(value: 'video', child: Text('Watch music video')),
                                               const PopupMenuItem(
                                                 value: 'playlist',
                                                 child: Text('Add to Playlist'),
