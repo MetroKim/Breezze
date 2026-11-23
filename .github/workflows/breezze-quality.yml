@@ -179,7 +179,7 @@ jobs:
 
       - name: Build macOS desktop
         working-directory: apps/mobile
-        run: flutter build macos --debug
+        run: flutter build macos --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
 
       - name: Build iOS
         working-directory: apps/mobile
@@ -217,7 +217,7 @@ jobs:
           # coroutine header; VS 2026 promotes its deprecation to an error.
           # Silence that upstream compatibility diagnostic for this build.
           CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
-        run: flutter build windows --debug
+        run: flutter build windows --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
 
   backend:
     name: NestJS and Prisma validation
