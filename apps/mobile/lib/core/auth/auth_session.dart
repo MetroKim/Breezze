@@ -210,7 +210,7 @@ class AuthSessionController extends Notifier<AuthState> {
         final response = await SupabaseAuthBridge.client.auth.signUp(
           email: email,
           password: password,
-          data: displayName == null ? null : {'display_name': displayName},
+          data: displayName == null ? null : {'full_name': displayName},
         );
         // Email verification may be required. Never issue a Breezze session
         // until the identity authority returns a signed-in session.
