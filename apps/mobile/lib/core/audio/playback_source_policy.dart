@@ -12,6 +12,15 @@ bool isMetadataOnlyTrackId(String id) =>
 bool canQueueTrackId(String id) =>
     id.trim().isNotEmpty && !isMetadataOnlyTrackId(id);
 
+/// YouTube Music results may be opened in the visible official video player.
+/// They remain separate from native audio queues and offline downloads.
+String? youtubeEmbeddedVideoId(String id) {
+  const prefix = 'bz:youtube_music:';
+  if (!id.startsWith(prefix)) return null;
+  final videoId = id.substring(prefix.length);
+  return RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(videoId) ? videoId : null;
+}
+
 /// Offline media requires an explicit download grant. Generic catalogue
 /// metadata (including Jamendo) cannot be downloaded by a discovery URL.
 bool canRequestOfflineDownload(String id) =>

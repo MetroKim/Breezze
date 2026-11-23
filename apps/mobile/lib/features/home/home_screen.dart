@@ -2,6 +2,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/main_tab.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/recent_store.dart';
@@ -148,7 +149,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     await PlaylistStore().create(ownerId, name, id: remoteId);
     if (!mounted) return;
-    ref.read(homeTabHintProvider.notifier).state = 3;
+    ref.read(homeTabHintProvider.notifier).state = MainTab.library.index;
     ref.read(playlistRefreshSignalProvider.notifier).state++;
   }
 
@@ -336,7 +337,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
           if (!_loading && _recentlyPlayed.isEmpty && _favorites.isEmpty)
             _FirstRunCard(
-              onSearch: () => ref.read(homeTabHintProvider.notifier).state = 4,
+              onSearch: () => ref.read(homeTabHintProvider.notifier).state = MainTab.search.index,
             ),
           if (_replay != null && ((_replay!['totalPlays'] as num?)?.toInt() ?? 0) > 0)
             _ReplayCard(summary: _replay!),

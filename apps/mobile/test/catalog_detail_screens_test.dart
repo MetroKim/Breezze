@@ -7,6 +7,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
+  testWidgets('YouTube song details enable the in-app player', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: bzLightTheme(),
+          home: const TrackDetailScreen(
+            track: TrackInfo(
+              id: 'bz:youtube_music:dQw4w9WgXcQ',
+              title: 'Available song',
+              artist: 'Artist',
+            ),
+          ),
+        ),
+      ),
+    );
+    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Play'));
+    expect(button.onPressed, isNotNull);
+  });
+
   testWidgets('saved artist page shows real saved songs and honest catalog gaps',
       (tester) async {
     await tester.pumpWidget(

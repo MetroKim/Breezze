@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bz_brand_icons.dart';
 import '../features/browse/browse_screen.dart';
-import '../features/radio/radio_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/player/now_playing_screen.dart';
@@ -15,7 +14,7 @@ import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/settings/account_screen.dart';
 
-/// Breezze's five-destination shell. Downloads live inside Library and
+/// Breezze's four-destination shell. Downloads live inside Library and
 /// Settings are reached from the profile surface; neither is a top-level tab.
 class BreezzeShell extends StatelessWidget {
   const BreezzeShell({super.key});
@@ -43,8 +42,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
 
   static const _tabs = [
     _TabDestination('Home', 'assets/icons/home.svg'),
-    _TabDestination('New', 'assets/icons/new.svg'),
-    _TabDestination('Radio', 'assets/icons/radio.svg'),
+    _TabDestination('Browse', 'assets/icons/new.svg'),
     _TabDestination('Library', 'assets/icons/library.svg'),
     _TabDestination('Search', 'assets/icons/search.svg'),
   ];
@@ -70,7 +68,6 @@ class _BzHomeState extends ConsumerState<BzHome> {
       children: const [
         HomeScreen(),
         BrowseScreen(),
-        RadioScreen(),
         LibraryScreen(),
         SearchScreen(),
       ],

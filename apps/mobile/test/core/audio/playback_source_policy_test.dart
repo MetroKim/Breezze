@@ -29,5 +29,14 @@ void main() {
       expect(canRequestOfflineDownload('bzv:dQw4w9WgXcQ'), isFalse);
       expect(canRequestOfflineDownload('catalog-uuid'), isTrue);
     });
+
+    test('YouTube song IDs open only in the official player', () {
+      const id = 'bz:youtube_music:dQw4w9WgXcQ';
+      expect(youtubeEmbeddedVideoId(id), 'dQw4w9WgXcQ');
+      expect(canQueueTrackId(id), isFalse);
+      expect(canRequestOfflineDownload(id), isFalse);
+      expect(youtubeEmbeddedVideoId('bz:youtube_music:invalid'), isNull);
+      expect(youtubeEmbeddedVideoId('bz:deezer:dQw4w9WgXcQ'), isNull);
+    });
   });
 }

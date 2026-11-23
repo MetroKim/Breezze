@@ -8,6 +8,7 @@ import '../../app/saved_album_store.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../core/audio/youtube_player_handoff.dart';
 import '../video/official_music_video_screen.dart';
+import '../video/open_youtube_player.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
@@ -169,9 +170,18 @@ class TrackDetailScreen extends ConsumerWidget {
                   runSpacing: 10,
                   children: [
                     FilledButton.icon(
-                      onPressed: isMetadataOnlyTrackId(track.id)
+                      onPressed: isMetadataOnlyTrackId(track.id) &&
+                              youtubeEmbeddedVideoId(track.id) == null
                           ? null
                           : () async {
+                        final videoId = youtubeEmbeddedVideoId(track.id);
+                        if (videoId != null) {
+                          await openYouTubePlayer(
+                            context: context, ref: ref, videoId: videoId,
+                            title: trackTitle, artist: artistName, artworkUrl: track.artworkUrl,
+                          );
+                          return;
+                        }
                         await ref.read(playerControllerProvider.notifier).playTrack(
                           trackId: track.id,
                           queue: queue,
@@ -181,7 +191,8 @@ class TrackDetailScreen extends ConsumerWidget {
                         );
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
-                      label: Text(isMetadataOnlyTrackId(track.id) ? 'Playback unavailable' : 'Play'),
+                      label: Text(isMetadataOnlyTrackId(track.id) && youtubeEmbeddedVideoId(track.id) == null
+                          ? 'Playback unavailable' : 'Play'),
                     ),
                     OutlinedButton.icon(
                       onPressed: saveToLibrary,
