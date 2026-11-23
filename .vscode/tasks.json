@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Breezze: Run (Codespaces/browser)",
+      "type": "shell",
+      "command": "bash apps/mobile/tool/run_dev.sh web",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Breezze: Run (automatic device)",
+      "type": "shell",
+      "command": "bash run.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

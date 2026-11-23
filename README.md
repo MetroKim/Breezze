@@ -28,6 +28,25 @@ infra/cloudflare/          API edge, WAF, rate limits and public metadata cache
 docs/                      Product, design, architecture, legal and release records
 ```
 
+## Open the app in GitHub Codespaces (or any Linux workspace)
+
+From the repository root, run:
+
+```bash
+bash run.sh
+```
+
+The launcher finds `apps/mobile`, fetches Flutter dependencies, generates Drift
+database code, downloads the pinned WebAssembly database for browser builds, and
+opens the app on port 8080 in Codespaces/headless Linux. Use the **Ports** panel
+to open the forwarded port. With a graphical Linux session, `bash run.sh linux`
+launches the native desktop runner. To use a different backend, set
+`BREEZZE_API_URL`; to use a different preview port, set `BREEZZE_PORT`.
+
+Do not invoke `flutter run` from the monorepo root: `pubspec.yaml` belongs to
+`apps/mobile`. The Linux runner is checked in; Android/iOS/macOS/Windows platform
+generation remains available through `apps/mobile/tool/generate_platform_targets.sh`.
+
 ## Quick start
 
 ### Flutter client

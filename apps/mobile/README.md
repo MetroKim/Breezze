@@ -25,6 +25,21 @@ Discovery metadata is not a playback license. The app never treats a YouTube Mus
 - Breezze API running and reachable from the target device.
 - A configured catalog/discovery sidecar and authorized playback provider for live music playback.
 
+## One-command development preview
+
+From any directory, use the root-level `bash run.sh`, or from
+`apps/mobile` use `bash tool/run_dev.sh`. Both commands resolve dependencies and
+generate the local Drift files before starting the app. In Codespaces, a
+headless workspace, or a Linux terminal without X11/Wayland, the launcher uses
+`flutter run -d web-server` on port 8080. Open that forwarded port in the
+Codespaces **Ports** panel.
+
+The native Linux runner is checked into source control. It requires a
+graphical session, GTK development packages, and display forwarding. A Linux
+device appearing in `flutter devices` does *not* guarantee GUI availability.
+The repository root is not a Flutter project; `flutter run` must run under
+`apps/mobile`, or via the launcher.
+
 ## Generate native platform runners
 
 From the repository root:
