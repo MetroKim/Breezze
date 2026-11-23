@@ -178,15 +178,15 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       body: BzAmbientBackdrop(
         artworkUrl: track.artworkUrl,
         child: SafeArea(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: LayoutBuilder(builder: (context, bounds) {
-                    final minHeight = MediaQuery.textScalerOf(context).scale(1) * 540;
-                    final height = bounds.maxHeight < minHeight ? minHeight : bounds.maxHeight;
-                    return SingleChildScrollView(
-                      child: SizedBox(
-                        height: height,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: LayoutBuilder(builder: (context, bounds) {
+                final minHeight = MediaQuery.textScalerOf(context).scale(1) * 540;
+                final height = bounds.maxHeight < minHeight ? minHeight : bounds.maxHeight;
+                return SingleChildScrollView(
+                  child: SizedBox(
+                    height: height,
                     child: Column(
                       children: [
                         Padding(
@@ -432,11 +432,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         ),
                       ],
                     ),
-                      ),
-                    );
-                  }),
-                ),
+                    ),
+                  );
+                }),
               ),
+            ),
         ),
       ),
     );

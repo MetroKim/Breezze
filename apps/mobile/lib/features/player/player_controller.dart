@@ -661,18 +661,16 @@ class PlayerController extends Notifier<PlayerState> {
     _machine.dispatch(StartRequested(info.id, requestId: requestId));
 
     try {
-      final closing = _closePlaybackSession();
+      // Detach the old session immediately. Source lookup and stopping the
+      // previous item can proceed together. The engine queue orders prepare
+      // after pause, including when two selections arrive back to back.
+      unawaited(_closePlaybackSession());
       _activeSource = null;
-      try {
-        if (previousTrackId != null) {
-          await _serializeEngineOperation(() async {
-            if (_isCurrentRequest(requestId)) await _engine?.pause();
-          });
-        }
-      } finally {
-        await closing;
+      if (previousTrackId != null) {
+        unawaited(_serializeEngineOperation(() async {
+          if (_isCurrentRequest(requestId)) await _engine?.pause();
+        }).catchError((Object _) {}));
       }
-      if (!_isCurrentRequest(requestId)) return;
       final source = info.localFilePath != null
           ? PlayableSource(
               trackId: info.id,
