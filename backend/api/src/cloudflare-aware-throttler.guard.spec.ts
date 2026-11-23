@@ -140,4 +140,22 @@ describe('CloudflareAwareThrottlerGuard', () => {
 
     await expect(guard.canActivate(context())).resolves.toBe(true);
   });
+
+  it('shares the login rate bucket with legacy account linking', async () => {
+    process.env.API_RATE_LIMIT = '100';
+    process.env.LOGIN_ACCOUNT_RATE_LIMIT = '1';
+    redis.eval.mockResolvedValueOnce([1, 60000])
+      .mockResolvedValueOnce([2, 899000]);
+
+    await expect(guard.canActivate(context(
+      '127.0.0.1',
+      { legacyEmail: 'Person@Example.com', legacyPassword: 'secret' },
+      '/api/v1/auth/supabase/link-legacy',
+    ))).rejects.toBeInstanceOf(HttpException);
+
+    const accountKey = String(redis.eval.mock.calls[1][2]);
+    expect(accountKey).toContain('login-account:');
+    expect(accountKey).not.toContain('Person@Example.com');
+    expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '899');
+  });
 });

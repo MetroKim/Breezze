@@ -1,10 +1,12 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma.service';
 import { AuthService, AuthResult } from './auth.service';
@@ -34,6 +36,84 @@ export class SupabaseExchangeService {
   ) {}
 
   async exchange(accessToken: string): Promise<AuthResult> {
+    const { subject, email } = await this.verifiedIdentity(accessToken);
+    const userId = await this.findOrCreateBreezzeIdentity(subject, email);
+    return this.auth.issueVerifiedSocialSession(userId);
+  }
+
+  /**
+   * One-time, two-authority account linking. Supabase proves control of the
+   * new identity; the Argon2 legacy password proves ownership of the *old*
+   * Breezze user. Linking keeps the existing user ID and all owned data.
+   *
+   * Email matches alone, unverified Supabase JWTs, arbitrary client user IDs
+   * and password-only links for privileged/MFA accounts are forbidden.
+   */
+  async linkLegacy(
+    accessToken: string,
+    legacyEmail: string,
+    legacyPassword: string,
+  ): Promise<AuthResult> {
+    const { subject } = await this.verifiedIdentity(accessToken);
+    const legacy = await this.prisma.user.findFirst({
+      where: { email: { equals: legacyEmail.trim().toLowerCase(), mode: 'insensitive' } },
+      select: { id: true, passwordHash: true, role: true, mfaEnabled: true },
+    });
+    const passwordValid = legacy
+      ? await argon2.verify(legacy.passwordHash, legacyPassword).catch(() => false)
+      : false;
+    if (!legacy || !passwordValid) {
+      throw new UnauthorizedException('LEGACY_CREDENTIALS_INVALID');
+    }
+    if (legacy.role !== 'user' || legacy.mfaEnabled) {
+      throw new ForbiddenException('LEGACY_PRIVILEGED_LINK_BLOCKED');
+    }
+
+    const provider = 'supabase';
+    let userId: string;
+    try {
+      userId = await this.prisma.$transaction(async (tx) => {
+        const mapped = await tx.socialAuthIdentity.findUnique({
+          where: { provider_subject: { provider, subject } },
+          select: { userId: true },
+        });
+        if (mapped && mapped.userId !== legacy.id) {
+          throw new ConflictException('SUPABASE_IDENTITY_ALREADY_LINKED');
+        }
+
+        // One Supabase subject per legacy account; serializable isolation
+        // prevents concurrent distinct subjects from claiming the same user.
+        const previouslyLinked = await tx.socialAuthIdentity.findFirst({
+          where: { userId: legacy.id, provider },
+          select: { subject: true },
+        });
+        if (previouslyLinked && previouslyLinked.subject !== subject) {
+          throw new ConflictException('LEGACY_ALREADY_LINKED');
+        }
+
+        if (!mapped) {
+          await tx.socialAuthIdentity.create({
+            data: { userId: legacy.id, provider, subject },
+          });
+        }
+        return legacy.id;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code === 'P2002' ||
+          (error as { code?: string } | null)?.code === 'P2034') {
+        // Unique-subject and concurrent-transaction collisions must never
+        // silently reassign an existing identity to another account.
+        throw new ConflictException('LEGACY_LINK_CONFLICT');
+      }
+      throw error;
+    }
+
+    return this.auth.issueVerifiedSocialSession(userId);
+  }
+
+  private async verifiedIdentity(
+    accessToken: string,
+  ): Promise<{ subject: string; email: string }> {
     const { url, key } = this.config();
     if (typeof accessToken !== 'string' ||
         accessToken.length < 20 ||
@@ -42,11 +122,8 @@ export class SupabaseExchangeService {
       throw new UnauthorizedException('SUPABASE_TOKEN_INVALID');
     }
     const verified = await this.verifyAtSupabase(url, key, accessToken);
-    // Identity provider and project are part of the stable subject, so a
-    // staging Supabase identity cannot impersonate a production identity.
-    const subject = `${url.hostname}:${verified.id}`;
-    const userId = await this.findOrCreateBreezzeIdentity(subject, verified.email);
-    return this.auth.issueVerifiedSocialSession(userId);
+    // Bind identity to the verified provider project, not a client claim.
+    return { subject: `${url.hostname}:${verified.id}`, email: verified.email };
   }
 
   private config(): { url: URL; key: string } {

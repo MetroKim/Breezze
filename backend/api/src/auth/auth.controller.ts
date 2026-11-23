@@ -79,6 +79,17 @@ export class SupabaseExchangeDto {
   accessToken!: string;
 }
 
+export class SupabaseLinkLegacyDto extends SupabaseExchangeDto {
+  @IsEmail()
+  @MaxLength(320)
+  legacyEmail!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  legacyPassword!: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -93,6 +104,19 @@ export class AuthController {
   @Header('Cache-Control', 'no-store')
   exchangeSupabase(@Body() dto: SupabaseExchangeDto) {
     return this.supabaseExchange.exchange(dto.accessToken);
+  }
+
+  // Two independently verified credentials; never link by email alone.
+  // Rate-limited by the same account quota as password login.
+  @Post('supabase/link-legacy')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  linkSupabaseLegacy(@Body() dto: SupabaseLinkLegacyDto) {
+    return this.supabaseExchange.linkLegacy(
+      dto.accessToken,
+      dto.legacyEmail,
+      dto.legacyPassword,
+    );
   }
 
   @Post('register')
