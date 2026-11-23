@@ -70,6 +70,7 @@ class BreezzeApi {
         path != '/auth/refresh' &&
         path != '/auth/login' &&
         path != '/auth/register' &&
+        path != '/auth/supabase/exchange' &&
         !path.startsWith('/auth/social/') &&
         !path.startsWith('/auth/mfa/') &&
         onUnauthorized != null &&
