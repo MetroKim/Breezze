@@ -5,7 +5,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../video/official_music_video_screen.dart';
+import '../video/open_youtube_player.dart';
 import '../../core/audio/playback_source_policy.dart';
 
 import '../../app/bootstrap.dart';
@@ -430,16 +430,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (embeddedId != null) {
       // A video is watched in the official visible iframe, never extracted
       // into Breezze's native audio-only playback queue.
-      await ref.read(playerControllerProvider.notifier).pause();
-      if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => OfficialMusicVideoScreen(
-          videoId: embeddedId,
-          title: track.title,
-          artist: track.artist,
-          artworkUrl: track.artworkUrl,
-        ),
-      ));
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: embeddedId,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+      );
       return;
     }
     if (isMetadataOnlyTrackId(track.id)) {
