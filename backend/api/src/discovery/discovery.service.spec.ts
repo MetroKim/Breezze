@@ -96,6 +96,7 @@ describe('DiscoveryService album metadata', () => {
         { title: 'Missing ID' },
         { videoId: 'not a video', title: 'Invalid ID' },
         { videoId: 'abcDEF12_-3', title: 'Official video', artist: 'Artist' },
+        { videoId: 'abcDEF12_-3', title: 'Duplicate video' },
       ] }),
     });
 
