@@ -25,6 +25,15 @@ Discovery metadata is not a playback license. The app never treats a YouTube Mus
 - Breezze API running and reachable from the target device.
 - A configured catalog/discovery sidecar and authorized playback provider for live music playback.
 
+## One-command development launch
+
+Run `bash run.sh` from the repository root or `bash tool/run_dev.sh` here.
+The launcher generates missing Drift code, prepares web SQLite assets when
+needed, then uses `web-server` for Codespaces/headless Linux and the native
+Linux runner when a display is available. Codespaces browser preview uses port
+8080 by default. The Linux desktop target is checked into this repository;
+GTK development packages and a GUI session are still required.
+
 ## Generate native platform runners
 
 From the repository root:

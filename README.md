@@ -30,6 +30,23 @@ infra/cloudflare/          API edge, WAF, rate limits and public metadata cache
 docs/                      Product, design, architecture, legal and release records
 ```
 
+## Launch Breezze on Linux or GitHub Codespaces
+
+Run `bash run.sh` from the repository root. It automatically opens the Flutter
+application under `apps/mobile`, installs dependencies, generates Drift database
+code, prepares browser SQLite assets, and starts the native Linux desktop when
+a GUI is available. In GitHub Codespaces/headless environments, it starts a
+browser preview on port 8080; open that port in the **Ports** panel.
+
+The Linux runner is tracked in Git to support `flutter run -d linux` after
+app dependencies and generated database code are ready. Use `bash run.sh linux`
+to force native Linux, or `bash run.sh web` for the browser. Set
+`BREEZZE_API_URL` to use a different backend and `BREEZZE_PORT` to change
+the preview port.
+
+Do not run `flutter run` from the monorepo root: `pubspec.yaml` lives in
+`apps/mobile`.
+
 ## Quick start
 
 ### Flutter client
