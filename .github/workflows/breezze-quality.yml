@@ -44,6 +44,32 @@ jobs:
         working-directory: apps/mobile
         run: flutter test --reporter expanded
 
+      - name: Probe public YouTube audio from runner network
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        working-directory: apps/mobile
+        run: |
+          if dart run tool/check_youtube_audio.dart aqz-KE-bpKQ; then
+            echo 'Public YouTube audio returned media bytes.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'YouTube returned no usable audio on the runner network.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Probe a provider-issued Deezer preview
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          url=$(curl --fail --silent --show-error --max-time 15 'https://api.deezer.com/track/3135556' | jq -er '.preview | select(test("^https://[a-z0-9.-]+\\.dzcdn\\.net/"))')
+          curl --fail --silent --show-error --max-time 20 --range 0-65535 "$url" -o "$RUNNER_TEMP/preview.mp3"
+          python - "$RUNNER_TEMP/preview.mp3" <<'PYTHON'
+          import pathlib, sys
+          data = pathlib.Path(sys.argv[1]).read_bytes()
+          assert len(data) > 1024 and (data.startswith(b'ID3') or data[0] == 255 and data[1] & 224 == 224)
+          print("Received Deezer MP3 preview bytes.")
+          PYTHON
+
       - name: Resolve API client dependencies
         working-directory: packages/api_client
         run: flutter pub get

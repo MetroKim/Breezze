@@ -19,8 +19,21 @@ void main() {
 
     test('local or backend tracks and approved Jamendo can request playback', () {
       expect(canQueueTrackId('catalog-uuid'), isTrue);
+      expect(canQueueTrackId('bz:deezer_preview:42'), isTrue);
+      expect(canQueueTrackId('bz:deezer_preview:nope'), isFalse);
+      expect(canRequestOfflineDownload('bz:deezer_preview:42'), isFalse);
       expect(canQueueTrackId('bz:jamendo:track-123'), isTrue);
       expect(isMetadataOnlyTrackId('bz:jamendo:track-123'), isFalse);
+    });
+
+    test('fallback requires an unambiguous preview of the selected recording', () {
+      const duration = Duration(seconds: 210);
+      final row = {'title': 'Song', 'artist': 'Artist', 'durationSec': 212,
+          'providerTrackId': '42', 'previewUrl': 'https://example.org/test.mp3'};
+      expect(matchingDeezerPreview([row], 'Song', 'Artist', duration), '42');
+      expect(matchingDeezerPreview([row, {...row, 'providerTrackId': '43'}], 'Song', 'Artist', duration), isNull);
+      expect(matchingDeezerPreview([row], 'Song (Live)', 'Artist', duration), isNull);
+      expect(matchingDeezerPreview([row], 'Song', 'Artist', const Duration(seconds: 120)), isNull);
     });
 
     test('metadata and embedded videos never request offline downloads', () {

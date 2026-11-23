@@ -557,6 +557,35 @@ class PlayerController extends Notifier<PlayerState> {
     await _resolveAndPlay(info);
   }
 
+  Future<bool> _tryDeezerPreview(TrackInfo track, int requestId) async {
+    if (!isYouTubeSongId(track.id) || !_isCurrentRequest(requestId)) return false;
+    final title = track.title;
+    final artist = track.artist;
+    if (title == null || artist == null || title.isEmpty || artist.isEmpty) return false;
+    try {
+      final response = await ref.read(authSessionProvider.notifier).api
+          .searchDeezer('$title $artist').timeout(const Duration(seconds: 5));
+      final id = matchingDeezerPreview(response['value'], title, artist, track.duration);
+      if (id == null || !_isCurrentRequest(requestId)) return false;
+      await _playDeezerPreview(TrackInfo(id: 'bz:deezer_preview:$id',
+          title: title, artist: artist, artworkUrl: track.artworkUrl));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _playDeezerPreview(TrackInfo preview) async {
+    if (!isDeezerPreview(preview.id) || _queue.current == null) return;
+    _trackInfos[preview.id] = preview;
+    _queue.replaceCurrent(QueueEntry(
+      entryId: _queue.current!.entryId, trackId: preview.id,
+      origin: 'preview', sourceContext: 'Deezer preview',
+      insertedAtMs: DateTime.now().millisecondsSinceEpoch, trackVersion: 'v1',
+    ));
+    await _resolveAndPlay(preview);
+  }
+
   /// Inserts a track directly after the current item.
   void playNext(TrackInfo track, {
     String origin = 'manual',
@@ -687,6 +716,7 @@ class PlayerController extends Notifier<PlayerState> {
       }
 
       if (source == null) {
+        if (await _tryDeezerPreview(info, requestId) || !_isCurrentRequest(requestId)) return;
         _activeSource = null;
         _machine.dispatch(SourceResolutionFailed(
           'NOT_AVAILABLE',
@@ -779,7 +809,7 @@ class PlayerController extends Notifier<PlayerState> {
       // Keep the legacy reporter only for local/offline media, which has no
       // server playback session.
       if (source.sessionId == null && !info.id.startsWith('device:') &&
-          !info.id.startsWith('bz:open_goldberg:')) {
+          !isDeezerPreview(info.id) && !isYouTubeSongId(info.id)) {
         unawaited(
           ref.read(playHistoryReporterProvider)(info).catchError((_) {}),
         );
@@ -788,6 +818,7 @@ class PlayerController extends Notifier<PlayerState> {
     } catch (_) {
       if (_isCurrentRequest(requestId)) {
         await _closePlaybackSession();
+        if (await _tryDeezerPreview(info, requestId) || !_isCurrentRequest(requestId)) return;
         _machine.dispatch(SourceResolutionFailed(
           'PLAYBACK_SETUP_FAILED',
           requestId: requestId,

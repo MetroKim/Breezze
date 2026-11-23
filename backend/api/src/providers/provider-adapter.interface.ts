@@ -48,6 +48,7 @@ export interface ProviderTrack {
   artist: string;
   artworkUrl?: string;
   sourceUrl?: string;
+  previewUrl?: string;
   durationSec?: number;
 }
 

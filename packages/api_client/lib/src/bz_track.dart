@@ -13,6 +13,7 @@ class BzTrack {
   final String? album;
   final String? artworkUrl;
   final Duration duration;
+  final bool hasPreview;
   final bool explicit;
 
   const BzTrack({
@@ -22,6 +23,7 @@ class BzTrack {
     this.album,
     this.artworkUrl,
     required this.duration,
+    this.hasPreview = false,
     this.explicit = false,
   });
 
@@ -33,6 +35,7 @@ class BzTrack {
         artworkUrl: artworkUrl,
         duration: duration,
         explicit: explicit,
+        hasPreview: hasPreview,
       );
 }
 

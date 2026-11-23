@@ -229,7 +229,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         // reading surface while retaining playback controls.
                         if (!_lyricsFocus) const Spacer(),
                         if (!_lyricsFocus)
-                          _BreathingArtwork(
+                          _PlayerArtwork(
                             playing: playing,
                             artworkUrl: track.artworkUrl,
                             fallbackColor: theme.bzText2,
@@ -273,7 +273,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         if (player.playbackState == PlaybackState.failed)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Text('Audio unavailable. Retry or choose another song.',
+                            child: Text('Audio unavailable for this recording. Tap play to retry.',
                                 style: theme.textTheme.bodySmall),
                           ),
                         const SizedBox(height: 16),
@@ -443,61 +443,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-class _BreathingArtwork extends StatefulWidget {
+class _PlayerArtwork extends StatelessWidget {
   final bool playing;
   final String? artworkUrl;
   final Color fallbackColor;
 
-  const _BreathingArtwork({
+  const _PlayerArtwork({
     required this.playing,
     required this.artworkUrl,
     required this.fallbackColor,
   });
-
-  @override
-  State<_BreathingArtwork> createState() => _BreathingArtworkState();
-}
-
-class _BreathingArtworkState extends State<_BreathingArtwork>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 2),
-    lowerBound: 0.96,
-    upperBound: 1.0,
-  );
-  bool _reduceMotion = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _reduceMotion = MediaQuery.disableAnimationsOf(context);
-    if (_reduceMotion) {
-      _controller.stop();
-      _controller.value = 1;
-    } else if (widget.playing && !_controller.isAnimating) {
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _BreathingArtwork oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_reduceMotion) return;
-    if (widget.playing != oldWidget.playing) {
-      if (widget.playing) {
-        _controller.repeat(reverse: true);
-      } else {
-        _controller.stop();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -509,8 +464,11 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
         final side = (constraints.maxWidth * 0.72)
             .clamp(144.0, heightCap)
             .toDouble();
-        return ScaleTransition(
-          scale: _controller,
+        return AnimatedScale(
+          scale: playing ? 1.0 : 0.88,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero : const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
           child: Container(
             width: side,
             height: side,
@@ -528,18 +486,18 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(BzRadius.artwork),
-              child: widget.artworkUrl != null
+              child: artworkUrl != null
                   ? Image.network(
-                      widget.artworkUrl!,
+                      artworkUrl!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Center(
                         child: BzBnoteMark(
-                            size: 96, color: widget.fallbackColor),
+                            size: 96, color: fallbackColor),
                       ),
                     )
                   : Center(
                       child:
-                          BzBnoteMark(size: 96, color: widget.fallbackColor),
+                          BzBnoteMark(size: 96, color: fallbackColor),
                     ),
             ),
           ),

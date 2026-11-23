@@ -15,13 +15,13 @@ import '../core/database/database_providers.dart';
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
-import '../features/free_music/open_goldberg.dart';
+import '../core/audio/stream_expiry.dart';
+import '../core/audio/youtube_audio_stub.dart'
+    if (dart.library.io) '../core/audio/youtube_audio_native.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// YouTube Music and Deezer are metadata/discovery sources only.
-/// Full-track playback is resolved separately through an approved provider
-/// grant or Breezze-owned licensed media; catalogue metadata never grants it.
+/// Resolve public audio on the device and keep Deezer previews explicit.
 /// Downloads remain rights-gated. Lyrics
 /// lookup remains keyless through LRCLIB.
 
@@ -57,6 +57,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
     final duration = value['durationSec'];
     return ProviderTrack(
       breezzeTrackId: 'bz:$providerId:$trackId',
+      hasPreview: providerId == 'deezer' && value['previewUrl'] is String,
       providerTrackId: '$providerId:$trackId',
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
@@ -77,6 +78,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
       providerTrackId: value['externalId'] as String? ?? id,
       title: value['title'] as String? ?? '',
       artist: artist,
+      artworkUrl: value['artworkUrl'] as String?,
       duration: Duration(seconds: duration is num ? duration.toInt() : 0),
     );
   }
@@ -184,10 +186,28 @@ class LiveResolver implements PlaybackResolver {
 
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
-    final openRecording = OpenGoldberg.audio(track.id);
-    if (openRecording != null) {
-      return PlayableSource(trackId: track.id, streamUrl: openRecording.toString(),
-          expiresAtUtc: DateTime.utc(9999), codec: 'mp3');
+    if (isYouTubeSongId(track.id)) {
+      final quality = (await DownloadPreferencesStore().load()).streamingQuality;
+      final ceiling = switch (quality) { 'AAC_128' => 128, 'LOSSLESS' => 1536, _ => 256 };
+      final stream = await resolveYouTubeAudio(track.id.split(':').last, ceilingKbps: ceiling);
+      if (stream != null) {
+        return PlayableSource(trackId: track.id, streamUrl: stream.toString(),
+            expiresAtUtc: streamExpiry(stream));
+      }
+    }
+    if (isDeezerPreview(track.id)) {
+      try {
+        final result = await _ref.read(authSessionProvider.notifier).api
+            .getProviderTrack('deezer', track.id.split(':').last);
+        final value = result['value'];
+        final uri = value is Map && value['previewUrl'] is String
+            ? Uri.tryParse(value['previewUrl'] as String) : null;
+        if (uri == null || uri.scheme != 'https' || !uri.host.endsWith('.dzcdn.net')) return null;
+        return PlayableSource(trackId: track.id, streamUrl: uri.toString(),
+            expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 1)));
+      } catch (_) {
+        return null;
+      }
     }
     final auth = _ref.read(authSessionProvider);
     if (auth is! AuthSignedIn) return null;
