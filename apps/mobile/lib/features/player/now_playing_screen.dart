@@ -166,10 +166,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         return;
       }
       final controller = ref.read(playerControllerProvider.notifier);
-      controller.playNext(TrackInfo(id: 'bz:deezer_preview:${match['providerTrackId']}',
-          title: track.title, artist: track.artist, artworkUrl: track.artworkUrl),
-          origin: 'preview', sourceContext: 'Deezer preview');
-      await controller.next();
+      await controller.playDeezerPreview(TrackInfo(id: 'bz:deezer_preview:${match['providerTrackId']}',
+          title: track.title, artist: track.artist, artworkUrl: track.artworkUrl));
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not load the Deezer preview.')));
@@ -269,7 +267,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         // reading surface while retaining playback controls.
                         if (!_lyricsFocus) const Spacer(),
                         if (!_lyricsFocus)
-                          _BreathingArtwork(
+                          _PlayerArtwork(
                             playing: playing,
                             artworkUrl: track.artworkUrl,
                             fallbackColor: theme.bzText2,
@@ -486,12 +484,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-class _BreathingArtwork extends StatelessWidget {
+class _PlayerArtwork extends StatelessWidget {
   final bool playing;
   final String? artworkUrl;
   final Color fallbackColor;
 
-  const _BreathingArtwork({
+  const _PlayerArtwork({
     required this.playing,
     required this.artworkUrl,
     required this.fallbackColor,

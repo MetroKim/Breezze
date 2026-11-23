@@ -81,6 +81,15 @@ class QueueManager {
     onQueueChanged?.call();
   }
 
+  /// Switch the current recording's source while preserving the upcoming queue.
+  void replaceCurrent(QueueEntry entry) {
+    final index = _currentIndex;
+    if (index == null) return;
+    _entries[index] = entry;
+    _rebuildShuffle();
+    onQueueChanged?.call();
+  }
+
   /// Removes by entryId; returns false when not found.
   bool remove(String entryId) {
     final idx = _entries.indexWhere((e) => e.entryId == entryId);

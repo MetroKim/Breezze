@@ -205,6 +205,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           _results = [if (op is ProviderOk<List<ProviderTrack>>) ...op.value
                   .map((track) => BzTrack(
                         id: track.breezzeTrackId,
+                        hasPreview: track.hasPreview,
                         title: track.title,
                         artist: track.artist,
                         artworkUrl: track.artworkUrl,
@@ -715,7 +716,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                           )
                                         : Text(
                                             track.id.startsWith('bz:deezer:')
-                                                ? '${track.artist} · Deezer preview'
+                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer preview' : 'Deezer catalog'}'
                                                 : track.id.startsWith('bz:youtube_music:')
                                                         ? '${track.artist} · YouTube Music'
                                                         : track.id.startsWith('bz:jamendo:')
@@ -730,11 +731,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         if (track.id.startsWith('bzv:') ||
-                                            canQueueTrackId(track.id))
+                                            track.hasPreview || canQueueTrackId(track.id))
                                           IconButton(
                                             tooltip: track.id.startsWith('bzv:')
                                                 ? 'Watch music video'
-                                                : 'Play',
+                                                : track.hasPreview ? 'Play preview' : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
@@ -820,7 +821,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       ],
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ||
-                                            (canQueueTrackId(track.id) || track.id.startsWith('bz:deezer:'))
+                                            (canQueueTrackId(track.id) || track.hasPreview)
                                         ? _play(track)
                                         : _openTrack(track),
                                   );

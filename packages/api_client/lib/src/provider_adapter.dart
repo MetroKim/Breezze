@@ -12,6 +12,7 @@ class ProviderTrack {
   final String artist;
   final String? artworkUrl;
   final Duration duration;
+  final bool hasPreview;
 
   ProviderTrack({
     required this.breezzeTrackId,
@@ -20,6 +21,7 @@ class ProviderTrack {
     required this.artist,
     this.artworkUrl,
     required this.duration,
+    this.hasPreview = false,
   });
 }
 

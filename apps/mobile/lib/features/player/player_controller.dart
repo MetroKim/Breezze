@@ -557,6 +557,17 @@ class PlayerController extends Notifier<PlayerState> {
     await _resolveAndPlay(info);
   }
 
+  Future<void> playDeezerPreview(TrackInfo preview) async {
+    if (!isDeezerPreview(preview.id) || _queue.current == null) return;
+    _trackInfos[preview.id] = preview;
+    _queue.replaceCurrent(QueueEntry(
+      entryId: _queue.current!.entryId, trackId: preview.id,
+      origin: 'preview', sourceContext: 'Deezer preview',
+      insertedAtMs: DateTime.now().millisecondsSinceEpoch, trackVersion: 'v1',
+    ));
+    await _resolveAndPlay(preview);
+  }
+
   /// Inserts a track directly after the current item.
   void playNext(TrackInfo track, {
     String origin = 'manual',

@@ -57,6 +57,7 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
     final duration = value['durationSec'];
     return ProviderTrack(
       breezzeTrackId: 'bz:$providerId:$trackId',
+      hasPreview: providerId == 'deezer' && value['previewUrl'] is String,
       providerTrackId: '$providerId:$trackId',
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
