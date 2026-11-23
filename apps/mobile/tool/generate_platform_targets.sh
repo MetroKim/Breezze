@@ -167,6 +167,7 @@ for entitlement_name in ("DebugProfile.entitlements", "Release.entitlements"):
     with entitlement_path.open("rb") as source:
         entitlements = plistlib.load(source)
     entitlements["com.apple.security.network.client"] = True
+    entitlements["com.apple.security.files.user-selected.read-only"] = True
     with entitlement_path.open("wb") as target:
         plistlib.dump(entitlements, target)
 

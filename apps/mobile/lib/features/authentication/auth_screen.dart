@@ -1,3 +1,4 @@
+import '../free_music/free_music_screen.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -200,6 +201,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
               ),
               const SizedBox(height: 28),
+              OutlinedButton(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const FreeMusicScreen())),
+                child: const Text('Listen free'),
+              ),
+              const SizedBox(height: 12),
               FutureBuilder<Map<String, dynamic>>(
                 future: _socialProviders,
                 builder: (context, snapshot) {

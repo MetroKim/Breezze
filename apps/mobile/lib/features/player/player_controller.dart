@@ -761,7 +761,7 @@ class PlayerController extends Notifier<PlayerState> {
       }
       _startHeartbeatTimer();
 
-      if (info.title != null) {
+      if (info.title != null && !info.id.startsWith('device:')) {
         final auth = ref.read(authSessionProvider);
         final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
         unawaited(_recent
@@ -778,7 +778,8 @@ class PlayerController extends Notifier<PlayerState> {
       // Session stop is now the authoritative qualified-play event.
       // Keep the legacy reporter only for local/offline media, which has no
       // server playback session.
-      if (source.sessionId == null) {
+      if (source.sessionId == null && !info.id.startsWith('device:') &&
+          !info.id.startsWith('bz:open_goldberg:')) {
         unawaited(
           ref.read(playHistoryReporterProvider)(info).catchError((_) {}),
         );

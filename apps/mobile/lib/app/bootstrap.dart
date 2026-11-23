@@ -15,6 +15,7 @@ import '../core/database/database_providers.dart';
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
+import '../features/free_music/open_goldberg.dart';
 
 /// Composition root for Breezze app services.
 ///
@@ -183,6 +184,11 @@ class LiveResolver implements PlaybackResolver {
 
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
+    final openRecording = OpenGoldberg.audio(track.id);
+    if (openRecording != null) {
+      return PlayableSource(trackId: track.id, streamUrl: openRecording.toString(),
+          expiresAtUtc: DateTime.utc(9999), codec: 'mp3');
+    }
     final auth = _ref.read(authSessionProvider);
     if (auth is! AuthSignedIn) return null;
 

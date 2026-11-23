@@ -1,3 +1,5 @@
+import '../../features/free_music/open_goldberg.dart';
+
 final _youtubeSongId = RegExp(r'^bz:youtube_music:[A-Za-z0-9_-]{11}$');
 
 bool isYouTubeSongId(String id) => _youtubeSongId.hasMatch(id);
@@ -5,7 +7,7 @@ bool isYouTubeSongId(String id) => _youtubeSongId.hasMatch(id);
 /// A queued song still needs a source from the session resolver.
 bool isMetadataOnlyTrackId(String id) =>
     id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:') && !isYouTubeSongId(id));
+    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:') && !isYouTubeSongId(id) && OpenGoldberg.audio(id) == null);
 
 bool canQueueTrackId(String id) => id.trim().isNotEmpty && !isMetadataOnlyTrackId(id);
 

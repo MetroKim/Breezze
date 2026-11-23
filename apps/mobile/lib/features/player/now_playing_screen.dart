@@ -34,7 +34,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   Future<void> _loadLyrics() async {
     final request = ++_lyricsRequestGeneration;
     final track = ref.read(playerControllerProvider).currentTrack;
-    if (track == null || track.title == null) {
+    if (track == null || track.title == null || track.id.startsWith('device:')) {
       if (mounted) {
         setState(() {
           _lyrics = null;
