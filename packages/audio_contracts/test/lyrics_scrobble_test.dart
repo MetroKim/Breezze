@@ -9,6 +9,12 @@ const sample = '''
 
 void main() {
   group('LrcParser (§10.1)', () {
+    test('offset applies to line and word timestamps', () {
+      final lyrics = LrcParser.parse('track', '[offset:+500]\n[00:02.00]<00:02.125>hello');
+      expect(lyrics.lines.single.start.inMilliseconds, 1500);
+      expect(lyrics.lines.single.words.single.start.inMilliseconds, 1625);
+    });
+
     test('parses lines sorted with end = next start', () {
       final lyrics = LrcParser.parse('t1', sample);
       expect(lyrics.lines.length, 3);

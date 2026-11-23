@@ -1,4 +1,5 @@
 import '../free_music/device_audio.dart';
+import '../video/device_video.dart';
 import '../player/now_playing_screen.dart';
 import 'dart:async';
 
@@ -837,6 +838,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return ListView(
       padding: EdgeInsets.fromLTRB(16, 12, 16, BzBreakpoints.bottomClearance(context, compact: 180)),
       children: [
+        if (_searchVideos && supportsDeviceVideo)
+          ListTile(
+            leading: const BzSvgIcon(name: 'video'),
+            title: const Text('Open a music video'),
+            onTap: () => pickDeviceVideo(context),
+          ),
         ListTile(
           leading: const BzSvgIcon(name: 'play'),
           title: const Text('Open audio files'),

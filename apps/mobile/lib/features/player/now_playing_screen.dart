@@ -544,7 +544,7 @@ class _PlayPauseButton extends StatelessWidget {
 /// Lyrics with depth-of-field: the active line is bold and fully opaque,
 /// surrounding lines fall back through two levels of softness — the
 /// Apple Music karaoke treatment where focus tracks the voice.
-class _LyricsView extends StatelessWidget {
+class _LyricsView extends ConsumerWidget {
   final Lyrics? lyrics;
   final String mode;
   final Duration position;
@@ -558,7 +558,7 @@ class _LyricsView extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
     if (mode == 'loading') {
@@ -613,8 +613,12 @@ class _LyricsView extends StatelessWidget {
           lineWeight = FontWeight.w400;
         }
 
+        Widget seekable(Widget child) => isSynced
+            ? InkWell(onTap: () => ref.read(playerControllerProvider.notifier).seekTo(line.start),
+                child: child)
+            : child;
         if (line.words.isEmpty) {
-          return Padding(
+          return seekable(Padding(
             padding: EdgeInsets.symmetric(vertical: focusMode ? 12 : 6),
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 200),
@@ -625,10 +629,10 @@ class _LyricsView extends StatelessWidget {
               ),
               child: Text(line.text),
             ),
-          );
+          ));
         }
 
-        return Padding(
+        return seekable(Padding(
           padding: EdgeInsets.symmetric(vertical: focusMode ? 12 : 6),
           child: Wrap(
             children: [
@@ -651,7 +655,7 @@ class _LyricsView extends StatelessWidget {
                 ),
             ],
           ),
-        );
+        ));
       },
     );
   }

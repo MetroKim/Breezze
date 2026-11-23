@@ -14,6 +14,12 @@ Future<void> openYouTubePlayer({
   required String artist,
   String? artworkUrl,
 }) async {
+  await openVideoSurface(context, (_) => OfficialMusicVideoScreen(
+    videoId: videoId, title: title, artist: artist, artworkUrl: artworkUrl,
+  ));
+}
+
+Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final controller = container.read(playerControllerProvider.notifier);
   final previous = container.read(playerControllerProvider);
@@ -31,11 +37,7 @@ Future<void> openYouTubePlayer({
   if (resumeAudio) await controller.pause();
   try {
     if (!context.mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => OfficialMusicVideoScreen(
-        videoId: videoId, title: title, artist: artist, artworkUrl: artworkUrl,
-      ),
-    ));
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
   } finally {
     if (context.mounted && resumeAudio && entry != null &&
         controller.queue.current?.entryId == entry &&
