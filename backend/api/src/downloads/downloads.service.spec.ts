@@ -142,6 +142,10 @@ describe('DownloadsService', () => {
     });
 
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'download', null);
+    expect(prisma.downloadRecord.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId_trackId: { userId: 'user-1', trackId: 'track-1' } },
+      update: { status: 'active', expiresAt: expect.any(Date) },
+    }));
   });
 
   it('does not issue download URLs for providers that do not support downloads', async () => {
