@@ -26,6 +26,17 @@ void main() {
       expect(q.upNext.map((e) => e.entryId), ['x', 'b', 'c']);
     });
 
+    test('source fallback keeps the selected slot and remaining tracks', () {
+      final q = QueueManager();
+      q.replaceWith([entry('a'), entry('b'), entry('c')], startIndex: 1);
+      q.repeatMode = RepeatMode.repeatOne;
+      q.shuffle = true;
+      q.replaceCurrent(entry('preview'));
+      expect(q.current!.entryId, 'preview');
+      expect(q.upNext.map((item) => item.entryId), ['c']);
+      expect(q.advance()!.entryId, 'preview');
+    });
+
     test('playLast appends at end', () {
       final q = QueueManager();
       q.replaceWith([entry('a'), entry('b')]);

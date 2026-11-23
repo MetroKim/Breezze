@@ -187,7 +187,9 @@ class LiveResolver implements PlaybackResolver {
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
     if (isYouTubeSongId(track.id)) {
-      final stream = await resolveYouTubeAudio(track.id.split(':').last);
+      final quality = (await DownloadPreferencesStore().load()).streamingQuality;
+      final ceiling = switch (quality) { 'AAC_128' => 128, 'LOSSLESS' => 1536, _ => 256 };
+      final stream = await resolveYouTubeAudio(track.id.split(':').last, ceilingKbps: ceiling);
       if (stream != null) {
         return PlayableSource(trackId: track.id, streamUrl: stream.toString(),
             expiresAtUtc: streamExpiry(stream));
