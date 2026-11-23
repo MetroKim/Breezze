@@ -7,6 +7,7 @@ import { SocialAuthController } from './social-auth.controller';
 import { SocialAuthService } from './social-auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { SupabaseExchangeService } from './supabase-exchange.service';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
     }),
   ],
   controllers: [AuthController, SocialAuthController],
-  providers: [AuthService, SocialAuthService, JwtStrategy, JwtAuthGuard],
+  providers: [AuthService, SocialAuthService, SupabaseExchangeService, JwtStrategy, JwtAuthGuard],
   exports: [AuthService, JwtAuthGuard],
 })
 export class AuthModule {}
