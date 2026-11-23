@@ -331,6 +331,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 child: const Text('Browse music'),
               ),
               const SizedBox(height: 12),
+              if (SupabaseAuthBridge.enabled) ...[
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: ref.read(authSessionProvider.notifier)
+                      .preserveExistingLibrary,
+                  onChanged: busy ? null : (checked) async {
+                    await ref.read(authSessionProvider.notifier)
+                        .setPreserveExistingLibrary(checked == true);
+                    if (mounted) setState(() {});
+                  },
+                  title: const Text(
+                    'I already have a Breezze library',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    'Keep your previous playlists and favorites, even if '
+                    'your Apple or Google email is different.',
+                    style: TextStyle(color: theme.bzText2, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (SupabaseAuthBridge.enabled &&
                   (SupabaseAuthBridge.nativeAppleReady ||
                       SupabaseAuthBridge.nativeGoogleReady)) ...[

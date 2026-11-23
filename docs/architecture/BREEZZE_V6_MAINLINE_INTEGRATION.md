@@ -163,3 +163,18 @@ A failed old password is not logged or stored. Cancel clears the temporary
 Supabase session. The legacy authentication implementation remains temporarily
 available for rollback; removal happens only after migrations and per-user
 authorization checks pass in production.
+
+
+### Different-email identity migration (Apple private relay)
+
+Before their first Supabase sign-in, returning Breezze users may select
+**I already have a Breezze library** in the existing sign-in panel. That
+choice is persisted in platform-secure storage so a relaunch cannot quietly
+create a new account before linking. After Supabase verifies any Google,
+Apple, or email identity, Breezze opens the old-account proof step *before*
+issuing a Breezze API session. The user supplies their original account
+email and password separately, regardless of the identity provider's
+current email. Clearing/canceling migration locally clears the pending
+choice. Privileged/MFA and legacy social-only identities still need a more
+specialized high-assurance migration process; no identity is linked by
+matching an email or copying a row.

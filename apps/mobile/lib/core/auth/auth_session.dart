@@ -82,6 +82,8 @@ class AuthSessionController extends Notifier<AuthState> {
   Future<bool>? _refreshInFlight;
   int _socialAttempt = 0;
   static const _refreshTokenKey = 'breezze.refresh_token';
+  static const _pendingLegacyLinkKey = 'breezze.pending_legacy_link';
+  bool _preferLegacyLink = false;
   static const _secureStorage = FlutterSecureStorage();
 
   static const _configuredApiUrl = String.fromEnvironment('BREEZZE_API_URL');
@@ -100,6 +102,27 @@ class AuthSessionController extends Notifier<AuthState> {
   }
 
   BreezzeApi get api => _api;
+
+  /// Choose account migration BEFORE a Supabase login, including Apple relay
+  /// identities whose email differs from the original Breezze account.
+  bool get preserveExistingLibrary => _preferLegacyLink;
+
+  Future<void> setPreserveExistingLibrary(bool enabled) async {
+    if (!SupabaseAuthBridge.enabled) return;
+    try {
+      if (enabled) {
+        await _secureStorage.write(key: _pendingLegacyLinkKey, value: '1');
+      } else {
+        await _secureStorage.delete(key: _pendingLegacyLinkKey);
+      }
+      _preferLegacyLink = enabled;
+    } catch (_) {
+      // Fail closed: never skip the old-account migration silently if secure
+      // storage cannot remember the user's explicit choice.
+      state = const AuthError('SECURE_STORAGE_UNAVAILABLE');
+    }
+  }
+
 
   Future<bool> _refreshAccessToken() async {
     final active = _refreshInFlight;
@@ -146,6 +169,8 @@ class AuthSessionController extends Notifier<AuthState> {
   Future<void> restoreSession() async {
     try {
       if (SupabaseAuthBridge.enabled) {
+        _preferLegacyLink =
+            await _secureStorage.read(key: _pendingLegacyLinkKey) == '1';
         final current = SupabaseAuthBridge.client.auth.currentSession;
         if (current == null) {
           _api.accessToken = null;
@@ -158,6 +183,12 @@ class AuthSessionController extends Notifier<AuthState> {
             : current;
         if (session == null) {
           throw StateError('SUPABASE_SESSION_EXPIRED');
+        }
+        if (_preferLegacyLink) {
+          _api.accessToken = null;
+          await _secureStorage.delete(key: _refreshTokenKey);
+          state = const AuthLegacyLinkRequired();
+          return;
         }
         await _exchangeSupabaseSession(session.accessToken);
         return;
@@ -277,6 +308,10 @@ class AuthSessionController extends Notifier<AuthState> {
           state = const AuthError('EMAIL_VERIFICATION_REQUIRED');
           return;
         }
+        if (_preferLegacyLink) {
+          state = const AuthLegacyLinkRequired();
+          return;
+        }
         await _exchangeSupabaseSession(session.accessToken);
       } else {
         final response = await _api.register(
@@ -308,6 +343,10 @@ class AuthSessionController extends Notifier<AuthState> {
         final session = response.session;
         if (session == null) {
           state = const AuthError('SUPABASE_AUTH_FAILED');
+          return;
+        }
+        if (_preferLegacyLink) {
+          state = const AuthLegacyLinkRequired();
           return;
         }
         await _exchangeSupabaseSession(session.accessToken);
@@ -415,6 +454,10 @@ class AuthSessionController extends Notifier<AuthState> {
         }
         return;
       }
+      if (_preferLegacyLink) {
+        state = const AuthLegacyLinkRequired();
+        return;
+      }
       await _exchangeSupabaseSession(
         token,
         expectedSocialAttempt: attempt,
@@ -477,6 +520,12 @@ class AuthSessionController extends Notifier<AuthState> {
         legacyPassword: legacyPassword,
       );
       await _persistSession(response);
+      _preferLegacyLink = false;
+      try {
+        await _secureStorage.delete(key: _pendingLegacyLinkKey);
+      } catch (_) {
+        // Already linked. Backend mapping is authoritative and idempotent.
+      }
     } on BreezzeApiException catch (error) {
       state = AuthLegacyLinkRequired(errorCode: error.code);
     } on AuthException {
@@ -489,6 +538,10 @@ class AuthSessionController extends Notifier<AuthState> {
   Future<void> cancelLegacyLink() async {
     if (!SupabaseAuthBridge.enabled) return;
     ++_socialAttempt;
+    _preferLegacyLink = false;
+    try {
+      await _secureStorage.delete(key: _pendingLegacyLinkKey);
+    } catch (_) {}
     _api.accessToken = null;
     try {
       await SupabaseAuthBridge.client.auth.signOut(scope: SignOutScope.local);
@@ -549,6 +602,10 @@ class AuthSessionController extends Notifier<AuthState> {
 
   Future<void> signOut() async {
     ++_socialAttempt;
+    _preferLegacyLink = false;
+    try {
+      await _secureStorage.delete(key: _pendingLegacyLinkKey);
+    } catch (_) {}
     // Stop the global player while the access token is still valid so its
     // server-authorized playback session is closed before account logout.
     try {
