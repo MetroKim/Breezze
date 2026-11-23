@@ -426,7 +426,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Future<void> _play(BzTrack track) async {
     final embeddedId = track.id.startsWith('bzv:')
         ? track.id.substring(4)
-        : youtubeEmbeddedVideoId(track.id);
+        : null;
     if (embeddedId != null) {
       // A video is watched in the official visible iframe, never extracted
       // into Breezze's native audio-only playback queue.
@@ -682,7 +682,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             track.id.startsWith('bz:deezer:')
                                                 ? '${track.artist} · Deezer · Catalogue only'
                                                 : track.id.startsWith('bz:youtube_music:')
-                                                        ? '${track.artist} · YouTube player'
+                                                        ? '${track.artist} · YouTube Music'
                                                         : track.id.startsWith('bz:jamendo:')
                                                             ? '${track.artist} · Jamendo'
                                                             : track.artist,
@@ -695,14 +695,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         if (track.id.startsWith('bzv:') ||
-                                            youtubeEmbeddedVideoId(track.id) != null ||
                                             canQueueTrackId(track.id))
                                           IconButton(
                                             tooltip: track.id.startsWith('bzv:')
                                                 ? 'Watch music video'
-                                                : youtubeEmbeddedVideoId(track.id) != null
-                                                    ? 'Play in YouTube player'
-                                                    : 'Play',
+                                                : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
@@ -773,7 +770,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       ],
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ||
-                                            youtubeEmbeddedVideoId(track.id) != null
+                                            isYouTubeSongId(track.id)
                                         ? _play(track)
                                         : _openTrack(track),
                                   );

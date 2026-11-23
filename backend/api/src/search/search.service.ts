@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
+import { providerError } from '../providers/provider-result';
+import { ProviderTrack } from '../providers/provider-adapter.interface';
 
 @Injectable()
 export class SearchService {
@@ -48,10 +50,18 @@ export class SearchService {
         include: { tracks: { select: { id: true }, take: 100 } },
         take: 5,
       }),
-      Promise.all(searchableProviders.map(async (provider) => ({
-        providerId: provider.providerId,
-        result: await provider.search(q),
-      }))),
+      Promise.all(searchableProviders.map(async (provider) => {
+        try {
+          return { providerId: provider.providerId, result: await provider.search(q) };
+        } catch {
+          return {
+            providerId: provider.providerId,
+            result: providerError<ProviderTrack[]>(
+              'PROVIDER_SEARCH_FAILED', 'Music source search failed', true,
+            ),
+          };
+        }
+      })),
     ]);
 
     const metadataTrackIds = [...new Set([

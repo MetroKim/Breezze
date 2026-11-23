@@ -8,7 +8,6 @@ import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
-import '../video/open_youtube_player.dart';
 
 /// Detail view for a device-local Breezze playlist.
 class PlaylistDetailScreen extends ConsumerStatefulWidget {
@@ -107,14 +106,6 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
     final track = playlist.tracks[index];
-    final videoId = youtubeEmbeddedVideoId(track.id);
-    if (videoId != null) {
-      await openYouTubePlayer(
-        context: context, ref: ref, videoId: videoId,
-        title: track.title, artist: track.artist, artworkUrl: track.artworkUrl,
-      );
-      return;
-    }
     if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

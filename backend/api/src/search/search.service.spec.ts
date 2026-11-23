@@ -79,4 +79,30 @@ describe('SearchService', () => {
       take: 5,
     });
   });
+
+  it('keeps local and other provider results when one provider throws', async () => {
+    const other = {
+      providerId: 'other',
+      capabilities: { search: true },
+      search: jest.fn().mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'other-1' }] }),
+    };
+    providers.list.mockReturnValueOnce([
+      { providerId: 'youtube_music', capabilities: { search: true } },
+      { providerId: 'other', capabilities: { search: true } },
+    ]);
+    providers.get.mockImplementation((id: string) => id === 'other' ? other : youtubeMusic);
+    youtubeMusic.search.mockRejectedValueOnce(new Error('provider unavailable'));
+
+    const result = await service.search('Amapiano', 'TZ');
+
+    expect(result.tracks).toEqual(tracks);
+    expect(result.externalTracks).toEqual([
+      expect.objectContaining({ providerTrackId: 'other-1', providerId: 'other' }),
+    ]);
+    expect(result.externalProviderStatus).toBe('ok');
+    expect(result.providerStatuses).toEqual([
+      { providerId: 'youtube_music', status: 'error', code: 'PROVIDER_SEARCH_FAILED', retryable: true },
+      { providerId: 'other', status: 'ok' },
+    ]);
+  });
 });

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
@@ -10,11 +8,7 @@ import '../../app/bootstrap.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
-/// Now Playing — premium edition: ambient artwork backdrop (content is
-/// the colour), breathing artwork on the calm 2s loop, word-synced
-/// karaoke lyrics, and immersive chrome that recedes to 0.15 opacity
-/// after 3s without input and restores instantly on any interaction
-/// (spec §4.2 / FR-005).
+/// Cover artwork, lyrics and queue share a single playback session.
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -30,44 +24,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   // Artwork-first playback and a dedicated lyric-reading mode share the
   // same player and synced lyric state, without duplicate audio sessions.
   bool _lyricsFocus = false;
-  bool _chromeReceded = false;
-  Timer? _recedeTimer;
 
   @override
   void initState() {
     super.initState();
     _loadLyrics();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleRecede());
-  }
-
-  @override
-  void dispose() {
-    _recedeTimer?.cancel();
-    super.dispose();
-  }
-
-  /// Chrome recedes after 3s without input (FR-005). Skipped entirely under
-  /// reduced motion or accessible navigation — the chrome stays put for
-  /// users who depend on it.
-  void _scheduleRecede() {
-    if (!mounted) return;
-    _recedeTimer?.cancel();
-    if (MediaQuery.disableAnimationsOf(context) ||
-        MediaQuery.of(context).accessibleNavigation) {
-      return;
-    }
-    setState(() => _chromeReceded = false);
-    _recedeTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && !_lyricsFocus) setState(() => _chromeReceded = true);
-    });
-  }
-
-  /// Any interaction restores chrome instantly (FR-005).
-  void _onUserInteraction() {
-    if (_chromeReceded) {
-      setState(() => _chromeReceded = false);
-    }
-    _scheduleRecede();
   }
 
   Future<void> _loadLyrics() async {
@@ -216,20 +177,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     return Scaffold(
       body: BzAmbientBackdrop(
         artworkUrl: track.artworkUrl,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _onUserInteraction,
-          onPanDown: (_) => _onUserInteraction(),
-          onScaleStart: (_) => _onUserInteraction(),
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: BzMotion.navMs),
-            curve: const Cubic(0.22, 1, 0.36, 1),
-            opacity: _chromeReceded ? 0.15 : 1.0,
-            child: SafeArea(
+        child: SafeArea(
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 760),
-                  child: SizedBox.expand(
+                  child: LayoutBuilder(builder: (context, bounds) {
+                    final minHeight = MediaQuery.textScalerOf(context).scale(1) * 540;
+                    final height = bounds.maxHeight < minHeight ? minHeight : bounds.maxHeight;
+                    return SingleChildScrollView(
+                      child: SizedBox(
+                        height: height,
                     child: Column(
                       children: [
                         Padding(
@@ -250,7 +207,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                             fontSize: BzType.caption,
                                             letterSpacing: 1,
                                             color: theme.bzText2)),
-                                    Text('Breezze',
+                                    Text(controller.queue.playingFromLabel ?? 'Breezze',
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                             fontSize: BzType.footnote,
                                             color: theme.bzText1)),
@@ -312,6 +270,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                             ],
                           ),
                         ),
+                        if (player.playbackState == PlaybackState.failed)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text('Audio unavailable. Retry or choose another song.',
+                                style: theme.textTheme.bodySmall),
+                          ),
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -334,7 +298,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                       ? player.duration.inMilliseconds.toDouble()
                                       : 1,
                                   onChanged: (v) {
-                                    _onUserInteraction();
+
                                     controller.seekTo(
                                         Duration(milliseconds: v.toInt()));
                                   },
@@ -348,7 +312,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                       style: TextStyle(
                                           fontSize: BzType.caption,
                                           color: theme.bzText2)),
-                                  Text(_format(player.duration),
+                                  Text('-${_format(player.duration > player.position ? player.duration - player.position : Duration.zero)}',
                                       style: TextStyle(
                                           fontSize: BzType.caption,
                                           color: theme.bzText2)),
@@ -409,7 +373,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           children: [
                             TextButton.icon(
                               onPressed: () {
-                                _onUserInteraction();
+
                                 setState(() {
                                   _lyricsVisible = !_lyricsVisible;
                                   if (!_lyricsVisible) _lyricsFocus = false;
@@ -430,16 +394,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 size: 20,
                               ),
                               onPressed: () {
-                                _onUserInteraction();
+
                                 setState(() {
                                   _lyricsFocus = !_lyricsFocus;
                                   if (_lyricsFocus) {
                                     _lyricsVisible = true;
-                                    _chromeReceded = false;
-                                    _recedeTimer?.cancel();
+
+
                                   }
                                 });
-                                if (!_lyricsFocus) _scheduleRecede();
+
                               },
                             ),
                             TextButton.icon(
@@ -468,11 +432,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         ),
                       ],
                     ),
-                  ),
+                      ),
+                    );
+                  }),
                 ),
               ),
-            ),
-          ),
         ),
       ),
     );

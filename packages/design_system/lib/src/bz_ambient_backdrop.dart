@@ -7,10 +7,7 @@ import 'bz_theme.dart';
 /// BzAmbientBackdrop — content is the colour (Liner principle, Breezze
 /// execution). Artwork blooms softly behind the screen chrome.
 ///
-/// The scrim over the blurred artwork is denser (0.78) than the old
-/// 0.55 so text and controls layered above it always pass contrast,
-/// in both themes. Chrome recedes (opacity 0.15) via the immersive
-/// behavior in now_playing_screen, not here.
+/// Artwork stays visible above the contrast gradient behind the controls.
 class BzAmbientBackdrop extends StatelessWidget {
   final Widget child;
   final String? artworkUrl;
@@ -33,13 +30,23 @@ class BzAmbientBackdrop extends StatelessWidget {
           Image.network(
             artworkUrl!,
             fit: BoxFit.cover,
-            opacity: const AlwaysStoppedAnimation(0.35),
+            alignment: Alignment.topCenter,
             errorBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
         BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+          filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
-            color: colors.background.withValues(alpha: 0.78),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colors.background.withValues(alpha: 0.72),
+                  colors.background.withValues(alpha: 0.83),
+                  colors.background,
+                ],
+              ),
+            ),
           ),
         ),
         child,

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/api/breezze_api.dart';
+import '../core/audio/playback_source_policy.dart';
 import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
@@ -189,11 +190,12 @@ class LiveResolver implements PlaybackResolver {
     if (api.accessToken == null) return null;
 
     try {
-      final catalogId = await _resolveCatalogId(api, track);
-      if (catalogId == null) return null;
+      final youtubeSong = isYouTubeSongId(track.id);
+      final catalogId = youtubeSong ? null : await _resolveCatalogId(api, track);
+      if (!youtubeSong && catalogId == null) return null;
 
       final providerIdentity = _providerIdentity(track.id);
-      if (providerIdentity != null) {
+      if (!youtubeSong && providerIdentity != null) {
         final session = await api.startPlaybackSession(
           providerId: providerIdentity.$1,
           providerTrackId: providerIdentity.$2,
@@ -223,6 +225,7 @@ class LiveResolver implements PlaybackResolver {
       final preferences = await DownloadPreferencesStore().load();
       final session = await api.startPlaybackSession(
         trackId: catalogId,
+        externalTrackId: youtubeSong ? track.id : null,
         requestedQuality: preferences.streamingQuality,
       );
       final sessionId = session['id'] as String?;

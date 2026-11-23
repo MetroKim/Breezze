@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/recent_store.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/audio/playback_source_policy.dart';
 import '../../core/database/database_providers.dart';
 import '../../core/database/playback_heartbeat_outbox_dao.dart';
 import 'playback_session_client.dart';
@@ -349,9 +350,6 @@ class PlayerController extends Notifier<PlayerState> {
     _activeSource = null;
   }
 
-  bool _isMetadataOnlyProviderTrack(String id) =>
-      id.startsWith('bzv:') ||
-      (id.startsWith('bz:') && !id.startsWith('bz:audius:'));
 
   // ----------------------------------------------------------------
   // Commands
@@ -369,10 +367,8 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Breezze',
   }) async {
-    // YouTube Music search results are catalogue metadata, not native
-    // playback grants. Never put them into Breezze's native queue.
-    if ((_isMetadataOnlyProviderTrack(trackId) && localFilePath == null) ||
-        queue.any((item) => _isMetadataOnlyProviderTrack(item.id) && item.localFilePath == null)) {
+    if ((isMetadataOnlyTrackId(trackId) && localFilePath == null) ||
+        queue.any((item) => isMetadataOnlyTrackId(item.id) && item.localFilePath == null)) {
       return;
     }
     if (queue.isNotEmpty) {
@@ -519,6 +515,10 @@ class PlayerController extends Notifier<PlayerState> {
       await pause();
     } else if (state.playbackState == PlaybackState.paused) {
       await resume();
+    } else if (state.playbackState == PlaybackState.failed ||
+        state.playbackState == PlaybackState.ended) {
+      final track = state.currentTrack;
+      if (track != null) await _resolveAndPlay(track);
     }
   }
 
@@ -562,7 +562,7 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Queue',
   }) {
-    if (_isMetadataOnlyProviderTrack(track.id) && track.localFilePath == null) return;
+    if (isMetadataOnlyTrackId(track.id) && track.localFilePath == null) return;
     _trackInfos[track.id] = track;
     if (state.currentTrack == null) {
       unawaited(playTrack(
@@ -591,7 +591,7 @@ class PlayerController extends Notifier<PlayerState> {
     String origin = 'manual',
     String sourceContext = 'Queue',
   }) {
-    if (_isMetadataOnlyProviderTrack(track.id) && track.localFilePath == null) return;
+    if (isMetadataOnlyTrackId(track.id) && track.localFilePath == null) return;
     _trackInfos[track.id] = track;
     if (state.currentTrack == null) {
       unawaited(playTrack(
@@ -645,19 +645,12 @@ class PlayerController extends Notifier<PlayerState> {
     TrackInfo info, {
     Duration initialPosition = Duration.zero,
   }) async {
-    if (_playbackSessionId != null) {
-      await _closePlaybackSession();
-    } else {
-      _pauseHeartbeatTimer();
-    }
-    // Defensive check for restored or stale queue entries created before the
-    // metadata-only provider capability was enforced.
-    if (_isMetadataOnlyProviderTrack(info.id) && info.localFilePath == null) return;
+    if (isMetadataOnlyTrackId(info.id) && info.localFilePath == null) return;
+    final requestId = ++_requestGeneration;
     final previousTrackId = state.currentTrack?.id;
     if (previousTrackId != null && previousTrackId != info.id) {
       _scrobbles.onStop(previousTrackId);
     }
-    final requestId = ++_requestGeneration;
     _autoAdvancedTrackId = null;
     _trackInfos[info.id] = info;
     state = state.copyWith(
@@ -668,6 +661,18 @@ class PlayerController extends Notifier<PlayerState> {
     _machine.dispatch(StartRequested(info.id, requestId: requestId));
 
     try {
+      final closing = _closePlaybackSession();
+      _activeSource = null;
+      try {
+        if (previousTrackId != null) {
+          await _serializeEngineOperation(() async {
+            if (_isCurrentRequest(requestId)) await _engine?.pause();
+          });
+        }
+      } finally {
+        await closing;
+      }
+      if (!_isCurrentRequest(requestId)) return;
       final source = info.localFilePath != null
           ? PlayableSource(
               trackId: info.id,
@@ -751,8 +756,8 @@ class PlayerController extends Notifier<PlayerState> {
         ));
       });
 
-      if (!_isCurrentRequest(requestId) ||
-          _machine.state != PlaybackState.playing) {
+      if (!_isCurrentRequest(requestId)) return;
+      if (_machine.state != PlaybackState.playing) {
         await _closePlaybackSession();
         return;
       }
