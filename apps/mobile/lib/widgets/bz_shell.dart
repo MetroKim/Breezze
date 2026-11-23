@@ -57,8 +57,9 @@ class _BzHomeState extends ConsumerState<BzHome> {
   @override
   Widget build(BuildContext context) {
     ref.listen<int>(homeTabHintProvider, (previous, next) {
-      if (next >= 0 && next < _tabs.length && next != _index) {
-        setState(() => _index = next);
+      if (next >= 0 && next < _tabs.length) {
+        if (next != _index) setState(() => _index = next);
+        ref.read(homeTabHintProvider.notifier).state = -1;
       }
     });
     final player = ref.watch(playerControllerProvider);

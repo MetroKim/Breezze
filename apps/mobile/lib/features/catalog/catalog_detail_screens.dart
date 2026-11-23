@@ -6,10 +6,42 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/bootstrap.dart';
 import '../../app/saved_album_store.dart';
 import '../../core/audio/playback_source_policy.dart';
+import '../../core/audio/youtube_player_handoff.dart';
+import '../video/official_music_video_screen.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
+
+final _artistFollowing = FutureProvider.autoDispose.family<bool, String>((ref, key) {
+  ref.watch(authSessionProvider);
+  return ref.read(authSessionProvider.notifier).api.artistFollowing(key);
+});
+
+final _artistVideos = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
+  final data = await ref.read(authSessionProvider.notifier).api
+      .discoveryMusicVideos(query: artist);
+  final name = artist.trim().toLowerCase();
+  return (data['items'] as List).whereType<Map>().where((item) {
+    final id = item['id'];
+    final credit = item['artist'];
+    return id is String && YoutubePlayerHandoff.isValidProviderTrackId(id) &&
+        credit is String && credit.trim().toLowerCase() == name;
+  }).take(8).toList();
+});
+
+final _artistConcerts = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
+  final territory = ref.watch(outboxTerritoryProvider);
+  final data = await ref.read(authSessionProvider.notifier).api.discoveryConcerts(
+    country: territory.length == 2 && territory != 'WW' ? territory : 'US',
+  );
+  final name = artist.trim().toLowerCase();
+  return (data['items'] as List).whereType<Map>().where((event) {
+    final credit = event['artist'];
+    return credit is String &&
+        credit.split(', ').any((part) => part.trim().toLowerCase() == name);
+  }).toList();
+});
 
 final _appleTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
@@ -322,6 +354,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
   bool _discographyLoading = true;
   String? _discographyError;
   String? _appleArtistId;
+  bool _changingFollow = false;
 
   String get artist => widget.artist;
   List<FavoriteTrack> get savedTracks => widget.savedTracks;
@@ -388,6 +421,13 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final artistKey = canonicalArtistId != null
+        ? 'catalog:$canonicalArtistId'
+        : _appleArtistId != null ? 'apple:$_appleArtistId' : null;
+    final signedIn = ref.watch(authSessionProvider) is AuthSignedIn;
+    final following = signedIn && artistKey != null
+        ? ref.watch(_artistFollowing(artistKey))
+        : null;
     final queue = [for (final track in savedTracks) track.toTrackInfo()];
     final heroArtwork = portraitUrl ?? (searchTracks.isNotEmpty
         ? searchTracks.first.artworkUrl
@@ -486,26 +526,38 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                       ),
                       label: const Text('Play saved songs'),
                     ),
-                    Tooltip(
-                      message: 'Artist following is not available yet.',
-                      child: OutlinedButton.icon(
-                        onPressed: null,
-                        icon: const BzSvgIcon(name: 'user-round-plus'),
-                        label: const Text('Follow'),
+                    if (following != null && artistKey != null)
+                      following.when(
+                        loading: () => const OutlinedButton(
+                          onPressed: null, child: Text('Loading…'),
+                        ),
+                        error: (_, __) => OutlinedButton(
+                          onPressed: () => ref.invalidate(_artistFollowing(artistKey)),
+                          child: const Text('Retry follow status'),
+                        ),
+                        data: (active) => OutlinedButton.icon(
+                          icon: BzSvgIcon(name: active ? 'check' : 'user-round-plus'),
+                          label: Text(active ? 'Following' : 'Follow'),
+                          onPressed: _changingFollow ? null : () async {
+                            setState(() => _changingFollow = true);
+                            try {
+                              await ref.read(authSessionProvider.notifier).api
+                                  .followArtist(artistKey, !active);
+                              if (mounted) ref.invalidate(_artistFollowing(artistKey));
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not update this artist. Try again.')),
+                                );
+                              }
+                            } finally {
+                              if (mounted) setState(() => _changingFollow = false);
+                            }
+                          },
+                        ),
                       ),
-                    ),
                   ],
                 ),
-                Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(
-                      'Following and artist-wide catalog actions become available when the artist services are connected.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.bzText2,
-                      ),
-                    ),
-                  ),
                 const SizedBox(height: 28),
                 _CatalogSection(
                   title: 'Saved Songs',
@@ -629,16 +681,71 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                       ],
                     ),
                   ),
-                for (final section in const [
-                  'Music Videos',
-                  'Upcoming Concerts',
-                  'Similar Artists',
-                ])
-                  _CatalogSection(
-                    title: section,
-                    subtitle: 'A licensed provider feed is not configured for this section.',
-                    available: false,
+                ref.watch(_artistVideos(artist)).when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => TextButton.icon(
+                    onPressed: () => ref.invalidate(_artistVideos(artist)),
+                    icon: const BzSvgIcon(name: 'refresh'),
+                    label: const Text('Retry music videos'),
                   ),
+                  data: (videos) => _CatalogSection(
+                    title: 'Music Videos',
+                    subtitle: 'No videos found for this artist.',
+                    available: videos.isNotEmpty,
+                    child: Column(children: [
+                      for (final video in videos)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: _TrackArtwork(url: video['artworkUrl'] as String?, size: 52),
+                          title: Text(video['title'] as String? ?? 'Music video'),
+                          trailing: const BzSvgIcon(name: 'play'),
+                          onTap: () async {
+                            await ref.read(playerControllerProvider.notifier).pause();
+                            if (!context.mounted) return;
+                            await Navigator.of(context).push(MaterialPageRoute<void>(
+                              builder: (_) => OfficialMusicVideoScreen(
+                                videoId: video['id'] as String,
+                                title: video['title'] as String? ?? 'Music video',
+                                artist: artist,
+                                artworkUrl: video['artworkUrl'] as String?,
+                              ),
+                            ));
+                          },
+                        ),
+                    ]),
+                  ),
+                ),
+                ref.watch(_artistConcerts(artist)).when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => _CatalogSection(
+                    title: 'Upcoming Concerts',
+                    subtitle: '',
+                    available: true,
+                    child: TextButton(
+                      onPressed: () => ref.invalidate(_artistConcerts(artist)),
+                      child: const Text('Retry concert listings'),
+                    ),
+                  ),
+                  data: (events) => _CatalogSection(
+                    title: 'Upcoming Concerts',
+                    subtitle: 'No upcoming shows found in your region.',
+                    available: events.isNotEmpty,
+                    child: Column(children: [
+                      for (final event in events)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const BzSvgIcon(name: 'calendar'),
+                          title: Text(event['title'] as String? ?? 'Concert'),
+                          subtitle: Text([
+                            if (event['date'] is String) (event['date'] as String).split('T').first,
+                            if (event['venue'] is String) event['venue'] as String,
+                            if (event['city'] is String) event['city'] as String,
+                          ].join(' · ')),
+                        ),
+                      const Text('Concert data provided by JamBase'),
+                    ]),
+                  ),
+                ),
               ],
             ),
             ),
