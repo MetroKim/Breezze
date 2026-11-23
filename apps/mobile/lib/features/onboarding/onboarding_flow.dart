@@ -52,7 +52,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             step: 0,
             totalSteps: 3,
             title: 'Welcome to Breezze',
-            subtitle: 'Free. Every platform. One line.',
+            subtitle: 'Choose your region and favorite genres.',
             nextLabel: 'Get started',
             onNext: _next,
             body: Center(

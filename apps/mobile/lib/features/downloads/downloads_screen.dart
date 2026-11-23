@@ -182,9 +182,15 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     ref.listen<AuthState>(authSessionProvider, (previous, next) {
       _refresh();
     });
+    ref.listen<DownloadBatchState>(downloadBatchProvider, (previous, next) {
+      if (previous != null && !previous.isSettled && next.isSettled) {
+        _refresh();
+      }
+    });
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
     final jobStatuses = ref.watch(downloadJobStatusProvider);
+    final batch = ref.watch(downloadBatchProvider);
     final downloadController = ref.read(downloadProgressProvider.notifier);
     final inProgress = jobStatuses.entries.where((entry) => ['downloading', 'paused', 'failed', 'waiting_for_wifi', 'waiting_for_network'].contains(entry.value)).map((entry) => MapEntry(entry.key, progress[entry.key] ?? 0.0)).toList();
 
@@ -258,6 +264,70 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                 : ListView(
                     padding: EdgeInsets.fromLTRB(0, 8, 0, BzBreakpoints.bottomClearance(context, compact: 220)),
                     children: [
+                      if (!batch.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: theme.bzSurface1,
+                              borderRadius: BorderRadius.circular(BzRadius.card),
+                              border: Border.all(color: theme.bzSeparator),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        batch.isSettled
+                                            ? batch.failedCount > 0
+                                                ? 'Downloads finished with ${batch.failedCount} failed'
+                                                : batch.cancelledCount > 0
+                                                    ? 'Downloads finished'
+                                                    : '${batch.completedCount} ${batch.completedCount == 1 ? 'download' : 'downloads'} ready'
+                                            : 'Downloading ${batch.totalCount} ${batch.totalCount == 1 ? 'track' : 'tracks'}',
+                                        style: theme.textTheme.titleMedium,
+                                      ),
+                                    ),
+                                    if (batch.isSettled)
+                                      TextButton(
+                                        onPressed: () => ref
+                                            .read(downloadBatchProvider.notifier)
+                                            .dismiss(),
+                                        child: const Text('Dismiss'),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(2),
+                                  child: LinearProgressIndicator(
+                                    value: batch.fraction,
+                                    minHeight: 4,
+                                    backgroundColor: theme.bzSeparator,
+                                    color: batch.failedCount > 0
+                                        ? theme.colorScheme.error
+                                        : theme.bzAccent,
+                                  ),
+                                ),
+                                if (batch.isSettled &&
+                                    (batch.failedCount > 0 ||
+                                        batch.cancelledCount > 0)) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '${batch.completedCount} ready'
+                                    '${batch.failedCount > 0 ? ' · ${batch.failedCount} failed' : ''}'
+                                    '${batch.cancelledCount > 0 ? ' · ${batch.cancelledCount} cancelled' : ''}',
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: theme.bzText2),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
                       // In-progress section (live)
                       for (final entry in inProgress)
                         ListTile(

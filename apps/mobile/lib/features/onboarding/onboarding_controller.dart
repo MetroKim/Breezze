@@ -89,7 +89,7 @@ const kOnboardingGenres = [
 /// Country list — compact ISO display list.
 const kOnboardingCountries = [
   'IN', 'US', 'GB', 'CA', 'AU', 'DE', 'FR', 'ES', 'IT', 'NL',
-  'SE', 'NO', 'BR', 'MX', 'JP', 'KR', 'CN', 'ZA', 'NG', 'KE',
+  'SE', 'NO', 'BR', 'MX', 'JP', 'KR', 'CN', 'ZA', 'NG', 'KE', 'TZ',
   'AE', 'SA', 'SG', 'MY', 'ID', 'PH', 'VN', 'TH', 'PK', 'BD',
 ];
 
@@ -100,7 +100,7 @@ String countryName(String code) {
     'ES': 'Spain', 'IT': 'Italy', 'NL': 'Netherlands', 'SE': 'Sweden',
     'NO': 'Norway', 'BR': 'Brazil', 'MX': 'Mexico', 'JP': 'Japan',
     'KR': 'South Korea', 'CN': 'China', 'ZA': 'South Africa',
-    'NG': 'Nigeria', 'KE': 'Kenya', 'AE': 'UAE', 'SA': 'Saudi Arabia',
+    'NG': 'Nigeria', 'KE': 'Kenya', 'TZ': 'Tanzania', 'AE': 'UAE', 'SA': 'Saudi Arabia',
     'SG': 'Singapore', 'MY': 'Malaysia', 'ID': 'Indonesia',
     'PH': 'Philippines', 'VN': 'Vietnam', 'TH': 'Thailand',
     'PK': 'Pakistan', 'BD': 'Bangladesh',

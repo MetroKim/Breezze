@@ -179,7 +179,7 @@ jobs:
 
       - name: Build macOS desktop
         working-directory: apps/mobile
-        run: flutter build macos --debug
+        run: flutter build macos --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
 
       - name: Build iOS
         working-directory: apps/mobile
@@ -217,7 +217,7 @@ jobs:
           # coroutine header; VS 2026 promotes its deprecation to an error.
           # Silence that upstream compatibility diagnostic for this build.
           CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
-        run: flutter build windows --debug
+        run: flutter build windows --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
 
   backend:
     name: NestJS and Prisma validation
@@ -271,11 +271,11 @@ jobs:
       - name: Typecheck backend
         run: npm run typecheck
 
-      - name: Test backend
-        run: npm test -- --runInBand
+      - name: Lint backend
+        run: npm run lint
 
-      - name: Test PostgreSQL concurrency constraints
-        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts src/library/saved-albums.integration.spec.ts
+      - name: Test backend and PostgreSQL integration
+        run: npm test -- --runInBand
 
       - name: Build backend
         run: npm run build

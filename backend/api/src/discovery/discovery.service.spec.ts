@@ -13,6 +13,18 @@ describe('DiscoveryService album metadata', () => {
     jest.restoreAllMocks();
   });
 
+  it('returns only recently released chart entries in release-date order', async () => {
+    const day = 86400000;
+    const date = (days: number) => new Date(Date.now() - days * day).toISOString().slice(0, 10);
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({
+      feed: { results: [10, 60, -10, 2].map(n => ({ id: String(n), releaseDate: date(n) })) },
+    }) });
+    const result = await service.recentChartReleases('songs', 'TZ');
+    expect(result.items.map(i => i.id)).toEqual(['2', '10']);
+    expect(result.items.every(i => i.rank === null)).toBe(true);
+    expect(result.sourceUrl).toContain('/tz/music/most-played/100/songs.json');
+  });
+
   it('preserves only upstream-provided genre and compilation attributes', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

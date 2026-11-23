@@ -21,6 +21,81 @@ final downloadProgressProvider =
     StateNotifierProvider<DownloadsController, Map<String, double>>(
         DownloadsController.new);
 
+/// A user-visible batch survives the final transfer so its outcome cannot
+/// disappear between the download finishing and the user opening Downloads.
+/// Starting a new download after a settled batch begins a fresh batch.
+final downloadBatchProvider =
+    StateNotifierProvider<DownloadBatchController, DownloadBatchState>(
+        (ref) => DownloadBatchController());
+
+class DownloadBatchState {
+  const DownloadBatchState({
+    this.statuses = const {},
+    this.progress = const {},
+  });
+
+  final Map<String, String> statuses;
+  final Map<String, double> progress;
+
+  static const _terminalStatuses = {'downloaded', 'failed', 'cancelled'};
+
+  bool get isEmpty => statuses.isEmpty;
+  bool get isSettled =>
+      statuses.isNotEmpty && statuses.values.every(_terminalStatuses.contains);
+  int get totalCount => statuses.length;
+  int get completedCount =>
+      statuses.values.where((status) => status == 'downloaded').length;
+  int get failedCount =>
+      statuses.values.where((status) => status == 'failed').length;
+  int get cancelledCount =>
+      statuses.values.where((status) => status == 'cancelled').length;
+
+  double get fraction {
+    if (statuses.isEmpty) return 0;
+    var total = 0.0;
+    for (final entry in statuses.entries) {
+      total += entry.value == 'downloaded'
+          ? 1.0
+          : (progress[entry.key] ?? 0.0).clamp(0.0, 1.0).toDouble();
+    }
+    return (total / statuses.length).clamp(0.0, 1.0).toDouble();
+  }
+}
+
+class DownloadBatchController extends StateNotifier<DownloadBatchState> {
+  DownloadBatchController() : super(const DownloadBatchState());
+
+  void begin(String trackId) {
+    final reset = state.isSettled;
+    final statuses = reset
+        ? <String, String>{}
+        : Map<String, String>.of(state.statuses);
+    final progress = reset
+        ? <String, double>{}
+        : Map<String, double>.of(state.progress);
+    statuses[trackId] = 'downloading';
+    progress[trackId] = 0;
+    state = DownloadBatchState(statuses: statuses, progress: progress);
+  }
+
+  void setStatus(String trackId, String status) {
+    if (!state.statuses.containsKey(trackId)) return;
+    final statuses = Map<String, String>.of(state.statuses)..[trackId] = status;
+    state = DownloadBatchState(statuses: statuses, progress: state.progress);
+  }
+
+  void setProgress(String trackId, double value) {
+    if (!state.statuses.containsKey(trackId)) return;
+    final progress = Map<String, double>.of(state.progress)
+      ..[trackId] = value.clamp(0.0, 1.0).toDouble();
+    state = DownloadBatchState(statuses: state.statuses, progress: progress);
+  }
+
+  void dismiss() {
+    if (state.isSettled) state = const DownloadBatchState();
+  }
+}
+
 /// Downloads only short-lived URLs authorized by the Breezze backend.
 /// Provider metadata/search adapters are never allowed to grant download
 /// rights or expose a raw stream URL.
@@ -92,6 +167,9 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
 
   void _setStatus(String id, String status) {
     if (!mounted) return;
+    final batch = ref.read(downloadBatchProvider.notifier);
+    if (status == 'downloading') batch.begin(id);
+    batch.setStatus(id, status);
     final next = Map<String, String>.of(ref.read(downloadJobStatusProvider));
     next[id] = status;
     ref.read(downloadJobStatusProvider.notifier).state = next;
@@ -183,8 +261,12 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       final rightsExpiry = rightsExpiryRaw == null
           ? null
           : DateTime.tryParse(rightsExpiryRaw)?.toUtc();
-      if (rightsExpiryRaw != null && rightsExpiry == null) return;
+      if (rightsExpiryRaw != null && rightsExpiry == null) {
+        _setStatus(track.id, 'failed');
+        return;
+      }
       if (rightsExpiry != null && !rightsExpiry.isAfter(DateTime.now().toUtc())) {
+        _setStatus(track.id, 'failed');
         return;
       }
 
@@ -202,7 +284,12 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         rightsExpiresAtUtc: rightsExpiry,
         cancellation: cancellation,
         onProgress: (progress) {
-          if (mounted) state = {...state, track.id: progress};
+          if (mounted) {
+            state = {...state, track.id: progress};
+            ref
+                .read(downloadBatchProvider.notifier)
+                .setProgress(track.id, progress);
+          }
         },
       );
 

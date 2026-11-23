@@ -21,6 +21,11 @@ export class FavoriteDto {
   trackId!: string;
 }
 
+class ArtistKeyParams {
+  @Matches(/^(apple:[0-9]{1,20}|catalog:[a-zA-Z0-9_-]{1,128})$/)
+  artistKey!: string;
+}
+
 export class SavedCatalogAlbumDto {
   @IsString()
   @Matches(/^[0-9]{1,20}$/)
@@ -62,6 +67,21 @@ export class SavedCatalogAlbumDto {
 @UseGuards(JwtAuthGuard)
 export class LibraryController {
   constructor(private readonly library: LibraryService) {}
+
+  @Get('artists/:artistKey')
+  artistStatus(@CurrentUser() userId: string, @Param() params: ArtistKeyParams) {
+    return this.library.artistStatus(userId, params.artistKey);
+  }
+
+  @Post('artists/:artistKey')
+  followArtist(@CurrentUser() userId: string, @Param() params: ArtistKeyParams) {
+    return this.library.setFollowing(userId, params.artistKey, true);
+  }
+
+  @Delete('artists/:artistKey')
+  unfollowArtist(@CurrentUser() userId: string, @Param() params: ArtistKeyParams) {
+    return this.library.setFollowing(userId, params.artistKey, false);
+  }
 
   @Get('albums')
   listSavedAlbums(

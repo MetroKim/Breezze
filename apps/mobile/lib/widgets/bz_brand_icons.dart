@@ -105,7 +105,9 @@ class BzBnoteMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SvgPicture.asset(
-      'assets/icons/b-note-mark.svg',
+      Theme.of(context).brightness == Brightness.dark
+          ? 'assets/icons/breezze-symbol-white.svg'
+          : 'assets/icons/breezze-symbol-black.svg',
       width: size,
       height: size,
       colorFilter: ColorFilter.mode(
@@ -126,66 +128,16 @@ class BzRibbonLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = color ?? Theme.of(context).colorScheme.onSurface;
-    return SizedBox(
+    return Image.asset(
+      Theme.of(context).brightness == Brightness.dark
+          ? 'assets/icons/breezze-logo-white.png'
+          : 'assets/icons/breezze-logo-black.png',
       width: width,
-      height: width * 0.8,
-      child: CustomPaint(painter: _RibbonPainter(c)),
+      height: width / 4,
+      fit: BoxFit.contain,
+      color: c,
+      colorBlendMode: BlendMode.srcIn,
+      semanticLabel: 'Breezze',
     );
   }
-}
-
-class _RibbonPainter extends CustomPainter {
-  final Color color;
-  _RibbonPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..color = color
-      ..strokeWidth = size.width * 0.03
-      ..strokeCap = StrokeCap.round;
-
-    final w = size.width;
-    final h = size.height;
-
-    final stem = Path()
-      ..moveTo(w * 0.22, h * 0.23)
-      ..lineTo(w * 0.22, h * 0.77);
-    canvas.drawPath(stem, paint);
-
-    final upper = Path()
-      ..moveTo(w * 0.22, h * 0.23)
-      ..lineTo(w * 0.44, h * 0.23)
-      ..arcToPoint(Offset(w * 0.44, h * 0.51),
-          radius: Radius.circular(w * 0.14), clockwise: true)
-      ..lineTo(w * 0.22, h * 0.51);
-    canvas.drawPath(upper, paint);
-
-    final lower = Path()
-      ..moveTo(w * 0.22, h * 0.51)
-      ..lineTo(w * 0.49, h * 0.51)
-      ..arcToPoint(Offset(w * 0.49, h * 0.69),
-          radius: Radius.circular(w * 0.16), clockwise: true)
-      ..lineTo(w * 0.22, h * 0.69);
-    canvas.drawPath(lower, paint);
-
-    final wave1 = Path()
-      ..moveTo(w * 0.60, h * 0.50)
-      ..cubicTo(w * 0.64, h * 0.43, w * 0.68, h * 0.43, w * 0.72, h * 0.48);
-    canvas.drawPath(wave1, paint);
-
-    final wave2 = Path()
-      ..moveTo(w * 0.60, h * 0.58)
-      ..cubicTo(w * 0.65, h * 0.66, w * 0.71, h * 0.67, w * 0.76, h * 0.62);
-    canvas.drawPath(wave2, paint);
-
-    final wave3 = Path()
-      ..moveTo(w * 0.60, h * 0.42)
-      ..cubicTo(w * 0.64, h * 0.35, w * 0.69, h * 0.34, w * 0.73, h * 0.38);
-    canvas.drawPath(wave3, paint);
-  }
-
-  @override
-  bool shouldRepaint(_RibbonPainter oldDelegate) => oldDelegate.color != color;
 }

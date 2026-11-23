@@ -37,8 +37,17 @@ model User {
   notifications  Notification[]
   pushTokens     PushToken[]
   supportRequests SupportRequest[]
+  followedArtists UserFollowedArtist[]
   savedCatalogAlbums UserSavedCatalogAlbum[]
   socialIdentities SocialAuthIdentity[]
+}
+
+model UserFollowedArtist {
+  userId    String
+  artistKey String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, artistKey])
 }
 
 /// Per-user catalog bookmarks only; they are never media playback rights.

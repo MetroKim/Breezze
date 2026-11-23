@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta name="description" content="Stream music and listen to your library on Breezze.">
+  <meta name="theme-color" content="#111214">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Breezze">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>Breezze</title>
+  <style>
+    html { color-scheme: light dark; background: #f5f5f7; }
+    @media (prefers-color-scheme: dark) { html { background: #000; } }
+    body { margin: 0; }
+    #launch { position: fixed; inset: 0; display: grid; place-items: center; }
+  </style>
+</head>
+<body>
+  <div id="launch"><img width="80" height="80" src="icons/Icon-192.png" alt="Opening Breezze"></div>
+  <script>
+    window.addEventListener('flutter-first-frame', () => document.getElementById('launch')?.remove(), {once: true});
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

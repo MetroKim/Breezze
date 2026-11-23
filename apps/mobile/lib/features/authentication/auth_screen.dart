@@ -1,11 +1,12 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/auth/auth_session.dart';
+import '../../core/auth/guest_mode.dart';
 import '../../core/api/breezze_api.dart';
 import '../../widgets/bz_brand_icons.dart';
+import 'youtube_music_connect_screen.dart';
 
 /// Auth screen — login + register in one premium glass card, wired to
 /// the real backend session controller.
@@ -23,44 +24,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _mfaCode = TextEditingController();
   bool _registerMode = false;
   bool _revealPassword = false;
-  late Future<Map<String, dynamic>> _socialProviders;
   bool _mfaBusy = false;
   String? _mfaError;
 
-  @override
-  void initState() {
-    super.initState();
-    _socialProviders = _prepareSocialFlows();
-  }
-
-  Future<Map<String, dynamic>> _prepareSocialFlows() async {
-    try {
-      final api = ref.read(authSessionProvider.notifier).api;
-      final flags = await api.socialProviders()
-          .timeout(const Duration(seconds: 10));
-      final result = Map<String, dynamic>.from(flags);
-      for (final provider in const ['apple', 'google']) {
-        if (result[provider] == true) {
-          try {
-            result['${provider}Flow'] = await api.startSocialLogin(provider)
-                .timeout(const Duration(seconds: 10));
-          } catch (_) {
-            // A failed preflight disables only that button; email and the
-            // other provider remain available.
-          }
-        }
-      }
-      return result;
-    } catch (_) {
-      return <String, dynamic>{};
+  Future<void> _connectYouTubeMusic() async {
+    final connected = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => const YouTubeMusicConnectScreen(),
+      ),
+    );
+    if (connected == true && mounted) {
+      ref.read(guestModeProvider.notifier).state = true;
     }
-  }
-
-  bool _freshFlow(Object? raw) {
-    if (raw is! Map || raw['expiresAt'] is! String) return false;
-    final until = DateTime.tryParse(raw['expiresAt'] as String);
-    return until != null &&
-        until.isAfter(DateTime.now().toUtc().add(const Duration(seconds: 15)));
   }
 
   @override
@@ -92,7 +67,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final theme = Theme.of(context);
     final auth = ref.watch(authSessionProvider);
     final busy = auth is AuthSigningIn;
-    final socialBusy = auth is AuthSigningIn && auth.social;
     final error = auth is AuthError ? auth.code : null;
 
     if (auth is AuthMfaRequired) return _buildMfaRequired(context, auth);
@@ -118,8 +92,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     ),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 480),
-                      child: _loginPanel(context, busy: busy, error: error,
-                        socialBusy: socialBusy),
+                      child: _loginPanel(context, busy: busy, error: error),
                     ),
                   ),
                 ),
@@ -132,83 +105,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   Widget _editorialPanel(ThemeData theme) {
-    return Container(
+    return ColoredBox(
       color: theme.bzSurface1,
-      padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 52),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              BzBnoteMark(size: 50, color: theme.bzText1),
-              const SizedBox(width: 14),
-              Text('Breezze', style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              )),
-            ],
-          ),
-          const Spacer(),
-          Text(
-            'Your sound.\\nAnywhere.',
-            style: theme.textTheme.displayLarge?.copyWith(
-              fontSize: 62,
-              height: 1.07,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -2,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Discover what moves you. Save what matters.\\n'
-            'Your library follows you across devices.',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.bzText2,
-              height: 1.6,
-            ),
-          ),
-          const SizedBox(height: 56),
-          Row(
-            children: [
-              for (var index = 0; index < 3; index++) ...[
-                if (index > 0) const SizedBox(width: 12),
-                Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1.23,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: [theme.bzSurface2,
-                          theme.bzBackground,
-                          theme.bzSurface2][index],
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: theme.bzSeparator),
-                      ),
-                      child: Center(
-                        child: BzSvgIcon(
-                          name: ['disc-3', 'music-note', 'headphones'][index],
-                          size: 38,
-                          color: theme.bzText2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const Spacer(),
-          Text('MUSIC FOR EVERY MOMENT',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.bzText2,
-                letterSpacing: 2.2,
-              )),
-        ],
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(48),
+          child: BzRibbonLogo(width: 340, color: theme.bzText1),
+        ),
       ),
     );
   }
 
   Widget _loginPanel(BuildContext context, {
     required bool busy,
-    required bool socialBusy,
     required String? error,
   }) {
     final theme = Theme.of(context);
@@ -216,16 +125,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            BzBnoteMark(size: 46, color: theme.bzText1),
-            const SizedBox(width: 10),
-            Text('Breezze', style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-            )),
-          ],
-        ),
-        const SizedBox(height: 34),
+        if (MediaQuery.sizeOf(context).width < 980) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: BzRibbonLogo(width: 168, color: theme.bzText1),
+          ),
+          const SizedBox(height: 28),
+        ],
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 34),
           decoration: BoxDecoration(
@@ -245,71 +151,24 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your music, your library, your place.',
+                _registerMode ? 'Save music and build your first playlist.'
+                    : 'Sign in to open your library and playlists.',
                 style: TextStyle(
                   fontSize: BzType.body,
                   color: theme.bzText2,
                 ),
               ),
               const SizedBox(height: 28),
-              FutureBuilder<Map<String, dynamic>>(
-                future: _socialProviders,
-                builder: (context, snapshot) {
-                  final providers = snapshot.data ?? const <String, dynamic>{};
-                  final googleFlow = providers['googleFlow'];
-                  final appleFlow = providers['appleFlow'];
-                  final googleReady = _freshFlow(googleFlow);
-                  final appleReady = _freshFlow(appleFlow);
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _socialButton(
-                        label: 'Continue with Apple',
-                        isApple: true,
-                        enabled: appleReady && !busy,
-                        onPressed: () => ref.read(authSessionProvider.notifier)
-                            .socialLogin('apple', preparedFlow:
-                              Map<String, dynamic>.from(appleFlow as Map)),
-                      ),
-                      const SizedBox(height: 12),
-                      _socialButton(
-                        label: 'Continue with Google',
-                        isApple: false,
-                        enabled: googleReady && !busy,
-                        onPressed: () => ref.read(authSessionProvider.notifier)
-                            .socialLogin('google', preparedFlow:
-                              Map<String, dynamic>.from(googleFlow as Map)),
-                      ),
-                      if (!googleReady || !appleReady) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          snapshot.connectionState == ConnectionState.waiting
-                              ? 'Preparing secure sign-in providers…'
-                              : (providers['google'] == true ||
-                                  providers['apple'] == true)
-                                ? 'Provider sign-in is unavailable or expired. '
-                                  'You can refresh it, or continue with email.'
-                                : 'Social sign-in becomes available when '
-                                  'provider credentials are configured.',
-                          style: TextStyle(
-                            color: theme.bzText2,
-                            fontSize: 12,
-                            height: 1.35,
-                          ),
-                        ),
-                        if (snapshot.connectionState != ConnectionState.waiting &&
-                            (providers['google'] == true ||
-                             providers['apple'] == true))
-                          TextButton(
-                            onPressed: busy ? null : () => setState(() {
-                              _socialProviders = _prepareSocialFlows();
-                            }),
-                            child: const Text('Refresh social sign-in'),
-                          ),
-                      ],
-                    ],
-                  );
-                },
+              OutlinedButton.icon(
+                onPressed: busy ? null : _connectYouTubeMusic,
+                icon: const BzSvgIcon(name: 'music-note'),
+                label: const Text('Connect YouTube Music'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Uses your YouTube Music session on this device. No Breezze API key is required.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.bzText2, fontSize: 12),
               ),
               const SizedBox(height: 24),
               Row(
@@ -332,7 +191,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       _premiumField(
                         controller: _displayName,
                         label: 'Display name',
-                        hint: 'How should we call you?',
+                        hint: 'Your name',
                         hints: const [AutofillHints.name],
                       ),
                       const SizedBox(height: 18),
@@ -397,6 +256,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   ),
                 ),
               ),
+              TextButton(
+                onPressed: busy ? null : () {
+                  ref.read(guestModeProvider.notifier).state = true;
+                },
+                child: const Text('Explore as guest'),
+              ),
+              Text(
+                'Your guest library stays on this device.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.bzText2, fontSize: 12),
+              ),
               const SizedBox(height: 12),
               Text(
                 'By continuing, you agree to our Terms and Privacy Policy.',
@@ -407,14 +277,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   color: theme.bzText2,
                 ),
               ),
-              if (socialBusy) ...[
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () => ref.read(authSessionProvider.notifier)
-                      .cancelSocialLogin(),
-                  child: const Text('Cancel sign-in'),
-                ),
-              ],
             ],
           ),
         ),
@@ -475,45 +337,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       ],
     );
   }
-
-  Widget _socialButton({
-    required String label,
-    required bool isApple,
-    required bool enabled,
-    required VoidCallback onPressed,
-  }) {
-    final theme = Theme.of(context);
-    const googleMark = '<svg xmlns="http://www.w3.org/2000/svg" '
-        'viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.25c0-.75-.08-1.5-.2-2.2H12v4.15h5.9a5.06 5.06 0 01-2.2 3.3v2.7h3.55c2.06-1.9 3.25-4.7 3.25-7.95z"/>'
-        '<path fill="#34A853" d="M12 23c2.93 0 5.4-.97 7.2-2.8l-3.55-2.7c-.98.67-2.22 1.05-3.65 1.05-2.8 0-5.18-1.9-6.03-4.45H2.3v2.8A11 11 0 0012 23z"/>'
-        '<path fill="#FBBC05" d="M5.97 14.1A6.64 6.64 0 015.62 12c0-.73.13-1.44.35-2.1V7.1H2.3A11 11 0 001 12c0 1.77.42 3.45 1.3 4.9l3.67-2.8z"/>'
-        '<path fill="#EA4335" d="M12 5.45c1.6 0 3.05.55 4.18 1.65L19.3 4A10.4 10.4 0 0012 1C7.7 1 3.98 3.45 2.3 7.1l3.67 2.8C6.82 7.35 9.2 5.45 12 5.45z"/></svg>';
-    const appleMark = '<svg xmlns="http://www.w3.org/2000/svg" '
-        'viewBox="0 0 24 28"><path fill="currentColor" d="M18.7 14.9c0-2.4 1.9-3.6 2-3.7-1.1-1.7-2.9-2-3.5-2.1-1.5-.2-3 .9-3.7.9-.8 0-1.9-.9-3.2-.9-1.7 0-3.2 1-4 2.5-1.7 3-1.2 7.3 1.2 9.9.8 1.3 1.7 2.7 3 2.7 1.2-.1 1.7-.8 3.2-.8s1.9.8 3.3.8c1.4 0 2.2-1.2 3-2.5.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.6-1-2.6-3.9zM16.3 6.8c.7-.9 1.2-2 1.1-3.1-1 .1-2.2.7-2.9 1.6-.7.8-1.3 2-1.2 3 .1 0 1.9.1 3-1.5z"/></svg>';
-    return SizedBox(
-      height: 54,
-      child: OutlinedButton.icon(
-        onPressed: enabled ? onPressed : null,
-        icon: SvgPicture.string(isApple ? appleMark : googleMark,
-          width: 21, height: 22,
-          colorFilter: isApple
-              ? ColorFilter.mode(theme.bzText1, BlendMode.srcIn) : null,
-        ),
-        label: Text(label),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: theme.bzText1,
-          backgroundColor: theme.bzSurface2,
-          disabledForegroundColor: theme.bzText2,
-          side: BorderSide(color: theme.bzSeparator),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
-
 
   Future<void> _runMfa(Future<void> Function() action) async {
     setState(() {
