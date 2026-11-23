@@ -4,9 +4,11 @@
 
 Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
 
-## Repository layout
+## Active implementation
 
-The Flutter app in `apps/mobile`, NestJS API in `backend/api`, and Python discovery service in `backend/ytmusicapi` are the production project. The previous Kotlin client, its license and its notices are preserved in `legacy/kotlin-client/`. Run Flutter builds from `apps/mobile`.
+The production-target client is Flutter in `apps/mobile`, with NestJS in `backend/api` and the Python discovery service in `backend/ytmusicapi`. The unused Kotlin/Chordline app trees have been removed from this checkout; their historical commits remain in Git. License and attribution obligations are retained and must be reviewed before distribution. Run Flutter builds from `apps/mobile`.
+
+**Auth migration:** `main` still contains its working legacy authentication endpoints. Supabase Auth and the custom login screens are being integrated separately; do not delete or disable the live auth path before that rollout passes integration tests.
 
 ## Product boundaries
 
@@ -26,6 +28,7 @@ packages/design_system/    Breezze tokens, themes, components and SVG icons
 packages/audio_contracts/  Playback state, queue and engine contracts
 packages/api_client/       Typed Breezze API client
 backend/api/               NestJS API, Prisma/PostgreSQL, Redis and BullMQ
+backend/ytmusicapi/         Python music metadata/discovery adapter
 infra/cloudflare/          API edge, WAF, rate limits and public metadata cache
 docs/                      Product, design, architecture, legal and release records
 ```
@@ -109,7 +112,7 @@ The Flutter codebase targets Android, iOS, Web, Linux, macOS and Windows. Build 
 
 ## Current verification
 
-The current main baseline includes the merged provider, playback and backend-hardening work through commit `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`. Its post-merge quality workflow [45008430816](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816) passed all 7 jobs. The in-app experience contract is proposed in [PR #33](https://github.com/MetroKim/MetroMusic/pull/33); remaining product implementation and acceptance evidence are tracked in [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27).
+The pre-cleanup `main` baseline `c74b98cdf3e17dee26367cc2d3237d09f76bbf0b` passed [CI](https://github.com/MetroKim/Breezze/actions/runs/45165004967), [Flutter web preview smoke](https://github.com/MetroKim/Breezze/actions/runs/45165004943), and [CodeQL](https://github.com/MetroKim/Breezze/actions/runs/45165004941). Cleanup commits require their own post-change CI checks; this paragraph does not claim physical-device or streaming-rights verification.
 
 Breezze's one-million-active-listener goal is an engineering target, not a measured capacity claim. Production deployment, provider rights approval, load testing and physical-device certification remain release gates.
 
