@@ -258,6 +258,17 @@ class BreezzeApi {
 
   // ---- auth ----
 
+  /// Only the backend can verify the supplied Supabase access token.
+  /// The returned Breezze session is transitional until API account IDs
+  /// have migrated; no credentials are passed to Breezze from the UI.
+  Future<AuthResponse> exchangeSupabaseAccessToken(String accessToken) async {
+    final data = await _post('/auth/supabase/exchange', {
+      'accessToken': accessToken,
+    });
+    return AuthResponse.fromJson(data);
+  }
+
+
   Future<AuthResponse> register(
     String email,
     String password, {
