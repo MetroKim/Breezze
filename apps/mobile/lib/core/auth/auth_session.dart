@@ -170,6 +170,19 @@ class AuthSessionController extends Notifier<AuthState> {
       }
       final response = await _api.refresh(refreshToken);
       await _persistSession(response);
+    } on BreezzeApiException catch (error) {
+      _api.accessToken = null;
+      try {
+        await _secureStorage.delete(key: _refreshTokenKey);
+      } catch (_) {}
+      if (SupabaseAuthBridge.enabled &&
+          error.code == 'LEGACY_ACCOUNT_LINK_REQUIRED') {
+        // Keep the verified Supabase identity so the user can prove
+        // ownership of their existing Breezze library.
+        state = const AuthLegacyLinkRequired();
+      } else {
+        state = const AuthSignedOut();
+      }
     } catch (_) {
       _api.accessToken = null;
       try {

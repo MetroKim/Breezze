@@ -107,6 +107,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
     if (mounted && ref.read(authSessionProvider) is AuthLegacyLinkRequired) {
       _legacyEmail.text = _email.text.trim();
+      _password.clear();
       _legacyPassword.clear();
     }
   }

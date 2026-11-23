@@ -1,6 +1,8 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { AuthService } from './auth.service';
+import { SupabaseExchangeService } from './supabase-exchange.service';
+import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma.service';
 
 const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
@@ -108,5 +110,81 @@ describeIntegration('Auth session PostgreSQL integration', () => {
       where: { tokenHash: createHash('sha256').update(token, 'utf8').digest('hex') },
     });
     expect(stored.revokedAt).toBeNull();
+  });
+
+  it('links an existing user without changing library ownership in PostgreSQL', async () => {
+    const oldPassword = 'migration-legacy-password';
+    const original = await prisma.user.create({
+      data: {
+        email: `link-${randomUUID()}@integration.invalid`,
+        passwordHash: await argon2.hash(oldPassword),
+        preference: {
+          create: {
+            genres: ['jazz'],
+            favoriteArtists: ['Original Artist'],
+            country: 'TZ',
+          },
+        },
+      },
+      select: { id: true, email: true },
+    });
+    userIds.push(original.id);
+    const second = await prisma.user.create({
+      data: {
+        email: `link-other-${randomUUID()}@integration.invalid`,
+        passwordHash: await argon2.hash('second-account-secret'),
+      },
+      select: { id: true, email: true },
+    });
+    userIds.push(second.id);
+
+    const identityId = randomUUID();
+    const oldUrl = process.env.SUPABASE_URL;
+    const oldKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+    process.env.SUPABASE_URL = 'https://migration-test.supabase.co';
+    process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        id: identityId,
+        email: 'masked@privaterelay.appleid.com',
+        email_confirmed_at: '2026-11-24T00:00:00Z',
+      }), { status: 200 }),
+    );
+    const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJleGFtcGxlIn0.c2lnbmF0dXJl';
+    try {
+      const exchange = new SupabaseExchangeService(
+        prisma as unknown as PrismaService,
+        service,
+      );
+      const linked = await exchange.linkLegacy(token, original.email, oldPassword);
+      expect(linked.user.id).toBe(original.id);
+
+      const mapping = await prisma.socialAuthIdentity.findUniqueOrThrow({
+        where: { provider_subject: {
+          provider: 'supabase',
+          subject: `migration-test.supabase.co:${identityId}`,
+        } },
+      });
+      expect(mapping.userId).toBe(original.id);
+      const library = await prisma.userPreference.findUniqueOrThrow({
+        where: { userId: original.id },
+      });
+      expect(library.genres).toEqual(['jazz']);
+      expect(library.favoriteArtists).toEqual(['Original Artist']);
+
+      const signedIn = await exchange.exchange(token);
+      expect(signedIn.user.id).toBe(original.id);
+
+      await expect(exchange.linkLegacy(token, second.email, 'second-account-secret'))
+        .rejects.toThrow('SUPABASE_IDENTITY_ALREADY_LINKED');
+      const stillOwned = await prisma.user.findUniqueOrThrow({ where: { id: second.id } });
+      expect(stillOwned.email).toBe(second.email);
+    } finally {
+      fetchMock.mockRestore();
+      if (oldUrl === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = oldUrl;
+      if (oldKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
+      else process.env.SUPABASE_PUBLISHABLE_KEY = oldKey;
+    }
   });
 });
