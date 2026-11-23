@@ -60,6 +60,17 @@ class AuthMfaRecoveryCodes extends AuthState {
   });
 }
 
+/// Only a signed-in, email-confirmed Supabase identity can reach this step.
+/// A separate old Breezze password proves ownership of existing music data.
+class AuthLegacyLinkRequired extends AuthState {
+  final String? errorCode;
+  const AuthLegacyLinkRequired({this.errorCode});
+}
+
+class AuthLegacyLinking extends AuthState {
+  const AuthLegacyLinking();
+}
+
 class AuthError extends AuthState {
   final String code;
   const AuthError(this.code);
@@ -263,7 +274,11 @@ class AuthSessionController extends Notifier<AuthState> {
         await _persistSession(response);
       }
     } on BreezzeApiException catch (e) {
-      state = AuthError(e.code);
+      if (SupabaseAuthBridge.enabled && e.code == 'LEGACY_ACCOUNT_LINK_REQUIRED') {
+        state = const AuthLegacyLinkRequired();
+      } else {
+        state = AuthError(e.code);
+      }
     } on AuthException {
       state = const AuthError('SUPABASE_AUTH_FAILED');
     } catch (_) {
@@ -288,7 +303,11 @@ class AuthSessionController extends Notifier<AuthState> {
         await _persistSession(response);
       }
     } on BreezzeApiException catch (e) {
-      state = AuthError(e.code);
+      if (SupabaseAuthBridge.enabled && e.code == 'LEGACY_ACCOUNT_LINK_REQUIRED') {
+        state = const AuthLegacyLinkRequired();
+      } else {
+        state = AuthError(e.code);
+      }
     } on AuthException {
       state = const AuthError('INVALID_CREDENTIALS');
     } catch (_) {
@@ -391,6 +410,11 @@ class AuthSessionController extends Notifier<AuthState> {
       if (attempt == _socialAttempt) state = const AuthSignedOut();
     } on BreezzeApiException catch (error) {
       if (attempt != _socialAttempt) return;
+      if (error.code == 'LEGACY_ACCOUNT_LINK_REQUIRED') {
+        // Keep the verified Supabase identity for explicit old-account proof.
+        state = const AuthLegacyLinkRequired();
+        return;
+      }
       try {
         await SupabaseAuthBridge.client.auth.signOut(
           scope: SignOutScope.local,
@@ -411,6 +435,52 @@ class AuthSessionController extends Notifier<AuthState> {
   void cancelSocialLogin() {
     ++_socialAttempt;
     if (state is AuthSigningIn) state = const AuthSignedOut();
+  }
+
+  /// Link once without copying or reassigning existing Breezze music data.
+  /// The old password is submitted only to our HTTPS backend, and is never
+  /// persisted or forwarded to Supabase.
+  Future<void> linkLegacyAccount(String legacyEmail, String legacyPassword) async {
+    if (!SupabaseAuthBridge.enabled) {
+      state = const AuthError('SUPABASE_AUTH_NOT_CONFIGURED');
+      return;
+    }
+    state = const AuthLegacyLinking();
+    try {
+      final auth = SupabaseAuthBridge.client.auth;
+      var session = auth.currentSession;
+      if (session == null || session.isExpired) {
+        session = (await auth.refreshSession()).session;
+      }
+      if (session == null || session.accessToken.isEmpty) {
+        state = const AuthLegacyLinkRequired(
+          errorCode: 'SUPABASE_SESSION_EXPIRED',
+        );
+        return;
+      }
+      final response = await _api.linkLegacySupabaseAccount(
+        supabaseAccessToken: session.accessToken,
+        legacyEmail: legacyEmail,
+        legacyPassword: legacyPassword,
+      );
+      await _persistSession(response);
+    } on BreezzeApiException catch (error) {
+      state = AuthLegacyLinkRequired(errorCode: error.code);
+    } on AuthException {
+      state = const AuthLegacyLinkRequired(errorCode: 'SUPABASE_SESSION_EXPIRED');
+    } catch (_) {
+      state = const AuthLegacyLinkRequired(errorCode: 'NETWORK_ERROR');
+    }
+  }
+
+  Future<void> cancelLegacyLink() async {
+    if (!SupabaseAuthBridge.enabled) return;
+    ++_socialAttempt;
+    _api.accessToken = null;
+    try {
+      await SupabaseAuthBridge.client.auth.signOut(scope: SignOutScope.local);
+    } catch (_) {}
+    state = const AuthSignedOut();
   }
 
   Future<void> beginMfaSetup(String password) async {

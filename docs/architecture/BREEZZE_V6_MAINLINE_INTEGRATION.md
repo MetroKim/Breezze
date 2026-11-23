@@ -139,3 +139,27 @@ signing identities, Apple on an Apple Developer-provisioned iOS build, and
 cross-account legacy data isolation. Emulator/source builds alone do not
 prove that an OAuth provider has been configured or that the system sheet
 can successfully issue a token.
+
+## 8. Explicit legacy account linking (Feature 3)
+
+When Supabase verifies an identity but its email already belongs to an older
+Breezze account, the exchange route raises `LEGACY_ACCOUNT_LINK_REQUIRED`.
+Flutter keeps the verified Supabase session and shows an account-linking card
+inside the **existing** login screen. The listener must supply the old Breezze
+email and old Breezze password. The backend verifies that Argon2 hash independently
+of Supabase's signed-in identity, and stores a single `SocialAuthIdentity`
+mapping to the **existing** `User.id`. No playlist/library/media rows are
+copied, merged, reassigned, or deleted.
+
+The link route `POST /api/v1/auth/supabase/link-legacy` is rate limited by
+the same per-account Redis window as password login. PostgreSQL serializable
+transactions reject identity collisions, duplicate subjects, and simultaneous
+conflicting claims. Admin/MFA accounts and older social-only accounts with
+non-user-known passwords are intentionally excluded until additional identity
+verification is available. An unchanged existing mapping is idempotent; a
+mapping owned by another user is never overwritten.
+
+A failed old password is not logged or stored. Cancel clears the temporary
+Supabase session. The legacy authentication implementation remains temporarily
+available for rollback; removal happens only after migrations and per-user
+authorization checks pass in production.

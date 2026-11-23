@@ -74,4 +74,78 @@ void main() {
     expect(calls, 2);
     expect(refreshes, 1);
   });
+
+  test('legacy link submits both credentials only to the dedicated route', () async {
+    var requests = 0;
+    final client = MockClient((request) async {
+      requests++;
+      expect(request.url.path, '/api/v1/auth/supabase/link-legacy');
+      expect(request.method, 'POST');
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      expect(body.keys.toSet(), {
+        'accessToken', 'legacyEmail', 'legacyPassword',
+      });
+      expect(body['accessToken'], 'verified-supabase-token');
+      expect(body['legacyEmail'], 'old@example.com');
+      expect(body['legacyPassword'], 'old-password');
+      return http.Response(jsonEncode({
+        'data': {
+          'accessToken': 'legacy-mapped-access',
+          'refreshToken': 'legacy-mapped-refresh',
+          'user': {'id': 'original-user-id', 'email': 'old@example.com'},
+        },
+      }), 200);
+    });
+    final api = BreezzeApi(baseUrl: 'https://api.breezze.test', client: client);
+    final result = await api.linkLegacySupabaseAccount(
+      supabaseAccessToken: 'verified-supabase-token',
+      legacyEmail: 'old@example.com',
+      legacyPassword: 'old-password',
+    );
+    expect(result.userId, 'original-user-id');
+    expect(requests, 1);
+  });
+
+  test('link failure is not retried through regular session refresh', () async {
+    var calls = 0;
+    var refreshes = 0;
+    final client = MockClient((request) async {
+      calls++;
+      return http.Response(
+        '{"message":"LEGACY_CREDENTIALS_INVALID","error":"Unauthorized","statusCode":401}',
+        401,
+      );
+    });
+    final api = BreezzeApi(baseUrl: 'https://api.breezze.test', client: client);
+    api.onUnauthorized = () async {
+      refreshes++;
+      return true;
+    };
+    await expectLater(
+      api.linkLegacySupabaseAccount(
+        supabaseAccessToken: 'verified-supabase-token',
+        legacyEmail: 'old@example.com',
+        legacyPassword: 'wrong-password',
+      ),
+      throwsA(isA<BreezzeApiException>().having(
+        (e) => e.code, 'code', 'LEGACY_CREDENTIALS_INVALID',
+      )),
+    );
+    expect(calls, 1);
+    expect(refreshes, 0);
+  });
+
+  test('original-account conflict preserves Nest machine-readable code', () async {
+    final client = MockClient((request) async => http.Response(
+      '{"message":"LEGACY_ACCOUNT_LINK_REQUIRED","error":"Conflict","statusCode":409}',
+      409,
+    ));
+    final api = BreezzeApi(baseUrl: 'https://api.breezze.test', client: client);
+    await expectLater(
+      api.exchangeSupabaseAccessToken('verified-supabase-token'),
+      throwsA(isA<BreezzeApiException>().having(
+        (e) => e.code, 'code', 'LEGACY_ACCOUNT_LINK_REQUIRED',
+      )),
+    );
+  });
 }
