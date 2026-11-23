@@ -168,11 +168,45 @@ class AuthSessionController extends Notifier<AuthState> {
     }
   }
 
-  Future<void> _exchangeSupabaseSession(String accessToken) async {
+  Future<void> _exchangeSupabaseSession(
+    String accessToken, {
+    int? expectedSocialAttempt,
+  }) async {
+    if (expectedSocialAttempt != null &&
+        expectedSocialAttempt != _socialAttempt) return;
     final previousRefreshToken =
         await _secureStorage.read(key: _refreshTokenKey);
     final response = await _api.exchangeSupabaseAccessToken(accessToken);
+
+    // Do not persist an exchange that was canceled while the network request
+    // was in flight. Revoke its newly issued Breezze session instead.
+    if (expectedSocialAttempt != null &&
+        expectedSocialAttempt != _socialAttempt) {
+      try {
+        await _api.logout(response.refreshToken);
+      } catch (_) {}
+      return;
+    }
+
     await _persistSession(response);
+
+    // Secure storage writes are asynchronous too: cancellation or switching
+    // accounts may happen after the first guard and before this point.
+    if (expectedSocialAttempt != null &&
+        expectedSocialAttempt != _socialAttempt) {
+      if (_api.accessToken == response.accessToken) {
+        _api.accessToken = null;
+        try {
+          await _secureStorage.delete(key: _refreshTokenKey);
+        } catch (_) {}
+        state = const AuthSignedOut();
+      }
+      try {
+        await _api.logout(response.refreshToken);
+      } catch (_) {}
+      return;
+    }
+
     // Rotating the mapped Breezze family avoids accumulating live legacy
     // sessions on every app restart or Supabase refresh.
     if (previousRefreshToken != null &&
@@ -341,16 +375,18 @@ class AuthSessionController extends Notifier<AuthState> {
           : await SupabaseAuthBridge.signInWithNativeApple();
 
       if (attempt != _socialAttempt) {
-        await SupabaseAuthBridge.client.auth.signOut(
-          scope: SignOutScope.local,
-        );
+        // Avoid affecting a newer sign-in that may already be in progress.
+        if (state is AuthSignedOut) {
+          await SupabaseAuthBridge.client.auth.signOut(
+            scope: SignOutScope.local,
+          );
+        }
         return;
       }
-      await _exchangeSupabaseSession(token);
-      if (attempt != _socialAttempt) {
-        // A user canceled while the exchange was in flight. Never revive it.
-        await signOut();
-      }
+      await _exchangeSupabaseSession(
+        token,
+        expectedSocialAttempt: attempt,
+      );
     } on NativeSocialLoginCancelled {
       if (attempt == _socialAttempt) state = const AuthSignedOut();
     } on BreezzeApiException catch (error) {
