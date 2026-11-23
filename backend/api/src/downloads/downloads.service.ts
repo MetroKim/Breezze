@@ -97,7 +97,10 @@ export class DownloadsService {
         trackId: dto.trackId,
         expiresAt: offlineLeaseExpiresAt,
       },
-      update: { expiresAt: offlineLeaseExpiresAt },
+      // A previously revoked record can be authorized again after rights are
+      // restored. Without reactivating it, the new download is invisible to
+      // list/revalidation even though this request has just been approved.
+      update: { status: 'active', expiresAt: offlineLeaseExpiresAt },
     });
 
     return {
