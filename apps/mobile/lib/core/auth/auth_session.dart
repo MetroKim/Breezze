@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, SignOutScope;
 
 import '../api/breezze_api.dart';
+import 'supabase_auth_bridge.dart';
 import '../../features/player/player_controller.dart';
 
 /// Auth session state — what the UI renders.
@@ -100,8 +102,21 @@ class AuthSessionController extends Notifier<AuthState> {
     }
   }
 
+  /// Every API reauthorization in Supabase mode requires a live Supabase
+  /// session. Never extend the legacy refresh-token family after Supabase
+  /// has been signed out or its session has expired.
   Future<bool> _performRefresh() async {
     try {
+      if (SupabaseAuthBridge.enabled) {
+        final session = await SupabaseAuthBridge.client.auth.refreshSession();
+        final token = session.session?.accessToken;
+        if (token == null || token.isEmpty) {
+          throw StateError('SUPABASE_SESSION_EXPIRED');
+        }
+        await _exchangeSupabaseSession(token);
+        return true;
+      }
+
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
       if (refreshToken == null || refreshToken.isEmpty) return false;
       final response = await _api.refresh(refreshToken);
@@ -119,6 +134,24 @@ class AuthSessionController extends Notifier<AuthState> {
 
   Future<void> restoreSession() async {
     try {
+      if (SupabaseAuthBridge.enabled) {
+        final current = SupabaseAuthBridge.client.auth.currentSession;
+        if (current == null) {
+          _api.accessToken = null;
+          await _secureStorage.delete(key: _refreshTokenKey);
+          state = const AuthSignedOut();
+          return;
+        }
+        final session = current.isExpired
+            ? (await SupabaseAuthBridge.client.auth.refreshSession()).session
+            : current;
+        if (session == null) {
+          throw StateError('SUPABASE_SESSION_EXPIRED');
+        }
+        await _exchangeSupabaseSession(session.accessToken);
+        return;
+      }
+
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
       if (refreshToken == null || refreshToken.isEmpty) {
         state = const AuthSignedOut();
@@ -132,6 +165,23 @@ class AuthSessionController extends Notifier<AuthState> {
         await _secureStorage.delete(key: _refreshTokenKey);
       } catch (_) {}
       state = const AuthSignedOut();
+    }
+  }
+
+  Future<void> _exchangeSupabaseSession(String accessToken) async {
+    final previousRefreshToken =
+        await _secureStorage.read(key: _refreshTokenKey);
+    final response = await _api.exchangeSupabaseAccessToken(accessToken);
+    await _persistSession(response);
+    // Rotating the mapped Breezze family avoids accumulating live legacy
+    // sessions on every app restart or Supabase refresh.
+    if (previousRefreshToken != null &&
+        previousRefreshToken != response.refreshToken) {
+      try {
+        await _api.logout(previousRefreshToken);
+      } catch (_) {
+        // Expired or unreachable old sessions are never used as a fallback.
+      }
     }
   }
 
@@ -156,11 +206,32 @@ class AuthSessionController extends Notifier<AuthState> {
   }) async {
     state = const AuthSigningIn();
     try {
-      final response = await _api.register(email, password,
-          displayName: displayName);
-      await _persistSession(response);
+      if (SupabaseAuthBridge.enabled) {
+        final response = await SupabaseAuthBridge.client.auth.signUp(
+          email: email,
+          password: password,
+          data: displayName == null ? null : {'display_name': displayName},
+        );
+        // Email verification may be required. Never issue a Breezze session
+        // until the identity authority returns a signed-in session.
+        final session = response.session;
+        if (session == null) {
+          state = const AuthError('EMAIL_VERIFICATION_REQUIRED');
+          return;
+        }
+        await _exchangeSupabaseSession(session.accessToken);
+      } else {
+        final response = await _api.register(
+          email,
+          password,
+          displayName: displayName,
+        );
+        await _persistSession(response);
+      }
     } on BreezzeApiException catch (e) {
       state = AuthError(e.code);
+    } on AuthException {
+      state = const AuthError('SUPABASE_AUTH_FAILED');
     } catch (_) {
       state = const AuthError('NETWORK_ERROR');
     }
@@ -169,10 +240,23 @@ class AuthSessionController extends Notifier<AuthState> {
   Future<void> login(String email, String password) async {
     state = const AuthSigningIn();
     try {
-      final response = await _api.login(email, password);
-      await _persistSession(response);
+      if (SupabaseAuthBridge.enabled) {
+        final response = await SupabaseAuthBridge.client.auth
+            .signInWithPassword(email: email, password: password);
+        final session = response.session;
+        if (session == null) {
+          state = const AuthError('SUPABASE_AUTH_FAILED');
+          return;
+        }
+        await _exchangeSupabaseSession(session.accessToken);
+      } else {
+        final response = await _api.login(email, password);
+        await _persistSession(response);
+      }
     } on BreezzeApiException catch (e) {
       state = AuthError(e.code);
+    } on AuthException {
+      state = const AuthError('INVALID_CREDENTIALS');
     } catch (_) {
       state = const AuthError('NETWORK_ERROR');
     }
@@ -182,6 +266,10 @@ class AuthSessionController extends Notifier<AuthState> {
     String provider, {
     Map<String, dynamic>? preparedFlow,
   }) async {
+    if (SupabaseAuthBridge.enabled) {
+      state = const AuthError('SUPABASE_SOCIAL_NOT_READY');
+      return;
+    }
     final attempt = ++_socialAttempt;
     state = const AuthSigningIn(social: true);
     try {
@@ -309,6 +397,18 @@ class AuthSessionController extends Notifier<AuthState> {
         await _api.logout(refreshToken);
       } catch (_) {
         // Local logout must still complete when the network is unavailable.
+      }
+    }
+    if (SupabaseAuthBridge.enabled) {
+      try {
+        await SupabaseAuthBridge.client.auth.signOut();
+      } catch (_) {
+        // If the server is unreachable, clear the local SDK session anyway.
+        try {
+          await SupabaseAuthBridge.client.auth.signOut(
+            scope: SignOutScope.local,
+          );
+        } catch (_) {}
       }
     }
     _api.accessToken = null;
