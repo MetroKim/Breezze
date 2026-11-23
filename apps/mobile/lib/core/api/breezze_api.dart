@@ -212,31 +212,6 @@ class BreezzeApi {
   Future<Map<String, dynamic>> discoveryAlbumTracks(String albumId) =>
       _get('/discovery/albums/${Uri.encodeComponent(albumId)}/tracks');
 
-  // ---- radio directory (metadata only; no stream URLs) ----
-
-  Future<List<Map<String, dynamic>>> getRadioStations() async {
-    final response = await _get('/radio/stations');
-    final payload = response['data'] ?? response;
-    if (payload is! List) {
-      throw const FormatException('Invalid radio station response');
-    }
-    return payload
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList(growable: false);
-  }
-
-  Future<Map<String, dynamic>> getRadioStation(String stationId) async {
-    final response = await _get(
-      '/radio/stations/${Uri.encodeComponent(stationId)}',
-    );
-    final payload = response['data'] ?? response;
-    if (payload is! Map) {
-      throw const FormatException('Invalid radio station detail response');
-    }
-    return Map<String, dynamic>.from(payload);
-  }
-
   // ---- signed-in saved album metadata (not playback/download grants) ----
 
   Future<Map<String, dynamic>> getSavedAlbums({String? cursor}) =>

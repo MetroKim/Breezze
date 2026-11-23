@@ -229,11 +229,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         // reading surface while retaining playback controls.
                         if (!_lyricsFocus) const Spacer(),
                         if (!_lyricsFocus)
-                          _PlayerArtwork(
+                          HeroMode(enabled: !MediaQuery.disableAnimationsOf(context),
+                            child: Hero(tag: 'now-playing-art:${track.id}', child: _PlayerArtwork(
                             playing: playing,
                             artworkUrl: track.artworkUrl,
                             fallbackColor: theme.bzText2,
-                          ),
+                          ))),
                         if (!_lyricsFocus) const Spacer(),
                         if (_lyricsFocus)
                           Expanded(

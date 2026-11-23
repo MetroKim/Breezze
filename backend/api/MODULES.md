@@ -18,7 +18,6 @@ Date: 2026-11-17 · Branch: breezze · 24 modules active in AppModule
 | 10 | DownloadsModule | /downloads/* | Rights-gated authorization + records |
 | 11 | HomeModule | /home, /home/plays | Typed feed sections + play recording |
 | 12 | LyricsModule | /lyrics, translations | Rights-gated lyrics.display |
-| 13 | RadioModule | /radio/* | Stations + programs |
 | 14 | RecommendationsModule | /recommendations | Deterministic artist affinity, no ML |
 | 15 | OnboardingModule | /onboarding/preferences | Persisted user preferences |
 | 16 | ReplayModule | /replay | Top songs/artists from events |

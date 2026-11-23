@@ -44,18 +44,6 @@ jobs:
         working-directory: apps/mobile
         run: flutter test --reporter expanded
 
-      - name: Probe public YouTube audio from runner network
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        working-directory: apps/mobile
-        run: |
-          if dart run tool/check_youtube_audio.dart aqz-KE-bpKQ; then
-            echo 'Public YouTube audio returned media bytes.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'YouTube returned no usable audio on the runner network.' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
       - name: Probe a provider-issued Deezer preview
         if: github.event_name == 'pull_request'
         continue-on-error: true
