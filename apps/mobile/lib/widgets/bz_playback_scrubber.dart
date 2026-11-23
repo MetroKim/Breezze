@@ -59,6 +59,8 @@ class _BzPlaybackScrubberState extends State<BzPlaybackScrubber> {
       enabled: widget.enabled,
       label: 'Playback position',
       value: '${(value * 100).round()}%',
+      increasedValue: '${((value + 0.05).clamp(0.0, 1.0) * 100).round()}%',
+      decreasedValue: '${((value - 0.05).clamp(0.0, 1.0) * 100).round()}%',
       onIncrease: widget.enabled
           ? () => widget.onSeek((value + 0.05).clamp(0.0, 1.0))
           : null,
