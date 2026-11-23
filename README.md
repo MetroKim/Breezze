@@ -1,5 +1,7 @@
 # Breezze
 
+> Development and production deployments have moved to [MetroKim/Breezze](https://github.com/MetroKim/Breezze). This repository preserves earlier releases, branches, issues and pull requests. Open new changes in the consolidated repository.
+
 **A free, listener-first music platform built with Flutter and NestJS.**
 
 Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
