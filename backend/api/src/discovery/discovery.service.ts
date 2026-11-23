@@ -204,12 +204,20 @@ export class DiscoveryService {
         }[];
       };
       if (!Array.isArray(payload.videos)) throw new Error('YTMUSIC_VIDEO_INVALID_RESPONSE');
+      const seenIds = new Set<string>();
       return {
         source: payload.source ?? 'YouTube Music via ytmusicapi',
         classification: 'YouTube Music Original Music Video (OMV)',
         fetchedAt: new Date().toISOString(),
-        items: payload.videos.map((video) => ({
-          id: video.videoId ?? null,
+        items: payload.videos.filter((video) => {
+          if (video == null || typeof video.videoId !== 'string' ||
+              !/^[A-Za-z0-9_-]{11}$/.test(video.videoId) || seenIds.has(video.videoId)) {
+            return false;
+          }
+          seenIds.add(video.videoId);
+          return true;
+        }).map((video) => ({
+          id: video.videoId!,
           title: video.title ?? 'Untitled video',
           artist: video.artist ?? 'Unknown artist',
           artworkUrl: video.artworkUrl ?? null,
@@ -247,7 +255,9 @@ export class DiscoveryService {
           publishedAt?: string; thumbnails?: { high?: { url?: string }; medium?: { url?: string } };
         } }[];
       };
-      const items = (payload.items ?? []).filter((item) =>
+      const items = (Array.isArray(payload.items) ? payload.items : []).filter((item) =>
+        item != null && typeof item.id?.videoId === 'string' &&
+        /^[A-Za-z0-9_-]{11}$/.test(item.id.videoId) &&
         item.snippet?.channelId && approvedChannels.includes(item.snippet.channelId),
       );
       return {

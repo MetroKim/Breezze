@@ -134,13 +134,18 @@ export class RecommendationsService {
       }
     }
 
-    return this.selectPlayable(
+    const personalized = await this.selectPlayable(
       rankedCandidates,
       territory,
       (track) => preferredArtistIdSet.has(track.artistId)
           ? 'Because you chose this artist'
           : 'Because you listen to this artist',
     );
+    // Known artists may have no playable tracks in this territory. Still show
+    // available popular music instead of leaving the recommendation rail empty.
+    return personalized.length > 0
+      ? personalized
+      : this.popularFallback(territory, excludedIds);
   }
 
   private async popularFallback(

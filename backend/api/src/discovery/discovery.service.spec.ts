@@ -87,4 +87,21 @@ describe('DiscoveryService album metadata', () => {
     );
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it('drops malformed music-video IDs while preserving playable results', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ videos: [
+        null,
+        { title: 'Missing ID' },
+        { videoId: 'not a video', title: 'Invalid ID' },
+        { videoId: 'abcDEF12_-3', title: 'Official video', artist: 'Artist' },
+        { videoId: 'abcDEF12_-3', title: 'Duplicate video' },
+      ] }),
+    });
+
+    const result = await service.musicVideos('Artist');
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ id: 'abcDEF12_-3', title: 'Official video' });
+  });
 });
