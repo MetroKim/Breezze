@@ -723,8 +723,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         return 'This email has an existing Breezze account. Use the old sign-in until account linking is available.';
       case 'SUPABASE_AUTH_FAILED':
         return 'Secure sign-in could not be completed. Check your details and try again.';
-      case 'SOCIAL_PROVIDER_NOT_CONFIGURED':
-        return 'This provider is not configured on this device yet.';
       case 'HTTP_409':
         return 'An existing Breezze account needs secure linking before social sign-in can continue.';
       case 'SUPABASE_SOCIAL_NOT_READY':
