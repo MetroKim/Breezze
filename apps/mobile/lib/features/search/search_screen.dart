@@ -583,7 +583,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _SearchScopePill(
+                    BzFilterPill(
                       label: 'Breezze',
                       active: !_searchLibrary,
                       onTap: () {
@@ -594,7 +594,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       },
                     ),
                     const SizedBox(width: 8),
-                    _SearchScopePill(
+                    BzFilterPill(
                       label: 'Your Library',
                       active: _searchLibrary,
                       onTap: () {
@@ -610,7 +610,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      _SearchScopePill(
+                      BzFilterPill(
                         label: 'Songs',
                         active: !_searchVideos,
                         onTap: () {
@@ -623,7 +623,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      _SearchScopePill(
+                      BzFilterPill(
                         label: 'Music Videos',
                         active: _searchVideos,
                         onTap: () {
@@ -920,46 +920,3 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
 /// Search scope pill — capsule (spec --radius-pill) with a solid text1
 /// fill when active, surface2 when not. Mirrors the Library section pill.
-class _SearchScopePill extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _SearchScopePill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      button: true,
-      selected: active,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: BzMotion.fastMs),
-          curve: const Cubic(0.22, 1, 0.36, 1),
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? theme.bzText1 : theme.bzSurface2,
-            borderRadius: BorderRadius.circular(BzRadius.capsule),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: BzType.subheadline,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? theme.bzBackground : theme.bzText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

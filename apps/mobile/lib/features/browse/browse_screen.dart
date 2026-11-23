@@ -164,7 +164,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                       itemBuilder: (context, index) {
                         final genre = _genres[index];
                         final selected = genre == _selectedGenre;
-                        return _BrowsePill(
+                        return BzFilterPill(
                           label: genre,
                           active: selected,
                           onTap: () => _loadGenre(genre),
@@ -711,7 +711,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                               spacing: 8,
                               runSpacing: 8,
                               children: [for (final choice in _choices)
-                                _BrowsePill(
+                                BzFilterPill(
                                   label: choice,
                                   active: _selected == choice,
                                   onTap: () => _search(choice),
@@ -995,46 +995,3 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
 
 /// Browse selection pill — capsule (spec --radius-pill), solid text1 fill
 /// when active, surface2 when not. Mirrors the Library and Search pills.
-class _BrowsePill extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _BrowsePill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      button: true,
-      selected: active,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: BzMotion.fastMs),
-          curve: const Cubic(0.22, 1, 0.36, 1),
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? theme.bzText1 : theme.bzSurface2,
-            borderRadius: BorderRadius.circular(BzRadius.capsule),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: BzType.subheadline,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? theme.bzBackground : theme.bzText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

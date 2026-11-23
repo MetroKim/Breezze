@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bz_brand_icons.dart';
+import 'bz_playback_scrubber.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
@@ -460,7 +461,7 @@ class _MiniPlayer extends ConsumerWidget {
                 // Scrubber (blueprint §5.2): pointer-drag seek, not just a
                 // passive indicator. The drag fraction dispatches seekTo
                 // through the player store — UI never touches the engine.
-                _MiniScrubber(
+                BzPlaybackScrubber(
                   progress: progress,
                   enabled: player.duration > Duration.zero,
                   onSeek: (fraction) => controller.seekTo(
@@ -483,91 +484,6 @@ class _MiniPlayer extends ConsumerWidget {
 /// Draggable progress strip on the mini-player pill. Tap or drag seeks;
 /// the fill uses the accent token (action/state color) per the accent
 /// discipline contract. Disabled while duration is unknown.
-class _MiniScrubber extends StatefulWidget {
-  final double progress;
-  final bool enabled;
-  final ValueChanged<double> onSeek;
-
-  const _MiniScrubber({
-    required this.progress,
-    required this.enabled,
-    required this.onSeek,
-  });
-
-  @override
-  State<_MiniScrubber> createState() => _MiniScrubberState();
-}
-
-class _MiniScrubberState extends State<_MiniScrubber> {
-  double? _dragValue;
-  bool _dragging = false;
-
-  double get _value =>
-      _dragging && _dragValue != null ? _dragValue! : widget.progress;
-
-  void _updateFromPosition(Offset localPosition, double width) {
-    if (width <= 0) return;
-    final fraction = (localPosition.dx / width).clamp(0.0, 1.0);
-    setState(() => _dragValue = fraction);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      slider: true,
-      label: 'Playback position',
-      enabled: widget.enabled,
-      child: SizedBox(
-        height: 14,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (details) {
-                if (!widget.enabled) return;
-                _updateFromPosition(details.localPosition, width);
-              },
-              onHorizontalDragStart: (details) {
-                if (!widget.enabled) return;
-                _dragging = true;
-                _updateFromPosition(details.localPosition, width);
-              },
-              onHorizontalDragUpdate: (details) {
-                if (!widget.enabled) return;
-                _updateFromPosition(details.localPosition, width);
-              },
-              onHorizontalDragEnd: (_) {
-                if (!widget.enabled || !_dragging) return;
-                final value = _dragValue;
-                _dragging = false;
-                setState(() => _dragValue = null);
-                if (value != null) widget.onSeek(value);
-              },
-              child: Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: SizedBox(
-                    height: 3,
-                    width: double.infinity,
-                    child: LinearProgressIndicator(
-                      value: _value,
-                      minHeight: 3,
-                      backgroundColor: theme.bzSeparator,
-                      color: theme.bzAccent,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
 class _MiniArtwork extends StatelessWidget {
   final Color color;
   const _MiniArtwork({required this.color});
@@ -633,12 +549,12 @@ class _TabBar extends StatelessWidget {
       builder: (context, constraints) {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onLongPressStart: (details) => _selectFromGlobalX(
-            details.globalPosition.dx,
+          onLongPressStart: (details) => _selectFromGlobalPosition(
+            details.globalPosition,
             context,
           ),
-          onLongPressMoveUpdate: (details) => _selectFromGlobalX(
-            details.globalPosition.dx,
+          onLongPressMoveUpdate: (details) => _selectFromGlobalPosition(
+            details.globalPosition,
             context,
           ),
           child: BzGlassContainer(
@@ -665,11 +581,14 @@ class _TabBar extends StatelessWidget {
     );
   }
 
-  void _selectFromGlobalX(double globalX, BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width - 24;
-    final localX = (globalX - 12).clamp(0.0, width - 1);
-    final next = (localX / (width / tabs.length)).floor();
-    onChanged(next.clamp(0, tabs.length - 1).toInt());
+  void _selectFromGlobalPosition(Offset globalPosition, BuildContext context) {
+    // Long-press tab selection must use the tab bar's actual render bounds,
+    // not the screen width (which differs in insets/split-screen/desktop).
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || renderObject.size.width <= 0) return;
+    final x = renderObject.globalToLocal(globalPosition).dx;
+    final fraction = (x / renderObject.size.width).clamp(0.0, 0.999999);
+    onChanged((fraction * tabs.length).floor());
   }
 }
 
