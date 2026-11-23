@@ -1,5 +1,8 @@
 # Breezze Current Implementation Gap Register
 
+> **v6 superseding decision:** The agreed current product has **four** primary tabs (Home, Browse, Library, Search); remove Radio from navigation. This older register contains historical five-tab and Audius-first decisions. The approved *target* is Supabase Auth with a staged migration, plus licensed/approved sources; Deezer previews are not full-stream grants. See [Breezze v6 mainline integration](../architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md). Existing features must not be removed until replacement and regression tests pass.
+
+
 **Last reconciled:** 2026-11-22  
 **Main baseline:** `bd031a24616d7257e2b04ef76b469332d4a49658` (PR #45 merged 2026-11-22)  
 **PR #44 CI:** [45017890994 — all 7 jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/45017890994)  
