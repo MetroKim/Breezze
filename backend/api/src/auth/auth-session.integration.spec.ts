@@ -143,8 +143,8 @@ describeIntegration('Auth session PostgreSQL integration', () => {
     const oldKey = process.env.SUPABASE_PUBLISHABLE_KEY;
     process.env.SUPABASE_URL = 'https://migration-test.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
-    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({
         id: identityId,
         email: 'masked@privaterelay.appleid.com',
         email_confirmed_at: '2026-11-24T00:00:00Z',
