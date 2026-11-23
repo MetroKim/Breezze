@@ -174,4 +174,31 @@ describe('RecommendationsService', () => {
     }));
     expect(rights.filterFullStream).toHaveBeenCalledWith(['popular-1', 'popular-2'], 'TZ');
   });
+
+  it('falls back to playable popular tracks when chosen artists have no playable candidates', async () => {
+    prisma.listeningEvent.groupBy.mockReset()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { trackId: 'recent-1', _count: { trackId: 50 } },
+        { trackId: 'popular-1', _count: { trackId: 20 } },
+        { trackId: 'blocked-1', _count: { trackId: 15 } },
+      ]);
+    prisma.recentlyPlayed.findMany.mockResolvedValue([{ trackId: 'recent-1' }]);
+    prisma.userPreference.findUnique.mockResolvedValue({ favoriteArtists: ['Artist X'] });
+    prisma.artist.findMany.mockResolvedValue([{ id: 'artist-x', name: 'Artist X' }]);
+    prisma.track.findMany.mockImplementation(({ where }: any) => Promise.resolve(
+      where.artistId ? [{ id: 'unavailable-1', artistId: 'artist-x' }] : [
+        { id: 'popular-1', artistId: 'artist-a' },
+        { id: 'blocked-1', artistId: 'artist-b' },
+      ],
+    ));
+    rights.filterFullStream
+      .mockResolvedValueOnce(new Set())
+      .mockResolvedValueOnce(new Set(['popular-1']));
+
+    await expect(service.forUser('user-1', 'TZ')).resolves.toEqual([
+      { trackId: 'popular-1', reason: 'Popular on Breezze' },
+    ]);
+    expect(rights.filterFullStream).toHaveBeenLastCalledWith(['popular-1', 'blocked-1'], 'TZ');
+  });
 });
