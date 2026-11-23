@@ -1,0 +1,75 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: breezze
+      POSTGRES_PASSWORD: breezze_dev
+      POSTGRES_DB: breezze
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U breezze"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://breezze:breezze_dev@postgres:5432/breezze
+      REDIS_URL: redis://redis:6379
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-100}
+      API_RATE_WINDOW_MS: ${API_RATE_WINDOW_MS:-60000}
+      LOGIN_ACCOUNT_RATE_LIMIT: ${LOGIN_ACCOUNT_RATE_LIMIT:-10}
+      LOGIN_ACCOUNT_RATE_WINDOW_MS: ${LOGIN_ACCOUNT_RATE_WINDOW_MS:-900000}
+      MFA_ATTEMPT_RATE_LIMIT: ${MFA_ATTEMPT_RATE_LIMIT:-5}
+      MFA_ATTEMPT_RATE_WINDOW_MS: ${MFA_ATTEMPT_RATE_WINDOW_MS:-900000}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
+      NODE_ENV: ${NODE_ENV:-development}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      YTMUSIC_API_URL: http://ytmusicapi:8000
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
+      EDGE_SHARED_SECRET: ${EDGE_SHARED_SECRET:-}
+      CDN_BASE_URL: ${CDN_BASE_URL:-http://localhost:3000/media}
+      MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-dev-only-signing-key}
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+
+  ytmusicapi:
+    build:
+      context: ./ytmusicapi
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+
+volumes:
+  pgdata:
+  redisdata:

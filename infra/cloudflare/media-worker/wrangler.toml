@@ -1,0 +1,7 @@
+name = "breezze-media"
+main = "src/index.ts"
+compatibility_date = "2026-11-21"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "breezze-media"

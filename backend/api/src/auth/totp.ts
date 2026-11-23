@@ -1,0 +1,131 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  createHash,
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
+
+const STEP_SECONDS = 30;
+const DIGITS = 6;
+const WINDOW = 1;
+
+function encryptionKey(): Buffer {
+  const encoded = process.env.MFA_ENCRYPTION_KEY;
+  if (!encoded) throw new Error('MFA_ENCRYPTION_KEY_REQUIRED');
+  const key = Buffer.from(encoded, 'base64');
+  if (key.length !== 32) throw new Error('MFA_ENCRYPTION_KEY_MUST_BE_32_BYTES_BASE64');
+  return key;
+}
+
+export function encryptTotpSecret(secret: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, tag, ciphertext].map((part) => part.toString('base64url')).join('.');
+}
+
+export function decryptTotpSecret(encrypted: string): string {
+  const [ivPart, tagPart, ciphertextPart] = encrypted.split('.');
+  if (!ivPart || !tagPart || !ciphertextPart) throw new Error('MFA_SECRET_INVALID');
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    encryptionKey(),
+    Buffer.from(ivPart, 'base64url'),
+  );
+  decipher.setAuthTag(Buffer.from(tagPart, 'base64url'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertextPart, 'base64url')),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
+function decodeBase32(secret: string): Buffer {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  const output: number[] = [];
+  for (const character of secret.replace(/=+$/g, '').toUpperCase()) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) throw new Error('MFA_SECRET_INVALID');
+    value = (value << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(output);
+}
+
+function codeForCounter(secret: string, counter: number): string {
+  const key = decodeBase32(secret);
+  const message = Buffer.alloc(8);
+  message.writeBigUInt64BE(BigInt(counter));
+  const digest = createHmac('sha1', key).update(message).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary = digest.readUInt32BE(offset) & 0x7fffffff;
+  return String(binary % 10 ** DIGITS).padStart(DIGITS, '0');
+}
+
+export function generateTotpSecret(): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bytes = randomBytes(20);
+  let bits = 0;
+  let value = 0;
+  let output = '';
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      output += alphabet[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) output += alphabet[(value << (5 - bits)) & 31];
+  return output;
+}
+
+export function getVerifiedTotpCounter(
+  secret: string,
+  candidate: string,
+  now = Date.now(),
+): number | null {
+  if (!/^\d{6}$/.test(candidate)) return null;
+  const counter = Math.floor(now / 1000 / STEP_SECONDS);
+  const supplied = Buffer.from(candidate);
+  for (let offset = -WINDOW; offset <= WINDOW; offset += 1) {
+    const candidateCounter = counter + offset;
+    if (candidateCounter < 0) continue;
+    const expected = Buffer.from(codeForCounter(secret, candidateCounter));
+    if (expected.length === supplied.length && timingSafeEqual(expected, supplied)) {
+      return candidateCounter;
+    }
+  }
+  return null;
+}
+
+export function verifyTotp(secret: string, candidate: string, now = Date.now()): boolean {
+  return getVerifiedTotpCounter(secret, candidate, now) !== null;
+}
+
+export function totpProvisioningUri(secret: string, email: string): string {
+  const label = encodeURIComponent(`Breezze:${email}`);
+  const issuer = encodeURIComponent('Breezze');
+  return `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=${STEP_SECONDS}`;
+}
+
+export function generateRecoveryCodes(count = 10): string[] {
+  return Array.from({ length: count }, () => {
+    const raw = randomBytes(8).toString('hex').toUpperCase();
+    return raw.match(/.{1,4}/g)!.join('-');
+  });
+}
+
+export function hashRecoveryCode(code: string): string {
+  return createHash('sha256')
+    .update(code.replace(/-/g, '').trim().toUpperCase(), 'utf8')
+    .digest('hex');
+}

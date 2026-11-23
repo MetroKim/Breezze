@@ -1,0 +1,6 @@
+name = "breezze-api-edge"
+main = "src/index.ts"
+compatibility_date = "2026-11-21"
+
+# API_ORIGIN is injected at deploy time or configured as a Worker variable.
+# EDGE_SHARED_SECRET must be stored with: wrangler secret put EDGE_SHARED_SECRET

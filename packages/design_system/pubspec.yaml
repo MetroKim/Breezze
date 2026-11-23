@@ -1,0 +1,15 @@
+name: breezze_design_system
+description: Breezze design tokens, Atmosphere materials, and theme.
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
