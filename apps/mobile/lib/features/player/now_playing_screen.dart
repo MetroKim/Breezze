@@ -5,8 +5,6 @@ import 'package:material_ui/material_ui.dart' hide RepeatMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
-import '../../core/audio/playback_source_policy.dart';
-import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -138,42 +136,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         ),
       ),
     );
-  }
-
-  bool _findingPreview = false;
-
-  Future<void> _tryPreview(TrackInfo track) async {
-    if (_findingPreview) return;
-    setState(() => _findingPreview = true);
-    try {
-      final api = ref.read(authSessionProvider.notifier).api;
-      final query = '${track.title ?? ''} ${track.artist ?? ''}'.trim();
-      final response = await api.searchDeezer(query);
-      if (!mounted || ref.read(playerControllerProvider).currentTrack?.id != track.id) return;
-      final rows = response['value'];
-      String normalized(Object? value) => value is String ? value.trim().toLowerCase() : '';
-      final match = rows is List ? rows.whereType<Map>().where((row) {
-        final seconds = row['durationSec'];
-        return normalized(row['title']) == normalized(track.title) &&
-            normalized(row['artist']) == normalized(track.artist) &&
-            (track.duration == Duration.zero ||
-                seconds is num && (seconds - track.duration.inSeconds).abs() <= 3) &&
-            row['previewUrl'] is String;
-      }).firstOrNull : null;
-      if (match == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Deezer has no matching preview for this recording.')));
-        return;
-      }
-      final controller = ref.read(playerControllerProvider.notifier);
-      await controller.playDeezerPreview(TrackInfo(id: 'bz:deezer_preview:${match['providerTrackId']}',
-          title: track.title, artist: track.artist, artworkUrl: track.artworkUrl));
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not load the Deezer preview.')));
-    } finally {
-      if (mounted) setState(() => _findingPreview = false);
-    }
   }
 
   String _format(Duration d) {
@@ -311,11 +273,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         if (player.playbackState == PlaybackState.failed)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: isYouTubeSongId(track.id)
-                                ? TextButton(onPressed: _findingPreview ? null : () => _tryPreview(track),
-                                    child: Text(_findingPreview ? 'Finding preview…' : 'Try a Deezer preview'))
-                                : Text('Audio unavailable. Retry or choose another song.',
-                                    style: theme.textTheme.bodySmall),
+                            child: Text('Audio unavailable for this recording. Tap play to retry.',
+                                style: theme.textTheme.bodySmall),
                           ),
                         const SizedBox(height: 16),
                         Padding(

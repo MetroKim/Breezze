@@ -18,3 +18,17 @@ bool canRequestOfflineDownload(String id) =>
     id.trim().isNotEmpty &&
     !id.startsWith('bz:') &&
     !id.startsWith('bzv:');
+
+/// Fallbacks must identify the same performance. Reject ambiguous editions.
+String? matchingDeezerPreview(Object? rows, String title, String artist, Duration duration) {
+  if (rows is! List) return null;
+  String normalize(String value) => value.trim().toLowerCase();
+  final candidates = rows.whereType<Map>().where((row) {
+    final seconds = row['durationSec'];
+    return row['title'] is String && normalize(row['title'] as String) == normalize(title) &&
+        row['artist'] is String && normalize(row['artist'] as String) == normalize(artist) &&
+        (duration == Duration.zero || seconds is num && (seconds - duration.inSeconds).abs() <= 3) &&
+        row['previewUrl'] is String && isDeezerPreview('bz:deezer_preview:${row['providerTrackId']}');
+  }).map((row) => row['providerTrackId'].toString()).toSet();
+  return candidates.length == 1 ? candidates.first : null;
+}
