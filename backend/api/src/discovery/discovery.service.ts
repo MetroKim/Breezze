@@ -204,14 +204,19 @@ export class DiscoveryService {
         }[];
       };
       if (!Array.isArray(payload.videos)) throw new Error('YTMUSIC_VIDEO_INVALID_RESPONSE');
+      const seenIds = new Set<string>();
       return {
         source: payload.source ?? 'YouTube Music via ytmusicapi',
         classification: 'YouTube Music Original Music Video (OMV)',
         fetchedAt: new Date().toISOString(),
-        items: payload.videos.filter((video) =>
-          video != null && typeof video.videoId === 'string' &&
-          /^[A-Za-z0-9_-]{11}$/.test(video.videoId),
-        ).map((video) => ({
+        items: payload.videos.filter((video) => {
+          if (video == null || typeof video.videoId !== 'string' ||
+              !/^[A-Za-z0-9_-]{11}$/.test(video.videoId) || seenIds.has(video.videoId)) {
+            return false;
+          }
+          seenIds.add(video.videoId);
+          return true;
+        }).map((video) => ({
           id: video.videoId!,
           title: video.title ?? 'Untitled video',
           artist: video.artist ?? 'Unknown artist',
