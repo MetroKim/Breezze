@@ -1,0 +1,84 @@
+name: Flutter web preview smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'run.sh'
+      - '.github/workflows/web-preview-smoke.yml'
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'run.sh'
+      - '.github/workflows/web-preview-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: Start headless Flutter web preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Start app using the same launcher as Codespaces
+        env:
+          BREEZZE_PORT: '8080'
+        run: |
+          set -euo pipefail
+          bash run.sh web > "$RUNNER_TEMP/breezze-web.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/breezze-web.pid"
+          echo "Breezze launcher started"
+
+      - name: Verify live Flutter web-server responses
+        run: |
+          set -euo pipefail
+          ready=0
+          for i in {1..180}; do
+            if ! kill -0 "$(cat "$RUNNER_TEMP/breezze-web.pid")" 2>/dev/null; then
+              echo "Breezze exited before the web server became ready" >&2
+              tail -n 100 "$RUNNER_TEMP/breezze-web.log" >&2
+              exit 1
+            fi
+            if curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:8080/ -o "$RUNNER_TEMP/breezze-index.html"; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$ready" != 1 ]]; then
+            echo "Flutter web-server did not become ready" >&2
+            tail -n 100 "$RUNNER_TEMP/breezze-web.log" >&2
+            exit 1
+          fi
+          grep -q 'flutter_bootstrap.js' "$RUNNER_TEMP/breezze-index.html"
+          grep -q 'Breezze' "$RUNNER_TEMP/breezze-index.html"
+          curl --retry 3 --retry-delay 1 --fail --silent --show-error http://127.0.0.1:8080/flutter_bootstrap.js -o "$RUNNER_TEMP/flutter_bootstrap.js"
+          test -s "$RUNNER_TEMP/flutter_bootstrap.js"
+          echo "Verified Breezze Flutter web-server is running and serving bootstrap assets"
+          tail -n 30 "$RUNNER_TEMP/breezze-web.log"
+
+      - name: Publish startup logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: breezze-web-preview-failure-${{ github.run_id }}
+          path: ${{ runner.temp }}/breezze-web.log
+          if-no-files-found: warn
+
+      - name: Stop local preview
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/breezze-web.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/breezze-web.pid")" 2>/dev/null || true
+          fi
