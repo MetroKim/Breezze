@@ -745,7 +745,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             tooltip: 'Song actions',
                                             icon: const BzSvgIcon(name: 'more-vertical', size: 20),
                                             onSelected: (action) {
-                                              if (action == 'video') {
+                                              if (action == 'original') {
+                                                openYouTubePlayer(
+                                                  context: context,
+                                                  ref: ref,
+                                                  videoId: track.id.substring('bz:youtube_music:'.length),
+                                                  title: track.title,
+                                                  artist: track.artist,
+                                                  artworkUrl: track.artworkUrl,
+                                                );
+                                              } else if (action == 'video') {
                                                 _watchMusicVideo(track);
                                               } else if (action == 'playlist') {
                                                 _showAddToPlaylist(track);
@@ -775,8 +784,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               }
                                             },
                                             itemBuilder: (context) => [
-                                              if (isYouTubeSongId(track.id))
+                                              if (isYouTubeSongId(track.id)) ...[
+                                                const PopupMenuItem(value: 'original', child: Text('Open YouTube player')),
                                                 const PopupMenuItem(value: 'video', child: Text('Watch music video')),
+                                              ],
                                               const PopupMenuItem(
                                                 value: 'playlist',
                                                 child: Text('Add to Playlist'),
