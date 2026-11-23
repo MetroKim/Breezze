@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Breezze app icon — glossy dark base, monochrome-forward B + music note -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1A1C20"/>
+      <stop offset="1" stop-color="#08090B"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.14"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.03"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="markGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#BCC9D8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded-square base -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bgGrad)"/>
+  <!-- inner hairline -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#2C323A" stroke-width="2"/>
+
+  <!-- B letterform: vertical stem + two bowls, fused with a music-note flag -->
+  <g fill="none" stroke="url(#markGrad)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <!-- stem -->
+    <path d="M176 132 L176 380"/>
+    <!-- upper bowl -->
+    <path d="M176 132 L300 132 A54 54 0 0 1 300 240 L176 240"/>
+    <!-- lower bowl -->
+    <path d="M176 240 L316 240 A56 56 0 0 1 316 352 L176 352"/>
+    <!-- music-note flag rising off the lower bowl -->
+    <path d="M316 352 L336 352 L336 258"/>
+    <path d="M336 258 A26 26 0 1 0 336 306"/>
+  </g>
+
+  <!-- glossy top highlight -->
+  <path d="M16 128 C16 66 66 16 128 16 L384 16 C446 16 496 66 496 128 L496 208 C400 168 112 168 16 208 Z" fill="url(#gloss)"/>
+</svg>

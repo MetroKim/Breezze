@@ -1,0 +1,478 @@
+// Breezze Prisma schema — Plan §12 (P0 subset).
+// Free app: no subscription/billing models — Breezze has no paywall.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String           @id @default(uuid())
+  email          String           @unique
+  passwordHash   String
+  role           String           @default("user")
+  mfaEnabled     Boolean          @default(false)
+  mfaSecretCiphertext String?
+  mfaPendingSecretCiphertext String?
+  mfaLastUsedStep BigInt?
+  displayName    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  refreshTokens  RefreshToken[]
+  mfaRecoveryCodes MfaRecoveryCode[]
+  favorites      Favorite[]
+  playlists      Playlist[]
+  downloads      DownloadRecord[]
+  recentlyPlayed RecentlyPlayed[]
+  listeningEvents ListeningEvent[]
+  playbackSessions PlaybackSession[]
+  preference     UserPreference?
+  following      Follow[]          @relation("follower")
+  followers      Follow[]          @relation("following")
+  reportsFiled   ContentReport[]  @relation("reporter")
+  notifications  Notification[]
+  pushTokens     PushToken[]
+  supportRequests SupportRequest[]
+  followedArtists UserFollowedArtist[]
+  savedCatalogAlbums UserSavedCatalogAlbum[]
+  socialIdentities SocialAuthIdentity[]
+}
+
+model UserFollowedArtist {
+  userId    String
+  artistKey String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, artistKey])
+}
+
+/// Per-user catalog bookmarks only; they are never media playback rights.
+/// Every query and mutation must include authenticated userId.
+model UserSavedCatalogAlbum {
+  id              String   @id @default(uuid())
+  userId          String
+  source          String   @default("apple_itunes")
+  externalAlbumId String
+  title           String
+  artist          String
+  artworkUrl      String?
+  catalogUrl      String?
+  genres          String[] @default([])
+  isCompilation   Boolean  @default(false)
+  savedAt         DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, externalAlbumId])
+  @@index([userId, savedAt, id])
+}
+
+
+/// OAuth identities bind to provider subject, never to an unverified email.
+/// Users with matching preexisting email/password accounts must explicitly link.
+model SocialAuthIdentity {
+  id          String   @id @default(uuid())
+  userId      String
+  provider    String
+  subject     String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([userId, provider])
+}
+
+/// Browser OAuth pairing. The browser never sees the Flutter refresh token.
+/// Flow secret is hashed and the result is AES-GCM sealed at rest.
+model SocialLoginFlow {
+  id            String    @id @default(uuid())
+  provider      String
+  stateHash     String    @unique
+  pollSecretHash String
+  nonce         String
+  codeVerifier  String
+  status        String    @default("pending")
+  resultCiphertext String?
+  errorCode     String?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  familyId  String
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  mfaVerified Boolean   @default(false)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserPreference {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  country     String?
+  language    String?
+  genres      String[]
+  favoriteArtists String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  kind      String    @default("general")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ContentReport {
+  id          String   @id @default(uuid())
+  reporterId  String
+  targetType  String
+  targetId    String
+  reason      String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  reporter    User     @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+}
+
+model SupportRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  category  String
+  subject   String
+  message   String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Artist {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  albums    Album[]
+  tracks    Track[]
+}
+
+model Album {
+  id          String    @id @default(uuid())
+  title       String
+  artistId    String
+  releaseDate DateTime?
+  artist      Artist    @relation(fields: [artistId], references: [id])
+  tracks      Track[]
+}
+
+model Track {
+  id          String                  @id @default(uuid())
+  // Convergence seam: the external source's stable ID (e.g. a
+  // YouTube video id). Upserted via /catalog/resolve so client-side
+  // external tracks get exactly one canonical catalog row.
+  externalId   String?                 @unique
+  source       String?
+  title       String
+  artistId    String
+  albumId     String?
+  duration    Int
+  explicit    Boolean                 @default(false)
+  artist      Artist                  @relation(fields: [artistId], references: [id])
+  album       Album?                  @relation(fields: [albumId], references: [id])
+  territories TerritoryAvailability[]
+  rights      RightsUsagePermission[]
+  takedowns   ContentTakedownCase[]
+  attribution ProviderAttribution?
+  favorites Favorite[]
+  recentlyPlayed RecentlyPlayed[]
+  listeningEvents ListeningEvent[]
+  playbackSessions PlaybackSession[]
+  playlistItems PlaylistItem[]
+  downloads DownloadRecord[]
+  lyrics Lyrics?
+
+  @@index([artistId, title])
+}
+
+model TerritoryAvailability {
+  id        String   @id @default(uuid())
+  trackId   String
+  territory String
+  track     Track    @relation(fields: [trackId], references: [id])
+
+  @@unique([trackId, territory])
+}
+
+model RightsUsagePermission {
+  id      String    @id @default(uuid())
+  trackId String
+  action  String
+  startAt DateTime?
+  endAt   DateTime?
+  track   Track     @relation(fields: [trackId], references: [id])
+
+  @@unique([trackId, action])
+}
+
+model ContentTakedownCase {
+  id        String   @id @default(uuid())
+  trackId   String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  track     Track    @relation(fields: [trackId], references: [id])
+
+  @@index([trackId, status])
+}
+
+model ProviderAttribution {
+  id      String @id @default(uuid())
+  trackId String
+  text    String
+  track   Track  @relation(fields: [trackId], references: [id])
+
+  @@unique([trackId])
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  trackId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, trackId])
+  @@index([userId, createdAt])
+}
+
+model RecentlyPlayed {
+  id          String   @id @default(uuid())
+  userId      String
+  trackId     String
+  playedAt    DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track       Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, trackId])
+  @@index([userId, playedAt])
+}
+
+model ListeningEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  trackId   String
+  playedMs  Int      @default(0)
+  isServerVerified Boolean @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@index([userId, isServerVerified, trackId])
+  @@index([isServerVerified, trackId, createdAt])
+}
+
+model PlaybackSession {
+  id               String              @id @default(uuid())
+  userId           String
+  trackId          String
+  providerId       String?
+  territory        String
+  status           String              @default("active")
+  startedAt        DateTime            @default(now())
+  lastHeartbeatAt  DateTime            @default(now())
+  expiresAt        DateTime
+  stoppedAt        DateTime?
+  lastSequence     Int                 @default(0)
+  accumulatedMs    Int                 @default(0)
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track            Track               @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  heartbeats       PlaybackHeartbeat[]
+
+  @@index([userId, status, expiresAt])
+  @@index([trackId, startedAt])
+}
+
+model PlaybackHeartbeat {
+  id          String          @id
+  sessionId   String
+  sequence    Int
+  elapsedMs   Int
+  createdAt   DateTime        @default(now())
+  session     PlaybackSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, sequence])
+  @@index([sessionId, createdAt])
+}
+
+model Playlist {
+  id        String         @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime       @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     PlaylistItem[]
+}
+
+model PlaylistItem {
+  id         String   @id @default(uuid())
+  playlistId String
+  trackId    String
+  position   Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@unique([playlistId, trackId])
+}
+
+model DownloadRecord {
+  id        String    @id @default(uuid())
+  userId    String
+  trackId   String
+  status    String    @default("active")
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track     @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, trackId])
+}
+
+model Lyrics {
+  id        String   @id @default(uuid())
+  trackId   String   @unique
+  plainText String
+  syncedLrc String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  translations LyricTranslation[]
+}
+
+model LyricTranslation {
+  id       String @id @default(uuid())
+  lyricsId String
+  language String
+  text     String
+  lyrics   Lyrics @relation(fields: [lyricsId], references: [id], onDelete: Cascade)
+
+  @@unique([lyricsId, language])
+}
+
+model RadioStation {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  genre       String?
+  streamUrl   String
+  isLive      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  programs    RadioProgram[]
+}
+
+model RadioProgram {
+  id          String       @id @default(uuid())
+  stationId   String
+  title       String
+  presenter   String?
+  airsAt      DateTime
+  durationMin Int
+  station     RadioStation @relation(fields: [stationId], references: [id])
+
+  @@unique([stationId, title])
+}
+
+model Composer {
+  id        String   @id @default(uuid())
+  name      String
+  era       String?
+  createdAt DateTime @default(now())
+  works     ClassicalWork[]
+}
+
+model ClassicalWork {
+  id          String   @id @default(uuid())
+  composerId  String
+  title       String
+  catalogCode String?
+  movements   ClassicalMovement[]
+  composer    Composer @relation(fields: [composerId], references: [id])
+
+  @@unique([composerId, title])
+}
+
+model ClassicalMovement {
+  id       String        @id @default(uuid())
+  workId   String
+  title    String
+  position Int
+  work     ClassicalWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@unique([workId, position])
+}
+
+
+/// Append-only application audit events for privileged administrative actions.
+/// Retention and database-level immutability must be enforced by deployment policy.
+model AdminAuditEvent {
+  id         String   @id @default(uuid())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
+
+model MfaRecoveryCode {
+  id         String   @id @default(uuid())
+  userId     String
+  codeHash   String   @unique
+  createdAt  DateTime @default(now())
+  consumedAt DateTime?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+}

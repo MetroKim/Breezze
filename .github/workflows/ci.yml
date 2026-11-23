@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - breezze
+  pull_request:
+    branches:
+      - main
+      - breezze
+      - feat/youtube-music-primary-provider
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Breezze quality gates
+    uses: ./.github/workflows/breezze-quality.yml

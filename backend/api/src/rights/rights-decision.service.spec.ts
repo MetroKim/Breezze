@@ -1,0 +1,171 @@
+import { PrismaService } from '../prisma.service';
+import { RightsDecisionService } from './rights-decision.service';
+
+describe('RightsDecisionService', () => {
+  let fullPermission: any;
+  let previewPermission: any;
+  const prisma = {
+    territoryAvailability: { findFirst: jest.fn(), findMany: jest.fn() },
+    contentTakedownCase: { findFirst: jest.fn(), findMany: jest.fn() },
+    rightsUsagePermission: { findFirst: jest.fn(), findMany: jest.fn() },
+    providerAttribution: { findFirst: jest.fn() },
+  };
+  let service: RightsDecisionService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    fullPermission = null;
+    previewPermission = null;
+    prisma.territoryAvailability.findFirst.mockResolvedValue({ id: 'territory-1' });
+    prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
+    prisma.rightsUsagePermission.findFirst.mockImplementation(
+      ({ where }: { where: { action: string } }) =>
+        Promise.resolve(
+          where.action === 'preview' ? previewPermission : fullPermission,
+        ),
+    );
+    prisma.providerAttribution.findFirst.mockResolvedValue({ text: 'Licensed via label' });
+    prisma.territoryAvailability.findMany.mockResolvedValue([]);
+    prisma.contentTakedownCase.findMany.mockResolvedValue([]);
+    prisma.rightsUsagePermission.findMany.mockResolvedValue([]);
+    service = new RightsDecisionService(prisma as unknown as PrismaService);
+  });
+
+  it('bulk-filters metadata by territory, takedown and explicit permission windows', async () => {
+    const future = new Date(Date.now() + 60_000);
+    const expired = new Date(Date.now() - 60_000);
+    prisma.territoryAvailability.findMany.mockResolvedValue([
+      { trackId: 'available-no-explicit-grant' },
+      { trackId: 'active-permission' },
+      { trackId: 'future-permission' },
+      { trackId: 'taken-down' },
+      { trackId: 'expired-permission' },
+    ]);
+    prisma.contentTakedownCase.findMany.mockResolvedValue([
+      { trackId: 'taken-down' },
+    ]);
+    prisma.rightsUsagePermission.findMany.mockResolvedValue([
+      { trackId: 'active-permission', startAt: null, endAt: future },
+      { trackId: 'future-permission', startAt: future, endAt: null },
+      { trackId: 'expired-permission', startAt: null, endAt: expired },
+    ]);
+
+    await expect(service.filterMetadataDisplay([
+      'available-no-explicit-grant',
+      'active-permission',
+      'future-permission',
+      'taken-down',
+      'expired-permission',
+      'not-in-territory',
+    ], 'TZ')).resolves.toEqual(new Set([
+      'available-no-explicit-grant',
+      'active-permission',
+    ]));
+  });
+
+  it('fails closed for invalid territory in bulk metadata filtering', async () => {
+    await expect(service.filterMetadataDisplay(['track-1'], 'unknown'))
+      .resolves.toEqual(new Set());
+    expect(prisma.territoryAvailability.findMany).not.toHaveBeenCalled();
+  });
+
+  it('denies tracks unavailable in the requested territory', async () => {
+    prisma.territoryAvailability.findFirst.mockResolvedValue(null);
+
+    const decision = await service.decide({
+      userId: 'user-1',
+      trackId: 'track-1',
+      action: 'stream.full',
+      territory: 'TZ',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('NOT_AVAILABLE_IN_TERRITORY');
+  });
+
+  it('denies active takedowns before checking stream permission', async () => {
+    prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'case-1' });
+
+    const decision = await service.decide({
+      userId: 'user-1',
+      trackId: 'track-1',
+      action: 'stream.full',
+      territory: 'TZ',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('TAKEDOWN_ACTIVE');
+    expect(prisma.rightsUsagePermission.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('does not accept a preview grant before its start time', async () => {
+    previewPermission = {
+      startAt: new Date(Date.now() + 60_000),
+      endAt: null,
+    };
+
+    const decision = await service.decide({
+      userId: 'user-1',
+      trackId: 'track-1',
+      action: 'stream.full',
+      territory: 'TZ',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('RIGHTS_WINDOW_NOT_OPEN');
+  });
+
+  it('does not accept an expired preview grant', async () => {
+    previewPermission = {
+      startAt: null,
+      endAt: new Date(Date.now() - 60_000),
+    };
+
+    const decision = await service.decide({
+      userId: 'user-1',
+      trackId: 'track-1',
+      action: 'stream.full',
+      territory: 'TZ',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('RIGHTS_EXPIRED');
+  });
+
+  it('does not use preview permission to authorize a download', async () => {
+    previewPermission = {
+      startAt: null,
+      endAt: new Date(Date.now() + 60_000),
+    };
+
+    const decision = await service.decide({
+      userId: 'user-1',
+      trackId: 'track-1',
+      action: 'download',
+      territory: 'TZ',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('NO_EXPLICIT_AUTHORIZATION');
+    expect(prisma.rightsUsagePermission.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a bounded preview-only decision for an active preview grant', async () => {
+    const endAt = new Date(Date.now() + 60_000);
+    previewPermission = { startAt: new Date(Date.now() - 60_000), endAt };
+
+    const decision = await service.decide({
+      userId: 'user-1',
+      trackId: 'track-1',
+      action: 'stream.full',
+      territory: 'TZ',
+    });
+
+    expect(decision).toMatchObject({
+      allowed: true,
+      previewOnly: true,
+      expiresAt: endAt,
+      attribution: 'Licensed via label',
+    });
+  });
+});

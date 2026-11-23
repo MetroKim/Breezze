@@ -1,0 +1,161 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
+import {
+  RightsDecision,
+  RightsRequest,
+  denyDecision,
+  allowDecision,
+} from './rights-decision.types';
+
+@Injectable()
+export class RightsDecisionService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async decide(req: RightsRequest): Promise<RightsDecision> {
+    const available = await this.prisma.territoryAvailability.findFirst({
+      where: { trackId: req.trackId, territory: req.territory },
+    });
+    if (!available) return denyDecision('NOT_AVAILABLE_IN_TERRITORY');
+
+    const takedown = await this.prisma.contentTakedownCase.findFirst({
+      where: { trackId: req.trackId, status: 'active' },
+    });
+    if (takedown) return denyDecision('TAKEDOWN_ACTIVE');
+
+    const permission = await this.prisma.rightsUsagePermission.findFirst({
+      where: { trackId: req.trackId, action: req.action },
+    });
+
+    if (!permission && req.action === 'metadata.display') {
+      return allowDecision({ qualityRestriction: null });
+    }
+
+    if (!permission) {
+      // A preview grant can never authorize downloads, caching or other
+      // full-content actions. It is only a limited fallback for stream.full.
+      if (req.action !== 'stream.full') {
+        return denyDecision('NO_EXPLICIT_AUTHORIZATION');
+      }
+
+      const preview = await this.prisma.rightsUsagePermission.findFirst({
+        where: { trackId: req.trackId, action: 'preview' },
+      });
+      if (!preview) return denyDecision('NO_EXPLICIT_AUTHORIZATION');
+
+      // Preview permissions have their own validity window. A stale or
+      // future preview grant must never be treated as active authorization.
+      const now = new Date();
+      if (preview.startAt && preview.startAt > now) {
+        return denyDecision('RIGHTS_WINDOW_NOT_OPEN');
+      }
+      if (preview.endAt && preview.endAt < now) {
+        return denyDecision('RIGHTS_EXPIRED');
+      }
+
+      const attribution = await this.prisma.providerAttribution.findFirst({
+        where: { trackId: req.trackId },
+      });
+      return allowDecision({
+        previewOnly: true,
+        qualityRestriction: null,
+        expiresAt: preview.endAt ?? null,
+        attribution: attribution?.text ?? null,
+      });
+    }
+
+    const now = new Date();
+    if (permission.startAt && permission.startAt > now) {
+      return denyDecision('RIGHTS_WINDOW_NOT_OPEN');
+    }
+    if (permission.endAt && permission.endAt < now) {
+      return denyDecision('RIGHTS_EXPIRED');
+    }
+
+    const attribution = await this.prisma.providerAttribution.findFirst({
+      where: { trackId: req.trackId },
+    });
+
+    return allowDecision({
+      qualityRestriction: null,
+      expiresAt: permission.endAt ?? null,
+      attribution: attribution?.text ?? null,
+    });
+  }
+
+  /**
+   * Bulk metadata-display decision. A track without an explicit metadata
+   * permission is visible only when territory availability exists and no
+   * active takedown exists. Explicit permissions must be inside their window.
+   */
+  async filterMetadataDisplay(trackIds: string[], territory: string): Promise<Set<string>> {
+    const ids = [...new Set(trackIds)];
+    if (ids.length === 0 || !/^[A-Z]{2}$/.test(territory)) return new Set<string>();
+
+    const now = new Date();
+    const [available, takedowns, permissions] = await Promise.all([
+      this.prisma.territoryAvailability.findMany({
+        where: { trackId: { in: ids }, territory },
+        select: { trackId: true },
+      }),
+      this.prisma.contentTakedownCase.findMany({
+        where: { trackId: { in: ids }, status: 'active' },
+        select: { trackId: true },
+      }),
+      this.prisma.rightsUsagePermission.findMany({
+        where: { trackId: { in: ids }, action: 'metadata.display' },
+        select: { trackId: true, startAt: true, endAt: true },
+      }),
+    ]);
+
+    const availableIds = new Set(available.map((row) => row.trackId));
+    const takedownIds = new Set(takedowns.map((row) => row.trackId));
+    const permissionByTrack = new Map(permissions.map((row) => [row.trackId, row]));
+    return new Set(ids.filter((id) => {
+      if (!availableIds.has(id) || takedownIds.has(id)) return false;
+      const permission = permissionByTrack.get(id);
+      if (!permission) return true;
+      return (!permission.startAt || permission.startAt <= now)
+        && (!permission.endAt || permission.endAt >= now);
+    }));
+  }
+
+  /**
+   * Bulk equivalent of decide(..., action: 'stream.full') for recommendation
+   * candidates. It excludes preview-only grants and evaluates territory,
+   * takedown, and permission windows in three bounded database queries.
+   */
+  async filterFullStream(trackIds: string[], territory: string): Promise<Set<string>> {
+    const ids = [...new Set(trackIds)];
+    if (ids.length === 0) return new Set<string>();
+
+    const now = new Date();
+    const [available, takedowns, permissions] = await Promise.all([
+      this.prisma.territoryAvailability.findMany({
+        where: { trackId: { in: ids }, territory },
+        select: { trackId: true },
+      }),
+      this.prisma.contentTakedownCase.findMany({
+        where: { trackId: { in: ids }, status: 'active' },
+        select: { trackId: true },
+      }),
+      this.prisma.rightsUsagePermission.findMany({
+        where: {
+          trackId: { in: ids },
+          action: 'stream.full',
+          AND: [
+            { OR: [{ startAt: null }, { startAt: { lte: now } }] },
+            { OR: [{ endAt: null }, { endAt: { gte: now } }] },
+          ],
+        },
+        select: { trackId: true },
+      }),
+    ]);
+
+    const availableIds = new Set(available.map((row) => row.trackId));
+    const takedownIds = new Set(takedowns.map((row) => row.trackId));
+    const permittedIds = new Set(permissions.map((row) => row.trackId));
+    return new Set(ids.filter((id) =>
+      availableIds.has(id) && permittedIds.has(id) && !takedownIds.has(id),
+    ));
+  }
+}

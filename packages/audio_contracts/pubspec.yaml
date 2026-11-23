@@ -1,0 +1,14 @@
+name: breezze_audio_contracts
+description: Breezze shared playback contracts — engine, queue, lyrics, scrobbling.
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

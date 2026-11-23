@@ -1,0 +1,7 @@
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "mfaEnabled" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "mfaSecretCiphertext" TEXT,
+  ADD COLUMN IF NOT EXISTS "mfaPendingSecretCiphertext" TEXT;
+
+ALTER TABLE "RefreshToken"
+  ADD COLUMN IF NOT EXISTS "mfaVerified" BOOLEAN NOT NULL DEFAULT false;
