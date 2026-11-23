@@ -101,7 +101,7 @@ void main() {
   test('Apple nonce is SHA-256 hashed before passing to the OS sheet', () {
     expect(
       SupabaseAuthBridge.hashAppleNonce('example'),
-      '50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884bd8cb64cee0c27e9c67',
+      '50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c',
     );
   });
 

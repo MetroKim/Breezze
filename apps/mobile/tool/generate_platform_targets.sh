@@ -161,7 +161,7 @@ if ios_plist.exists():
     # Pass the same iOS OAuth client ID here and via Flutter --dart-define.
     ios_client_id = os.environ.get("BREEZZE_GOOGLE_IOS_CLIENT_ID", "").strip()
     if ios_client_id:
-        if not re.fullmatch(r"[A-Za-z0-9_-]+\\.apps\\.googleusercontent\\.com", ios_client_id):
+        if not re.fullmatch(r"[A-Za-z0-9_-]+\.apps\.googleusercontent\.com", ios_client_id):
             raise SystemExit("Invalid BREEZZE_GOOGLE_IOS_CLIENT_ID")
         scheme = "com.googleusercontent.apps." + ios_client_id.split(".")[0]
         schemes = values.setdefault("CFBundleURLTypes", [])
