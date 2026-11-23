@@ -5,6 +5,8 @@ import 'package:material_ui/material_ui.dart' hide RepeatMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../../core/audio/playback_source_policy.dart';
+import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 
@@ -136,6 +138,44 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         ),
       ),
     );
+  }
+
+  bool _findingPreview = false;
+
+  Future<void> _tryPreview(TrackInfo track) async {
+    if (_findingPreview) return;
+    setState(() => _findingPreview = true);
+    try {
+      final api = ref.read(authSessionProvider.notifier).api;
+      final query = '${track.title ?? ''} ${track.artist ?? ''}'.trim();
+      final response = await api.searchDeezer(query);
+      if (!mounted || ref.read(playerControllerProvider).currentTrack?.id != track.id) return;
+      final rows = response['value'];
+      String normalized(Object? value) => value is String ? value.trim().toLowerCase() : '';
+      final match = rows is List ? rows.whereType<Map>().where((row) {
+        final seconds = row['durationSec'];
+        return normalized(row['title']) == normalized(track.title) &&
+            normalized(row['artist']) == normalized(track.artist) &&
+            (track.duration == Duration.zero ||
+                seconds is num && (seconds - track.duration.inSeconds).abs() <= 3) &&
+            row['previewUrl'] is String;
+      }).firstOrNull : null;
+      if (match == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Deezer has no matching preview for this recording.')));
+        return;
+      }
+      final controller = ref.read(playerControllerProvider.notifier);
+      controller.playNext(TrackInfo(id: 'bz:deezer_preview:${match['providerTrackId']}',
+          title: track.title, artist: track.artist, artworkUrl: track.artworkUrl),
+          origin: 'preview', sourceContext: 'Deezer preview');
+      await controller.next();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load the Deezer preview.')));
+    } finally {
+      if (mounted) setState(() => _findingPreview = false);
+    }
   }
 
   String _format(Duration d) {
@@ -273,8 +313,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         if (player.playbackState == PlaybackState.failed)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Text('Audio unavailable. Retry or choose another song.',
-                                style: theme.textTheme.bodySmall),
+                            child: isYouTubeSongId(track.id)
+                                ? TextButton(onPressed: _findingPreview ? null : () => _tryPreview(track),
+                                    child: Text(_findingPreview ? 'Finding preview…' : 'Try a Deezer preview'))
+                                : Text('Audio unavailable. Retry or choose another song.',
+                                    style: theme.textTheme.bodySmall),
                           ),
                         const SizedBox(height: 16),
                         Padding(
@@ -443,7 +486,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-class _BreathingArtwork extends StatefulWidget {
+class _BreathingArtwork extends StatelessWidget {
   final bool playing;
   final String? artworkUrl;
   final Color fallbackColor;
@@ -455,51 +498,6 @@ class _BreathingArtwork extends StatefulWidget {
   });
 
   @override
-  State<_BreathingArtwork> createState() => _BreathingArtworkState();
-}
-
-class _BreathingArtworkState extends State<_BreathingArtwork>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 2),
-    lowerBound: 0.96,
-    upperBound: 1.0,
-  );
-  bool _reduceMotion = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _reduceMotion = MediaQuery.disableAnimationsOf(context);
-    if (_reduceMotion) {
-      _controller.stop();
-      _controller.value = 1;
-    } else if (widget.playing && !_controller.isAnimating) {
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _BreathingArtwork oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_reduceMotion) return;
-    if (widget.playing != oldWidget.playing) {
-      if (widget.playing) {
-        _controller.repeat(reverse: true);
-      } else {
-        _controller.stop();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).bz;
     return LayoutBuilder(
@@ -509,8 +507,11 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
         final side = (constraints.maxWidth * 0.72)
             .clamp(144.0, heightCap)
             .toDouble();
-        return ScaleTransition(
-          scale: _controller,
+        return AnimatedScale(
+          scale: playing ? 1.0 : 0.88,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero : const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
           child: Container(
             width: side,
             height: side,
@@ -528,18 +529,18 @@ class _BreathingArtworkState extends State<_BreathingArtwork>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(BzRadius.artwork),
-              child: widget.artworkUrl != null
+              child: artworkUrl != null
                   ? Image.network(
-                      widget.artworkUrl!,
+                      artworkUrl!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Center(
                         child: BzBnoteMark(
-                            size: 96, color: widget.fallbackColor),
+                            size: 96, color: fallbackColor),
                       ),
                     )
                   : Center(
                       child:
-                          BzBnoteMark(size: 96, color: widget.fallbackColor),
+                          BzBnoteMark(size: 96, color: fallbackColor),
                     ),
             ),
           ),

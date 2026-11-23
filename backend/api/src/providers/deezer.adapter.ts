@@ -58,6 +58,7 @@ export class DeezerAdapter implements ProviderAdapter {
       artworkUrl: track.album?.cover_big ?? track.album?.cover_medium,
       durationSec: typeof track.duration === 'number' && track.duration > 0 ? track.duration : undefined,
       sourceUrl: track.link,
+      previewUrl: track.preview && /^https:\/\/[a-z0-9.-]+\.dzcdn\.net\//i.test(track.preview) ? track.preview : undefined,
     };
   }
 

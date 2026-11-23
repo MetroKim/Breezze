@@ -1,5 +1,5 @@
-import '../free_music/free_music_screen.dart';
-import '../free_music/open_goldberg.dart';
+import '../free_music/device_audio.dart';
+import '../player/now_playing_screen.dart';
 import 'dart:async';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
@@ -171,18 +171,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
 
-    final terms = normalized.toLowerCase().split(RegExp(r'\s+'));
-    final openTracks = <BzTrack>[
-      if (!_searchVideos)
-        for (var i = 0; i < OpenGoldberg.length; i++)
-          if (terms.every(('Bach ${OpenGoldberg.album} ${OpenGoldberg.artist} '
-                  '${OpenGoldberg.title(i)}').toLowerCase().contains))
-            BzTrack(id: OpenGoldberg.id(i), title: OpenGoldberg.title(i),
-                artist: OpenGoldberg.artist, duration: Duration.zero),
-    ];
-    if (openTracks.isNotEmpty) {
-      setState(() { _results = openTracks; _loading = false; });
-    }
     try {
       final isVideoSearch = _searchVideos && !_searchLibrary;
       if (isVideoSearch) {
@@ -214,7 +202,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         if (!mounted || generation != _searchGeneration) return;
         setState(() {
           _loading = false;
-          _results = [...openTracks, if (op is ProviderOk<List<ProviderTrack>>) ...op.value
+          _results = [if (op is ProviderOk<List<ProviderTrack>>) ...op.value
                   .map((track) => BzTrack(
                         id: track.breezzeTrackId,
                         title: track.title,
@@ -232,7 +220,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _loading = false;
-        _results = openTracks;
+        _results = [];
         if (_results.isEmpty) _error = 'Could not reach the music source. Check your connection.';
       });
     }
@@ -475,6 +463,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
       return;
     }
+    if (track.id.startsWith('bz:deezer:')) {
+      final id = track.id.replaceFirst('bz:deezer:', 'bz:deezer_preview:');
+      final preview = TrackInfo(id: id, title: track.title, artist: track.artist,
+          artworkUrl: track.artworkUrl);
+      ref.read(playerControllerProvider.notifier).playTrack(
+        trackId: id, queue: [preview], startIndex: 0, origin: 'search',
+        sourceContext: 'Deezer preview',
+      );
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()));
+      return;
+    }
     if (isMetadataOnlyTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -506,6 +505,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           origin: 'search',
           sourceContext: 'Search',
         );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()));
   }
 
   @override
@@ -714,10 +714,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            OpenGoldberg.audio(track.id) != null
-                                                ? '${track.artist} · Full recording'
-                                                : track.id.startsWith('bz:deezer:')
-                                                ? '${track.artist} · Deezer · Catalogue only'
+                                            track.id.startsWith('bz:deezer:')
+                                                ? '${track.artist} · Deezer preview'
                                                 : track.id.startsWith('bz:youtube_music:')
                                                         ? '${track.artist} · YouTube Music'
                                                         : track.id.startsWith('bz:jamendo:')
@@ -822,7 +820,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       ],
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ||
-                                            (isYouTubeSongId(track.id) || OpenGoldberg.audio(track.id) != null)
+                                            (canQueueTrackId(track.id) || track.id.startsWith('bz:deezer:'))
                                         ? _play(track)
                                         : _openTrack(track),
                                   );
@@ -840,10 +838,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       children: [
         ListTile(
           leading: const BzSvgIcon(name: 'play'),
-          title: const Text('Listen free'),
-          subtitle: const Text('Device files and the Open Goldberg Variations'),
-          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => const FreeMusicScreen())),
+          title: const Text('Open audio files'),
+          onTap: () => pickDeviceAudio(context, ref),
         ),
         if (_recentSearches.isNotEmpty) ...[
           Row(

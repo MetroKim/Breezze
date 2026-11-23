@@ -154,6 +154,9 @@ class BreezzeApi {
   Future<Map<String, dynamic>> searchAllProviders(String query) =>
       _get('/providers/search?q=${Uri.encodeQueryComponent(query)}');
 
+  Future<Map<String, dynamic>> searchDeezer(String query) =>
+      _get('/providers/deezer/search?q=${Uri.encodeQueryComponent(query)}');
+
   Future<Map<String, dynamic>> getProviderTrack(
     String providerId,
     String providerTrackId,

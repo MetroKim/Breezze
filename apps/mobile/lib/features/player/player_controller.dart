@@ -779,7 +779,7 @@ class PlayerController extends Notifier<PlayerState> {
       // Keep the legacy reporter only for local/offline media, which has no
       // server playback session.
       if (source.sessionId == null && !info.id.startsWith('device:') &&
-          !info.id.startsWith('bz:open_goldberg:')) {
+          !isDeezerPreview(info.id) && !isYouTubeSongId(info.id)) {
         unawaited(
           ref.read(playHistoryReporterProvider)(info).catchError((_) {}),
         );

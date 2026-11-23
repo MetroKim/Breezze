@@ -21,6 +21,7 @@ describe('DeezerAdapter', () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true, json: async () => ({ data: [{
         id: 42, title: 'Example Song', duration: 211, link: 'https://www.deezer.com/track/42',
+        preview: 'https://cdnt-preview.dzcdn.net/api/1/clip',
         artist: { name: 'Example Artist' }, album: { cover_medium: 'https://cdn.example/cover.jpg' },
       }] }),
     }) as unknown as typeof fetch;
@@ -28,7 +29,7 @@ describe('DeezerAdapter', () => {
     expect(result).toMatchObject({ kind: 'ok', value: [{
       providerTrackId: '42', title: 'Example Song', artist: 'Example Artist',
       durationSec: 211, artworkUrl: 'https://cdn.example/cover.jpg',
-      sourceUrl: 'https://www.deezer.com/track/42',
+      sourceUrl: 'https://www.deezer.com/track/42', previewUrl: 'https://cdnt-preview.dzcdn.net/api/1/clip',
     }] });
     expect(adapter.capabilities).toMatchObject({ playback: false, availability: false });
     await expect(adapter.resolvePlayback({

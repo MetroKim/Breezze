@@ -19,6 +19,9 @@ void main() {
 
     test('local or backend tracks and approved Jamendo can request playback', () {
       expect(canQueueTrackId('catalog-uuid'), isTrue);
+      expect(canQueueTrackId('bz:deezer_preview:42'), isTrue);
+      expect(canQueueTrackId('bz:deezer_preview:nope'), isFalse);
+      expect(canRequestOfflineDownload('bz:deezer_preview:42'), isFalse);
       expect(canQueueTrackId('bz:jamendo:track-123'), isTrue);
       expect(isMetadataOnlyTrackId('bz:jamendo:track-123'), isFalse);
     });
