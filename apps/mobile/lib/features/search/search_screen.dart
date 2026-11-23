@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
@@ -50,6 +52,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     'City Charts': 'top city charts',
   };
   int _searchGeneration = 0;
+  Timer? _typeaheadTimer;
 
   SearchHistoryStore get _history {
     final auth = ref.read(authSessionProvider);
@@ -69,21 +72,44 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   void dispose() {
+    _typeaheadTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   Future<void> _loadHistory() async {
     try {
+      final auth = ref.read(authSessionProvider);
+      final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
       final history = await _history.load();
       if (!mounted) return;
+      final current = ref.read(authSessionProvider);
+      final currentOwner = current is AuthSignedIn ? current.userId : 'guest';
+      if (ownerId != currentOwner) return;
       setState(() => _recentSearches = history);
     } catch (_) {
       // Search must remain usable when local history storage is unavailable.
     }
   }
 
-  Future<void> _search(String query) async {
+  void _onQueryChanged(String query) {
+    _typeaheadTimer?.cancel();
+    _searchGeneration++;
+    final normalized = query.trim();
+    setState(() {
+      _loading = normalized.length >= 2;
+      _searched = normalized.length >= 2;
+      _results = [];
+      _error = null;
+    });
+    if (normalized.length < 2) return;
+    _typeaheadTimer = Timer(const Duration(milliseconds: 500), () {
+      _search(normalized, recordHistory: false);
+    });
+  }
+
+  Future<void> _search(String query, {bool recordHistory = true}) async {
+    _typeaheadTimer?.cancel();
     final normalized = query.trim();
     if (normalized.isEmpty) return;
 
@@ -96,14 +122,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     // Search history is best-effort local UI state. A disk failure must not
     // prevent the actual catalogue search or masquerade as a provider outage.
-    try {
-      final history = await _history.add(normalized);
-      if (mounted && generation == _searchGeneration) {
-        setState(() => _recentSearches = history);
+    if (recordHistory) {
+      try {
+        final history = await _history.add(normalized);
+        if (mounted && generation == _searchGeneration) {
+          setState(() => _recentSearches = history);
+        }
+      } catch (_) {
+        // Continue with the music-source request even if persistence fails.
       }
-    } catch (_) {
-      // Continue with the music-source request even if persistence fails.
     }
+
+    if (!mounted || generation != _searchGeneration) return;
 
     if (_searchLibrary) {
       try {
@@ -394,16 +424,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _play(BzTrack track) async {
-    // Only dedicated music-video results may open the official YouTube
-    // video player. Song metadata is not a native playback grant.
-    if (track.id.startsWith('bzv:')) {
+    final embeddedId = track.id.startsWith('bzv:')
+        ? track.id.substring(4)
+        : youtubeEmbeddedVideoId(track.id);
+    if (embeddedId != null) {
       // A video is watched in the official visible iframe, never extracted
       // into Breezze's native audio-only playback queue.
       await ref.read(playerControllerProvider.notifier).pause();
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => OfficialMusicVideoScreen(
-          videoId: track.id.substring(4),
+          videoId: embeddedId,
           title: track.title,
           artist: track.artist,
           artworkUrl: track.artworkUrl,
@@ -450,10 +481,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       final previousOwner = previous is AuthSignedIn ? previous.userId : 'guest';
       final nextOwner = next is AuthSignedIn ? next.userId : 'guest';
       if (previousOwner != nextOwner) {
+        _typeaheadTimer?.cancel();
         _searchGeneration++;
         setState(() {
           _recentSearches = [];
           _results = [];
+          _loading = false;
           _searched = false;
           _error = null;
         });
@@ -491,14 +524,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                             tooltip: 'Clear search',
                             icon: BzSvgIcon(name: 'close', color: theme.bzText2),
                             onPressed: () {
-                              _searchGeneration++;
                               _controller.clear();
-                              setState(() {
-                                _loading = false;
-                                _searched = false;
-                                _results = [];
-                                _error = null;
-                              });
+                              _onQueryChanged('');
                             },
                           ),
                     filled: true,
@@ -516,7 +543,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       borderSide: BorderSide(color: theme.bzAccent),
                     ),
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: _onQueryChanged,
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -657,7 +684,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             track.id.startsWith('bz:deezer:')
                                                 ? '${track.artist} · Deezer · Catalogue only'
                                                 : track.id.startsWith('bz:youtube_music:')
-                                                        ? '${track.artist} · YouTube Music · Catalogue only'
+                                                        ? '${track.artist} · YouTube player'
                                                         : track.id.startsWith('bz:jamendo:')
                                                             ? '${track.artist} · Jamendo'
                                                             : track.artist,
@@ -670,10 +697,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         if (track.id.startsWith('bzv:') ||
+                                            youtubeEmbeddedVideoId(track.id) != null ||
                                             canQueueTrackId(track.id))
                                           IconButton(
                                             tooltip: track.id.startsWith('bzv:')
-                                                ? 'Watch music video' : 'Play',
+                                                ? 'Watch music video'
+                                                : youtubeEmbeddedVideoId(track.id) != null
+                                                    ? 'Play in YouTube player'
+                                                    : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
@@ -743,7 +774,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                           ),
                                       ],
                                     ),
-                                    onTap: () => track.id.startsWith('bzv:') ? _play(track) : _openTrack(track),
+                                    onTap: () => track.id.startsWith('bzv:') ||
+                                            youtubeEmbeddedVideoId(track.id) != null
+                                        ? _play(track)
+                                        : _openTrack(track),
                                   );
                                 },
                               ),
