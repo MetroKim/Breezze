@@ -15,13 +15,10 @@ import '../core/database/database_providers.dart';
 import '../core/database/db_instance.dart';
 import '../core/database/favorites_dao.dart';
 import '../features/player/player_controller.dart';
-import '../core/audio/stream_expiry.dart';
-import '../core/audio/youtube_audio_stub.dart'
-    if (dart.library.io) '../core/audio/youtube_audio_native.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// Resolve public audio on the device and keep Deezer previews explicit.
+/// Resolve full recordings through backend sessions and label Deezer previews.
 /// Downloads remain rights-gated. Lyrics
 /// lookup remains keyless through LRCLIB.
 
@@ -186,15 +183,6 @@ class LiveResolver implements PlaybackResolver {
 
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
-    if (isYouTubeSongId(track.id)) {
-      final quality = (await DownloadPreferencesStore().load()).streamingQuality;
-      final ceiling = switch (quality) { 'AAC_128' => 128, 'LOSSLESS' => 1536, _ => 256 };
-      final stream = await resolveYouTubeAudio(track.id.split(':').last, ceilingKbps: ceiling);
-      if (stream != null) {
-        return PlayableSource(trackId: track.id, streamUrl: stream.toString(),
-            expiresAtUtc: streamExpiry(stream));
-      }
-    }
     if (isDeezerPreview(track.id)) {
       try {
         final result = await _ref.read(authSessionProvider.notifier).api

@@ -6,7 +6,7 @@ Breezze is an independent product. It is not affiliated with or endorsed by YouT
 
 ## Product boundaries
 
-- Five primary destinations: Home, Browse, Radio, Library and Search.
+- Four primary destinations: Home, Browse, Library and Search.
 - One global player and queue shared by every screen.
 - No artist portal, artist upload workflow, subscriptions, billing, memberships or paywalls in this release.
 - Artist and album pages are listener-facing catalog experiences only.

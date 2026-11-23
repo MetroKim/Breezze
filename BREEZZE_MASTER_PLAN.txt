@@ -1,0 +1,22 @@
+BREEZZE
+Master plan and release criteria
+
+Product
+Free, listener-first music streaming on Android and iOS. Home presents listening history, mixes and releases. Browse presents charts, moods and editorial collections. Library holds saved music, playlists, downloads and device files. Search unifies songs, albums, artists and playlists. Audio playback is the primary experience. Music video is a separate listener action. Exclude radio, subscriptions, paywalls, ads and artist uploads.
+
+Provider contract
+Use Flutter with Riverpod and a single queue. NestJS owns canonical identities and playback decisions. Python exposes ytmusicapi metadata behind the gateway. Search and collection responses contain metadata only. A song's play request uses its canonical ID or a server-resolvable provider ID. Resolve a full recording only when a provider or a Breezze master grants playback for that listener and territory. Return source, quality and expiry. A Deezer preview is a separate, visibly labelled clip. A shared personal account cookie does not establish a full-catalog grant.
+
+Normalize recordings using ISRC when available. Preserve edition, duration, artist credits and source IDs. Cache metadata in Redis and Postgres. Bound playback cache entries by grant expiry, listener and territory. Keep credentials on the server. Support anonymous discovery and optional authenticated sync. Distinguish a regional denial, an unmatched recording and a temporary outage.
+
+Execution and acceptance
+1. Foundation. Rename the repository to MetroKim/Breezze, verify redirects, remotes, CI and hosting integrations. Align branding, launcher, splash, display names and package metadata. Keep Home, Browse, Library and Search across device layouts.
+2. Theme. Derive the Material color schemes from the launcher icon. Test fallback swatches, high contrast, light and dark appearances, and dynamic type. Use separate artwork-based colors on Now Playing.
+3. Shell. Keep the mini-player and full player bound to one controller. Support accessible transport controls, artwork expansion, reduced motion, queue navigation and responsive layout.
+4. Catalog. Implement typed metadata routes for search, tracks, albums, artists, playlists, charts, moods and related music. Wire all four destinations. Verify provider failures independently and test duplicate releases, missing artwork and empty results.
+5. Listening. Verify full-track audio through a backend-authorized source, expiry and retry, queue edits, background media controls, interruptions and offline grants. Test time to first audio and transitions on devices. Track preview success separately from full-track success.
+6. Polish. Parse line and enhanced word timestamps, offsets and missing lyrics. Test line seeking, scroll behavior, accessibility and artwork caching. Keep analytics opt-in.
+7. Release. Test Android and iOS builds on physical devices, including background playback on Xiaomi, Huawei and Oppo, lock-screen seeking, Bluetooth, airplane mode and account isolation. Prepare store metadata and signing under the publisher's account. Record test evidence before publishing.
+
+Implementation baseline
+Retain the existing Drift database and audio_service bridge while verifying the acceptance criteria. Migration to another storage or background-audio package needs an explicit benefit and a tested path for existing listeners. Treat store publication and provider delivery as separate release gates.

@@ -390,6 +390,9 @@ class _MiniPlayer extends ConsumerWidget {
               children: [
                 Row(
                   children: [
+                    HeroMode(
+                      enabled: track != null && !MediaQuery.disableAnimationsOf(context),
+                      child: Hero(tag: 'now-playing-art:${track?.id}', child:
                     ClipRRect(
                       borderRadius: BorderRadius.circular(BzRadius.artwork),
                       child: track?.artworkUrl != null
@@ -402,7 +405,7 @@ class _MiniPlayer extends ConsumerWidget {
                                   _MiniArtwork(color: theme.bzText2),
                             )
                           : _MiniArtwork(color: theme.bzText2),
-                    ),
+                    ))),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(

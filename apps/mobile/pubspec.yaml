@@ -1,5 +1,5 @@
 name: breezze
-description: Breezze — music discovery, streaming, library and listening platform.
+description: Free, listener-first music streaming with discovery, playlists and offline listening.
 publish_to: 'none'
 version: 0.1.0
 
@@ -42,7 +42,6 @@ dependencies:
   http: ^1.2.1
   url_launcher: ^6.3.2
   # Official YouTube IFrame player for supported embedded platforms.
-  youtube_explode_dart: 3.1.0
   youtube_player_iframe: 5.2.2
   connectivity_plus: ^6.1.0
   flutter_secure_storage: ^9.2.4

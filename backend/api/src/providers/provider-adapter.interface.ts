@@ -16,7 +16,6 @@ export interface ProviderCapabilities {
   charts?: boolean;
   genres?: boolean;
   moods?: boolean;
-  radio?: boolean;
   lyrics?: boolean;
 }
 

@@ -13,7 +13,6 @@ import { PlaylistsModule } from './playlists/playlists.module';
 import { DownloadsModule } from './downloads/downloads.module';
 import { HomeModule } from './home/home.module';
 import { LyricsModule } from './lyrics/lyrics.module';
-import { RadioModule } from './radio/radio.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ReplayModule } from './replay/replay.module';
@@ -42,7 +41,6 @@ import { CloudflareAwareThrottlerGuard } from './cloudflare-aware-throttler.guar
     DownloadsModule,
     HomeModule,
     LyricsModule,
-    RadioModule,
     RecommendationsModule,
     OnboardingModule,
     ReplayModule,

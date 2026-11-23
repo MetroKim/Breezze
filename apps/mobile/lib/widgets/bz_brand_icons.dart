@@ -21,7 +21,6 @@ class BzSvgIcon extends StatelessWidget {
     'wifi-off': '<path d="M3 3 21 21M8.5 8.5A12 12 0 0 1 21 12M5 12a12 12 0 0 1 2.2-1.2M2 8a16 16 0 0 1 3.2-2M12 20h.01" />',
     'music-note': '<path d="M14.5 4.25v11.2a3.1 3.1 0 1 1-1.8-2.82V7.1l7-1.55v8.4a3.1 3.1 0 1 1-1.8-2.82V3.6l-3.4.65Z" />',
     'download': '<path d="M12 3.75v10.5m-4-4 4 4 4-4M4.5 16.5v2A1.75 1.75 0 0 0 6.25 20.25h11.5a1.75 1.75 0 0 0 1.75-1.75v-2" />',
-    'radio': '<rect x="3.5" y="8" width="17" height="12" rx="2"/><path d="m7 8 9-4M7.5 12.5h.01M11 12.5h.01M7 16h4m3.5-3.5h3"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     'plus': '<path d="M12 5v14M5 12h14"/>',
