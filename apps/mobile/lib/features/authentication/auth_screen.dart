@@ -209,6 +209,45 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 child: const Text('Browse music'),
               ),
               const SizedBox(height: 12),
+              if (SupabaseAuthBridge.enabled &&
+                  (SupabaseAuthBridge.nativeAppleReady ||
+                      SupabaseAuthBridge.nativeGoogleReady)) ...[
+                if (SupabaseAuthBridge.nativeAppleReady) ...[
+                  _socialButton(
+                    label: 'Continue with Apple',
+                    isApple: true,
+                    enabled: !busy,
+                    onPressed: () => ref
+                        .read(authSessionProvider.notifier)
+                        .socialLogin('apple'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (SupabaseAuthBridge.nativeGoogleReady) ...[
+                  _socialButton(
+                    label: 'Continue with Google',
+                    isApple: false,
+                    enabled: !busy,
+                    onPressed: () => ref
+                        .read(authSessionProvider.notifier)
+                        .socialLogin('google'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: theme.bzSeparator)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Text('or use email',
+                          style: TextStyle(color: theme.bzText2, fontSize: 12)),
+                    ),
+                    Expanded(child: Divider(color: theme.bzSeparator)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
               if (!SupabaseAuthBridge.enabled) ...[
               FutureBuilder<Map<String, dynamic>>(
                 future: _socialProviders,
@@ -684,8 +723,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         return 'This email has an existing Breezze account. Use the old sign-in until account linking is available.';
       case 'SUPABASE_AUTH_FAILED':
         return 'Secure sign-in could not be completed. Check your details and try again.';
+      case 'SOCIAL_PROVIDER_NOT_CONFIGURED':
+        return 'This provider is not configured on this device yet.';
+      case 'HTTP_409':
+        return 'An existing Breezze account needs secure linking before social sign-in can continue.';
       case 'SUPABASE_SOCIAL_NOT_READY':
-        return 'Google and Apple sign-in will appear after the native provider setup is verified.';
+        return 'Native provider configuration is still pending.';
       default:
         return 'Something went wrong. Try again.';
     }

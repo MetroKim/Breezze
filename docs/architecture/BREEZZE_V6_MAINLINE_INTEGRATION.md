@@ -93,3 +93,49 @@
 - Existing release blockers: `docs/audit/gap-register.md`
 
 This is the **mainline migration contract**, not a second pretend repository tree. Each new directory must contain implemented, tested code before it is listed as complete.
+
+
+## 7. Native social sign-in implementation (Feature 2)
+
+The Flutter login screen now calls the **existing** `AuthSessionController.socialLogin()`.
+With Supabase enabled, it uses native Google (Android/iOS) or Apple (iOS);
+in legacy mode, the old provider flow remains for rollback. No extra login
+page, auth provider, or browser fallback was added.
+
+**Runtime activation requires all three independent layers:**
+
+1. Flutter `--dart-define=BREEZZE_SUPABASE_URL=...` and
+   `BREEZZE_SUPABASE_PUBLISHABLE_KEY=...`. These are public client
+   configuration values; NEVER ship service-role keys.
+2. Backend `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`; the verified
+   exchange endpoint remains inactive until both are present.
+3. Google/Apple identity-provider registration and mobile platform signing:
+   - Google Android: configure Android OAuth app ID/package and both debug
+     and release SHA certificate fingerprints in Google Cloud, plus the
+     Web/server OAuth client registered with Supabase. Pass
+     `BREEZZE_GOOGLE_WEB_CLIENT_ID` to the Flutter build.
+   - Google iOS: register its bundle ID and iOS OAuth client in Google Cloud;
+     pass `BREEZZE_GOOGLE_IOS_CLIENT_ID` to the Flutter build **and**
+     to `tool/generate_platform_targets.sh` as an environment variable so
+     it installs the reversed client ID URL scheme in generated Info.plist.
+   - Apple iOS: register Breezze's exact bundle ID under Apple Developer,
+     enable the **Sign in with Apple** capability in Apple Developer and the
+     Runner provisioning profile/entitlements, then add that App ID to the
+     Supabase Apple Auth provider. Only after the native capability is signed
+     and verified should the Flutter build set
+     `--dart-define=BREEZZE_APPLE_NATIVE_ENABLED=true`.
+     This intentionally does not enable browser-based Apple OAuth.
+
+**Fail-closed behavior:** No configured provider means no native button.
+Cancelled system authorization does not create a Breezze session. Token
+verification or account-mapping failures clear the transient local Supabase
+session. Existing account email matches require **explicit** legacy account
+ownership verification; no automatic linking. Cross-platform desktop/web
+native Google/Apple support is a separate gated feature; email login remains
+available.
+
+**Device certification remains open:** Verify Google on real Android/iOS
+signing identities, Apple on an Apple Developer-provisioned iOS build, and
+cross-account legacy data isolation. Emulator/source builds alone do not
+prove that an OAuth provider has been configured or that the system sheet
+can successfully issue a token.

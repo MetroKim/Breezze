@@ -267,7 +267,7 @@ class AuthSessionController extends Notifier<AuthState> {
     Map<String, dynamic>? preparedFlow,
   }) async {
     if (SupabaseAuthBridge.enabled) {
-      state = const AuthError('SUPABASE_SOCIAL_NOT_READY');
+      await _signInWithNativeSupabase(provider);
       return;
     }
     final attempt = ++_socialAttempt;
@@ -322,6 +322,53 @@ class AuthSessionController extends Notifier<AuthState> {
       if (attempt == _socialAttempt) state = AuthError(e.code);
     } catch (_) {
       if (attempt == _socialAttempt) state = const AuthError('SOCIAL_AUTH_FAILED');
+    }
+  }
+
+  /// Native social identity is verified by Supabase before Breezze sees a
+  /// short-lived access token. A failed exchange never leaves a half-signed-in
+  /// Supabase session that could later impersonate another Breezze account.
+  Future<void> _signInWithNativeSupabase(String provider) async {
+    if (!SupabaseAuthBridge.readyFor(provider)) {
+      state = const AuthError('SOCIAL_PROVIDER_NOT_CONFIGURED');
+      return;
+    }
+    final attempt = ++_socialAttempt;
+    state = const AuthSigningIn(social: true);
+    try {
+      final token = provider == 'google'
+          ? await SupabaseAuthBridge.signInWithNativeGoogle()
+          : await SupabaseAuthBridge.signInWithNativeApple();
+
+      if (attempt != _socialAttempt) {
+        await SupabaseAuthBridge.client.auth.signOut(
+          scope: SignOutScope.local,
+        );
+        return;
+      }
+      await _exchangeSupabaseSession(token);
+      if (attempt != _socialAttempt) {
+        // A user canceled while the exchange was in flight. Never revive it.
+        await signOut();
+      }
+    } on NativeSocialLoginCancelled {
+      if (attempt == _socialAttempt) state = const AuthSignedOut();
+    } on BreezzeApiException catch (error) {
+      if (attempt != _socialAttempt) return;
+      try {
+        await SupabaseAuthBridge.client.auth.signOut(
+          scope: SignOutScope.local,
+        );
+      } catch (_) {}
+      state = AuthError(error.code);
+    } catch (_) {
+      if (attempt != _socialAttempt) return;
+      try {
+        await SupabaseAuthBridge.client.auth.signOut(
+          scope: SignOutScope.local,
+        );
+      } catch (_) {}
+      state = const AuthError('SOCIAL_AUTH_FAILED');
     }
   }
 
@@ -400,6 +447,7 @@ class AuthSessionController extends Notifier<AuthState> {
       }
     }
     if (SupabaseAuthBridge.enabled) {
+      await SupabaseAuthBridge.signOutNativeGoogle();
       try {
         await SupabaseAuthBridge.client.auth.signOut();
       } catch (_) {

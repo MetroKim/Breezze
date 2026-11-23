@@ -26,7 +26,9 @@ flutter create \
 # The repository intentionally keeps one shared Dart app; these are thin native
 # service declarations, not separate platform application implementations.
 python3 - "${APP_DIR}" <<'PY'
+import os
 import plistlib
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -154,6 +156,27 @@ if ios_plist.exists():
     modes = values.setdefault("UIBackgroundModes", [])
     if "audio" not in modes:
         modes.append("audio")
+
+    # Native Google sign-in requires a registered reverse-client-ID callback.
+    # Pass the same iOS OAuth client ID here and via Flutter --dart-define.
+    ios_client_id = os.environ.get("BREEZZE_GOOGLE_IOS_CLIENT_ID", "").strip()
+    if ios_client_id:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+\\.apps\\.googleusercontent\\.com", ios_client_id):
+            raise SystemExit("Invalid BREEZZE_GOOGLE_IOS_CLIENT_ID")
+        scheme = "com.googleusercontent.apps." + ios_client_id.split(".")[0]
+        schemes = values.setdefault("CFBundleURLTypes", [])
+        registered = {
+            item
+            for entry in schemes if isinstance(entry, dict)
+            for item in entry.get("CFBundleURLSchemes", [])
+        }
+        if scheme not in registered:
+            schemes.append({
+                "CFBundleTypeRole": "Editor",
+                "CFBundleURLSchemes": [scheme],
+            })
+        values["GIDClientID"] = ios_client_id
+
     with ios_plist.open("wb") as target:
         plistlib.dump(values, target)
 
