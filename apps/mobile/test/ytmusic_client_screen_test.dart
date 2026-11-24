@@ -16,6 +16,7 @@ class _ClientApi extends BreezzeApi {
   bool accountAvailable = true;
   bool accountConnected = true;
   int accountPlaylistCalls = 0;
+  int accountItemCalls = 0;
   int disconnectCalls = 0;
 
   @override
@@ -33,6 +34,23 @@ class _ClientApi extends BreezzeApi {
       'scope': 'read_only_youtube_playlists',
       'items': [
         {'playlistId': 'OLAK5uy_abcdefghij', 'title': 'My Saved Playlist'},
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> youtubeAccountPlaylistItems(String playlistId) async {
+    expect(playlistId, 'OLAK5uy_abcdefghij');
+    accountItemCalls++;
+    return {
+      'source': 'youtube_data_api',
+      'playlistId': playlistId,
+      'hasMore': false,
+      'items': [
+        {'videoId': 'abcdefghijk', 'title': 'Connected Playlist Song',
+          'artist': 'Connected Artist', 'playback': 'visible_youtube_only'},
+        {'videoId': 'invalid', 'title': 'Invalid Item',
+          'artist': 'Untrusted'},
       ],
     };
   }
@@ -247,6 +265,25 @@ void main() {
     expect(api.disconnectCalls, 1);
     expect(find.text('My Saved Playlist'), findsNothing);
     expect(find.text('Connect YouTube'), findsOneWidget);
+  });
+
+  testWidgets('linked account playlist opens read-only video items in Breezze',
+      (tester) async {
+    final api = _ClientApi();
+    await _mount(tester, api, signedIn: true);
+
+    await tester.tap(find.text('My Saved Playlist'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connected Playlist Song'), findsOneWidget);
+    expect(find.textContaining('videos use the official YouTube player'),
+        findsOneWidget);
+    expect(api.accountItemCalls, 1);
+    final invalid = find.ancestor(
+      of: find.text('Invalid Item'),
+      matching: find.byType(ListTile),
+    );
+    expect(tester.widget<ListTile>(invalid).onTap, isNull);
   });
 
   testWidgets('does not enable Google consent button without configured credentials',
