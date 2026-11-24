@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../video/official_music_video_screen.dart';
+import '../video/open_youtube_player.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -102,6 +103,17 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
+    if (isYouTubeSongId(selected.id)) {
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: selected.id.substring('bz:youtube_music:'.length),
+        title: selected.title,
+        artist: selected.artist,
+        artworkUrl: selected.artworkUrl,
+      );
+      return;
+    }
     if (!canQueueTrackId(selected.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -694,6 +706,17 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
+    if (isYouTubeSongId(selected.id)) {
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: selected.id.substring('bz:youtube_music:'.length),
+        title: selected.title,
+        artist: selected.artist,
+        artworkUrl: selected.artworkUrl,
+      );
+      return;
+    }
     if (!canQueueTrackId(selected.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
