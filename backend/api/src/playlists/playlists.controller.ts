@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ArrayUnique, IsArray, IsString, MaxLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PlaylistsService } from './playlists.service';
@@ -17,12 +17,21 @@ export class CreatePlaylistDto {
   @IsString()
   @MaxLength(128)
   name!: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  id?: string;
 }
 
 export class RenamePlaylistDto {
   @IsString()
   @MaxLength(128)
   name!: string;
+}
+
+export class PinPlaylistDto {
+  @IsBoolean()
+  pinned!: boolean;
 }
 
 export class AddTrackDto {
@@ -47,7 +56,7 @@ export class PlaylistsController {
     @CurrentUser() userId: string,
     @Body() dto: CreatePlaylistDto,
   ) {
-    return this.playlists.create(userId, dto.name);
+    return this.playlists.create(userId, dto.name, dto.id);
   }
 
   @Get()
@@ -58,6 +67,15 @@ export class PlaylistsController {
   @Get(':id')
   get(@CurrentUser() userId: string, @Param('id') id: string) {
     return this.playlists.get(userId, id);
+  }
+
+  @Patch(':id/pin')
+  setPinned(
+    @CurrentUser() userId: string,
+    @Param('id') id: string,
+    @Body() dto: PinPlaylistDto,
+  ) {
+    return this.playlists.setPinned(userId, id, dto.pinned);
   }
 
   @Patch(':id')

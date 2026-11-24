@@ -5,22 +5,58 @@ import { PrismaService } from '../prisma.service';
 export class LibraryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listFollowedArtists(userId: string) {
+    const items = await this.prisma.userFollowedArtist.findMany({
+      where: { userId },
+      orderBy: [{ isPinned: 'desc' }, { followedAt: 'desc' }, { artistKey: 'asc' }],
+      select: { artistKey: true, displayName: true, isPinned: true, followedAt: true },
+    });
+    return { items };
+  }
+
   async artistStatus(userId: string, artistKey: string) {
     const row = await this.prisma.userFollowedArtist.findUnique({
       where: { userId_artistKey: { userId, artistKey } },
     });
-    return { following: row !== null };
+    return { following: row !== null, isPinned: row?.isPinned ?? false };
   }
 
-  async setFollowing(userId: string, artistKey: string, following: boolean) {
+  async setFollowing(
+    userId: string, artistKey: string, following: boolean, displayName?: string,
+  ) {
     if (following) {
+      const name = displayName?.trim() || null;
+      // Concurrent follow taps must never race on the composite primary key.
+      // PostgreSQL INSERT ... ON CONFLICT DO NOTHING is atomic, unlike a
+      // client-side read-then-insert upsert fallback.
       await this.prisma.userFollowedArtist.createMany({
-        data: [{ userId, artistKey }], skipDuplicates: true,
+        data: [{ userId, artistKey, displayName: name }],
+        skipDuplicates: true,
       });
+      // Metadata-only updates never reset an existing user-selected pin.
+      if (name !== null) {
+        await this.prisma.userFollowedArtist.updateMany({
+          where: { userId, artistKey },
+          data: { displayName: name },
+        });
+      }
     } else {
-      await this.prisma.userFollowedArtist.deleteMany({ where: { userId, artistKey } });
+      await this.prisma.userFollowedArtist.deleteMany({
+        where: { userId, artistKey },
+      });
     }
     return { following };
+  }
+
+  async setArtistPinned(userId: string, artistKey: string, pinned: boolean) {
+    const updated = await this.prisma.userFollowedArtist.updateMany({
+      where: { userId, artistKey },
+      data: { isPinned: pinned },
+    });
+    if (updated.count !== 1) {
+      throw new NotFoundException('ARTIST_NOT_FOLLOWED');
+    }
+    return { following: true, isPinned: pinned };
   }
 
   private static readonly savedAlbumSource = 'apple_itunes';
@@ -63,7 +99,7 @@ export class LibraryService {
     }
     const rows = await this.prisma.userSavedCatalogAlbum.findMany({
       where: { userId, source: LibraryService.savedAlbumSource },
-      orderBy: [{ savedAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isPinned: 'desc' }, { savedAt: 'desc' }, { id: 'desc' }],
       take: 101,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
@@ -76,6 +112,7 @@ export class LibraryService {
         catalogUrl: true,
         genres: true,
         isCompilation: true,
+        isPinned: true,
         savedAt: true,
         updatedAt: true,
       },
@@ -97,6 +134,7 @@ export class LibraryService {
       catalogUrl?: string;
       genres?: string[];
       isCompilation?: boolean;
+      isPinned?: boolean;
     },
   ) {
     const source = LibraryService.savedAlbumSource;
@@ -120,8 +158,11 @@ export class LibraryService {
       where: {
         userId_source_externalAlbumId: { userId, source, externalAlbumId },
       },
-      create: { userId, source, externalAlbumId, ...payload },
-      update: payload,
+      create: { userId, source, externalAlbumId, ...payload, isPinned: dto.isPinned === true },
+      update: {
+        ...payload,
+        ...(dto.isPinned === undefined ? {} : { isPinned: dto.isPinned }),
+      },
       select: {
         id: true,
         source: true,
@@ -132,6 +173,7 @@ export class LibraryService {
         catalogUrl: true,
         genres: true,
         isCompilation: true,
+        isPinned: true,
         savedAt: true,
         updatedAt: true,
       },
@@ -156,7 +198,19 @@ export class LibraryService {
     return this.prisma.favorite.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, trackId: true, createdAt: true },
+      select: {
+        id: true,
+        trackId: true,
+        createdAt: true,
+        track: {
+          select: {
+            id: true,
+            title: true,
+            duration: true,
+            artist: { select: { name: true } },
+          },
+        },
+      },
     });
   }
 

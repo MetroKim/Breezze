@@ -80,6 +80,34 @@ describe('Saved catalog albums: owner isolation and rights boundaries', () => {
     );
   });
 
+  it('preserves pin status on unrelated metadata updates', async () => {
+    prisma.userSavedCatalogAlbum.upsert.mockResolvedValue({ externalAlbumId: '123' });
+    await service.upsertSavedAlbum('user-a', {
+      externalAlbumId: '123', title: 'Album', artist: 'Artist',
+    });
+    expect(prisma.userSavedCatalogAlbum.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ isPinned: false }),
+        update: expect.not.objectContaining({ isPinned: expect.anything() }),
+      }),
+    );
+    await service.upsertSavedAlbum('user-a', {
+      externalAlbumId: '123', title: 'Album', artist: 'Artist', isPinned: true,
+    });
+    expect(prisma.userSavedCatalogAlbum.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ isPinned: true }),
+        update: expect.objectContaining({ isPinned: true }),
+      }),
+    );
+    await service.upsertSavedAlbum('user-a', {
+      externalAlbumId: '123', title: 'Album', artist: 'Artist', isPinned: false,
+    });
+    expect(prisma.userSavedCatalogAlbum.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ isPinned: false }) }),
+    );
+  });
+
   it('rejects untrusted catalog URLs without any DB write', async () => {
     await expect(service.upsertSavedAlbum('user-a', {
       externalAlbumId: '123',

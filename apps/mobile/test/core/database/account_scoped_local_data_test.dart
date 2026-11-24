@@ -1,10 +1,60 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:breezze/core/api/breezze_api.dart';
+import 'package:breezze/core/auth/auth_session.dart';
+import 'package:breezze/core/database/database_providers.dart';
+import 'package:breezze/core/database/outbox_sync_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:breezze/core/database/breezze_database.dart';
 import 'package:breezze/core/database/favorites_dao.dart';
 import 'package:breezze/core/database/recently_played_dao.dart';
 import 'package:breezze/core/database/sync_outbox_dao.dart';
+
+class _ControlledFavoritesApi extends BreezzeApi {
+  _ControlledFavoritesApi() : super(baseUrl: 'https://api.breezze.test') {
+    accessToken = 'session-a';
+  }
+
+  final beganAdd = Completer<void>();
+  final resumeAdd = Completer<void>();
+  final cloud = <String>{};
+  var _firstAdd = true;
+
+  @override
+  Future<Map<String, dynamic>> addFavorite(String trackId) async {
+    if (_firstAdd) {
+      _firstAdd = false;
+      beganAdd.complete();
+      await resumeAdd.future;
+    }
+    cloud.add(trackId);
+    return {'trackId': trackId};
+  }
+
+  @override
+  Future<void> removeFavorite(String trackId) async {
+    cloud.remove(trackId);
+  }
+}
+
+class _TestAuth extends AuthSessionController {
+  _TestAuth(this.testApi);
+  final BreezzeApi testApi;
+
+  @override
+  BreezzeApi get api => testApi;
+
+  @override
+  AuthState build() =>
+      const AuthSignedIn(userId: 'user-a', email: 'a@example.com');
+
+  void switchTo(String ownerId) {
+    state = AuthSignedIn(userId: ownerId, email: '$ownerId@example.com');
+  }
+}
 
 void main() {
   late BreezzeDatabase db;
@@ -89,7 +139,8 @@ void main() {
     expect(userBOps.map((op) => op.trackId), ['user-b::track-2']);
   });
 
-  test('removing a favorite before sync cancels its queued add', () async {
+  test('offline remove keeps an ordered cloud compensation after pending add',
+      () async {
     await favorites.add(
       id: 'new-track',
       title: 'New song',
@@ -97,12 +148,105 @@ void main() {
       ownerId: 'user-a',
     );
 
-    expect((await outbox.pending(ownerId: 'user-a')).length, 1);
-
     await favorites.remove('new-track', ownerId: 'user-a');
 
-    expect(await outbox.pending(ownerId: 'user-a'), isEmpty);
+    expect((await outbox.pending(ownerId: 'user-a'))
+        .map((op) => op.op).toList(),
+      ['favorite.add', 'favorite.remove']);
     expect(await favorites.list(ownerId: 'user-a'), isEmpty);
+    expect(await favorites.reconcileCloud(
+      ownerId: 'user-a',
+      tracks: const [],
+    ), isFalse);
+  });
+
+  test('removal during an in-flight add is drained before returning', () async {
+    const id = '11111111-1111-4111-8111-111111111111';
+    final api = _ControlledFavoritesApi();
+    final container = ProviderContainer(overrides: [
+      authSessionProvider.overrideWith(() => _TestAuth(api)),
+      breezzeDatabaseProvider.overrideWithValue(db),
+    ]);
+    addTearDown(container.dispose);
+
+    await favorites.add(
+      id: id, title: 'A song', artist: 'An artist', ownerId: 'user-a',
+    );
+    final syncing = container.read(outboxSyncProvider).drainIfSignedIn();
+    await api.beganAdd.future.timeout(const Duration(seconds: 15));
+    await favorites.remove(id, ownerId: 'user-a');
+    api.resumeAdd.complete();
+    await syncing;
+
+    expect(api.cloud, isEmpty);
+    expect(await favorites.list(ownerId: 'user-a'), isEmpty);
+    expect(await outbox.pending(ownerId: 'user-a'), isEmpty);
+  });
+
+  test('a token rotation during network add never acknowledges old outbox',
+      () async {
+    const id = '22222222-2222-4222-8222-222222222222';
+    final api = _ControlledFavoritesApi();
+    final container = ProviderContainer(overrides: [
+      authSessionProvider.overrideWith(() => _TestAuth(api)),
+      breezzeDatabaseProvider.overrideWithValue(db),
+    ]);
+    addTearDown(container.dispose);
+
+    await favorites.add(
+      id: id, title: 'A song', artist: 'An artist', ownerId: 'user-a',
+    );
+    final service = container.read(outboxSyncProvider);
+    final syncing = service.drainIfSignedIn();
+    await api.beganAdd.future.timeout(const Duration(seconds: 15));
+    api.accessToken = 'session-rotated';
+    api.resumeAdd.complete();
+    await syncing;
+
+    expect((await outbox.pending(ownerId: 'user-a')).single.op,
+        'favorite.add');
+    await service.drainIfSignedIn(); // idempotent replay on new session
+    expect(api.cloud, {id});
+    expect(await outbox.pending(ownerId: 'user-a'), isEmpty);
+  });
+
+  test('a switch to another account cannot acknowledge old account operations',
+      () async {
+    const id = '33333333-3333-4333-8333-333333333333';
+    final api = _ControlledFavoritesApi();
+    final container = ProviderContainer(overrides: [
+      authSessionProvider.overrideWith(() => _TestAuth(api)),
+      breezzeDatabaseProvider.overrideWithValue(db),
+    ]);
+    addTearDown(container.dispose);
+
+    await favorites.add(
+      id: id, title: 'A song', artist: 'An artist', ownerId: 'user-a',
+    );
+    final service = container.read(outboxSyncProvider);
+    final syncing = service.drainIfSignedIn();
+    await api.beganAdd.future.timeout(const Duration(seconds: 15));
+    final auth = container.read(authSessionProvider.notifier) as _TestAuth;
+    auth.switchTo('user-b');
+    api.resumeAdd.complete();
+    await syncing;
+
+    expect((await outbox.pending(ownerId: 'user-a')).single.op,
+        'favorite.add');
+    expect(await outbox.pending(ownerId: 'user-b'), isEmpty);
+    auth.switchTo('user-a');
+    await service.drainIfSignedIn();
+    expect(await outbox.pending(ownerId: 'user-a'), isEmpty);
+  });
+
+  test('guest favorite changes do not accumulate cloud outbox entries', () async {
+    await favorites.add(
+      id: 'guest-track', title: 'Guest song', artist: 'Guest',
+    );
+    await favorites.remove('guest-track');
+    expect(await outbox.pending(ownerId: 'guest'), isEmpty);
+    final all = await db.select(db.syncOutbox).get();
+    expect(all, isEmpty);
   });
 
   test('legacy unscoped rows remain visible only in the guest namespace', () async {

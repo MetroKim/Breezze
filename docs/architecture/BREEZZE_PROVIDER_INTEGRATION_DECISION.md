@@ -1,6 +1,6 @@
 # Breezze Provider Integration Decision
 
-**Status:** Approved architecture; provider credentials and legal/operational verification still required  
+**Status:** Two-source implementation adopted; provider rights/operational release gates remain  
 **Scope:** Catalog discovery, provider matching, playback resolution and failover  
 **Non-goal:** Hosting or proxying third-party music files
 
@@ -10,13 +10,13 @@ Breezze uses a provider-neutral resolver behind the NestJS API. No client or scr
 
 | Role | Provider | Decision |
 |---|---|---|
-| Native playback | Audius official API | First third-party playback adapter; public, ungated and API-accessible tracks only; gated/restricted tracks are rejected |
-| YouTube Music catalog/search | `ytmusicapi` | Metadata/discovery only; never a native audio source or download path |
+| YouTube Music catalog/search | `ytmusicapi` | Metadata/discovery only; never an unauthorized native audio source or download path |
+| Deezer catalog/search | Official public metadata API | Metadata and short previews only; no full-track rights |
 | Apple RSS / iTunes | Official public catalog feeds/APIs | Metadata, charts and release discovery only; no full-track playback authorization |
 | MusicAPI Core | Optional future catalog integration | Not connected; credentials, plan, coverage, rate limits and terms must be reviewed before implementation |
 | Liner Desktop | External desktop product | Not an embeddable/server-side fallback; no code, assets, algorithms or private API behavior may be reused without written authorization |
 
-Audius is the first official third-party playback adapter in the current Breezze implementation. It is deliberately restricted to public, ungated tracks that the official API allows the app to access. This is not a complete commercial music catalog. `ytmusicapi` is an unofficial YouTube Music client API and is metadata/discovery only; it does not provide Breezze with a streaming licence. MusicAPI Core remains an optional future catalog candidate and is not connected.
+**Current provider policy (24 November 2026):** Only YouTube Music and Deezer are connected as external music sources. Audius and Jamendo are removed. `ytmusicapi` is an unofficial YouTube Music metadata client and does not grant music-streaming rights; Deezer's previews similarly do not authorize commercial full-track streaming. Additional historical candidates listed below are **not connected**.
 
 ## 2. Liner Desktop restriction
 

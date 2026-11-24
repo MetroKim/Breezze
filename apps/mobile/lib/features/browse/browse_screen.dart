@@ -7,11 +7,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../video/official_music_video_screen.dart';
+import '../video/device_video.dart';
+import '../video/open_youtube_player.dart';
+import 'ytmusic_client_screen.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
+import '../../features/player/now_playing_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Browse uses live source search for genre discovery. It does not label
@@ -92,8 +96,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   void _openCollection(_BrowseDestination destination) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _BrowseCollectionScreen(destination: destination),
+      MaterialPageRoute<void>(
+        builder: (_) => destination.title == 'YouTube Music'
+            ? const YouTubeMusicClientScreen()
+            : _BrowseCollectionScreen(destination: destination),
       ),
     );
   }
@@ -101,6 +107,17 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
+    if (isYouTubeSongId(selected.id)) {
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: selected.id.substring('bz:youtube_music:'.length),
+        title: selected.title,
+        artist: selected.artist,
+        artworkUrl: selected.artworkUrl,
+      );
+      return;
+    }
     if (!canQueueTrackId(selected.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -156,7 +173,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                   // Capsule pill genre rail — spec §2.3 tab indicators use
                   // --radius-pill. Same treatment as Library and Search.
                   SizedBox(
-                    height: 36,
+                    height: 52,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _genres.length,
@@ -164,7 +181,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                       itemBuilder: (context, index) {
                         final genre = _genres[index];
                         final selected = genre == _selectedGenre;
-                        return _BrowsePill(
+                        return BzFilterPill(
                           label: genre,
                           active: selected,
                           onTap: () => _loadGenre(genre),
@@ -374,6 +391,8 @@ class _BrowseDestination {
         return 'Upcoming release announcements need verified artist, release-date and territory metadata.';
       case 'Music Videos':
         return 'An authorized video catalog and playback permissions are not connected.';
+      case 'Breezze Videos':
+        return 'No rights-cleared Breezze video files are available in this territory.';
       case 'City Charts':
         return 'City-level rankings require a verified local chart provider and a documented methodology.';
       case 'Upcoming Concerts':
@@ -418,15 +437,17 @@ class _BrowseDestination {
 }
 
 const _browseDestinations = <_BrowseDestination>[
+  _BrowseDestination('YouTube Music', 'Explore public releases, trending songs, moods and playlists in Breezze.', 'music-note'),
   _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
   _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
-  _BrowseDestination('Daily Top 100', 'Apple Music Daily Global Top 100 for the selected territory.', 'star'),
+  _BrowseDestination('Daily Top 100', 'Daily chart where available; otherwise labeled regional most-played results.', 'star'),
   _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
-  _BrowseDestination('Music Videos', 'Music videos from channel owners verified by Breezze.', 'video'),
+  _BrowseDestination('Music Videos', 'Official music video discovery from YouTube Music; opens video playback separately.', 'video'),
+  _BrowseDestination('Breezze Videos', 'Rights-cleared videos available for native playback and eligible offline downloads.', 'video'),
   _BrowseDestination('Charts', 'Global, regional and genre charts with source attribution.', 'grid'),
   _BrowseDestination('Browse by Genre', 'Explore catalog music by genre and subgenre.', 'compass'),
-  _BrowseDestination('Moods & Activities', 'Curated listening collections for moods and activities.', 'favorite'),
+  _BrowseDestination('Moods & Activities', 'Explore track-search matches for moods and activities.', 'favorite'),
   _BrowseDestination('City Charts', 'City-level charts backed by verified regional data.', 'globe'),
   _BrowseDestination('Upcoming Concerts', 'Upcoming concerts and festivals with source-linked event details.', 'calendar'),
   _BrowseDestination('Seasonal Collections', 'Time-limited music collections and seasonal features.', 'disc-3'),
@@ -451,17 +472,20 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   int _generation = 0;
   List<Map<String, dynamic>> _catalogItems = [];
   String? _catalogSource;
+  String? _catalogTitle;
+  bool _dailyChartFallback = false;
   String? _catalogError;
   String? _catalogTerritory;
   DateTime? _catalogFetchedAt;
 
   bool get _latestSongs => widget.destination.title == 'Latest Songs';
-  bool get _appleChart => widget.destination.title == 'Charts';
+  bool get _deezerChart => widget.destination.title == 'Charts';
   bool get _dailyChart => widget.destination.title == 'Daily Top 100';
-  bool get _appleReleases => widget.destination.title == 'New Releases';
+  bool get _deezerReleases => widget.destination.title == 'New Releases';
   bool get _videoFeed => widget.destination.title == 'Music Videos';
+  bool get _licensedVideoFeed => widget.destination.title == 'Breezze Videos';
   bool get _concertFeed => widget.destination.title == 'Upcoming Concerts';
-  bool get _liveProviderCatalog => _latestSongs || _appleChart || _dailyChart || _appleReleases || _videoFeed || _concertFeed;
+  bool get _liveProviderCatalog => _latestSongs || _deezerChart || _dailyChart || _deezerReleases || _videoFeed || _licensedVideoFeed || _concertFeed;
 
   bool get _genre => widget.destination.title == 'Browse by Genre';
   bool get _mood => widget.destination.title == 'Moods & Activities';
@@ -489,6 +513,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       _loading = true;
       _catalogError = null;
       _catalogItems = [];
+      _catalogSource = null;
+      _catalogTitle = null;
+      _catalogTerritory = null;
+      _catalogFetchedAt = null;
+      _dailyChartFallback = false;
     });
     try {
       final api = ref.read(authSessionProvider.notifier).api;
@@ -498,12 +527,14 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
           : 'us';
       final data = _latestSongs
           ? await api.discoveryLatestSongs(country: territory)
-          : _appleReleases
+          : _deezerReleases
           ? await api.discoveryNewReleases(country: territory)
           : _dailyChart
               ? await api.discoveryDailyTop100(country: territory)
-              : _appleChart
+              : _deezerChart
                   ? await api.discoverySongsChart(country: territory)
+                  : _licensedVideoFeed
+                  ? await api.licensedVideos()
                   : _videoFeed
                   ? await api.discoveryMusicVideos()
                   : await api.discoveryConcerts(country: territory);
@@ -515,6 +546,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                 item.map((key, value) => MapEntry(key.toString(), value))).toList()
             : [];
         _catalogSource = data['source'] as String?;
+        _catalogTitle = data['title'] as String?;
+        _dailyChartFallback = _dailyChart && data['dailyTop100Available'] == false;
         _catalogTerritory = data['territory'] as String? ??
             (_videoFeed ? null : territory.toUpperCase());
         _catalogFetchedAt = DateTime.tryParse(data['fetchedAt'] as String? ?? '');
@@ -530,26 +563,52 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     }
   }
 
+  Future<void> _playCatalogPreview(Map<String, dynamic> item) async {
+    final trackId = item['id']?.toString() ?? '';
+    if (!RegExp(r'^[0-9]{1,20}$').hasMatch(trackId) ||
+        item['previewUrl'] is! String) return;
+    // The music resolver rechecks Deezer metadata and its trusted preview
+    // host; the cached browse URL itself is never a streaming entitlement.
+    final id = 'bz:deezer_preview:$trackId';
+    await ref.read(playerControllerProvider.notifier).playTrack(
+      trackId: id,
+      queue: [TrackInfo(
+        id: id,
+        title: item['title'] as String?,
+        artist: item['artist'] as String?,
+        artworkUrl: item['artworkUrl'] as String?,
+        duration: const Duration(seconds: 30),
+      )],
+      startIndex: 0,
+      origin: 'browse',
+      sourceContext: 'Deezer preview (up to 30 seconds)',
+    );
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => const NowPlayingScreen(),
+    ));
+  }
+
   Future<void> _openCatalogItem(Map<String, dynamic> item) async {
     final itemId = item['id']?.toString();
     final title = item['title'] as String? ?? 'Untitled';
     final artist = item['artist'] as String? ?? 'Unknown artist';
     final artwork = item['artworkUrl'] as String?;
-    if (_appleReleases && itemId != null &&
+    if (_deezerReleases && itemId != null &&
         RegExp(r'^[0-9]{1,20}$').hasMatch(itemId)) {
       Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => AppleAlbumCatalogScreen(
+        builder: (_) => DeezerAlbumCatalogScreen(
           albumId: itemId, title: title, artist: artist,
-          artworkUrl: artwork, appleUrl: item['url'] as String?,
+          artworkUrl: artwork, deezerUrl: item['url'] as String?,
         ),
       ));
       return;
     }
-    if ((_latestSongs || _appleChart || _dailyChart) && itemId != null) {
+    if ((_latestSongs || _deezerChart || _dailyChart) && itemId != null) {
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => TrackDetailScreen(
           track: TrackInfo(
-            id: 'bz:apple_catalog:$itemId',
+            id: 'bz:deezer:$itemId',
             title: title, artist: artist,
             artworkUrl: artwork, duration: Duration.zero,
           ),
@@ -558,7 +617,39 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       ));
       return;
     }
-    if (_videoFeed && itemId != null) {
+    if (_licensedVideoFeed) {
+      final videoAssetId = item['videoAssetId'] as String? ?? '';
+      if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) return;
+      try {
+        final result = await ref.read(authSessionProvider.notifier).api
+            .videoPlayback(videoAssetId);
+        if (!mounted) return;
+        final url = result['streamUrl'];
+        final expiry = DateTime.tryParse(result['expiresAt'] as String? ?? '')?.toUtc();
+        final uri = url is String ? Uri.tryParse(url) : null;
+        if (uri == null || expiry == null ||
+            !expiry.isAfter(DateTime.now().toUtc())) {
+          throw StateError('VIDEO_SOURCE_NOT_AVAILABLE');
+        }
+        await openAuthorizedBreezzeVideo(
+          context, streamUrl: uri, title: title,
+        );
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This licensed video is not currently available.')),
+        );
+      }
+      return;
+    }
+    if (_videoFeed) {
+      if (itemId == null || !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(itemId)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('This video has no valid YouTube playback ID.'),
+          ));
+        }
+        return;
+      }
       await ref.read(playerControllerProvider.notifier).pause();
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -650,6 +741,17 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
+    if (isYouTubeSongId(selected.id)) {
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: selected.id.substring('bz:youtube_music:'.length),
+        title: selected.title,
+        artist: selected.artist,
+        artworkUrl: selected.artworkUrl,
+      );
+      return;
+    }
     if (!canQueueTrackId(selected.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -695,7 +797,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: _liveProviderCatalog
-                ? _appleCatalogContent(theme)
+                ? _deezerCatalogContent(theme)
                 : _searchable
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -711,7 +813,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                               spacing: 8,
                               runSpacing: 8,
                               children: [for (final choice in _choices)
-                                _BrowsePill(
+                                BzFilterPill(
                                   label: choice,
                                   active: _selected == choice,
                                   onTap: () => _search(choice),
@@ -802,9 +904,12 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     );
   }
 
-  Widget _appleCatalogContent(ThemeData theme) {
-    final isReleaseFeed = _appleReleases || _latestSongs;
-    final isVideoFeed = _videoFeed;
+  Widget _deezerCatalogContent(ThemeData theme) {
+    final isReleaseFeed = _deezerReleases || _latestSongs;
+    final isVideoFeed = _videoFeed || _licensedVideoFeed;
+    final isLicensedVideoFeed = _licensedVideoFeed;
+    final downloadProgress = ref.watch(downloadProgressProvider);
+    final downloadStatuses = ref.watch(downloadJobStatusProvider);
     final isConcertFeed = _concertFeed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -816,6 +921,20 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
             children: [
               Text(widget.destination.description, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 8),
+              if (_catalogTitle != null) ...[
+                Text(_catalogTitle!, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+              ],
+              if (_dailyChartFallback) ...[
+                Text('This is a Deezer global ranking, not a verified daily or country-specific Top 100.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                const SizedBox(height: 8),
+              ],
+              if (!isVideoFeed && !isConcertFeed) ...[
+                Text('Catalog metadata only. Playback requires a separate authorized source.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                const SizedBox(height: 8),
+              ],
               if (_catalogSource != null || _catalogTerritory != null) ...[
                 const SizedBox(height: 5),
                 Text(
@@ -861,7 +980,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                             final rank = item['rank'];
                             final meta = isReleaseFeed
                                 ? (item['releaseDate'] ?? 'Release date not supplied').toString()
-                                : isVideoFeed
+                                : isLicensedVideoFeed
+                                    ? 'Licensed Breezze video'
+                                    : isVideoFeed
                                     ? (item['publishedAt'] ?? 'Publication date not supplied').toString()
                                     : isConcertFeed
                                         ? [
@@ -910,14 +1031,58 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              trailing: IconButton(
-                                tooltip: isVideoFeed
+                              trailing: isLicensedVideoFeed
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (item['downloadAvailable'] == true &&
+                                            item['videoAssetId'] is String)
+                                          downloadProgress.containsKey('video:${item['videoAssetId']}')
+                                              ? const SizedBox(
+                                                  width: 24, height: 24,
+                                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                                )
+                                              : IconButton(
+                                                  tooltip: downloadStatuses['video:${item['videoAssetId']}'] == 'downloaded'
+                                                      ? 'Downloaded'
+                                                      : 'Download licensed video',
+                                                  onPressed: downloadStatuses['video:${item['videoAssetId']}'] == 'downloaded'
+                                                      ? null
+                                                      : () => ref.read(downloadProgressProvider.notifier)
+                                                          .downloadVideo(
+                                                            videoAssetId: item['videoAssetId'] as String,
+                                                            title: title,
+                                                          ),
+                                                  icon: BzSvgIcon(
+                                                    name: downloadStatuses['video:${item['videoAssetId']}'] == 'downloaded'
+                                                        ? 'download-done' : 'download',
+                                                    size: 19,
+                                                  ),
+                                                ),
+                                        IconButton(
+                                          tooltip: 'Play licensed video',
+                                          icon: const BzSvgIcon(name: 'play', size: 19),
+                                          onPressed: () => _openCatalogItem(item),
+                                        ),
+                                      ],
+                                    )
+                                  : IconButton(
+                                tooltip: !isVideoFeed && !isConcertFeed && item['previewUrl'] is String
+                                    ? 'Play Deezer preview (30 seconds)'
+                                    : isVideoFeed
                                     ? 'Watch official video'
                                     : isConcertFeed
                                         ? 'Open event details'
                                         : 'View details in Breezze',
-                                icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
-                                onPressed: () => _openCatalogItem(item),
+                                icon: BzSvgIcon(
+                                  name: !isVideoFeed && !isConcertFeed &&
+                                          item['previewUrl'] is String
+                                      ? 'play' : 'arrow-up-right',
+                                  size: 19,
+                                ),
+                                onPressed: () => !isVideoFeed && !isConcertFeed &&
+                                        item['previewUrl'] is String
+                                    ? _playCatalogPreview(item) : _openCatalogItem(item),
                               ),
                               onTap: () => _openCatalogItem(item),
                             );
@@ -995,46 +1160,3 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
 
 /// Browse selection pill — capsule (spec --radius-pill), solid text1 fill
 /// when active, surface2 when not. Mirrors the Library and Search pills.
-class _BrowsePill extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _BrowsePill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      button: true,
-      selected: active,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: BzMotion.fastMs),
-          curve: const Cubic(0.22, 1, 0.36, 1),
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? theme.bzText1 : theme.bzSurface2,
-            borderRadius: BorderRadius.circular(BzRadius.capsule),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: BzType.subheadline,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? theme.bzBackground : theme.bzText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

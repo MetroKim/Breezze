@@ -544,7 +544,7 @@ class _PlayPauseButton extends StatelessWidget {
 /// Lyrics with depth-of-field: the active line is bold and fully opaque,
 /// surrounding lines fall back through two levels of softness — the
 /// Apple Music karaoke treatment where focus tracks the voice.
-class _LyricsView extends StatelessWidget {
+class _LyricsView extends ConsumerWidget {
   final Lyrics? lyrics;
   final String mode;
   final Duration position;
@@ -558,7 +558,7 @@ class _LyricsView extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
     if (mode == 'loading') {
@@ -613,8 +613,12 @@ class _LyricsView extends StatelessWidget {
           lineWeight = FontWeight.w400;
         }
 
+        Widget seekable(Widget child) => isSynced
+            ? InkWell(onTap: () => ref.read(playerControllerProvider.notifier).seekTo(line.start),
+                child: child)
+            : child;
         if (line.words.isEmpty) {
-          return Padding(
+          return seekable(Padding(
             padding: EdgeInsets.symmetric(vertical: focusMode ? 12 : 6),
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 200),
@@ -625,10 +629,10 @@ class _LyricsView extends StatelessWidget {
               ),
               child: Text(line.text),
             ),
-          );
+          ));
         }
 
-        return Padding(
+        return seekable(Padding(
           padding: EdgeInsets.symmetric(vertical: focusMode ? 12 : 6),
           child: Wrap(
             children: [
@@ -651,7 +655,7 @@ class _LyricsView extends StatelessWidget {
                 ),
             ],
           ),
-        );
+        ));
       },
     );
   }
@@ -836,8 +840,17 @@ class _PlayingNextSheet extends ConsumerWidget {
                             ?.copyWith(color: theme.bzText2),
                       ),
                     )
-                  : ListView.builder(
+                  : ReorderableListView.builder(
+                      buildDefaultDragHandles: false,
                       itemCount: upcoming.length,
+                      onReorderItem: (oldIndex, newIndex) {
+                        // Flutter now provides the post-removal target index.
+                        // Do not decrement it a second time.
+                        queue.reorderUpNext(
+                          upcoming[oldIndex].entryId,
+                          newIndex,
+                        );
+                      },
                       itemBuilder: (context, index) {
                         final entry = upcoming[index];
                         final info = controller.trackInfoFor(entry.trackId);
@@ -867,14 +880,30 @@ class _PlayingNextSheet extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: IconButton(
-                              tooltip: 'Remove from queue',
-                              onPressed: () => queue.remove(entry.entryId),
-                              icon: BzSvgIcon(
-                                name: 'close',
-                                color: theme.bzText2,
-                                size: 18,
-                              ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Remove from queue',
+                                  onPressed: () => queue.remove(entry.entryId),
+                                  icon: BzSvgIcon(
+                                    name: 'close',
+                                    color: theme.bzText2,
+                                    size: 18,
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: 'Drag to reorder',
+                                  child: ReorderableDragStartListener(
+                                    index: index,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Icon(Icons.drag_handle,
+                                          color: theme.bzText2),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );

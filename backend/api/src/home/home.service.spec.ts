@@ -55,4 +55,41 @@ describe('HomeService history and personalized feed', () => {
     }]);
     expect(recommendations.forUser).toHaveBeenCalledWith('user-1', 'TZ');
   });
+  it('reads recently played and favorites only for the authenticated user', async () => {
+    prisma.recentlyPlayed.findMany.mockImplementation(async (query) =>
+      query.where.userId === 'user-a'
+        ? [{ trackId: 'private-a-history' }]
+        : [{ trackId: 'private-b-history' }],
+    );
+    prisma.favorite.findMany.mockImplementation(async (query) =>
+      query.where.userId === 'user-a'
+        ? [{ trackId: 'private-a-favorite' }]
+        : [{ trackId: 'private-b-favorite' }],
+    );
+
+    const feedA = await service.feed('user-a', 'TZ');
+    const feedB = await service.feed('user-b', 'TZ');
+
+    expect(feedA.flatMap((section) => section.trackIds))
+      .toEqual(['private-a-history', 'private-a-favorite']);
+    expect(feedB.flatMap((section) => section.trackIds))
+      .toEqual(['private-b-history', 'private-b-favorite']);
+    expect(prisma.recentlyPlayed.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'user-a' },
+        orderBy: { playedAt: 'desc' },
+        take: 12,
+      }),
+    );
+    expect(prisma.favorite.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'user-b' },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+      }),
+    );
+    expect(recommendations.forUser).toHaveBeenNthCalledWith(1, 'user-a', 'TZ');
+    expect(recommendations.forUser).toHaveBeenNthCalledWith(2, 'user-b', 'TZ');
+  });
+
 });

@@ -11,6 +11,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
+import '../video/device_video.dart';
 
 /// Downloads library — offline tracks with cover art + lyrics, plus a
 /// live in-progress section (§6.1).
@@ -23,6 +24,7 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   List<DownloadedTrack> _tracks = [];
+  List<DownloadedVideo> _videos = [];
   int _storageBytes = 0;
   var _loading = true;
 
@@ -38,6 +40,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       if (!mounted) return;
       setState(() {
         _tracks = [];
+        _videos = [];
         _loading = false;
       });
       return;
@@ -73,6 +76,26 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       }
       tracks = await library.list(ownerId: auth.userId);
     }
+    var videos = await library.listVideos(ownerId: auth.userId);
+    if (api.accessToken != null) {
+      for (final video in videos) {
+        try {
+          final lease = await api.revalidateVideoDownload(video.videoAssetId);
+          if (lease['allowed'] != true) {
+            await library.removeVideo(video.videoAssetId);
+            ref.read(downloadProgressProvider.notifier).forgetVideo(video.videoAssetId);
+            continue;
+          }
+          final expiry = DateTime.tryParse(lease['offlineLeaseExpiresAt'] as String? ?? '')?.toUtc();
+          if (expiry != null) {
+            await library.updateVideoOfflineLease(video.videoAssetId, expiry);
+          }
+        } catch (_) {
+          // Network failures cannot invalidate a still-valid offline lease.
+        }
+      }
+      videos = await library.listVideos(ownerId: auth.userId);
+    }
     var storageBytes = 0;
     for (final track in tracks) {
       for (final filePath in [track.audioPath, track.coverPath, track.lyricsPath]) {
@@ -85,17 +108,22 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
         }
       }
     }
+    for (final video in videos) {
+      try { storageBytes += await File(video.filePath).length(); } catch (_) {}
+    }
     if (!mounted) return;
     final latestAuth = ref.read(authSessionProvider);
     if (latestAuth is! AuthSignedIn || latestAuth.userId != auth.userId) {
       setState(() {
         _tracks = [];
+        _videos = [];
         _loading = false;
       });
       return;
     }
     setState(() {
       _tracks = tracks;
+      _videos = videos;
       _storageBytes = storageBytes;
       _loading = false;
     });
@@ -123,6 +151,45 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
         );
   }
 
+  Future<void> _playVideo(DownloadedVideo video) async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || auth.userId != video.ownerId) return;
+    if (!video.rightsExpiresAtUtc.isAfter(DateTime.now().toUtc())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This video download has expired. Reconnect to renew its license.')),
+      );
+      return;
+    }
+    try {
+      await openDownloadedBreezzeVideo(
+        context,
+        filePath: video.filePath,
+        title: video.title,
+        rightsExpiresAtUtc: video.rightsExpiresAtUtc,
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This offline video could not be opened.')),
+      );
+    }
+  }
+
+  Future<void> _removeVideo(DownloadedVideo video) async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || auth.userId != video.ownerId) return;
+    final dir = await downloadsDirectory(userId: auth.userId);
+    await DownloadsLibrary(root: dir, lyrics: ref.read(lyricsProvider))
+        .removeVideo(video.videoAssetId);
+    ref.read(downloadProgressProvider.notifier).forgetVideo(video.videoAssetId);
+    try {
+      await ref.read(authSessionProvider.notifier).api
+          .removeVideoDownload(video.videoAssetId);
+    } catch (_) {
+      // Local deletion works even without network access.
+    }
+    await _refresh();
+  }
+
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
@@ -133,13 +200,13 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   Future<void> _freeUpSpace() async {
-    if (_tracks.isEmpty) return;
+    if (_tracks.isEmpty && _videos.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove all downloads?'),
         content: Text(
-          'This removes ${_tracks.length} downloaded ${_tracks.length == 1 ? 'track' : 'tracks'} '
+          'This removes ${_tracks.length} audio tracks and ${_videos.length} videos '
           'and frees approximately ${_formatBytes(_storageBytes)} on this device. '
           'Your playlists and library will not be deleted.',
         ),
@@ -162,6 +229,15 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final library = DownloadsLibrary(root: dir, lyrics: ref.read(lyricsProvider));
     for (final track in List<DownloadedTrack>.of(_tracks)) {
       if (track.ownerId == auth.userId) await library.remove(track.trackId);
+    }
+    for (final video in List<DownloadedVideo>.of(_videos)) {
+      if (video.ownerId != auth.userId) continue;
+      await library.removeVideo(video.videoAssetId);
+      ref.read(downloadProgressProvider.notifier).forgetVideo(video.videoAssetId);
+      try {
+        await ref.read(authSessionProvider.notifier).api
+            .removeVideoDownload(video.videoAssetId);
+      } catch (_) {}
     }
     await _refresh();
   }
@@ -189,7 +265,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final inProgress = jobStatuses.entries.where((entry) => ['downloading', 'paused', 'failed', 'waiting_for_wifi', 'waiting_for_network'].contains(entry.value)).map((entry) => MapEntry(entry.key, progress[entry.key] ?? 0.0)).toList();
 
     // Refresh the completed list when the last in-flight download ends.
-    if (inProgress.isEmpty && _tracks.isNotEmpty) {
+    if (inProgress.isEmpty && (_tracks.isNotEmpty || _videos.isNotEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refreshIfNeeded());
     }
 
@@ -234,13 +310,13 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                           )),
                           const SizedBox(height: 4),
                           Text(_formatBytes(_storageBytes), style: theme.textTheme.titleLarge),
-                          Text('${_tracks.length} downloaded ${_tracks.length == 1 ? 'track' : 'tracks'}',
+                          Text('${_tracks.length} audio tracks · ${_videos.length} videos',
                             style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
                         ],
                       ),
                     ),
                     TextButton(
-                      onPressed: _tracks.isEmpty ? null : _freeUpSpace,
+                      onPressed: _tracks.isEmpty && _videos.isEmpty ? null : _freeUpSpace,
                       child: const Text('Free Up Space'),
                     ),
                   ],
@@ -305,7 +381,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                           ),
                         ),
                       // Completed downloads
-                      if (_tracks.isEmpty && inProgress.isEmpty)
+                      if (_tracks.isEmpty && _videos.isEmpty && inProgress.isEmpty)
                         Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -361,6 +437,23 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                             ),
                             onTap: () => _play(track),
                           ),
+                       for (final video in _videos)
+                         ListTile(
+                           leading: const BzSvgIcon(name: 'video', size: 42),
+                           title: Text(video.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                           subtitle: Text(
+                             video.rightsExpiresAtUtc.isAfter(DateTime.now().toUtc())
+                                 ? 'Offline MP4 · Licensed Breezze video'
+                                 : 'Video license expired',
+                           ),
+                           trailing: IconButton(
+                             tooltip: 'Remove offline video',
+                             icon: const BzSvgIcon(name: 'trash'),
+                             onPressed: () => _removeVideo(video),
+                           ),
+                           onTap: () => _playVideo(video),
+                         ),
+
                     ],
                   ),
           ),

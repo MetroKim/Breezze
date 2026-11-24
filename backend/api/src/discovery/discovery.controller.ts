@@ -10,28 +10,28 @@ export class DiscoveryController {
     try { return await this.discovery.dailyTop100(country); }
     catch (error) {
       if (error instanceof Error && error.message.endsWith('_NOT_CONFIGURED')) {
-        throw new ServiceUnavailableException({ code: 'PROVIDER_NOT_CONFIGURED', provider: 'Apple Music API' });
+        throw new ServiceUnavailableException({ code: 'PROVIDER_NOT_CONFIGURED', provider: 'Deezer' });
       }
-      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music API' });
+      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' });
     }
   }
 
   @Get('charts/songs')
   async songsChart(@Query('country') country?: string) {
     try { return await this.discovery.songsChart(country); }
-    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
+    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' }); }
   }
 
   @Get('releases/songs')
   async latestSongs(@Query('country') country?: string) {
     try { return await this.discovery.recentChartReleases('songs', country); }
-    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
+    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' }); }
   }
 
   @Get('releases/albums')
   async newReleases(@Query('country') country?: string) {
     try { return await this.discovery.newReleases(country); }
-    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple Music RSS' }); }
+    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' }); }
   }
 
   @Get('songs/:id/music-video')
@@ -66,13 +66,13 @@ export class DiscoveryController {
   @Get('tracks/search')
   async searchTracks(@Query('q') query = '') {
     try { return await this.discovery.searchTracks(query); }
-    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple iTunes Search API' }); }
+    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' }); }
   }
 
   @Get('artists/search')
   async searchArtists(@Query('q') query = '') {
     try { return await this.discovery.searchArtists(query); }
-    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple iTunes Search API' }); }
+    catch { throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' }); }
   }
 
   @Get('artists/:artistId/albums')
@@ -80,7 +80,7 @@ export class DiscoveryController {
     try { return await this.discovery.artistAlbums(artistId); }
     catch (error) {
       if (error instanceof Error && error.message.startsWith('INVALID_')) throw new BadRequestException(error.message);
-      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple iTunes Search API' });
+      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' });
     }
   }
 
@@ -89,7 +89,7 @@ export class DiscoveryController {
     try { return await this.discovery.albumTracks(albumId); }
     catch (error) {
       if (error instanceof Error && error.message.startsWith('INVALID_')) throw new BadRequestException(error.message);
-      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Apple iTunes Search API' });
+      throw new ServiceUnavailableException({ code: 'DISCOVERY_SOURCE_UNAVAILABLE', source: 'Deezer' });
     }
   }
 }

@@ -57,70 +57,13 @@ class DownloadsLibrary {
       // 1. Fetch only the short-lived URL issued by the backend after its
       // download-rights decision. Never extract media directly from a
       // metadata/search provider in the client.
-      final audioFile = File('${dir.path}/audio.m4a');
-      if (!await audioFile.exists()) {
-        final partialFile = File('${dir.path}/audio.part');
-        final client = HttpClient();
-        try {
-          final existingBytes =
-              await partialFile.exists() ? await partialFile.length() : 0;
-          final request = await client.getUrl(Uri.parse(downloadUrl));
-          if (existingBytes > 0) {
-            request.headers.set('range', 'bytes=$existingBytes-');
-          }
-          final response = await request.close();
-          final resumes = existingBytes > 0 &&
-              response.statusCode == HttpStatus.partialContent;
-          if (response.statusCode != HttpStatus.ok && !resumes) {
-            throw HttpException(
-              'authorized_download_${response.statusCode}',
-              uri: Uri.parse(downloadUrl),
-            );
-          }
-          if (resumes) {
-            final contentRange = response.headers.value('content-range');
-            if (contentRange == null ||
-                !contentRange.startsWith('bytes $existingBytes-')) {
-              throw const HttpException('invalid_resume_content_range');
-            }
-          }
-
-          // A server that ignores Range returns 200. Start over rather than
-          // appending a second copy of the complete asset.
-          final sink = partialFile.openWrite(
-            mode: resumes ? FileMode.append : FileMode.write,
-          );
-          var received = resumes ? existingBytes : 0;
-          final totalBytes = resumes
-              ? _totalBytesFromContentRange(
-                  response.headers.value('content-range'),
-                )
-              : response.contentLength;
-          try {
-            await for (final chunk in response) {
-              if (cancellation?.isCancelled == true) throw DownloadCancelledException();
-              sink.add(chunk);
-              received += chunk.length;
-              if (totalBytes > 0) {
-                onProgress?.call((received / totalBytes).clamp(0.0, 1.0));
-              }
-            }
-            await sink.flush();
-          } finally {
-            await sink.close();
-          }
-          if (totalBytes > 0 && received != totalBytes) {
-            throw const HttpException('authorized_download_incomplete');
-          }
-          await partialFile.rename(audioFile.path);
-        } catch (_) {
-          // Keep the partial asset. The next authorized attempt can request
-          // the remaining byte range instead of downloading from zero.
-          rethrow;
-        } finally {
-          client.close(force: true);
-        }
-      }
+      await _transferAuthorizedMedia(
+        downloadUrl: downloadUrl,
+        output: File('${dir.path}/audio.m4a'),
+        partial: File('${dir.path}/audio.part'),
+        cancellation: cancellation,
+        onProgress: onProgress,
+      );
       onProgress?.call(1.0);
 
       // 2. Cover art is optional. A CDN/network failure must not turn a
@@ -172,6 +115,177 @@ class DownloadsLibrary {
     } catch (_) {
       return false;
     }
+  }
+
+  /// One byte-range transfer implementation shared by audio and licensed
+  /// videos. Never receives a URL from an untrusted catalog/search response.
+  Future<void> _transferAuthorizedMedia({
+    required String downloadUrl,
+    required File output,
+    required File partial,
+    DownloadCancellation? cancellation,
+    void Function(double progress)? onProgress,
+    String? requiredMimeType,
+  }) async {
+    if (await output.exists()) {
+      onProgress?.call(1.0);
+      return;
+    }
+    final source = Uri.parse(downloadUrl);
+    if (source.scheme != 'https' &&
+        !(source.scheme == 'http' &&
+          (source.host == '127.0.0.1' || source.host == 'localhost'))) {
+      throw const HttpException('authorized_media_source_invalid');
+    }
+    await partial.parent.create(recursive: true);
+    final client = HttpClient();
+    try {
+      final existingBytes = await partial.exists() ? await partial.length() : 0;
+      final request = await client.getUrl(source);
+      if (existingBytes > 0) {
+        request.headers.set('range', 'bytes=$existingBytes-');
+      }
+      final response = await request.close();
+      final resumes = existingBytes > 0 &&
+          response.statusCode == HttpStatus.partialContent;
+      if (response.statusCode != HttpStatus.ok && !resumes) {
+        throw HttpException('authorized_download_${response.statusCode}');
+      }
+      final contentType = response.headers.contentType?.mimeType;
+      if (requiredMimeType != null && contentType != requiredMimeType) {
+        await response.drain<void>();
+        throw const HttpException('authorized_media_type_mismatch');
+      }
+      if (resumes) {
+        final contentRange = response.headers.value('content-range');
+        if (contentRange == null ||
+            !contentRange.startsWith('bytes $existingBytes-')) {
+          await response.drain<void>();
+          throw const HttpException('invalid_resume_content_range');
+        }
+      }
+      final sink = partial.openWrite(mode: resumes ? FileMode.append : FileMode.write);
+      var received = resumes ? existingBytes : 0;
+      final totalBytes = resumes
+          ? _totalBytesFromContentRange(response.headers.value('content-range'))
+          : response.contentLength;
+      try {
+        await for (final chunk in response) {
+          if (cancellation?.isCancelled == true) throw DownloadCancelledException();
+          sink.add(chunk);
+          received += chunk.length;
+          if (totalBytes > 0) {
+            onProgress?.call((received / totalBytes).clamp(0.0, 1.0));
+          }
+        }
+        await sink.flush();
+      } finally {
+        await sink.close();
+      }
+      if (totalBytes > 0 && received != totalBytes) {
+        throw const HttpException('authorized_download_incomplete');
+      }
+      if (cancellation?.isCancelled == true) throw DownloadCancelledException();
+      await partial.rename(output.path);
+      onProgress?.call(1.0);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Directory _videoDirFor(String videoAssetId) {
+    if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) {
+      throw ArgumentError.value(videoAssetId, 'videoAssetId', 'invalid video asset key');
+    }
+    return Directory('${root.path}/videos/$videoAssetId');
+  }
+
+  /// Only call after POST /videos/{uuid}/download returns allowed=true.
+  /// The saved MP4 is app-private and only playable while its lease is valid.
+  Future<bool> downloadVideo({
+    required String videoAssetId,
+    required String title,
+    required String ownerId,
+    required String downloadUrl,
+    required DateTime rightsExpiresAtUtc,
+    DownloadCancellation? cancellation,
+    void Function(double progress)? onProgress,
+  }) async {
+    if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc())) return false;
+    final dir = _videoDirFor(videoAssetId);
+    try {
+      await dir.create(recursive: true);
+      await _transferAuthorizedMedia(
+        downloadUrl: downloadUrl,
+        output: File('${dir.path}/video.mp4'),
+        partial: File('${dir.path}/video.part'),
+        cancellation: cancellation,
+        onProgress: onProgress,
+        requiredMimeType: 'video/mp4',
+      );
+      if (cancellation?.isCancelled == true) return false;
+      await File('${dir.path}/meta.json').writeAsString(jsonEncode({
+        'mediaType': 'video',
+        'videoAssetId': videoAssetId,
+        'title': title,
+        'ownerId': ownerId,
+        'rightsExpiresAtUtc': rightsExpiresAtUtc.toUtc().toIso8601String(),
+      }));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<DownloadedVideo>> listVideos({required String ownerId}) async {
+    final folder = Directory('${root.path}/videos');
+    if (!await folder.exists()) return [];
+    final videos = <DownloadedVideo>[];
+    await for (final item in folder.list()) {
+      if (item is! Directory) continue;
+      final meta = File('${item.path}/meta.json');
+      final file = File('${item.path}/video.mp4');
+      if (!await meta.exists() || !await file.exists()) continue;
+      try {
+        final raw = jsonDecode(await meta.readAsString());
+        if (raw is! Map<String, dynamic> || raw['mediaType'] != 'video' ||
+            raw['ownerId'] != ownerId || raw['videoAssetId'] is! String ||
+            item.uri.pathSegments.where((part) => part.isNotEmpty).last != raw['videoAssetId']) {
+          continue;
+        }
+        final expiry = DateTime.tryParse(raw['rightsExpiresAtUtc'] as String? ?? '');
+        if (expiry == null) continue;
+        videos.add(DownloadedVideo(
+          videoAssetId: raw['videoAssetId'] as String,
+          ownerId: ownerId,
+          title: raw['title'] as String? ?? 'Video',
+          filePath: file.path,
+          rightsExpiresAtUtc: expiry.toUtc(),
+        ));
+      } catch (_) {
+        continue;
+      }
+    }
+    return videos;
+  }
+
+  Future<void> updateVideoOfflineLease(String videoAssetId, DateTime expiresAtUtc) async {
+    final meta = File('${_videoDirFor(videoAssetId).path}/meta.json');
+    if (!await meta.exists()) return;
+    final raw = jsonDecode(await meta.readAsString());
+    if (raw is! Map<String, dynamic> || raw['mediaType'] != 'video') return;
+    raw['rightsExpiresAtUtc'] = expiresAtUtc.toUtc().toIso8601String();
+    await meta.writeAsString(jsonEncode(raw));
+  }
+
+  Future<void> removeVideoPartial(String videoAssetId) async {
+    final partial = File('${_videoDirFor(videoAssetId).path}/video.part');
+    if (await partial.exists()) await partial.delete();
+  }
+
+  Future<void> removeVideo(String videoAssetId) async {
+    final dir = _videoDirFor(videoAssetId);
+    if (await dir.exists()) await dir.delete(recursive: true);
   }
 
   int _totalBytesFromContentRange(String? value) {
@@ -269,5 +383,21 @@ class DownloadedTrack {
     required this.audioPath,
     this.coverPath,
     this.lyricsPath,
+  });
+}
+
+class DownloadedVideo {
+  final String videoAssetId;
+  final String ownerId;
+  final String title;
+  final String filePath;
+  final DateTime rightsExpiresAtUtc;
+
+  const DownloadedVideo({
+    required this.videoAssetId,
+    required this.ownerId,
+    required this.title,
+    required this.filePath,
+    required this.rightsExpiresAtUtc,
   });
 }

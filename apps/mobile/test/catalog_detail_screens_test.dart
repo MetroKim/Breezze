@@ -6,7 +6,66 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
+class _InMemoryFavorites extends FavoritesStore {
+  final saved = <String>{};
+
+  String _key(String ownerId, String trackId) => '$ownerId::$trackId';
+
+  @override
+  Future<bool> isFavorite(String id, {String ownerId = 'guest'}) async =>
+      saved.contains(_key(ownerId, id));
+
+  @override
+  Future<bool> toggle(FavoriteTrack track, {String ownerId = 'guest'}) async {
+    final key = _key(ownerId, track.id);
+    if (!saved.add(key)) {
+      saved.remove(key);
+      return false;
+    }
+    return true;
+  }
+}
+
 void main() {
+  testWidgets('song detail saves and removes favorites with live button state',
+      (tester) async {
+    final store = _InMemoryFavorites();
+    const song = TrackInfo(
+      id: 'bz:youtube_music:favorite-ui-test',
+      title: 'Favorite UI QA Song',
+      artist: 'Breezze QA',
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [favoritesStoreProvider.overrideWithValue(store)],
+        child: MaterialApp(
+          theme: bzLightTheme(),
+          home: const TrackDetailScreen(track: song),
+        ),
+      ),
+    );
+    Future<void> expectVisibleAction(String label) async {
+      // Riverpod family invalidation resolves asynchronously after the
+      // persistence future. Wait for its next frame without depending on
+      // unrelated catalog discovery requests to settle.
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.text(label).evaluate().isNotEmpty) return;
+      }
+      expect(find.text(label), findsOneWidget);
+    }
+
+    await expectVisibleAction('Add to Library');
+    await tester.ensureVisible(find.text('Add to Library'));
+    await tester.tap(find.text('Add to Library'));
+    await expectVisibleAction('Remove from Library');
+    expect(await store.isFavorite(song.id), isTrue);
+
+    await tester.tap(find.text('Remove from Library'));
+    await expectVisibleAction('Add to Library');
+    expect(await store.isFavorite(song.id), isFalse);
+  });
+
   testWidgets('YouTube song details enable the in-app player', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -22,7 +81,9 @@ void main() {
         ),
       ),
     );
-    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Play'));
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Play on YouTube'),
+    );
     expect(button.onPressed, isNotNull);
   });
 
@@ -49,8 +110,8 @@ void main() {
 
     expect(find.text('Test Artist'), findsWidgets);
     expect(find.text('Saved Song'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Apple catalog discography'), 260);
-    expect(find.text('Apple catalog discography'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Deezer catalog discography'), 260);
+    expect(find.text('Deezer catalog discography'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Upcoming Concerts'), 260);
     expect(find.text('Upcoming Concerts'), findsOneWidget);
     expect(
@@ -63,6 +124,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
+        // This is a catalog-metadata test, not a device SQLite test.
+        overrides: [favoritesStoreProvider.overrideWithValue(_InMemoryFavorites())],
         child: MaterialApp(
           theme: bzLightTheme(),
           home: TrackDetailScreen(
@@ -92,6 +155,13 @@ void main() {
 
     expect(find.text('Search Result Song'), findsOneWidget);
     expect(find.text('Search Result Artist'), findsWidgets);
+    // The action now correctly shows "Checking Library..." until its
+    // owner-scoped saved-state lookup resolves. Await the enabled label.
+    for (var i = 0;
+        i < 25 && find.text('Add to Library').evaluate().isEmpty;
+        i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(find.text('Add to Library'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Album'), 240);
     expect(find.text('Album'), findsOneWidget);

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/auth/auth_session.dart';
+import '../../core/auth/supabase_auth_bridge.dart';
 import '../../core/api/breezze_api.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -22,6 +23,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _password = TextEditingController();
   final _displayName = TextEditingController();
   final _mfaCode = TextEditingController();
+  final _legacyEmail = TextEditingController();
+  final _legacyPassword = TextEditingController();
   bool _registerMode = false;
   bool _revealPassword = false;
   late Future<Map<String, dynamic>> _socialProviders;
@@ -35,6 +38,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   Future<Map<String, dynamic>> _prepareSocialFlows() async {
+    if (SupabaseAuthBridge.enabled) return const <String, dynamic>{};
     try {
       final api = ref.read(authSessionProvider.notifier).api;
       final flags = await api.socialProviders()
@@ -83,6 +87,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     _password.dispose();
     _displayName.dispose();
     _mfaCode.dispose();
+    _legacyEmail.dispose();
+    _legacyPassword.dispose();
     super.dispose();
   }
 
@@ -99,6 +105,121 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     } else {
       await controller.login(_email.text.trim(), _password.text);
     }
+    if (mounted && ref.read(authSessionProvider) is AuthLegacyLinkRequired) {
+      _legacyEmail.text = _email.text.trim();
+      _password.clear();
+      _legacyPassword.clear();
+    }
+  }
+
+  Future<void> _linkLegacy() async {
+    final email = _legacyEmail.text.trim();
+    final password = _legacyPassword.text;
+    if (email.isEmpty || password.isEmpty) return;
+    await ref.read(authSessionProvider.notifier)
+        .linkLegacyAccount(email, password);
+    _legacyPassword.clear();
+  }
+
+  Widget _buildLegacyLink(BuildContext context, AuthState auth) {
+    final theme = Theme.of(context);
+    final busy = auth is AuthLegacyLinking;
+    final code = auth is AuthLegacyLinkRequired ? auth.errorCode : null;
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: BzRibbonLogo(width: 154, color: theme.bzText1),
+                  ),
+                  const SizedBox(height: 28),
+                  BzGlassContainer(
+                    radius: BzRadius.card,
+                    blur: 20,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text('Link your existing library',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'You have signed in securely with Supabase. '
+                            'Confirm your previous Breezze account to keep '
+                            'its playlists, favorites, and listening history. '
+                            'Your old password will not be saved.',
+                            style: TextStyle(
+                              color: theme.bzText2,
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          _premiumField(
+                            controller: _legacyEmail,
+                            label: 'Previous Breezze email',
+                            hint: 'email used before the upgrade',
+                            keyboard: TextInputType.emailAddress,
+                            hints: const [AutofillHints.email],
+                          ),
+                          const SizedBox(height: 16),
+                          _premiumField(
+                            controller: _legacyPassword,
+                            label: 'Previous Breezze password',
+                            hint: 'Your old Breezze password',
+                            obscure: true,
+                            hints: const [AutofillHints.password],
+                            onSubmitted: (_) {
+                              if (!busy) _linkLegacy();
+                            },
+                          ),
+                          if (code != null) ...[
+                            const SizedBox(height: 12),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(_errorText(code),
+                                style: TextStyle(color: theme.bzError, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 22),
+                          _SubmitButton(
+                            label: 'Link my existing library',
+                            busy: busy,
+                            onPressed: _linkLegacy,
+                          ),
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: busy ? null : () async {
+                              await ref.read(authSessionProvider.notifier)
+                                  .cancelLegacyLink();
+                              _legacyPassword.clear();
+                            },
+                            child: const Text('Cancel and choose another account'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -109,6 +230,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final socialBusy = auth is AuthSigningIn && auth.social;
     final error = auth is AuthError ? auth.code : null;
 
+    if (auth is AuthLegacyLinkRequired || auth is AuthLegacyLinking) {
+      return _buildLegacyLink(context, auth);
+    }
     if (auth is AuthMfaRequired) return _buildMfaRequired(context, auth);
     if (auth is AuthMfaRecoveryCodes) return _buildRecoveryCodes(context, auth);
 
@@ -207,6 +331,70 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 child: const Text('Browse music'),
               ),
               const SizedBox(height: 12),
+              if (SupabaseAuthBridge.enabled) ...[
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: ref.read(authSessionProvider.notifier)
+                      .preserveExistingLibrary,
+                  onChanged: busy ? null : (checked) async {
+                    await ref.read(authSessionProvider.notifier)
+                        .setPreserveExistingLibrary(checked == true);
+                    if (mounted) setState(() {});
+                  },
+                  title: const Text(
+                    'I already have a Breezze library',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    'Keep your previous playlists and favorites, even if '
+                    'your Apple or Google email is different.',
+                    style: TextStyle(color: theme.bzText2, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (SupabaseAuthBridge.enabled &&
+                  (SupabaseAuthBridge.nativeAppleReady ||
+                      SupabaseAuthBridge.nativeGoogleReady)) ...[
+                if (SupabaseAuthBridge.nativeAppleReady) ...[
+                  _socialButton(
+                    label: 'Continue with Apple',
+                    isApple: true,
+                    enabled: !busy,
+                    onPressed: () => ref
+                        .read(authSessionProvider.notifier)
+                        .socialLogin('apple'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (SupabaseAuthBridge.nativeGoogleReady) ...[
+                  _socialButton(
+                    label: 'Continue with Google',
+                    isApple: false,
+                    enabled: !busy,
+                    onPressed: () => ref
+                        .read(authSessionProvider.notifier)
+                        .socialLogin('google'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: theme.bzSeparator)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Text('or use email',
+                          style: TextStyle(color: theme.bzText2, fontSize: 12)),
+                    ),
+                    Expanded(child: Divider(color: theme.bzSeparator)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
+              if (!SupabaseAuthBridge.enabled) ...[
               FutureBuilder<Map<String, dynamic>>(
                 future: _socialProviders,
                 builder: (context, snapshot) {
@@ -272,6 +460,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ],
               ),
               const SizedBox(height: 24),
+              ],
               AutofillGroup(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -674,6 +863,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         return 'This sign-in provider is not configured yet.';
       case 'SOCIAL_AUTH_FAILED':
         return 'Secure sign-in did not finish. Please retry or use email.';
+      case 'LEGACY_CREDENTIALS_INVALID':
+        return 'The previous Breezze email or password is incorrect.';
+      case 'SUPABASE_IDENTITY_ALREADY_LINKED':
+      case 'LEGACY_ALREADY_LINKED':
+      case 'LEGACY_LINK_CONFLICT':
+        return 'This identity is already linked to another Breezze account. '
+            'No library data was changed.';
+      case 'LEGACY_PRIVILEGED_LINK_BLOCKED':
+        return 'This account uses additional security. Its migration requires '
+            'a separate identity verification process.';
+      case 'SUPABASE_SESSION_EXPIRED':
+        return 'Your secure login expired. Cancel and sign in again.';
+      case 'HTTP_429':
+        return 'Too many attempts. Please try again after the cooldown.';
+      case 'EMAIL_VERIFICATION_REQUIRED':
+        return 'Check your inbox and verify your email before signing in.';
+      case 'LEGACY_ACCOUNT_LINK_REQUIRED':
+        return 'This email has an existing Breezze account. Use the old sign-in until account linking is available.';
+      case 'SUPABASE_AUTH_FAILED':
+        return 'Secure sign-in could not be completed. Check your details and try again.';
+      case 'HTTP_409':
+        return 'An existing Breezze account needs secure linking before social sign-in can continue.';
+      case 'SUPABASE_SOCIAL_NOT_READY':
+        return 'Native provider configuration is still pending.';
       default:
         return 'Something went wrong. Try again.';
     }

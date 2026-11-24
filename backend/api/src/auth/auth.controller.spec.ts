@@ -1,5 +1,5 @@
 import { validateSync } from 'class-validator';
-import { MfaRecoveryRegenerationDto } from './auth.controller';
+import { MfaRecoveryRegenerationDto, SupabaseLinkLegacyDto } from './auth.controller';
 
 describe('MfaRecoveryRegenerationDto', () => {
   const validDto = (code: string) =>
@@ -23,5 +23,31 @@ describe('MfaRecoveryRegenerationDto', () => {
   it('requires a password for recovery-code regeneration', () => {
     const dto = Object.assign(new MfaRecoveryRegenerationDto(), { code: '123456' });
     expect(validateSync(dto).some((error) => error.property === 'password')).toBe(true);
+  });
+});
+
+describe('SupabaseLinkLegacyDto', () => {
+  const validDto = () => Object.assign(new SupabaseLinkLegacyDto(), {
+    accessToken: 'a'.repeat(100),
+    legacyEmail: 'old@example.com',
+    legacyPassword: 'previous-account-password',
+  });
+
+  it('requires a verified token and the old account credentials', () => {
+    expect(validateSync(validDto())).toHaveLength(0);
+    const missing = Object.assign(new SupabaseLinkLegacyDto(), {
+      accessToken: 'a'.repeat(100),
+    });
+    expect(validateSync(missing).map((e) => e.property))
+      .toEqual(expect.arrayContaining(['legacyEmail', 'legacyPassword']));
+  });
+
+  it('rejects excessively long passwords and malformed legacy email', () => {
+    const invalid = validDto();
+    invalid.legacyEmail = 'invalid-email';
+    invalid.legacyPassword = 'a'.repeat(129);
+    const fields = validateSync(invalid).map((e) => e.property);
+    expect(fields).toContain('legacyEmail');
+    expect(fields).toContain('legacyPassword');
   });
 });

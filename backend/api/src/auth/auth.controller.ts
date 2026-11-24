@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { IsEmail, IsString, IsOptional, Matches, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
+import { SupabaseExchangeService } from './supabase-exchange.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import { CurrentSession } from './current-session.decorator';
@@ -71,9 +72,52 @@ export class RefreshDto {
   refreshToken!: string;
 }
 
+export class SupabaseExchangeDto {
+  @IsString()
+  @MinLength(20)
+  @MaxLength(8192)
+  accessToken!: string;
+}
+
+export class SupabaseLinkLegacyDto extends SupabaseExchangeDto {
+  @IsEmail()
+  @MaxLength(320)
+  legacyEmail!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  legacyPassword!: string;
+}
+
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly supabaseExchange: SupabaseExchangeService,
+  ) {}
+
+  // Transitional: only a token validated by Supabase Auth may be exchanged.
+  // This route never links a preexisting Breezze account by email alone.
+  @Post('supabase/exchange')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  exchangeSupabase(@Body() dto: SupabaseExchangeDto) {
+    return this.supabaseExchange.exchange(dto.accessToken);
+  }
+
+  // Two independently verified credentials; never link by email alone.
+  // Rate-limited by the same account quota as password login.
+  @Post('supabase/link-legacy')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  linkSupabaseLegacy(@Body() dto: SupabaseLinkLegacyDto) {
+    return this.supabaseExchange.linkLegacy(
+      dto.accessToken,
+      dto.legacyEmail,
+      dto.legacyPassword,
+    );
+  }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {

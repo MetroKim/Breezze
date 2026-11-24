@@ -11,6 +11,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
 import '../../core/audio/audio_service_bridge.dart';
 import '../../core/audio/background_audio.dart';
+import '../../core/audio/playback_queue_store.dart';
 import '../../core/database/migrate_to_drift.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
@@ -37,6 +38,51 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
   ProviderContainer? _container;
   JustAudioEngineAdapter? _audioEngine;
   BackgroundAudioBridge? _backgroundBridge;
+  final _queueStore = PlaybackQueueStore();
+  String? _queueOwner;
+  Future<void> _pendingQueueWrite = Future<void>.value();
+  Future<void> _queueAuthTransition = Future<void>.value();
+  ProviderSubscription<PlayerState>? _queueSubscription;
+
+  void _saveQueueFor(String ownerId) {
+    final snapshot = _container?.read(playerControllerProvider.notifier)
+        .exportQueueSnapshot();
+    // Preserve write order: a late position tick must never resurrect a queue
+    // that was explicitly stopped a moment later.
+    _pendingQueueWrite = _pendingQueueWrite.then((_) async {
+      try {
+        if (snapshot == null) {
+          await _queueStore.clear(ownerId);
+        } else {
+          await _queueStore.save(ownerId, snapshot);
+        }
+      } catch (_) {
+        // Secure storage failure must never interrupt playback.
+      }
+    });
+  }
+
+  Future<void> _restoreQueueFor(String ownerId, int version) async {
+    try {
+      final snapshot = await _queueStore.load(ownerId);
+      if (!mounted || version != _accountVersion) return;
+      final auth = ref.read(authSessionProvider);
+      if (auth is! AuthSignedIn || auth.userId != ownerId) return;
+      if (snapshot != null) {
+        _container?.read(playerControllerProvider.notifier)
+            .restoreQueueSnapshot(snapshot);
+      }
+    } catch (_) {
+      // A missing, corrupt or platform-unsupported secure store is nonfatal.
+    } finally {
+      if (mounted && version == _accountVersion) {
+        final auth = ref.read(authSessionProvider);
+        if (auth is AuthSignedIn && auth.userId == ownerId) {
+          _queueOwner = ownerId;
+        }
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -45,6 +91,23 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     _container = ProviderScope.containerOf(context, listen: false);
     _audioEngine = JustAudioEngineAdapter();
     _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
+    _queueSubscription = ref.listenManual<PlayerState>(
+      playerControllerProvider,
+      (previous, next) {
+        final owner = _queueOwner;
+        final auth = ref.read(authSessionProvider);
+        if (owner == null || auth is! AuthSignedIn || auth.userId != owner) {
+          return;
+        }
+        final queueChanged = previous?.queueVersion != next.queueVersion ||
+            previous?.currentTrack?.id != next.currentTrack?.id ||
+            previous?.playbackState != next.playbackState;
+        final positionCheckpoint =
+            (previous?.position.inSeconds ?? 0) ~/ 20 !=
+            next.position.inSeconds ~/ 20;
+        if (queueChanged || positionCheckpoint) _saveQueueFor(owner);
+      },
+    );
     unawaited(_startBackgroundAudio());
     unawaited(migrateJsonStoresToDrift(_container!));
     unawaited(_container!.read(authSessionProvider.notifier).restoreSession());
@@ -52,14 +115,23 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
       final before = prev is AuthSignedIn ? prev.userId : null;
       final after = next is AuthSignedIn ? next.userId : null;
       if (before != after) {
-        _accountVersion++;
+        final version = ++_accountVersion;
         _showOnboarding = false;
         _shellKey = GlobalKey();
         ref.invalidate(onboardingProvider);
         ref.read(outboxTerritoryProvider.notifier).state = 'WW';
-      }
-      if (prev is AuthSignedIn && before != after) {
-        unawaited(ref.read(playerControllerProvider.notifier).stop());
+
+        // Snapshot the departing account before Stop clears the controller.
+        // All data is written to account-scoped encrypted storage and never
+        // contains a playback grant or a provider URL.
+        if (before != null) _saveQueueFor(before);
+        _queueOwner = null;
+        _queueAuthTransition = _queueAuthTransition.then((_) async {
+          if (before != null) {
+            await _container?.read(playerControllerProvider.notifier).stop();
+          }
+          if (after != null) await _restoreQueueFor(after, version);
+        }).catchError((Object _) {});
       }
       if (next is AuthSignedIn && before != after) {
         // Replay offline ops now that a session exists.
@@ -76,6 +148,12 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     if (state == AppLifecycleState.resumed &&
         ref.read(authSessionProvider) is AuthSignedIn) {
       unawaited(ref.read(outboxSyncProvider).drainIfSignedIn());
+    }
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      final owner = _queueOwner;
+      if (owner != null) _saveQueueFor(owner);
     }
   }
 
@@ -99,6 +177,10 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    final owner = _queueOwner;
+    if (owner != null) _saveQueueFor(owner);
+    _queueOwner = null;
+    _queueSubscription?.close();
     unawaited(_backgroundBridge?.stop() ?? Future<void>.value());
     _container?.read(playerControllerProvider.notifier).detachEngine();
     _audioEngine?.dispose();

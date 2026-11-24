@@ -52,14 +52,19 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
   ProviderTrack _trackFromJson(Map value, {String providerId = 'youtube_music'}) {
     final trackId = value['providerTrackId'] as String? ?? '';
     final duration = value['durationSec'];
+    final isPreview = providerId == 'deezer' &&
+        RegExp(r'^[0-9]{1,20}$').hasMatch(trackId) &&
+        value['previewUrl'] is String &&
+        (value['previewUrl'] as String).isNotEmpty;
     return ProviderTrack(
-      breezzeTrackId: 'bz:$providerId:$trackId',
-      hasPreview: providerId == 'deezer' && value['previewUrl'] is String,
+      breezzeTrackId: isPreview
+          ? 'bz:deezer_preview:$trackId' : 'bz:$providerId:$trackId',
+      hasPreview: isPreview,
       providerTrackId: '$providerId:$trackId',
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
       artworkUrl: value['artworkUrl'] as String?,
-      duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+      duration: Duration(seconds: isPreview ? 30 : duration is num ? duration.toInt() : 0),
     );
   }
 
@@ -203,13 +208,17 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
+    // YouTube Music is discovery/official video only in the Deezer-first
+    // player configuration. Never resolve an unofficial media URL in the
+    // native audio engine, including for previously saved YouTube items.
+    if (isYouTubeSongId(track.id)) return null;
+
     try {
-      final youtubeSong = isYouTubeSongId(track.id);
-      final catalogId = youtubeSong ? null : await _resolveCatalogId(api, track);
-      if (!youtubeSong && catalogId == null) return null;
+      final catalogId = await _resolveCatalogId(api, track);
+      if (catalogId == null) return null;
 
       final providerIdentity = _providerIdentity(track.id);
-      if (!youtubeSong && providerIdentity != null) {
+      if (providerIdentity != null) {
         final session = await api.startPlaybackSession(
           providerId: providerIdentity.$1,
           providerTrackId: providerIdentity.$2,
@@ -239,7 +248,6 @@ class LiveResolver implements PlaybackResolver {
       final preferences = await DownloadPreferencesStore().load();
       final session = await api.startPlaybackSession(
         trackId: catalogId,
-        externalTrackId: youtubeSong ? track.id : null,
         requestedQuality: preferences.streamingQuality,
       );
       final sessionId = session['id'] as String?;
@@ -440,8 +448,40 @@ class FavoritesStore {
 
   Future<bool> isFavorite(String id, {String ownerId = 'guest'}) =>
       _dao.contains(id, ownerId: ownerId);
+
+  /// One-way hydration from a validated, account-scoped cloud snapshot.
+  /// This does not produce local edits or upload the same rows again.
+  Future<bool> reconcileCloud(
+    String ownerId,
+    List<FavoriteTrack> remote,
+  ) => _dao.reconcileCloud(
+        ownerId: ownerId,
+        tracks: [
+          for (final track in remote)
+            (
+              id: track.id,
+              title: track.title,
+              artist: track.artist,
+              artworkUrl: track.artworkUrl,
+              durationMs: track.durationMs,
+            ),
+        ],
+      );
 }
 
 /// App-wide favorites store provider.
 final favoritesStoreProvider =
     Provider<FavoritesStore>((ref) => FavoritesStore());
+
+/// Read-only favorite state is scoped to both account and catalog track.
+/// Album/follow providers use the same owner-aware invalidation convention.
+typedef FavoriteTrackKey = ({String ownerId, String trackId});
+
+final isTrackFavoriteProvider = FutureProvider.family<bool, FavoriteTrackKey>(
+  (ref, key) => ref.read(favoritesStoreProvider)
+      .isFavorite(key.trackId, ownerId: key.ownerId),
+);
+
+/// Invalidated after a saved-song mutation so the persistent Library tab
+/// refreshes without requiring a route restart or another account sign-in.
+final favoritesRefreshProvider = StateProvider<int>((ref) => 0);

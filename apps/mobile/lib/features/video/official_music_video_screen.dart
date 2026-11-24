@@ -1,9 +1,11 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../core/audio/youtube_player_handoff.dart';
+import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// In-app official YouTube video player. This is video playback only; it does
@@ -11,7 +13,7 @@ import '../../widgets/bz_brand_icons.dart';
 ///
 /// If YouTube prevents embedding, the user may explicitly open the original
 /// watch page in YouTube. Breezze must not circumvent uploader restrictions.
-class OfficialMusicVideoScreen extends StatefulWidget {
+class OfficialMusicVideoScreen extends ConsumerStatefulWidget {
   final String videoId;
   final String title;
   final String artist;
@@ -26,20 +28,105 @@ class OfficialMusicVideoScreen extends StatefulWidget {
   });
 
   @override
-  State<OfficialMusicVideoScreen> createState() =>
+  ConsumerState<OfficialMusicVideoScreen> createState() =>
       _OfficialMusicVideoScreenState();
 }
 
 class _OfficialMusicVideoScreenState
-    extends State<OfficialMusicVideoScreen> {
+    extends ConsumerState<OfficialMusicVideoScreen> with WidgetsBindingObserver {
   YoutubePlayerController? _controller;
+  late String _currentVideoId;
+  late String _currentTitle;
+  late String _currentArtist;
+  String? _currentArtworkUrl;
+
+  // Provider recommendations are a foreground video watch list only.
+  List<Map<String, String?>> _watchQueue = [];
+  int _queuePosition = 0;
 
   bool get _valid =>
-      YoutubePlayerHandoff.isValidProviderTrackId(widget.videoId);
+      YoutubePlayerHandoff.isValidProviderTrackId(_currentVideoId);
+
+  Future<void> _loadWatchQueue() async {
+    if (!_valid) return;
+    try {
+      final result = await ref.read(authSessionProvider.notifier).api
+          .ytMusicWatchQueue(widget.videoId);
+      if (!mounted || result['kind'] != 'ok') return;
+      final payload = result['value'];
+      if (payload is! Map || payload['playbackAvailable'] != false ||
+          payload['seedVideoId'] != widget.videoId ||
+          payload['tracks'] is! List) return;
+      final queue = <Map<String, String?>>[
+        {
+          'videoId': widget.videoId,
+          'title': widget.title,
+          'artist': widget.artist,
+          'artworkUrl': widget.artworkUrl,
+        },
+      ];
+      final seen = <String>{widget.videoId};
+      for (final item in (payload['tracks'] as List).take(25)) {
+        if (item is! Map) continue;
+        final id = item['providerTrackId'];
+        final title = item['title'];
+        if (id is! String || title is! String ||
+            !YoutubePlayerHandoff.isValidProviderTrackId(id) ||
+            title.trim().isEmpty || !seen.add(id)) continue;
+        queue.add({
+          'videoId': id,
+          'title': title,
+          'artist': item['artist'] is String
+              ? item['artist'] as String : 'Unknown artist',
+          'artworkUrl': item['artworkUrl'] is String
+              ? item['artworkUrl'] as String : null,
+        });
+      }
+      if (mounted) setState(() => _watchQueue = queue);
+    } catch (_) {
+      // Unofficial queue failure must not prevent the official video player.
+    }
+  }
+
+  Future<void> _jumpToQueueItem(int position) async {
+    if (position < 0 || position >= _watchQueue.length) return;
+    final item = _watchQueue[position];
+    final id = item['videoId'];
+    if (id == null || !YoutubePlayerHandoff.isValidProviderTrackId(id)) return;
+    try {
+      if (_controller == null) {
+        final opened = await YoutubePlayerHandoff.openProviderTrackId(id);
+        if (!opened) return;
+      } else {
+        // This user-initiated action uses the official visible iframe,
+        // never a detached, audio-only or background media URL.
+        await _controller!.loadVideoById(videoId: id);
+      }
+      if (!mounted) return;
+      setState(() {
+        _queuePosition = position;
+        _currentVideoId = id;
+        _currentTitle = item['title'] ?? _currentTitle;
+        _currentArtist = item['artist'] ?? _currentArtist;
+        _currentArtworkUrl = item['artworkUrl'];
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This YouTube video cannot be opened.')),
+        );
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _currentVideoId = widget.videoId;
+    _currentTitle = widget.title;
+    _currentArtist = widget.artist;
+    _currentArtworkUrl = widget.artworkUrl;
     if (_valid &&
         YoutubePlayerHandoff.supportsEmbeddedPlayer(
           platform: defaultTargetPlatform,
@@ -49,7 +136,7 @@ class _OfficialMusicVideoScreenState
       // Listeners control the video in the YouTube UI and all restrictions
       // remain enforced by the upstream provider.
       _controller = YoutubePlayerController.fromVideoId(
-        videoId: widget.videoId,
+        videoId: _currentVideoId,
         autoPlay: false,
         params: const YoutubePlayerParams(
           showControls: true,
@@ -57,10 +144,20 @@ class _OfficialMusicVideoScreenState
         ),
       );
     }
+    // Queue metadata is optional; it never holds up the first video.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadWatchQueue();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _controller?.pauseVideo();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.close();
     super.dispose();
   }
@@ -68,7 +165,7 @@ class _OfficialMusicVideoScreenState
   Future<void> _openOnYouTube() async {
     try {
       final opened =
-          await YoutubePlayerHandoff.openProviderTrackId(widget.videoId);
+          await YoutubePlayerHandoff.openProviderTrackId(_currentVideoId);
       if (!opened && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -79,7 +176,7 @@ class _OfficialMusicVideoScreenState
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid or unavailable music video.')),
+          const SnackBar(content: Text('Invalid or unavailable YouTube video.'))
         );
       }
     }
@@ -101,7 +198,7 @@ class _OfficialMusicVideoScreenState
     return Scaffold(
       backgroundColor: theme.bzBackground,
       appBar: AppBar(
-        title: const Text('Music Video'),
+        title: const Text('YouTube player'),
         leading: IconButton(
           tooltip: 'Back to music',
           icon: const BzSvgIcon(name: 'chevron-left'),
@@ -131,9 +228,9 @@ class _OfficialMusicVideoScreenState
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          if (widget.artworkUrl != null)
+                          if (_currentArtworkUrl != null)
                             Image.network(
-                              widget.artworkUrl!,
+                              _currentArtworkUrl!,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) =>
                                   const SizedBox.shrink(),
@@ -178,18 +275,44 @@ class _OfficialMusicVideoScreenState
                   ),
                 const SizedBox(height: 22),
                 Text(
-                  widget.title,
+                  _currentTitle,
                   style: theme.textTheme.headlineSmall,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  widget.artist,
+                  _currentArtist,
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: theme.bzText2,
                   ),
                 ),
+                if (_watchQueue.length > 1) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Previous YouTube video',
+                        icon: const Icon(Icons.skip_previous),
+                        onPressed: _queuePosition == 0
+                            ? null : () => _jumpToQueueItem(_queuePosition - 1),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Up Next · ${_queuePosition + 1} of ${_watchQueue.length}',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Next YouTube video',
+                        icon: const Icon(Icons.skip_next),
+                        onPressed: _queuePosition + 1 >= _watchQueue.length
+                            ? null : () => _jumpToQueueItem(_queuePosition + 1),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Row(
                   children: [

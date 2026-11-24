@@ -27,6 +27,19 @@ export class PlaybackResolveService {
     edgeCountry?: string,
   ) {
     const territory = this.requireTerritory(edgeCountry);
+    // A catalogue metadata record cannot authorize a Breezze-hosted media URL.
+    // External providers must use the provider-specific resolver and deliver
+    // their own authorized playback source; an internal rights row alone is
+    // not proof that any audio bytes exist in Breezze's media storage.
+    const track = await this.prisma.track.findUnique({
+      where: { id: dto.trackId },
+      select: { source: true },
+    });
+    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
+    if (track.source === 'youtube_music' || track.source === 'deezer') {
+      throw new NotAcceptableException('USE_PROVIDER_PLAYBACK_RESOLVER');
+    }
+
     const decision = await this.rights.decide({
       userId,
       trackId: dto.trackId,
@@ -58,7 +71,7 @@ export class PlaybackResolveService {
   }
 
   async resolveProvider(
-    _userId: string,
+    userId: string,
     dto: {
       providerId: string;
       providerTrackId: string;
@@ -83,6 +96,20 @@ export class PlaybackResolveService {
       where: { trackId: dto.canonicalTrackId, status: 'active' },
     });
     if (takedown) throw new NotAcceptableException('TAKEDOWN_ACTIVE');
+
+    // Search metadata, previews and even upstream availability do not convey
+    // full-audio rights. A canonical territory-aware permission is mandatory.
+    const decision = await this.rights.decide({
+      userId,
+      trackId: dto.canonicalTrackId,
+      action: 'stream.full',
+      territory,
+    });
+    if (!decision.allowed || decision.previewOnly) {
+      throw new NotAcceptableException(
+        decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason,
+      );
+    }
 
     const provider = this.providers.get(dto.providerId);
     if (
@@ -109,15 +136,14 @@ export class PlaybackResolveService {
     if (!availability.value.available) {
       throw new NotAcceptableException('PROVIDER_TRACK_UNAVAILABLE');
     }
-
     const result = await provider.resolvePlayback({
       providerTrackId: dto.providerTrackId,
       canonicalTrackId: dto.canonicalTrackId,
       territory,
       authorization: {
         action: 'stream.full',
-        expiresAt: null,
-        attribution: availability.attribution ?? null,
+        expiresAt: decision.expiresAt,
+        attribution: decision.attribution ?? availability.attribution ?? null,
       },
     });
     if (result.kind === 'unsupported') {
@@ -140,6 +166,12 @@ export class PlaybackResolveService {
     ) {
       throw new ServiceUnavailableException('PROVIDER_RETURNED_INVALID_SOURCE');
     }
+    // A provider URL whose validity extends beyond this recording's
+    // explicit license window is not safe to hand out. Adapter metadata
+    // cannot silently widen our canonical authorization interval.
+    if (decision.expiresAt && result.value.expiresAt > decision.expiresAt) {
+      throw new NotAcceptableException('PROVIDER_GRANT_OUTLIVES_RIGHTS');
+    }
 
     return {
       providerId: dto.providerId,
@@ -148,7 +180,8 @@ export class PlaybackResolveService {
       expiresAt: result.value.expiresAt,
       mimeType: result.value.mimeType,
       codec: result.value.codec,
-      attribution: result.attribution ?? availability.attribution ?? null,
+      attribution: decision.attribution ??
+        result.attribution ?? availability.attribution ?? null,
     };
   }
 }

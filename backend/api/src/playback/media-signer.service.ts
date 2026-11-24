@@ -37,6 +37,40 @@ export class MediaSigner {
     };
   }
 
+  /**
+   * R2 only: signed delivery for explicitly ingested and rights-authorized
+   * Breezze-controlled video assets. Never feed this a YouTube video ID.
+   */
+  createVideoUrl(
+    videoAssetId: string,
+    mode: 'stream' | 'download',
+    rightsExpiresAt: Date | null = null,
+  ): { url: string; expiresAt: Date } {
+    if (!/^[a-f0-9-]{36}$/i.test(videoAssetId)) {
+      throw new Error('VIDEO_ASSET_ID_INVALID');
+    }
+    const now = Date.now();
+    const expires = Math.min(
+      now + (mode === 'stream' ? 2 * 60 * 60 * 1000 : 15 * 60 * 1000),
+      rightsExpiresAt?.getTime() ?? Number.POSITIVE_INFINITY,
+    );
+    if (!Number.isFinite(expires) || expires <= now) {
+      throw new Error('MEDIA_URL_EXPIRY_INVALID');
+    }
+    const signature = this.sign(`video:${videoAssetId}:${mode}:${expires}`);
+    return {
+      url: `${this.edgeUrl(`/video/${encodeURIComponent(videoAssetId)}/${mode}`)}?e=${expires}&s=${signature}`,
+      expiresAt: new Date(expires),
+    };
+  }
+
+  verifyVideo(videoAssetId: string, mode: 'stream' | 'download', expires: number, sig: string): boolean {
+    if (!Number.isSafeInteger(expires) || Date.now() >= expires) return false;
+    const expected = Buffer.from(this.sign(`video:${videoAssetId}:${mode}:${expires}`), 'utf8');
+    const actual = Buffer.from(sig, 'utf8');
+    return actual.length === expected.length && timingSafeEqual(expected, actual);
+  }
+
   createUploadUrl(
     userId: string,
     jobId: string,

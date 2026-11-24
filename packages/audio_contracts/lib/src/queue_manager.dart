@@ -39,14 +39,72 @@ class QueueManager {
           ? _entries[_currentIndex!]
           : null;
 
-  List<QueueEntry> get upNext => List.unmodifiable(
-      _currentIndex == null ? _entries : _entries.sublist(_currentIndex! + 1));
+  /// The UI and OS media queue must display the same order advance() uses.
+  /// In shuffle mode physical list indexes are not playback ordering.
+  List<QueueEntry> get upNext {
+    final index = _currentIndex;
+    if (!shuffle || index == null) {
+      return List.unmodifiable(index == null ? _entries : _entries.sublist(index + 1));
+    }
+    final position = _shuffledOrder.indexOf(_entries[index].entryId);
+    if (position < 0) return const <QueueEntry>[];
+    final byId = {for (final item in _entries) item.entryId: item};
+    return List.unmodifiable(_shuffledOrder.skip(position + 1)
+        .map((id) => byId[id]).whereType<QueueEntry>());
+  }
 
   List<QueueEntry> get history => List.unmodifiable(_history);
 
   String? get playingFromLabel => current?.sourceContext;
 
   int get length => _entries.length;
+
+  /// Read-only stable order for serialization; stream URLs are never stored.
+  List<QueueEntry> get entries => List.unmodifiable(_entries);
+  List<String> get shuffledOrder => List.unmodifiable(_shuffledOrder);
+
+  /// Restores the same queue without starting an unauthorized media source.
+  void restore(
+    List<QueueEntry> entries, {
+    required String currentEntryId,
+    required RepeatMode repeat,
+    required bool shuffleEnabled,
+    List<String> shuffledOrder = const [],
+  }) {
+    final ids = entries.map((e) => e.entryId).toSet();
+    final index = entries.indexWhere((e) => e.entryId == currentEntryId);
+    if (entries.isEmpty || ids.length != entries.length || index < 0) {
+      throw ArgumentError('INVALID_QUEUE_SNAPSHOT');
+    }
+    _entries
+      ..clear()
+      ..addAll(entries);
+    _history.clear();
+    _currentIndex = index;
+    repeatMode = repeat;
+    shuffle = shuffleEnabled;
+    if (shuffle &&
+        shuffledOrder.length == entries.length &&
+        shuffledOrder.toSet().length == ids.length &&
+        shuffledOrder.toSet().containsAll(ids)) {
+      _shuffledOrder = List.of(shuffledOrder);
+    } else {
+      _shuffledOrder = [];
+      _rebuildShuffle();
+    }
+    onQueueChanged?.call();
+  }
+
+  /// Explicit Stop and account switches must not leak prior queue modes.
+  void reset() {
+    _entries.clear();
+    _history.clear();
+    _currentIndex = null;
+    repeatMode = RepeatMode.off;
+    shuffle = false;
+    _shuffledOrder = [];
+    onQueueChanged?.call();
+  }
 
   // ------------------------------------------------------------------
   // Mutations
@@ -68,16 +126,31 @@ class QueueManager {
   void playLast(QueueEntry entry) {
     _entries.add(entry);
     _currentIndex ??= 0;
-    _rebuildShuffle();
+    if (shuffle && _shuffledOrder.isNotEmpty) {
+      _shuffledOrder.add(entry.entryId);
+    } else {
+      _rebuildShuffle();
+    }
     onQueueChanged?.call();
   }
 
   /// Inserts immediately after the current item (Play Next, §53.4).
   void playNext(QueueEntry entry) {
     final insertAt = (_currentIndex ?? -1) + 1;
+    final previousCurrentId = current?.entryId;
     _entries.insert(insertAt, entry);
     if (_currentIndex == null) _currentIndex = 0;
-    _rebuildShuffle();
+    if (shuffle && previousCurrentId != null) {
+      final pos = _shuffledOrder.indexOf(previousCurrentId);
+      if (pos < 0) {
+        _rebuildShuffle();
+      } else {
+        // Play Next is explicitly ordered, even while shuffle is enabled.
+        _shuffledOrder.insert(pos + 1, entry.entryId);
+      }
+    } else {
+      _rebuildShuffle();
+    }
     onQueueChanged?.call();
   }
 
@@ -85,8 +158,16 @@ class QueueManager {
   void replaceCurrent(QueueEntry entry) {
     final index = _currentIndex;
     if (index == null) return;
+    final oldId = _entries[index].entryId;
     _entries[index] = entry;
-    _rebuildShuffle();
+    if (shuffle) {
+      final pos = _shuffledOrder.indexOf(oldId);
+      if (pos < 0) {
+        _rebuildShuffle();
+      } else {
+        _shuffledOrder[pos] = entry.entryId;
+      }
+    }
     onQueueChanged?.call();
   }
 
@@ -103,7 +184,8 @@ class QueueManager {
             _entries.isEmpty ? null : math.min(idx, _entries.length - 1);
       }
     }
-    _rebuildShuffle();
+    if (shuffle) _shuffledOrder.remove(entryId);
+    if (!shuffle || _shuffledOrder.isEmpty) _rebuildShuffle();
     onQueueChanged?.call();
     return true;
   }
@@ -119,6 +201,41 @@ class QueueManager {
     _currentIndex = _entries.indexWhere((e) => e.entryId == currentId);
     if (_currentIndex != null && _currentIndex! < 0) _currentIndex = null;
     _rebuildShuffle();
+    onQueueChanged?.call();
+    return true;
+  }
+
+  /// Reorder an upcoming entry in the *visible* playback order, not its
+  /// physical storage index. The playing entry and already-played prefix are
+  /// never moved. This works identically with shuffle on or off.
+  bool reorderUpNext(String entryId, int newUpNextIndex) {
+    final playingIndex = _currentIndex;
+    final playingId = current?.entryId;
+    if (playingIndex == null || playingId == null ||
+        current?.entryId == entryId) return false;
+
+    if (shuffle) {
+      final playingPosition = _shuffledOrder.indexOf(playingId);
+      if (playingPosition < 0) return false;
+      final next = _shuffledOrder.skip(playingPosition + 1).toList();
+      if (!next.remove(entryId)) return false;
+      final target = math.max(0, math.min(newUpNextIndex, next.length));
+      next.insert(target, entryId);
+      _shuffledOrder = [
+        ..._shuffledOrder.take(playingPosition + 1),
+        ...next,
+      ];
+    } else {
+      final from = _entries.indexWhere((e) => e.entryId == entryId);
+      if (from <= playingIndex) return false;
+      final moving = _entries.removeAt(from);
+      final target = math.max(
+        playingIndex + 1,
+        math.min(playingIndex + 1 + newUpNextIndex, _entries.length),
+      );
+      _entries.insert(target, moving);
+      _currentIndex = _entries.indexWhere((e) => e.entryId == playingId);
+    }
     onQueueChanged?.call();
     return true;
   }
@@ -154,17 +271,42 @@ class QueueManager {
     final next = _nextIndex(cur);
     if (next == null) return null; // queue finished
     _currentIndex = next;
+    onQueueChanged?.call();
     return _entries[next];
   }
 
   QueueEntry? previous() {
     if (_entries.isEmpty || _currentIndex == null) return null;
+    if (shuffle) {
+      final pos = _shuffledOrder.indexOf(current!.entryId);
+      if (pos > 0) {
+        final prev = _entries.indexWhere((e) => e.entryId == _shuffledOrder[pos - 1]);
+        if (prev >= 0) {
+          _currentIndex = prev;
+          onQueueChanged?.call();
+          return _entries[prev];
+        }
+      }
+      if (pos == 0 && repeatMode == RepeatMode.repeatAll &&
+          _shuffledOrder.isNotEmpty) {
+        final lastId = _shuffledOrder.last;
+        final last = _entries.indexWhere((e) => e.entryId == lastId);
+        if (last >= 0) {
+          _currentIndex = last;
+          onQueueChanged?.call();
+          return _entries[last];
+        }
+      }
+      return current;
+    }
     if (_currentIndex! > 0) {
       _currentIndex = _currentIndex! - 1;
+      onQueueChanged?.call();
       return _entries[_currentIndex!];
     }
     if (repeatMode == RepeatMode.repeatAll) {
       _currentIndex = _entries.length - 1;
+      onQueueChanged?.call();
       return _entries.last;
     }
     return _entries.first; // stay at first

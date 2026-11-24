@@ -1,3 +1,4 @@
+import 'package:breezze_audio_contracts/audio_contracts.dart' show PlaybackState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -13,14 +14,36 @@ Future<void> openYouTubePlayer({
   required String artist,
   String? artworkUrl,
 }) async {
-  await ref.read(playerControllerProvider.notifier).pause();
-  if (!context.mounted) return;
-  await Navigator.of(context).push(MaterialPageRoute<void>(
-    builder: (_) => OfficialMusicVideoScreen(
-      videoId: videoId,
-      title: title,
-      artist: artist,
-      artworkUrl: artworkUrl,
-    ),
+  await openVideoSurface(context, (_) => OfficialMusicVideoScreen(
+    videoId: videoId, title: title, artist: artist, artworkUrl: artworkUrl,
   ));
+}
+
+Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final controller = container.read(playerControllerProvider.notifier);
+  final previous = container.read(playerControllerProvider);
+  if (previous.playbackState == PlaybackState.resolving ||
+      previous.playbackState == PlaybackState.buffering ||
+      previous.playbackState == PlaybackState.loading ||
+      previous.playbackState == PlaybackState.transitioning) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Audio is loading. Try the video again in a moment.')),
+    );
+    return;
+  }
+  final entry = controller.queue.current?.entryId;
+  final resumeAudio = previous.playbackState == PlaybackState.playing;
+  if (resumeAudio) await controller.pause();
+  try {
+    if (!context.mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
+  } finally {
+    if (context.mounted && resumeAudio && entry != null &&
+        controller.queue.current?.entryId == entry &&
+        container.read(playerControllerProvider).playbackState == PlaybackState.paused &&
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      await controller.resume();
+    }
+  }
 }

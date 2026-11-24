@@ -15,6 +15,7 @@ class SavedAlbum {
   final String? catalogUrl;
   final List<String> genres;
   final bool isCompilation;
+  final bool isPinned;
   final DateTime addedAt;
 
   const SavedAlbum({
@@ -26,7 +27,20 @@ class SavedAlbum {
     this.catalogUrl,
     this.genres = const [],
     this.isCompilation = false,
+    this.isPinned = false,
   });
+
+  SavedAlbum withPinned(bool pinned) => SavedAlbum(
+        id: id,
+        title: title,
+        artist: artist,
+        addedAt: addedAt,
+        artworkUrl: artworkUrl,
+        catalogUrl: catalogUrl,
+        genres: genres,
+        isCompilation: isCompilation,
+        isPinned: pinned,
+      );
 
   factory SavedAlbum.fromJson(Map<String, dynamic> json) => SavedAlbum(
         id: json['id'] as String,
@@ -43,6 +57,7 @@ class SavedAlbum {
                 .toList(growable: false)
             : const [],
         isCompilation: json['isCompilation'] == true,
+        isPinned: json['isPinned'] == true,
         addedAt: DateTime.tryParse(json['addedAt'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       );
@@ -57,6 +72,7 @@ class SavedAlbum {
         'catalogUrl': json['catalogUrl'],
         'genres': json['genres'],
         'isCompilation': json['isCompilation'],
+        'isPinned': json['isPinned'],
         'addedAt': json['savedAt'],
       });
 
@@ -68,6 +84,7 @@ class SavedAlbum {
         'catalogUrl': catalogUrl,
         'genres': genres,
         'isCompilation': isCompilation,
+        'isPinned': isPinned,
         'addedAt': addedAt.toUtc().toIso8601String(),
       };
 }
@@ -178,11 +195,19 @@ class SavedAlbumStore {
       if (raw == null) return [];
       final decoded = jsonDecode(raw);
       if (decoded is! List) return [];
-      return [
+      final albums = [
         for (final item in decoded)
           if (item is Map)
             SavedAlbum.fromJson(Map<String, dynamic>.from(item)),
       ];
+      // Pin ordering is a presentation detail; unpinned albums retain
+      // the saved-at order and this never changes catalog identifiers.
+      albums.sort((a, b) {
+        if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+        final byDate = b.addedAt.compareTo(a.addedAt);
+        return byDate != 0 ? byDate : a.id.compareTo(b.id);
+      });
+      return albums;
     } catch (_) {
       // Catalog browsing must still work when local storage is unavailable.
       return [];
@@ -194,17 +219,53 @@ class SavedAlbumStore {
 
   Future<void> save(String ownerId, SavedAlbum album) => _serialize(() async {
         final ops = await _readOps(ownerId);
-        // Persist intent before changing the visible local cache. Repeating a
-        // pending upsert after a crash is safe because the API is idempotent.
-        ops[album.id] = {'action': 'upsert', 'album': album.toJson()};
-        await _writeOps(ownerId, ops);
         final albums = await load(ownerId);
+        // Album detail may not know an existing pin; metadata refreshes must
+        // not clear that user's explicit pin selection.
+        final existing = albums.where((item) => item.id == album.id);
+        final effective = existing.isEmpty
+            ? album
+            : album.withPinned(existing.first.isPinned || album.isPinned);
+        // Persist intent before updating visible state. Replays are idempotent.
+        final explicitPin = ops[album.id]?['pinExplicit'] == true ||
+            effective.isPinned;
+        ops[album.id] = {
+          'action': 'upsert',
+          'album': effective.toJson(),
+          if (explicitPin) 'pinExplicit': true,
+        };
+        await _writeOps(ownerId, ops);
         albums.removeWhere((item) => item.id == album.id);
-        albums.insert(0, album);
+        albums.insert(0, effective);
         await _storage.write(
           key: _key(ownerId),
           value: jsonEncode(albums.map((item) => item.toJson()).toList()),
         );
+      });
+
+  /// Owner-scoped, durable pin/unpin. Uses the existing album upsert journal
+  /// so an offline pin cannot race ahead of the album's initial cloud save.
+  Future<bool> setPinned(String ownerId, String albumId, bool pinned) =>
+      _serialize(() async {
+        final albums = await load(ownerId);
+        final index = albums.indexWhere((album) => album.id == albumId);
+        if (index < 0) return false;
+        final original = albums[index];
+        if (original.isPinned == pinned) return false;
+        final updated = original.withPinned(pinned);
+        final ops = await _readOps(ownerId);
+        ops[albumId] = {
+          'action': 'upsert',
+          'album': updated.toJson(),
+          'pinExplicit': true,
+        };
+        await _writeOps(ownerId, ops);
+        albums[index] = updated;
+        await _storage.write(
+          key: _key(ownerId),
+          value: jsonEncode(albums.map((item) => item.toJson()).toList()),
+        );
+        return true;
       });
 
   Future<void> remove(String ownerId, String albumId) => _serialize(() async {
@@ -247,6 +308,7 @@ class SavedAlbumStore {
             ops.putIfAbsent(album.id, () => {
               'action': 'upsert',
               'album': album.toJson(),
+              if (album.isPinned) 'pinExplicit': true,
             });
           }
           await _writeOps(ownerId, ops);
@@ -274,6 +336,9 @@ class SavedAlbumStore {
               catalogUrl: album.catalogUrl,
               genres: album.genres,
               isCompilation: album.isCompilation,
+              // A stale metadata-only save must not overwrite a pin
+              // changed on another device since this cache was created.
+              isPinned: item['pinExplicit'] == true ? album.isPinned : null,
             );
           } else {
             // Damaged outbox entries must not be silently discarded.
@@ -321,7 +386,7 @@ class SavedAlbumStore {
       });
 
 
-  Future<void> _serialize(Future<void> Function() action) {
+  Future<T> _serialize<T>(Future<T> Function() action) {
     final next = _pending.then((_) => action());
     _pending = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     return next;
@@ -335,4 +400,16 @@ typedef SavedAlbumKey = ({String ownerId, String albumId});
 
 final isAlbumSavedProvider = FutureProvider.family<bool, SavedAlbumKey>(
   (ref, key) => SavedAlbumStore().contains(key.ownerId, key.albumId),
+);
+
+/// Owner-scoped pin state for the existing album-detail action. No new
+/// persistence path: the same encrypted SavedAlbumStore owns all pin edits.
+final isAlbumPinnedProvider = FutureProvider.family<bool, SavedAlbumKey>(
+  (ref, key) async {
+    final albums = await SavedAlbumStore().load(key.ownerId);
+    for (final album in albums) {
+      if (album.id == key.albumId) return album.isPinned;
+    }
+    return false;
+  },
 );

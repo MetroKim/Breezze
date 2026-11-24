@@ -27,6 +27,7 @@ model User {
   favorites      Favorite[]
   playlists      Playlist[]
   downloads      DownloadRecord[]
+  videoDownloads VideoDownloadRecord[]
   recentlyPlayed RecentlyPlayed[]
   listeningEvents ListeningEvent[]
   playbackSessions PlaybackSession[]
@@ -40,14 +41,20 @@ model User {
   followedArtists UserFollowedArtist[]
   savedCatalogAlbums UserSavedCatalogAlbum[]
   socialIdentities SocialAuthIdentity[]
+  youtubeAccountConnection YoutubeAccountConnection?
+  youtubeAccountFlows YoutubeAccountLinkFlow[]
 }
 
 model UserFollowedArtist {
-  userId    String
-  artistKey String
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  artistKey    String
+  displayName  String?
+  isPinned     Boolean  @default(false)
+  followedAt   DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, artistKey])
+  @@index([userId, isPinned, followedAt, artistKey])
 }
 
 /// Per-user catalog bookmarks only; they are never media playback rights.
@@ -63,12 +70,13 @@ model UserSavedCatalogAlbum {
   catalogUrl      String?
   genres          String[] @default([])
   isCompilation   Boolean  @default(false)
+  isPinned         Boolean  @default(false)
   savedAt         DateTime @default(now())
   updatedAt       DateTime @updatedAt
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, source, externalAlbumId])
-  @@index([userId, savedAt, id])
+  @@index([userId, isPinned, savedAt, id])
 }
 
 
@@ -88,6 +96,37 @@ model SocialAuthIdentity {
 
 /// Browser OAuth pairing. The browser never sees the Flutter refresh token.
 /// Flow secret is hashed and the result is AES-GCM sealed at rest.
+/// Separately consented, read-only YouTube Data API authorization.
+/// Supabase/Google sign-in NEVER supplies this token. Each token is sealed
+/// with server-side AES-GCM and associated with the owning Breezze user.
+model YoutubeAccountConnection {
+  userId                 String   @id
+  channelId              String   @unique
+  channelTitle           String?
+  accessTokenCiphertext  String
+  refreshTokenCiphertext String
+  accessExpiresAt        DateTime
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// One-time, owner-bound OAuth PKCE flows; server never sends verifier to app.
+model YoutubeAccountLinkFlow {
+  id          String   @id @default(uuid())
+  userId      String
+  stateHash   String   @unique
+  codeVerifier String
+  status      String   @default("pending")
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([expiresAt])
+}
+
 model SocialLoginFlow {
   id            String    @id @default(uuid())
   provider      String
@@ -227,6 +266,7 @@ model Track {
   playbackSessions PlaybackSession[]
   playlistItems PlaylistItem[]
   downloads DownloadRecord[]
+  videoAsset VideoAsset?
   lyrics Lyrics?
 
   @@index([artistId, title])
@@ -346,9 +386,12 @@ model Playlist {
   id        String         @id @default(uuid())
   userId    String
   name      String
+  isPinned  Boolean        @default(false)
   createdAt DateTime       @default(now())
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     PlaylistItem[]
+
+  @@index([userId, isPinned, createdAt])
 }
 
 model PlaylistItem {
@@ -360,6 +403,33 @@ model PlaylistItem {
   track      Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
 
   @@unique([playlistId, trackId])
+}
+
+/// Only a verified, Breezze-controlled MP4 R2 object can become a
+/// native playable/downloadable video. YouTube metadata never creates one.
+model VideoAsset {
+  id        String   @id @default(uuid())
+  trackId   String   @unique
+  status    String   @default("pending")
+  mimeType  String   @default("video/mp4")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  downloads VideoDownloadRecord[]
+}
+
+model VideoDownloadRecord {
+  id           String     @id @default(uuid())
+  userId       String
+  videoAssetId String
+  status       String     @default("active")
+  expiresAt    DateTime
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoAsset   VideoAsset @relation(fields: [videoAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoAssetId])
+  @@index([userId, status, createdAt])
 }
 
 model DownloadRecord {

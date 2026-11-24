@@ -1,10 +1,12 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderRegistry } from './provider-registry.service';
+import { YtMusicAdapter } from './ytmusic.adapter';
 
 // Read-only provider discovery and metadata endpoints.
 @Controller('providers')
 export class ProvidersController {
-  constructor(private readonly registry: ProviderRegistry) {}
+  constructor(private readonly registry: ProviderRegistry, private readonly youtubeMusic: YtMusicAdapter) {}
 
   @Get()
   list() {
@@ -14,6 +16,82 @@ export class ProvidersController {
   @Get('search')
   searchAll(@Query('q') q: string) {
     return this.registry.searchAll(q ?? '');
+  }
+
+  // YouTube Music is a supplementary artist/chart metadata source, not an audio stream proxy.
+  // Restricted to authenticated users and an explicit non-production feature flag.
+  // This is a feasibility POC, not an approved streaming or download grant.
+  @Get('youtube_music/audio-candidate/:videoId')
+  @UseGuards(JwtAuthGuard)
+  getYoutubeMusicAudioCandidate(@Param('videoId') videoId: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getAudioCandidate(videoId);
+  }
+
+  @Get('youtube_music/artists/search')
+  searchYoutubeMusicArtists(@Query('q') q: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.searchArtists(q ?? '');
+  }
+
+  @Get('youtube_music/artists/:artistId')
+  getYoutubeMusicArtist(@Param('artistId') artistId: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getArtist(artistId);
+  }
+
+  @Get('youtube_music/charts')
+  getYoutubeMusicCharts(@Query('country') country: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getCharts(country || 'ZZ');
+  }
+
+  @Get('youtube_music/watch-queue/:videoId')
+  getYoutubeMusicWatchQueue(
+    @Param('videoId') videoId: string,
+    @Query('limit') limit: string | undefined,
+  ) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    const parsedLimit = limit === undefined ? 20 : Number(limit);
+    return this.youtubeMusic.getWatchQueue(videoId, parsedLimit);
+  }
+
+  // All these routes call the private ytmusicapi service for public catalog
+  // metadata. None return media bytes, signed streaming URLs or download grants.
+  @Get('youtube_music/suggestions')
+  getYoutubeMusicSuggestions(@Query('q') query: string, @Query('limit') limit?: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getSuggestions(query ?? '', limit === undefined ? 10 : Number(limit));
+  }
+
+  @Get('youtube_music/albums/:albumId')
+  getYoutubeMusicAlbum(@Param('albumId') albumId: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getAlbum(albumId);
+  }
+
+  @Get('youtube_music/playlists/:playlistId')
+  getYoutubeMusicPlaylist(@Param('playlistId') playlistId: string, @Query('limit') limit?: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getPlaylist(playlistId, limit === undefined ? 50 : Number(limit));
+  }
+
+  @Get('youtube_music/moods')
+  getYoutubeMusicMoods() {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getMoods();
+  }
+
+  @Get('youtube_music/moods/playlists')
+  getYoutubeMusicMoodPlaylists(@Query('params') params: string, @Query('limit') limit?: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getMoodPlaylists(params ?? '', limit === undefined ? 20 : Number(limit));
+  }
+
+  @Get('youtube_music/explore')
+  getYoutubeMusicExplore() {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getExplore();
   }
 
   @Get(':id/tracks/:trackId')

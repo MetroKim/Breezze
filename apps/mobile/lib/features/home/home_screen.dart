@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -9,6 +11,8 @@ import '../../app/recent_store.dart';
 import '../../app/playlist_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../core/audio/playback_source_policy.dart';
+import '../video/open_youtube_player.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_screen.dart';
 import '../settings/account_screen.dart';
@@ -18,19 +22,24 @@ import '../settings/account_screen.dart';
 /// Recently Played comes from the RecentStore; Favorites from the
 /// FavoritesStore. No placeholder data presented as real (§50.1).
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.loadRecent});
+
+  /// An account-scoped history reader. Defaults to the persistent RecentStore.
+  /// This seam also makes account-switch and storage-failure behavior testable.
+  final Future<List<RecentEntry>> Function(String ownerId)? loadRecent;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final _recent = RecentStore();
   List<RecentEntry> _recentlyPlayed = [];
   List<FavoriteTrack> _favorites = [];
   List<TrackInfo> _madeForYou = [];
+  List<TrackInfo> _deezerTrending = [];
   Map<String, dynamic>? _replay;
   bool _loading = true;
+  bool _localDataUnavailable = false;
   int _refreshVersion = 0;
 
   @override
@@ -43,11 +52,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final version = ++_refreshVersion;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final recent = await _recent.load(ownerId: ownerId);
+    // A broken local store must not leave Listen Now on skeletons forever.
+    // Continue to fetch any independent remote sections without claiming
+    // that missing local rows are real history or recommendations.
+    var localDataUnavailable = false;
+    List<RecentEntry> recent;
+    try {
+      final load = widget.loadRecent;
+      recent = load != null
+          ? await load(ownerId)
+          : await RecentStore().load(ownerId: ownerId);
+    } catch (_) {
+      recent = [];
+      localDataUnavailable = true;
+    }
     if (!mounted || version != _refreshVersion) return;
-    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
+    List<FavoriteTrack> favorites;
+    try {
+      favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
+    } catch (_) {
+      favorites = [];
+      localDataUnavailable = true;
+    }
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
+    var deezerTrending = <TrackInfo>[];
     if (!mounted || version != _refreshVersion) return;
     if (auth is AuthSignedIn) {
       final api = ref.read(authSessionProvider.notifier).api;
@@ -96,6 +125,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       } catch (_) {
         // Replay is an independent home section.
       }
+      try {
+        final chart = await api.discoverySongsChart();
+        final rows = chart['items'];
+        if (rows is List && chart['source'] == 'Deezer') {
+          // Do not queue raw full-track Deezer metadata identifiers.
+          deezerTrending = rows.whereType<Map>().where((row) {
+            final id = row['id']?.toString() ?? '';
+            return RegExp(r'^[0-9]{1,20}$').hasMatch(id) &&
+                row['previewUrl'] is String &&
+                (row['title'] as String?)?.isNotEmpty == true &&
+                (row['artist'] as String?)?.isNotEmpty == true;
+          }).take(12).map((row) => TrackInfo(
+            id: 'bz:deezer_preview:${row['id']}',
+            title: row['title'] as String,
+            artist: row['artist'] as String,
+            artworkUrl: row['artworkUrl'] as String?,
+            duration: const Duration(seconds: 30),
+          )).toList(growable: false);
+        }
+      } catch (_) {
+        // A Deezer outage must not hide saved Home content.
+      }
     }
     if (!mounted || version != _refreshVersion) return;
     final currentAuth = ref.read(authSessionProvider);
@@ -106,8 +157,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _recentlyPlayed = recent;
       _favorites = favorites;
       _madeForYou = madeForYou;
+      _deezerTrending = deezerTrending;
       _replay = replay;
       _loading = false;
+      _localDataUnavailable = localDataUnavailable;
     });
   }
 
@@ -140,21 +193,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (name == null || name.trim().isEmpty) return;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    String? remoteId;
+    final store = PlaylistStore();
+    await store.create(ownerId, name);
     if (auth is AuthSignedIn) {
-      try {
-        final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name.trim());
-        remoteId = remote['id'] as String?;
-      } catch (_) {}
+      unawaited(store.syncOwner(
+        ownerId,
+        ref.read(authSessionProvider.notifier).api,
+        ownerStillActive: () {
+          if (!mounted) return false;
+          final current = ref.read(authSessionProvider);
+          return current is AuthSignedIn && current.userId == ownerId;
+        },
+      ));
     }
-    await PlaylistStore().create(ownerId, name, id: remoteId);
     if (!mounted) return;
     ref.read(homeTabHintProvider.notifier).state = MainTab.library.index;
     ref.read(playlistRefreshSignalProvider.notifier).state++;
   }
 
-  void _play(TrackInfo track, List<TrackInfo> queue, int index) {
-    ref.read(playerControllerProvider.notifier).playTrack(
+  Future<void> _play(TrackInfo track, List<TrackInfo> queue, int index) async {
+    if (isYouTubeSongId(track.id)) {
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: track.id.substring('bz:youtube_music:'.length),
+        title: track.title ?? 'YouTube Music',
+        artist: track.artist ?? 'Unknown artist',
+        artworkUrl: track.artworkUrl,
+      );
+      return;
+    }
+    await ref.read(playerControllerProvider.notifier).playTrack(
           trackId: track.id,
           queue: queue,
           startIndex: index,
@@ -183,8 +252,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _recentlyPlayed = [];
         _favorites = [];
         _madeForYou = [];
+        _deezerTrending = [];
         _replay = null;
         _loading = true;
+        _localDataUnavailable = false;
       });
       _refresh();
     });
@@ -284,6 +355,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 18),
             const BzSkeletonArtworkGrid(itemCount: 4),
           ],
+          if (!_loading && _localDataUnavailable) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Could not load your saved music',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text('Your listening history or saved songs are temporarily unavailable. Your library has not been erased.',
+                      style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 14),
+                  OutlinedButton(
+                    onPressed: _refresh,
+                    child: const Text('Try again'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
           if (!_loading && shortcuts.isNotEmpty) ...[
             _ShortcutGrid(tracks: shortcuts.values.toList(), onPlay: _play),
             const SizedBox(height: 28),
@@ -296,7 +393,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
-          if (!_loading && _recentlyPlayed.isNotEmpty) ...[
+          if (!_loading && _deezerTrending.isNotEmpty) ...[
+             _Rail(
+               title: 'Trending on Deezer · 30-second previews',
+               tracks: _deezerTrending,
+               onPlay: _play,
+             ),
+             const SizedBox(height: 24),
+           ],
+           if (!_loading && _recentlyPlayed.isNotEmpty) ...[
             _Rail(
               title: 'Recently Played',
               tracks: [
@@ -335,7 +440,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
-          if (!_loading && _recentlyPlayed.isEmpty && _favorites.isEmpty)
+          if (!_loading && !_localDataUnavailable && _recentlyPlayed.isEmpty && _favorites.isEmpty)
             _FirstRunCard(
               onSearch: () => ref.read(homeTabHintProvider.notifier).state = MainTab.search.index,
             ),

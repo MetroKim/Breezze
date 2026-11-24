@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
-import { JamendoAdapter } from './jamendo.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
 
@@ -17,12 +16,10 @@ export class ProviderRegistry {
     internal: InternalCatalogAdapter,
     youtubeMusic: YtMusicAdapter,
     deezer: DeezerAdapter,
-    jamendo: JamendoAdapter,
   ) {
     this.register(internal);
     this.register(youtubeMusic);
     this.register(deezer);
-    this.register(jamendo);
   }
 
   register(adapter: ProviderAdapter) {
@@ -53,9 +50,12 @@ export class ProviderRegistry {
     if (normalized.length < 2 || normalized.length > 120) {
       return { query: normalized, providers: [] };
     }
+    // Deezer is the app's primary public metadata/search backend.
+    // YouTube Music remains available as a supplemental discovery/matching
+    // source, but search results should show Deezer first.
     const adapters = [...this.adapters.values()].filter(
       (adapter) => adapter.enabled !== false && adapter.capabilities.search,
-    );
+    ).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     const settled = await Promise.allSettled(
       adapters.map(async (adapter) => ({
         providerId: adapter.providerId,

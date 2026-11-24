@@ -22,7 +22,7 @@ export class DeezerAdapter implements ProviderAdapter {
   readonly providerId = 'deezer';
   readonly displayName = 'Deezer';
   readonly adapterVersion = '1.0.0';
-  readonly priority = 95;
+  readonly priority = 110;
   get enabled(): boolean { return process.env.DEEZER_ENABLED !== 'false'; }
   readonly capabilities: ProviderCapabilities = {
     search: true, metadata: true, availability: false, playback: false,

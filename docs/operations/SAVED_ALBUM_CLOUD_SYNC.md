@@ -7,7 +7,7 @@ Saved albums are **bookmarks containing catalog metadata**, not media entitlemen
 ## API
 
 - `GET /api/v1/library/albums?cursor=<opaque id>` returns at most 100 saved albums and an optional next cursor. The cursor must belong to the same authenticated user; otherwise it is rejected.
-- `POST /api/v1/library/albums` upserts the user's `externalAlbumId`, `title`, `artist`, `genres`, and optional approved artwork and catalog URLs, plus explicit `isCompilation` when actually supplied by the source.
+- `POST /api/v1/library/albums` upserts the user's `externalAlbumId`, `title`, `artist`, `genres`, and optional approved artwork and catalog URLs, plus explicit `isCompilation` when actually supplied by the source. An **optional** `isPinned` boolean updates the current user's pin. Omitting it preserves an existing pin.
 - `DELETE /api/v1/library/albums/:externalAlbumId` deletes only the authenticated user's own bookmark and is idempotent.
 
 The database has a unique constraint on `(userId, source, externalAlbumId)`, `ON DELETE CASCADE` on the user relation, and a bounded keyset pagination index. Changes are an additive migration. Server metadata URLs permit only trusted Apple/iTunes catalog and artwork hosts over HTTPS; this prevents user-provided URLs from becoming private-host links.
@@ -16,7 +16,7 @@ The database has a unique constraint on `(userId, source, externalAlbumId)`, `ON
 
 The existing `SavedAlbumStore` remains the local first-read cache, keyed by the authenticated account ID. Every add/remove operation persists a per-owner encrypted-storage outbox entry **before** it updates the local view. A later refresh replays those operations using idempotent server upserts/deletes, discards each entry only after the network operation completes and the owner is still active, then reconciles from the complete server page sequence.
 
-- **Offline:** local change remains visible; the same outbox operation is retried on reconnect.
+- **Offline:** local change remains visible; the same outbox operation is retried on reconnect. Album pin/unpin uses this same journal, not a second sync engine, and pinned albums sort first locally and on the owner-scoped backend list.
 - **Restart:** pending operations persist in secure storage.
 - **Account switch or token mutation:** the sync operation aborts before making further calls or replacing the local cache. No account A album is uploaded with account B's token.
 - **Legacy upgrade:** pre-cloud albums are enqueued for upload once per account; a durable marker prevents later remote deletions from being resurrected.

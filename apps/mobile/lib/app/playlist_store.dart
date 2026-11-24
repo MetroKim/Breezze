@@ -1,5 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+
+import '../core/api/breezze_api.dart';
+import '../core/database/catalog_id_map_dao.dart';
+import '../core/database/db_instance.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,19 +21,30 @@ class UserPlaylist {
   final String name;
   final DateTime createdAt;
   final List<FavoriteTrack> tracks;
+  final bool isPinned;
 
   const UserPlaylist({
     required this.id,
     required this.name,
     required this.createdAt,
     required this.tracks,
+    this.isPinned = false,
   });
+
+  UserPlaylist withPinned(bool pinned) => UserPlaylist(
+        id: id,
+        name: name,
+        createdAt: createdAt,
+        tracks: tracks,
+        isPinned: pinned,
+      );
 
   factory UserPlaylist.fromJson(Map<String, Object?> json) {
     final rawTracks = json['tracks'];
     return UserPlaylist(
       id: json['id'] as String,
       name: json['name'] as String? ?? 'Untitled playlist',
+      isPinned: json['isPinned'] == true,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       tracks: [
@@ -43,22 +59,58 @@ class UserPlaylist {
   Map<String, Object?> toJson() => {
         'id': id,
         'name': name,
+        'isPinned': isPinned,
         'createdAt': createdAt.toIso8601String(),
         'tracks': tracks.map((track) => track.toJson()).toList(),
       };
 }
 
-/// Local playlist repository. Operations are serialized so rapid adds/removes
-/// cannot overwrite each other's JSON snapshots.
+/// A single atomic JSON snapshot stores playlist rows AND their unsent edits.
+/// Previous releases wrote only a JSON list; that format remains readable.
+class _PlaylistDocument {
+  final List<UserPlaylist> playlists;
+  final List<Map<String, dynamic>> pending;
+
+  _PlaylistDocument(this.playlists, this.pending);
+}
+
+/// Account-scoped playlist cache and durable offline mutation journal.
+/// No second playlist database: playlist data and its pending edit are
+/// committed together by temp-file rename, and replayed in operation order.
 class PlaylistStore {
+  PlaylistStore({
+    Future<Directory> Function()? documentsDirectory,
+    Future<String?> Function(String)? cachedCanonicalId,
+  }) : _documentsDirectory =
+           documentsDirectory ?? getApplicationDocumentsDirectory,
+       _cachedCanonicalId = cachedCanonicalId ??
+           ((externalId) => CatalogIdMapDao(breezzeDb).lookup(externalId));
+
+  final Future<Directory> Function() _documentsDirectory;
+  final Future<String?> Function(String) _cachedCanonicalId;
   static Future<void> _pending = Future<void>.value();
+  static final Set<String> _syncingOwners = <String>{};
+  static final _uuidPattern = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+  );
+
+  static String _newId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+        '${hex.substring(20)}';
+  }
 
   Future<Directory> _directory(String ownerId) async {
     final safeOwner = ownerId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
     if (safeOwner.isEmpty) {
       throw ArgumentError.value(ownerId, 'ownerId', 'must be non-empty');
     }
-    final base = await getApplicationDocumentsDirectory();
+    final base = await _documentsDirectory();
     final directory = Directory('${base.path}/playlists/$safeOwner');
     await directory.create(recursive: true);
     return directory;
@@ -69,81 +121,209 @@ class PlaylistStore {
     return File('${directory.path}/playlists.json');
   }
 
+  Future<_PlaylistDocument> _read(String ownerId) async {
+    final file = await _file(ownerId);
+    if (!await file.exists()) return _PlaylistDocument([], []);
+    final json = jsonDecode(await file.readAsString());
+    final List<dynamic> rows;
+    final List<dynamic> pending;
+    if (json is List) {
+      rows = json;
+      pending = [];
+    } else if (json is Map &&
+        json['playlists'] is List &&
+        json['pending'] is List) {
+      rows = json['playlists'] as List;
+      pending = json['pending'] as List;
+    } else {
+      throw const FormatException('Unsupported playlist store');
+    }
+    return _PlaylistDocument(
+      [
+        for (final row in rows)
+          if (row is Map)
+            UserPlaylist.fromJson(row.cast<String, Object?>()),
+      ],
+      [
+        for (final op in pending)
+          if (op is Map)
+            Map<String, dynamic>.from(op),
+      ],
+    );
+  }
+
   Future<List<UserPlaylist>> load(String ownerId) async {
     try {
-      final file = await _file(ownerId);
-      if (!await file.exists()) return [];
-      final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! List) return [];
+      final playlists = (await _read(ownerId)).playlists;
+      // Stable partition preserves historical order within each group.
       return [
-        for (final item in decoded)
-          if (item is Map)
-            UserPlaylist.fromJson(item.cast<String, Object?>()),
+        ...playlists.where((p) => p.isPinned),
+        ...playlists.where((p) => !p.isPinned),
       ];
     } catch (_) {
+      // Local filesystem can be unavailable on restricted platforms.
+      // Never write a default empty state over an unreadable snapshot.
       return [];
     }
   }
 
-  Future<void> mergeRemote(String ownerId, List<Map<String, dynamic>> remote) => _serialize(() async {
-        final local = await load(ownerId);
-        final byId = {for (final item in local) item.id: item};
+  Future<int> pendingCount(String ownerId, {String? playlistId}) async {
+    final doc = await _read(ownerId);
+    return playlistId == null
+        ? doc.pending.length
+        : doc.pending.where((op) => op['playlistId'] == playlistId).length;
+  }
+
+  /// Used by Library to label the exact playlists with offline changes.
+  Future<Set<String>> pendingPlaylistIds(String ownerId) async {
+    final doc = await _read(ownerId);
+    return {
+      for (final op in doc.pending)
+        if (op['playlistId'] is String) op['playlistId'] as String,
+    };
+  }
+
+  Future<void> _save(String ownerId, _PlaylistDocument doc) async {
+    final file = await _file(ownerId);
+    final temp = File('${file.path}.tmp');
+    final content = jsonEncode({
+      'playlists': doc.playlists.map((playlist) => playlist.toJson()).toList(),
+      'pending': doc.pending,
+    });
+    await temp.writeAsString(content, flush: true);
+    await temp.rename(file.path);
+  }
+
+  void _queue(
+    String ownerId,
+    _PlaylistDocument doc,
+    String type,
+    String playlistId, [
+    Map<String, dynamic> fields = const {},
+  ]) {
+    if (ownerId == 'guest') return;
+    doc.pending.add({
+      'operationId': _newId(),
+      'type': type,
+      'playlistId': playlistId,
+      ...fields,
+    });
+  }
+
+  Future<void> mergeRemote(
+    String ownerId,
+    List<Map<String, dynamic>> remote,
+  ) => _serialize(() async {
+        final doc = await _read(ownerId);
+        final pendingIds = {
+          for (final entry in doc.pending)
+            if (entry['playlistId'] is String)
+              entry['playlistId'] as String,
+        };
+        final local = {for (final item in doc.playlists) item.id: item};
         final merged = <UserPlaylist>[];
-        for (final item in remote) {
-          final id = item['id'] as String?;
-          if (id == null || id.isEmpty) continue;
-          final cached = byId.remove(id);
+        for (final row in remote) {
+          final id = row['id'];
+          if (id is! String || id.isEmpty) continue;
+          if (pendingIds.contains(id)) {
+            final offline = local.remove(id);
+            if (offline != null) merged.add(offline);
+            // A pending delete intentionally keeps this ID absent.
+            continue;
+          }
+          final cached = local.remove(id);
+          final rawItems = row['items'];
+          final tracks = <FavoriteTrack>[];
+          if (rawItems is List) {
+            for (final raw in rawItems) {
+              if (raw is! Map || raw['track'] is! Map) continue;
+              final track = raw['track'] as Map;
+              final artist = track['artist'];
+              final idValue = track['id'];
+              if (idValue is! String || track['title'] is! String) {
+                continue;
+              }
+              tracks.add(FavoriteTrack(
+                id: idValue,
+                title: track['title'] as String,
+                artist: artist is Map && artist['name'] is String
+                    ? artist['name'] as String
+                    : '',
+                durationMs: ((track['duration'] as num?)?.toInt() ?? 0) * 1000,
+              ));
+            }
+          }
           merged.add(UserPlaylist(
             id: id,
-            name: item['name'] as String? ?? cached?.name ?? 'Untitled playlist',
-            createdAt: DateTime.tryParse(item['createdAt'] as String? ?? '') ?? cached?.createdAt ?? DateTime.now().toUtc(),
-            tracks: cached?.tracks ?? const [],
+            name: row['name'] as String? ?? cached?.name ?? 'Untitled playlist',
+            isPinned: row['isPinned'] is bool
+                ? row['isPinned'] == true
+                : cached?.isPinned ?? false,
+            createdAt: DateTime.tryParse(row['createdAt'] as String? ?? '') ??
+                cached?.createdAt ?? DateTime.now().toUtc(),
+            tracks: rawItems is List ? tracks : (cached?.tracks ?? const []),
           ));
         }
-        merged.addAll(byId.values);
-        await _save(ownerId, merged);
+        // A local pending edit wins over a stale server snapshot. Legacy
+        // offline drafts from older app versions also survive hydration.
+        for (final playlist in local.values) {
+          if (pendingIds.contains(playlist.id) ||
+              !_uuidPattern.hasMatch(playlist.id)) {
+            merged.add(playlist);
+          }
+        }
+        doc.playlists
+          ..clear()
+          ..addAll(merged);
+        await _save(ownerId, doc);
       });
 
-  Future<void> create(String ownerId, String name, {String? id}) => _serialize(() async {
+  Future<String> create(String ownerId, String name, {String? id}) =>
+      _serialize(() async {
         final normalized = name.trim();
         if (normalized.isEmpty) {
           throw ArgumentError.value(name, 'name', 'must not be empty');
         }
-        final playlists = await load(ownerId);
-        playlists.insert(
-          0,
-          UserPlaylist(
-            id: id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-            name: normalized,
-            createdAt: DateTime.now().toUtc(),
-            tracks: const [],
-          ),
-        );
-        await _save(ownerId, playlists);
+        final doc = await _read(ownerId);
+        final playlistId = id ?? _newId();
+        if (doc.playlists.any((playlist) => playlist.id == playlistId)) {
+          return playlistId;
+        }
+        doc.playlists.insert(0, UserPlaylist(
+          id: playlistId,
+          name: normalized,
+          createdAt: DateTime.now().toUtc(),
+          tracks: const [],
+        ));
+        _queue(ownerId, doc, 'create', playlistId, {'name': normalized});
+        await _save(ownerId, doc);
+        return playlistId;
       });
 
-  Future<void> replaceTracks(
+  /// Server hydration may update local items only if there is no unsent
+  /// operation for the same playlist. Otherwise an offline add could vanish.
+  Future<bool> replaceTracks(
     String ownerId,
     String playlistId,
     List<FavoriteTrack> tracks,
-  ) =>
-      _serialize(() async {
-        final playlists = await load(ownerId);
-        final index = playlists.indexWhere((item) => item.id == playlistId);
-        if (index < 0) return;
-        final old = playlists[index];
-        await _save(ownerId, [
-          for (var i = 0; i < playlists.length; i++)
-            if (i == index)
-              UserPlaylist(
-                id: old.id,
-                name: old.name,
-                createdAt: old.createdAt,
-                tracks: List<FavoriteTrack>.unmodifiable(tracks),
-              )
-            else
-              playlists[i],
-        ]);
+  ) => _serialize(() async {
+        final doc = await _read(ownerId);
+        if (doc.pending.any((op) => op['playlistId'] == playlistId)) {
+          return false;
+        }
+        final index =
+            doc.playlists.indexWhere((playlist) => playlist.id == playlistId);
+        if (index < 0) return false;
+        final current = doc.playlists[index];
+        doc.playlists[index] = UserPlaylist(
+          id: current.id,
+          name: current.name,
+          createdAt: current.createdAt,
+          tracks: List<FavoriteTrack>.unmodifiable(tracks),
+          isPinned: current.isPinned,
+        );
+        await _save(ownerId, doc);
+        return true;
       });
 
   Future<void> rename(String ownerId, String playlistId, String name) =>
@@ -152,102 +332,417 @@ class PlaylistStore {
         if (normalized.isEmpty) {
           throw ArgumentError.value(name, 'name', 'must not be empty');
         }
-        final playlists = await load(ownerId);
-        final index = playlists.indexWhere((p) => p.id == playlistId);
+        final doc = await _read(ownerId);
+        final index =
+            doc.playlists.indexWhere((playlist) => playlist.id == playlistId);
         if (index < 0) return;
-        final old = playlists[index];
-        playlists[index] = UserPlaylist(
-          id: old.id,
+        final current = doc.playlists[index];
+        doc.playlists[index] = UserPlaylist(
+          id: current.id,
           name: normalized,
-          createdAt: old.createdAt,
-          tracks: old.tracks,
+          createdAt: current.createdAt,
+          tracks: current.tracks,
+          isPinned: current.isPinned,
         );
-        await _save(ownerId, playlists);
+        _queue(ownerId, doc, 'rename', playlistId, {'name': normalized});
+        await _save(ownerId, doc);
+      });
+
+  /// Pin/unpin and its pending cloud edit share one atomic local snapshot.
+  Future<bool> setPinned(String ownerId, String playlistId, bool pinned) =>
+      _serialize(() async {
+        final doc = await _read(ownerId);
+        final index =
+            doc.playlists.indexWhere((playlist) => playlist.id == playlistId);
+        if (index < 0 || doc.playlists[index].isPinned == pinned) return false;
+        doc.playlists[index] = doc.playlists[index].withPinned(pinned);
+        _queue(ownerId, doc, 'pin', playlistId, {'pinned': pinned});
+        await _save(ownerId, doc);
+        return true;
       });
 
   Future<void> delete(String ownerId, String playlistId) =>
       _serialize(() async {
-        final playlists = await load(ownerId);
-        playlists.removeWhere((p) => p.id == playlistId);
-        await _save(ownerId, playlists);
+        final doc = await _read(ownerId);
+        if (!doc.playlists.any((playlist) => playlist.id == playlistId)) return;
+        doc.playlists.removeWhere((playlist) => playlist.id == playlistId);
+        _queue(ownerId, doc, 'delete', playlistId);
+        await _save(ownerId, doc);
+      });
+
+  /// Adds a song to several existing playlists in ONE account-scoped,
+  /// serialized file transaction. Each new membership gets its own durable
+  /// cloud operation, while already-added songs and missing IDs are ignored.
+  /// The returned count is the number of playlists actually changed.
+  Future<int> addTrackToMany(
+    String ownerId,
+    Iterable<String> playlistIds,
+    FavoriteTrack track,
+  ) => _serialize(() async {
+        if (track.id.trim().isEmpty) {
+          throw ArgumentError.value(track.id, 'track.id', 'must not be empty');
+        }
+        final selected = playlistIds.toSet();
+        if (selected.isEmpty) return 0;
+        // Synced cloud playlists use canonical UUIDs; Search still supplies
+        // provider IDs. Avoid creating a duplicate local membership when a
+        // previously resolved provider track is already present.
+        String? canonicalId;
+        if (track.id.startsWith('bz:') || track.id.startsWith('bzv:')) {
+          try {
+            canonicalId = await _cachedCanonicalId(track.id);
+          } catch (_) {
+            // An unavailable mapping cache must not block offline edits.
+          }
+        }
+        final doc = await _read(ownerId);
+        var added = 0;
+        for (var i = 0; i < doc.playlists.length; i++) {
+          final current = doc.playlists[i];
+          if (!selected.contains(current.id) ||
+              current.tracks.any((item) =>
+                  item.id == track.id ||
+                  (canonicalId != null && item.id == canonicalId))) {
+            continue;
+          }
+          doc.playlists[i] = UserPlaylist(
+            id: current.id,
+            name: current.name,
+            createdAt: current.createdAt,
+            tracks: [...current.tracks, track],
+            isPinned: current.isPinned,
+          );
+          _queue(ownerId, doc, 'add', current.id, {
+            'track': track.toJson(),
+          });
+          added++;
+        }
+        if (added > 0) await _save(ownerId, doc);
+        return added;
       });
 
   Future<void> addTrack(
     String ownerId,
     String playlistId,
     FavoriteTrack track,
-  ) =>
-      _serialize(() async {
-        final playlists = await load(ownerId);
-        final index = playlists.indexWhere((p) => p.id == playlistId);
-        if (index < 0) return;
-        final old = playlists[index];
-        if (old.tracks.any((item) => item.id == track.id)) return;
-        playlists[index] = UserPlaylist(
-          id: old.id,
-          name: old.name,
-          createdAt: old.createdAt,
-          tracks: [...old.tracks, track],
-        );
-        await _save(ownerId, playlists);
-      });
+  ) async {
+    await addTrackToMany(ownerId, [playlistId], track);
+  }
 
   Future<void> reorderTracks(
     String ownerId,
     String playlistId,
     int oldIndex,
     int newIndex,
-  ) =>
-      _serialize(() async {
-        final playlists = await load(ownerId);
-        final index = playlists.indexWhere((p) => p.id == playlistId);
+  ) => _serialize(() async {
+        final doc = await _read(ownerId);
+        final index =
+            doc.playlists.indexWhere((playlist) => playlist.id == playlistId);
         if (index < 0) return;
-        final old = playlists[index];
-        if (oldIndex < 0 ||
-            oldIndex >= old.tracks.length ||
-            newIndex < 0 ||
-            newIndex >= old.tracks.length) {
+        final current = doc.playlists[index];
+        if (oldIndex < 0 || oldIndex >= current.tracks.length ||
+            newIndex < 0 || newIndex >= current.tracks.length) {
           return;
         }
-        final tracks = List<FavoriteTrack>.from(old.tracks);
+        final tracks = List<FavoriteTrack>.from(current.tracks);
         final moved = tracks.removeAt(oldIndex);
         tracks.insert(newIndex, moved);
-        playlists[index] = UserPlaylist(
-          id: old.id,
-          name: old.name,
-          createdAt: old.createdAt,
+        doc.playlists[index] = UserPlaylist(
+          id: current.id,
+          name: current.name,
+          createdAt: current.createdAt,
           tracks: tracks,
+          isPinned: current.isPinned,
         );
-        await _save(ownerId, playlists);
+        _queue(ownerId, doc, 'reorder', playlistId, {
+          'tracks': tracks.map((track) => track.toJson()).toList(),
+        });
+        await _save(ownerId, doc);
       });
 
   Future<void> removeTrack(
     String ownerId,
     String playlistId,
     String trackId,
-  ) =>
-      _serialize(() async {
-        final playlists = await load(ownerId);
-        final index = playlists.indexWhere((p) => p.id == playlistId);
+  ) => _serialize(() async {
+        final doc = await _read(ownerId);
+        final index =
+            doc.playlists.indexWhere((playlist) => playlist.id == playlistId);
         if (index < 0) return;
-        final old = playlists[index];
-        playlists[index] = UserPlaylist(
-          id: old.id,
-          name: old.name,
-          createdAt: old.createdAt,
-          tracks: old.tracks.where((item) => item.id != trackId).toList(),
+        final current = doc.playlists[index];
+        final candidate = current.tracks.where((track) => track.id == trackId);
+        if (candidate.isEmpty) return;
+        final removed = candidate.first;
+        doc.playlists[index] = UserPlaylist(
+          id: current.id,
+          name: current.name,
+          createdAt: current.createdAt,
+          tracks: current.tracks.where((track) => track.id != trackId).toList(),
+          isPinned: current.isPinned,
         );
-        await _save(ownerId, playlists);
+        _queue(ownerId, doc, 'remove', playlistId, {'track': removed.toJson()});
+        await _save(ownerId, doc);
       });
 
-  Future<void> _save(String ownerId, List<UserPlaylist> playlists) async {
-    final file = await _file(ownerId);
-    final temp = File('${file.path}.tmp');
-    await temp.writeAsString(
-      jsonEncode(playlists.map((playlist) => playlist.toJson()).toList()),
-      flush: true,
+  /// Import numeric local draft IDs from older versions into stable
+  /// client-generated UUIDs. This keeps already-offline playlists uploadable.
+  Future<void> _adoptLegacyDrafts(String ownerId) => _serialize(() async {
+        final doc = await _read(ownerId);
+        var changed = false;
+
+        // The older app used non-UUID local IDs when server creation failed.
+        // Those IDs never existed on the backend. Coalesce any pending edits
+        // into the local draft's CURRENT state rather than replaying unusable
+        // numeric-ID operations or recreating an already deleted draft.
+        if (doc.pending.any((op) =>
+            op['playlistId'] is String &&
+            !_uuidPattern.hasMatch(op['playlistId'] as String))) {
+          doc.pending.removeWhere((op) =>
+              op['playlistId'] is String &&
+              !_uuidPattern.hasMatch(op['playlistId'] as String));
+          changed = true;
+        }
+
+        final converted = <Map<String, dynamic>>[];
+        for (var i = 0; i < doc.playlists.length; i++) {
+          final old = doc.playlists[i];
+          if (_uuidPattern.hasMatch(old.id)) continue;
+          final nextId = _newId();
+          doc.playlists[i] = UserPlaylist(
+            id: nextId,
+            name: old.name,
+            createdAt: old.createdAt,
+            tracks: old.tracks,
+            isPinned: old.isPinned,
+          );
+          converted.add({
+            'operationId': _newId(),
+            'type': 'create',
+            'playlistId': nextId,
+            'name': old.name,
+          });
+          if (old.isPinned) {
+            converted.add({
+              'operationId': _newId(),
+              'type': 'pin',
+              'playlistId': nextId,
+              'pinned': true,
+            });
+          }
+          for (final track in old.tracks) {
+            converted.add({
+              'operationId': _newId(),
+              'type': 'add',
+              'playlistId': nextId,
+              'track': track.toJson(),
+            });
+          }
+          changed = true;
+        }
+        if (converted.isNotEmpty) doc.pending.insertAll(0, converted);
+        if (changed) await _save(ownerId, doc);
+      });
+
+  Future<String> _canonicalTrackId(
+    BreezzeApi api,
+    Map<String, dynamic> track,
+  ) async {
+    final id = track['id'];
+    if (id is! String || id.trim().isEmpty) {
+      throw const FormatException('Playlist edit has no track ID');
+    }
+    if (_uuidPattern.hasMatch(id)) return id;
+    final map = CatalogIdMapDao(breezzeDb);
+    final cached = await map.lookup(id);
+    if (cached != null) return cached;
+    final title = track['title'];
+    final artist = track['artist'];
+    if (title is! String || title.isEmpty ||
+        artist is! String || artist.isEmpty) {
+      throw const FormatException('Missing playlist track metadata');
+    }
+    String source = 'breezze_internal';
+    if (id.startsWith('bzv:')) {
+      source = 'youtube_music';
+    } else if (id.startsWith('bz:')) {
+      final segments = id.split(':');
+      if (segments.length >= 3 && segments[1].isNotEmpty) {
+        source = segments[1];
+      }
+    }
+    final durationMs = track['durationMs'];
+    final resolved = await api.resolveCatalogTrack(
+      externalId: id,
+      source: source,
+      title: title,
+      artistName: artist,
+      durationSec: ((durationMs is num ? durationMs.toInt() : 0) ~/ 1000)
+          .clamp(1, 86400).toInt(),
     );
-    await temp.rename(file.path);
+    final canonical = resolved['id'];
+    if (canonical is! String || !_uuidPattern.hasMatch(canonical)) {
+      throw const FormatException('Catalog identity not resolved');
+    }
+    await map.save(id, canonical);
+    return canonical;
+  }
+
+  Future<void> _sendOperation(
+    BreezzeApi api,
+    Map<String, dynamic> operation, {
+    required String issuedForToken,
+  }) async {
+    // A queued operation belongs to one authenticated session. Never make
+    // follow-up network calls under a different token after an async gap.
+    void assertSession() {
+      if (api.accessToken != issuedForToken) {
+        throw StateError('PLAYLIST_SYNC_SESSION_CHANGED');
+      }
+    }
+    assertSession();
+    final id = operation['playlistId'];
+    if (id is! String || !_uuidPattern.hasMatch(id)) {
+      throw const FormatException('Invalid playlist operation ID');
+    }
+    switch (operation['type']) {
+      case 'create':
+        await api.createPlaylist(operation['name'] as String, id: id);
+        return;
+      case 'rename':
+        await api.renamePlaylist(id, operation['name'] as String);
+        return;
+      case 'pin':
+        if (operation['pinned'] is! bool) {
+          throw const FormatException('Invalid playlist pin operation');
+        }
+        await api.pinPlaylist(id, operation['pinned'] as bool);
+        return;
+      case 'delete':
+        try {
+          await api.deletePlaylist(id);
+        } on BreezzeApiException catch (error) {
+          if (error.code != 'PLAYLIST_NOT_FOUND') rethrow;
+        }
+        return;
+      case 'add':
+        final track = Map<String, dynamic>.from(operation['track'] as Map);
+        final canonical = await _canonicalTrackId(api, track);
+        assertSession();
+        await api.addPlaylistTrack(id, canonical);
+        return;
+      case 'remove':
+        final track = Map<String, dynamic>.from(operation['track'] as Map);
+        final canonical = await _canonicalTrackId(api, track);
+        assertSession();
+        await api.removePlaylistTrack(id, canonical);
+        return;
+      case 'reorder':
+        final tracks = operation['tracks'] as List;
+        final ids = <String>[];
+        for (final item in tracks) {
+          assertSession();
+          ids.add(await _canonicalTrackId(
+            api, Map<String, dynamic>.from(item as Map),
+          ));
+        }
+        assertSession();
+        try {
+          await api.reorderPlaylistTracks(id, ids);
+        } on BreezzeApiException catch (error) {
+          if (error.code != 'PLAYLIST_ORDER_MISMATCH') rethrow;
+          // Device B may have added or removed tracks while device A was
+          // offline. Rebase A's relative ordering onto B's current
+          // membership; never delete B's newly added tracks.
+          assertSession();
+          final remote = await api.getPlaylist(id);
+          assertSession();
+          final items = remote['items'];
+          if (items is! List) {
+            throw const FormatException('Playlist conflict response invalid');
+          }
+          final remoteIds = <String>[];
+          for (final raw in items) {
+            if (raw is! Map || raw['trackId'] is! String) {
+              throw const FormatException('Playlist track identity missing');
+            }
+            final trackId = raw['trackId'] as String;
+            if (!_uuidPattern.hasMatch(trackId)) {
+              throw const FormatException('Playlist track identity invalid');
+            }
+            remoteIds.add(trackId);
+          }
+          if (remoteIds.toSet().length != remoteIds.length) {
+            throw const FormatException('Duplicate remote playlist identity');
+          }
+          final serverSet = remoteIds.toSet();
+          final rebased = <String>[];
+          final seen = <String>{};
+          for (final trackId in ids) {
+            if (serverSet.contains(trackId) && seen.add(trackId)) {
+              rebased.add(trackId);
+            }
+          }
+          for (final trackId in remoteIds) {
+            if (seen.add(trackId)) rebased.add(trackId);
+          }
+          assertSession();
+          await api.reorderPlaylistTracks(id, rebased);
+        }
+        return;
+      default:
+        throw const FormatException('Unknown playlist operation');
+    }
+  }
+
+  /// Replay durable operations in strict order. A network error or ownership
+  /// denial leaves the operation pending; concurrent membership changes
+  /// rebase reorder intent without dropping another device's songs.
+  /// Only a confirmed server response deletes a journal entry.
+  Future<bool> syncOwner(
+    String ownerId,
+    BreezzeApi api, {
+    required bool Function() ownerStillActive,
+  }) async {
+    if (ownerId == 'guest' || !ownerStillActive() ||
+        api.accessToken == null || api.accessToken!.isEmpty ||
+        !_syncingOwners.add(ownerId)) return false;
+    final issuedForToken = api.accessToken!;
+    try {
+      await _adoptLegacyDrafts(ownerId);
+      while (ownerStillActive() && api.accessToken == issuedForToken) {
+        final doc = await _read(ownerId);
+        if (doc.pending.isEmpty) return true;
+        final operation = doc.pending.first;
+        try {
+          await _sendOperation(
+            api, operation, issuedForToken: issuedForToken,
+          );
+        } catch (_) {
+          // Never discard an edit just because the server is offline or
+          // another device changed playlist membership meanwhile.
+          return false;
+        }
+        // Switching sessions (even mid-request) must not acknowledge or
+        // replay an operation under a different bearer token.
+        if (!ownerStillActive() || api.accessToken != issuedForToken) {
+          return false;
+        }
+        await _serialize(() async {
+          final current = await _read(ownerId);
+          if (current.pending.isNotEmpty &&
+              current.pending.first['operationId'] ==
+                  operation['operationId']) {
+            current.pending.removeAt(0);
+            await _save(ownerId, current);
+          }
+        });
+      }
+      return false;
+    } catch (_) {
+      return false;
+    } finally {
+      _syncingOwners.remove(ownerId);
+    }
   }
 
   Future<T> _serialize<T>(Future<T> Function() operation) {

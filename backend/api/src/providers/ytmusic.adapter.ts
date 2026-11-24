@@ -18,6 +18,54 @@ interface TrackPayload {
   track?: ProviderTrack;
 }
 
+export interface YtMusicArtist {
+  artistId: string;
+  name: string;
+  artworkUrl?: string | null;
+  subscribers?: string | null;
+  rank?: string | number | null;
+}
+
+export interface YtMusicArtistSearch {
+  source: string;
+  artists: YtMusicArtist[];
+}
+
+export interface YtMusicArtistDetail {
+  source: string;
+  artist: { artistId: string; name: string; description?: string | null; artworkUrl?: string | null;
+    subscribers?: string | null; topSongs: Array<{ providerTrackId: string; title: string; artworkUrl?: string | null }>;
+    albums: Array<{ browseId: string; title: string; year?: string | null; artworkUrl?: string | null }> };
+}
+
+export interface YtMusicAudioCandidate {
+  source: 'youtube_music';
+  providerTrackId: string;
+  experimental: true;
+  candidate: {
+    streamUrl: string;
+    mimeType: string;
+    bitrateKbps: number;
+    expiresAt: string;
+  };
+}
+
+export interface YtMusicWatchQueue {
+  source: 'youtube_music';
+  seedVideoId: string;
+  playlistId: string | null;
+  tracks: ProviderTrack[];
+  playbackAvailable: false;
+}
+
+export interface YtMusicCharts {
+  source: string;
+  country: string;
+  artists: YtMusicArtist[];
+  musicVideoPlaylists: Array<{ playlistId: string; title: string; artworkUrl?: string | null }>;
+  songRankingAvailable: boolean;
+}
+
 @Injectable()
 export class YtMusicAdapter implements ProviderAdapter {
   readonly providerId = 'youtube_music';
@@ -33,6 +81,12 @@ export class YtMusicAdapter implements ProviderAdapter {
     availability: false,
     playback: false,
     download: false,
+    albums: true,
+    artists: true,
+    playlists: true,
+    videos: true,
+    charts: true,
+    moods: true,
   };
 
   private readonly inFlight = new Map<string, Promise<ProviderResult<unknown>>>();
@@ -161,6 +215,250 @@ export class YtMusicAdapter implements ProviderAdapter {
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
       }
     }));
+  }
+
+  /** Supplementary YouTube Music public metadata; never an audio entitlement. */
+  private async fetchSupplemental<T>(
+    cacheKey: string,
+    resource: string,
+    isValid: (payload: unknown) => payload is T,
+    ttlSeconds: number,
+  ): Promise<ProviderResult<T>> {
+    if (!this.enabled) return providerUnsupported('YouTube Music metadata provider is disabled');
+    const cached = await this.cache.get<ProviderResult<T>>(cacheKey);
+    if (cached) return cached;
+    return this.coalesce(cacheKey, () => this.withCircuit(async () => {
+      try {
+        const response = await fetch(new URL(resource, this.baseUrl), { signal: AbortSignal.timeout(4500) });
+        if (!response.ok) {
+          return providerError('YTMUSIC_METADATA_FAILED', `Metadata provider returned HTTP ${response.status}`,
+            response.status >= 500 || response.status === 429);
+        }
+        const payload: unknown = await response.json();
+        if (!isValid(payload)) {
+          return providerError('YTMUSIC_INVALID_RESPONSE', 'Unexpected YouTube Music metadata response', false);
+        }
+        const result = providerOk(payload, 'YouTube Music metadata via sigma67/ytmusicapi; no full-song playback grant');
+        await this.cache.set(cacheKey, result, this.cacheTtl(ttlSeconds));
+        return result;
+      } catch {
+        return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata temporarily unavailable', true);
+      }
+    }));
+  }
+
+  searchArtists(query: string): Promise<ProviderResult<YtMusicArtistSearch>> {
+    const q = query.trim();
+    if (q.length < 2 || q.length > 120) return Promise.resolve(providerOk({ source: 'youtube_music', artists: [] }));
+    const hash = crypto.createHash('sha256').update(q.toLowerCase()).digest('hex');
+    const url = new URL('/artists/search', this.baseUrl);
+    url.searchParams.set('q', q);
+    url.searchParams.set('limit', '20');
+    return this.fetchSupplemental(`provider:youtube_music:artists:v1:${hash}`, url.pathname + url.search,
+      (payload): payload is YtMusicArtistSearch =>
+        typeof payload === 'object' && payload !== null &&
+        Array.isArray((payload as YtMusicArtistSearch).artists), 180);
+  }
+
+  getArtist(artistId: string): Promise<ProviderResult<YtMusicArtistDetail>> {
+    if (!/^[A-Za-z0-9_-]{10,64}$/.test(artistId)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_ARTIST_ID', 'Invalid artist identifier', false));
+    }
+    return this.fetchSupplemental(`provider:youtube_music:artist:v1:${artistId}`,
+      `/artists/${encodeURIComponent(artistId)}`,
+      (payload): payload is YtMusicArtistDetail =>
+        typeof payload === 'object' && payload !== null &&
+        typeof (payload as YtMusicArtistDetail).artist?.name === 'string' &&
+        Array.isArray((payload as YtMusicArtistDetail).artist?.topSongs) &&
+        Array.isArray((payload as YtMusicArtistDetail).artist?.albums), 900);
+  }
+
+  getCharts(country = 'ZZ'): Promise<ProviderResult<YtMusicCharts>> {
+    const territory = country.toUpperCase();
+    if (!/^[A-Z]{2}$/.test(territory)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_CHART_COUNTRY', 'Expected a two-letter country code or ZZ', false));
+    }
+    return this.fetchSupplemental(`provider:youtube_music:charts:v1:${territory}`,
+      `/charts?country=${territory}`,
+      (payload): payload is YtMusicCharts =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as YtMusicCharts).country === territory &&
+        Array.isArray((payload as YtMusicCharts).artists) &&
+        Array.isArray((payload as YtMusicCharts).musicVideoPlaylists) &&
+        typeof (payload as YtMusicCharts).songRankingAvailable === 'boolean', 300);
+  }
+
+  /** Get unofficial YouTube Music next-track suggestions, metadata only. */
+  getWatchQueue(videoId: string, limit = 20): Promise<ProviderResult<YtMusicWatchQueue>> {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_ID', 'Expected an 11-character YouTube Music ID', false));
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 25) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_QUEUE_LIMIT', 'Queue limit must be 1 to 25', false));
+    }
+    return this.fetchSupplemental(
+      `provider:youtube_music:watch-queue:v1:${videoId}:${limit}`,
+      `/watch-queue/${encodeURIComponent(videoId)}?limit=${limit}`,
+      (payload): payload is YtMusicWatchQueue =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as YtMusicWatchQueue).source === 'youtube_music' &&
+        (payload as YtMusicWatchQueue).seedVideoId === videoId &&
+        (payload as YtMusicWatchQueue).playbackAvailable === false &&
+        Array.isArray((payload as YtMusicWatchQueue).tracks), 60,
+    );
+  }
+
+  /** Unofficial, read-only public catalog extensions. No media data leaves the sidecar. */
+  getSuggestions(query: string, limit = 10): Promise<ProviderResult<{ source: string; suggestions: string[] }>> {
+    const q = query.trim();
+    if (q.length < 2 || q.length > 120) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_QUERY', 'Search query must contain 2 to 120 characters', false));
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_LIMIT', 'Suggestion limit must be 1 to 10', false));
+    }
+    const hash = crypto.createHash('sha256').update(q.toLowerCase()).digest('hex');
+    return this.fetchSupplemental(
+      'provider:youtube_music:suggestions:v1:' + hash + ':' + limit,
+      '/suggestions?q=' + encodeURIComponent(q) + '&limit=' + limit,
+      (payload): payload is { source: string; suggestions: string[] } =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as { source?: unknown }).source === 'youtube_music' &&
+        Array.isArray((payload as { suggestions?: unknown }).suggestions), 120,
+    );
+  }
+
+  getAlbum(albumId: string): Promise<ProviderResult<{ source: string; album: Record<string, unknown>; playbackAvailable: false }>> {
+    if (!/^MPRE[A-Za-z0-9_-]{6,60}$/.test(albumId)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_ALBUM_ID', 'Invalid YouTube Music album ID', false));
+    }
+    return this.fetchSupplemental(
+      'provider:youtube_music:album:v1:' + albumId,
+      '/albums/' + encodeURIComponent(albumId),
+      (payload): payload is { source: string; album: Record<string, unknown>; playbackAvailable: false } =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as { source?: unknown }).source === 'youtube_music' &&
+        (payload as { playbackAvailable?: unknown }).playbackAvailable === false &&
+        typeof (payload as { album?: { title?: unknown } }).album?.title === 'string' &&
+        Array.isArray((payload as { album?: { tracks?: unknown } }).album?.tracks), 900,
+    );
+  }
+
+  getPlaylist(playlistId: string, limit = 50): Promise<ProviderResult<{ source: string; playlist: Record<string, unknown>; playbackAvailable: false }>> {
+    if (!/^[A-Za-z0-9_-]{10,128}$/.test(playlistId)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_PLAYLIST_ID', 'Invalid YouTube Music playlist ID', false));
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_LIMIT', 'Playlist limit must be 1 to 100', false));
+    }
+    return this.fetchSupplemental(
+      'provider:youtube_music:playlist:v1:' + playlistId + ':' + limit,
+      '/playlists/' + encodeURIComponent(playlistId) + '?limit=' + limit,
+      (payload): payload is { source: string; playlist: Record<string, unknown>; playbackAvailable: false } =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as { source?: unknown }).source === 'youtube_music' &&
+        (payload as { playbackAvailable?: unknown }).playbackAvailable === false &&
+        typeof (payload as { playlist?: { title?: unknown } }).playlist?.title === 'string' &&
+        Array.isArray((payload as { playlist?: { tracks?: unknown } }).playlist?.tracks), 300,
+    );
+  }
+
+  getMoods(): Promise<ProviderResult<{ source: string; sections: unknown[] }>> {
+    return this.fetchSupplemental(
+      'provider:youtube_music:moods:v1',
+      '/moods',
+      (payload): payload is { source: string; sections: unknown[] } =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as { source?: unknown }).source === 'youtube_music' &&
+        Array.isArray((payload as { sections?: unknown }).sections), 1800,
+    );
+  }
+
+  getMoodPlaylists(params: string, limit = 20): Promise<ProviderResult<{ source: string; playlists: unknown[] }>> {
+    if (!/^[A-Za-z0-9_-]{6,256}$/.test(params)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_MOOD_PARAMS', 'Invalid mood category token', false));
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 25) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_LIMIT', 'Mood playlist limit must be 1 to 25', false));
+    }
+    const hash = crypto.createHash('sha256').update(params).digest('hex');
+    return this.fetchSupplemental(
+      'provider:youtube_music:mood-playlists:v1:' + hash + ':' + limit,
+      '/moods/playlists?params=' + encodeURIComponent(params) + '&limit=' + limit,
+      (payload): payload is { source: string; playlists: unknown[] } =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as { source?: unknown }).source === 'youtube_music' &&
+        Array.isArray((payload as { playlists?: unknown }).playlists), 600,
+    );
+  }
+
+  getExplore(): Promise<ProviderResult<{ source: string; newReleases: unknown[]; trending: unknown[]; newVideos: unknown[]; topSongsAvailable: boolean; playbackAvailable: false }>> {
+    return this.fetchSupplemental(
+      'provider:youtube_music:explore:v1',
+      '/explore',
+      (payload): payload is { source: string; newReleases: unknown[]; trending: unknown[]; newVideos: unknown[]; topSongsAvailable: boolean; playbackAvailable: false } =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as { source?: unknown }).source === 'youtube_music' &&
+        (payload as { playbackAvailable?: unknown }).playbackAvailable === false &&
+        typeof (payload as { topSongsAvailable?: unknown }).topSongsAvailable === 'boolean' &&
+        Array.isArray((payload as { newReleases?: unknown }).newReleases) &&
+        Array.isArray((payload as { trending?: unknown }).trending) &&
+        Array.isArray((payload as { newVideos?: unknown }).newVideos), 300,
+    );
+  }
+
+  /**
+   * Opt-in development feasibility only. Returns an already-direct provider URL;
+   * it does not decipher protected formats, proxy bytes, grant downloads or
+   * claim licensed playback. Intentionally unavailable in production.
+   */
+  async getAudioCandidate(videoId: string): Promise<ProviderResult<YtMusicAudioCandidate>> {
+    if (process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT !== 'true' ||
+        process.env.NODE_ENV === 'production' ||
+        process.env.RAILWAY_ENVIRONMENT_NAME?.toLowerCase() === 'production') {
+      return providerUnsupported('YTMUSIC_AUDIO_EXPERIMENT_DISABLED');
+    }
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      return providerError('INVALID_YTMUSIC_ID', 'Invalid YouTube Music track identifier', false);
+    }
+    try {
+      const url = new URL(`/tracks/${encodeURIComponent(videoId)}/audio-candidate`, this.baseUrl);
+      const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (response.status === 404) {
+        return providerUnsupported('DIRECT_YTMUSIC_AUDIO_NOT_AVAILABLE');
+      }
+      if (!response.ok) {
+        return providerError('YTMUSIC_AUDIO_PROBE_UNAVAILABLE', 'Upstream audio probe unavailable', response.status >= 500);
+      }
+      const payload: unknown = await response.json();
+      if (!payload || typeof payload !== 'object') {
+        return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Invalid audio response', false);
+      }
+      const data = payload as Partial<YtMusicAudioCandidate>;
+      const candidate = data.candidate;
+      if (data.source !== 'youtube_music' || data.providerTrackId !== videoId ||
+          data.experimental !== true || !candidate ||
+          typeof candidate.streamUrl !== 'string' ||
+          typeof candidate.mimeType !== 'string' || !candidate.mimeType.startsWith('audio/') ||
+          typeof candidate.bitrateKbps !== 'number' || !Number.isFinite(candidate.bitrateKbps) ||
+          typeof candidate.expiresAt !== 'string') {
+        return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Invalid audio response', false);
+      }
+      let streamUrl: URL;
+      try { streamUrl = new URL(candidate.streamUrl); }
+      catch { return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Invalid audio URL', false); }
+      const hostname = streamUrl.hostname.toLowerCase();
+      const expiresAtMs = Date.parse(candidate.expiresAt);
+      if (streamUrl.protocol !== 'https:' ||
+          (hostname !== 'googlevideo.com' && !hostname.endsWith('.googlevideo.com')) ||
+          streamUrl.username || streamUrl.password ||
+          !Number.isFinite(expiresAtMs) || expiresAtMs < Date.now() + 60_000) {
+        return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Untrusted or expired media URL', false);
+      }
+      return providerOk(data as YtMusicAudioCandidate, 'Unlicensed experimental direct-stream feasibility only');
+    } catch {
+      return providerError('YTMUSIC_AUDIO_PROBE_UNAVAILABLE', 'Audio probe request failed', true);
+    }
   }
 
   async getAvailability(): Promise<ProviderResult<{ available: boolean }>> {

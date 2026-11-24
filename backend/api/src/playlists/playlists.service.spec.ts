@@ -50,8 +50,61 @@ describe('PlaylistsService tenant isolation and ordering', () => {
     await service.list('user-a');
     expect(prisma.playlist.findMany).toHaveBeenCalledWith({
       where: { userId: 'user-a' },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        items: {
+          orderBy: { position: 'asc' },
+          include: {
+            track: { include: { artist: true, album: true } },
+          },
+        },
+      },
     });
+  });
+
+  it('pins only an owned playlist and rejects cross-account changes',
+      async () => {
+    prisma.playlist.updateMany.mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    prisma.playlist.findFirst.mockResolvedValue({
+      id: 'playlist-a', userId: 'user-a', isPinned: true,
+    });
+    await expect(service.setPinned('user-a', 'playlist-a', true))
+      .resolves.toMatchObject({ isPinned: true });
+    expect(prisma.playlist.updateMany).toHaveBeenCalledWith({
+      where: { id: 'playlist-a', userId: 'user-a' },
+      data: { isPinned: true },
+    });
+    await expect(service.setPinned('user-b', 'playlist-a', false))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.playlist.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates with a client UUID for idempotent offline replay', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    prisma.playlist.create.mockResolvedValue({ id, userId: 'user-a', name: 'Offline mix' });
+    await expect(service.create('user-a', 'Offline mix', id))
+      .resolves.toEqual({ id, userId: 'user-a', name: 'Offline mix' });
+    expect(prisma.playlist.create).toHaveBeenCalledWith({
+      data: { id, userId: 'user-a', name: 'Offline mix' },
+    });
+  });
+
+  it('replays an already-created owned playlist without overwriting its name', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    prisma.playlist.create.mockRejectedValue({ code: 'P2002' });
+    prisma.playlist.findFirst.mockResolvedValue({ id, userId: 'user-a', name: 'Renamed elsewhere' });
+    const result = await service.create('user-a', 'Older offline name', id);
+    expect(result.name).toBe('Renamed elsewhere');
+    expect(prisma.playlist.findFirst).toHaveBeenCalledWith({ where: { id, userId: 'user-a' } });
+  });
+
+  it('rejects a client UUID already owned by a different account', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    prisma.playlist.create.mockRejectedValue({ code: 'P2002' });
+    prisma.playlist.findFirst.mockResolvedValue(null);
+    await expect(service.create('user-b', 'Hijack attempt', id))
+      .rejects.toThrow('PLAYLIST_ID_CONFLICT');
   });
 
   it('does not disclose another user playlist', async () => {

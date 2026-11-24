@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kReleaseMode;
@@ -70,6 +71,8 @@ class BreezzeApi {
         path != '/auth/refresh' &&
         path != '/auth/login' &&
         path != '/auth/register' &&
+        path != '/auth/supabase/exchange' &&
+        path != '/auth/supabase/link-legacy' &&
         !path.startsWith('/auth/social/') &&
         !path.startsWith('/auth/mfa/') &&
         onUnauthorized != null &&
@@ -80,9 +83,26 @@ class BreezzeApi {
   }
 
   Future<Map<String, dynamic>> _get(String path) async {
+    // Retrying an idempotent GET is safe after a transient edge/network
+    // interruption. Never apply this retry to POST/PATCH/DELETE mutations.
+    final originalToken = accessToken;
     Future<http.Response> send() =>
-        _client.get(_uri(path), headers: _headers).timeout(const Duration(seconds: 10));
-    var response = await send();
+        _client.get(_uri(path), headers: _headers)
+            .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await send();
+    } on Exception catch (error) {
+      if ((error is! TimeoutException && error is! http.ClientException) ||
+          accessToken != originalToken) {
+        rethrow;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      // An account switch during the backoff must never replay the old read
+      // under a different listener's session.
+      if (accessToken != originalToken) rethrow;
+      response = await send(); // Exactly one retry; a second failure propagates.
+    }
     if (response.statusCode == 401 &&
         onUnauthorized != null &&
         await onUnauthorized!()) {
@@ -132,10 +152,16 @@ class BreezzeApi {
         : jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode >= 400) {
       final error = body['error'];
+      // Nest HttpExceptions return a top-level machine-readable message.
+      final rawCode = body['message'];
+      final canonical = rawCode is String &&
+              RegExp(r'^[A-Z][A-Z0-9_]{2,80}$').hasMatch(rawCode)
+          ? rawCode
+          : null;
       throw BreezzeApiException(
         code: error is Map && error['code'] is String
             ? error['code'] as String
-            : 'HTTP_${response.statusCode}',
+            : canonical ?? 'HTTP_${response.statusCode}',
         message: error is Map && error['message'] is String
             ? error['message'] as String
             : 'Request failed',
@@ -163,6 +189,61 @@ class BreezzeApi {
   ) =>
       _get('/providers/${Uri.encodeComponent(providerId)}/tracks/${Uri.encodeComponent(providerTrackId)}');
 
+
+  // ---- separate, consent-based YouTube Data API account connection ----
+  // These routes never receive Supabase Google OAuth credentials directly.
+  Future<Map<String, dynamic>> youtubeAccountStatus() =>
+      _get('/youtube-account/status');
+
+  Future<Map<String, dynamic>> youtubeAccountStart() =>
+      _post('/youtube-account/start', const {});
+
+  Future<Map<String, dynamic>> youtubeAccountPlaylists() =>
+      _get('/youtube-account/playlists');
+
+  Future<Map<String, dynamic>> youtubeAccountPlaylistItems(String playlistId) =>
+      _get('/youtube-account/playlists/${Uri.encodeComponent(playlistId)}/items');
+
+  Future<Map<String, dynamic>> youtubeAccountDisconnect() =>
+      _delete('/youtube-account/connection');
+
+  // ---- unofficial YouTube Music discovery (metadata only) ----
+  // These endpoints proxy the private ytmusicapi service through Breezze's
+  // normal API. The provider result has an explicit kind (ok/error/unsupported);
+  // never interpret it as an audio stream or offline-download grant.
+  Future<Map<String, dynamic>> ytMusicSearchArtists(String query) =>
+      _get('/providers/youtube_music/artists/search?q=${Uri.encodeQueryComponent(query)}');
+
+  Future<Map<String, dynamic>> ytMusicArtist(String artistId) =>
+      _get('/providers/youtube_music/artists/${Uri.encodeComponent(artistId)}');
+
+  Future<Map<String, dynamic>> ytMusicCharts({String country = 'ZZ'}) =>
+      _get('/providers/youtube_music/charts?country=${Uri.encodeQueryComponent(country)}');
+
+  /// Non-production feasibility only; not a full-song distribution grant.
+  Future<Map<String, dynamic>> ytMusicAudioCandidate(String videoId) =>
+      _get('/providers/youtube_music/audio-candidate/${Uri.encodeComponent(videoId)}');
+
+  Future<Map<String, dynamic>> ytMusicWatchQueue(String videoId, {int limit = 20}) =>
+      _get('/providers/youtube_music/watch-queue/${Uri.encodeComponent(videoId)}?limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicSuggestions(String query, {int limit = 10}) =>
+      _get('/providers/youtube_music/suggestions?q=${Uri.encodeQueryComponent(query)}&limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicAlbum(String albumId) =>
+      _get('/providers/youtube_music/albums/${Uri.encodeComponent(albumId)}');
+
+  Future<Map<String, dynamic>> ytMusicPlaylist(String playlistId, {int limit = 50}) =>
+      _get('/providers/youtube_music/playlists/${Uri.encodeComponent(playlistId)}?limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicMoods() =>
+      _get('/providers/youtube_music/moods');
+
+  Future<Map<String, dynamic>> ytMusicMoodPlaylists(String params, {int limit = 20}) =>
+      _get('/providers/youtube_music/moods/playlists?params=${Uri.encodeQueryComponent(params)}&limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicExplore() =>
+      _get('/providers/youtube_music/explore');
 
   // ---- public catalog discovery (metadata only; never playback grants) ----
   Future<Map<String, dynamic>> discoveryDailyTop100({String country = 'us'}) =>
@@ -192,18 +273,31 @@ class BreezzeApi {
   Future<Map<String, dynamic>> discoveryArtistSearch(String query) =>
       _get('/discovery/artists/search?q=${Uri.encodeQueryComponent(query)}');
 
+  Future<Map<String, dynamic>> getFollowedArtists() =>
+      _get('/library/artists');
+
   Future<bool> artistFollowing(String key) async {
     final data = await _get('/library/artists/${Uri.encodeComponent(key)}');
     return data['following'] as bool;
   }
 
-  Future<void> followArtist(String key, bool following) async {
+  Future<void> followArtist(
+    String key, bool following, {String? displayName}
+  ) async {
     final path = '/library/artists/${Uri.encodeComponent(key)}';
     if (following) {
-      await _post(path, {});
+      await _post(path, {
+        if (displayName != null) 'displayName': displayName,
+      });
     } else {
       await _delete(path);
     }
+  }
+
+  Future<void> pinArtist(String key, bool pinned) async {
+    await _patch('/library/artists/${Uri.encodeComponent(key)}/pin', {
+      'pinned': pinned,
+    });
   }
 
   Future<Map<String, dynamic>> discoveryArtistAlbums(String artistId) =>
@@ -226,6 +320,7 @@ class BreezzeApi {
     String? catalogUrl,
     List<String> genres = const [],
     bool isCompilation = false,
+    bool? isPinned,
   }) =>
       _post('/library/albums', {
         'externalAlbumId': externalAlbumId,
@@ -235,6 +330,7 @@ class BreezzeApi {
         if (catalogUrl != null) 'catalogUrl': catalogUrl,
         'genres': genres,
         'isCompilation': isCompilation,
+        if (isPinned != null) 'isPinned': isPinned,
       });
 
   Future<void> deleteSavedAlbum(String externalAlbumId) async {
@@ -257,6 +353,31 @@ class BreezzeApi {
   }
 
   // ---- auth ----
+
+  /// Only the backend can verify the supplied Supabase access token.
+  /// The returned Breezze session is transitional until API account IDs
+  /// have migrated; no credentials are passed to Breezze from the UI.
+  Future<AuthResponse> exchangeSupabaseAccessToken(String accessToken) async {
+    final data = await _post('/auth/supabase/exchange', {
+      'accessToken': accessToken,
+    });
+    return AuthResponse.fromJson(data);
+  }
+
+
+  /// Explicit ownership proof; neither credential is saved by this client.
+  Future<AuthResponse> linkLegacySupabaseAccount({
+    required String supabaseAccessToken,
+    required String legacyEmail,
+    required String legacyPassword,
+  }) async {
+    final data = await _post('/auth/supabase/link-legacy', {
+      'accessToken': supabaseAccessToken,
+      'legacyEmail': legacyEmail,
+      'legacyPassword': legacyPassword,
+    });
+    return AuthResponse.fromJson(data);
+  }
 
   Future<AuthResponse> register(
     String email,
@@ -378,6 +499,27 @@ class BreezzeApi {
         if (requestedQuality != null) 'requestedQuality': requestedQuality,
       });
 
+  // Licensed Breezze R2 video assets only. YouTube Music IDs cannot be
+  // used here and never produce downloadable media grants.
+  Future<Map<String, dynamic>> licensedVideos() =>
+      _get('/videos/catalog');
+
+  Future<Map<String, dynamic>> videoPlayback(String videoAssetId) =>
+      _get('/videos/${Uri.encodeComponent(videoAssetId)}/playback');
+
+  Future<Map<String, dynamic>> authorizeVideoDownload(String videoAssetId) =>
+      _post('/videos/${Uri.encodeComponent(videoAssetId)}/download', const {});
+
+  Future<Map<String, dynamic>> revalidateVideoDownload(String videoAssetId) =>
+      _post('/videos/${Uri.encodeComponent(videoAssetId)}/download/revalidate', const {});
+
+  Future<Map<String, dynamic>> videoDownloads() =>
+      _get('/videos/downloads');
+
+  Future<void> removeVideoDownload(String videoAssetId) async {
+    await _delete('/videos/${Uri.encodeComponent(videoAssetId)}/download');
+  }
+
   Future<Map<String, dynamic>> authorizeDownload({
     required String trackId,
     required String territory,
@@ -466,6 +608,20 @@ class BreezzeApi {
   Future<Map<String, dynamic>> recordRecent(String trackId) =>
       _post('/home/recent', {'trackId': trackId});
 
+  /// Snapshot of this account's saved songs, with display metadata from the
+  /// canonical catalog. The server owns tenant filtering and authorization.
+  Future<List<Map<String, dynamic>>> fetchCloudFavorites() async {
+    final response = await _get('/library/favorites');
+    final data = response['data'];
+    if (data is! List || data.any((item) => item is! Map)) {
+      throw const BreezzeApiException(
+        code: 'CLOUD_FAVORITES_INVALID',
+        message: 'The cloud library returned an invalid favorites snapshot.',
+      );
+    }
+    return _asMapList(data);
+  }
+
   Future<Map<String, dynamic>> addFavorite(String trackId) =>
       _post('/library/favorites', {'trackId': trackId});
 
@@ -484,8 +640,12 @@ class BreezzeApi {
   Future<List<Map<String, dynamic>>> playlists() async =>
       _asMapList(await _get('/playlists'));
 
-  Future<Map<String, dynamic>> createPlaylist(String name) =>
-      _post('/playlists', {'name': name});
+  /// Client UUID supports retry-safe creation after an offline session.
+  Future<Map<String, dynamic>> createPlaylist(String name, {String? id}) =>
+      _post('/playlists', {
+        'name': name,
+        if (id != null) 'id': id,
+      });
 
   Future<Map<String, dynamic>> getPlaylist(String playlistId) =>
       _get('/playlists/${Uri.encodeComponent(playlistId)}');
@@ -513,6 +673,12 @@ class BreezzeApi {
       '${Uri.encodeComponent(trackId)}',
     );
   }
+
+  Future<Map<String, dynamic>> pinPlaylist(String playlistId, bool pinned) =>
+      _patch(
+        '/playlists/${Uri.encodeComponent(playlistId)}/pin',
+        {'pinned': pinned},
+      );
 
   Future<Map<String, dynamic>> renamePlaylist(
     String playlistId,
