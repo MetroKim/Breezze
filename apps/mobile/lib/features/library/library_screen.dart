@@ -554,10 +554,51 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
             '${playlist.tracks.length} songs · '
-            '${_ownerId == 'guest' ? 'On this device' : _pendingPlaylistIds.contains(playlist.id) ? 'Pending sync' : 'Synced'}',
+            '${_ownerId == 'guest' ? 'On this device' : _pendingPlaylistIds.contains(playlist.id) ? 'Pending sync' : 'Synced'}'
+            '${playlist.isPinned ? ' · Pinned' : ''}',
             style: TextStyle(color: theme.bzText2),
           ),
-          trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
+          trailing: PopupMenuButton<String>(
+            tooltip: 'Playlist options',
+            icon: const BzSvgIcon(name: 'more-vertical'),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'pin',
+                child: Row(
+                  children: [
+                    BzSvgIcon(name: playlist.isPinned ? 'star-filled' : 'star'),
+                    const SizedBox(width: 12),
+                    Text(playlist.isPinned ? 'Unpin playlist' : 'Pin to top'),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (action) async {
+              if (action != 'pin') return;
+              final owner = _ownerId;
+              try {
+                if (!await _playlistStore.setPinned(
+                  owner, playlist.id, !playlist.isPinned,
+                )) return;
+                if (!mounted || !_ownerStillActive(owner)) return;
+                await _refresh();
+                if (!mounted || !_ownerStillActive(owner)) return;
+                final pending = await _playlistStore.pendingPlaylistIds(owner);
+                if (!mounted || !_ownerStillActive(owner)) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(pending.contains(playlist.id)
+                      ? 'Pin saved on this device. Cloud sync will retry.'
+                      : 'Playlist pin updated.'),
+                ));
+              } catch (_) {
+                if (mounted && _ownerStillActive(owner)) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Could not update playlist pin.'),
+                  ));
+                }
+              }
+            },
+          ),
           onTap: () => _openPlaylist(playlist),
         );
       },

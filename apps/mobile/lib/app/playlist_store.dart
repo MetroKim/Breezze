@@ -21,19 +21,30 @@ class UserPlaylist {
   final String name;
   final DateTime createdAt;
   final List<FavoriteTrack> tracks;
+  final bool isPinned;
 
   const UserPlaylist({
     required this.id,
     required this.name,
     required this.createdAt,
     required this.tracks,
+    this.isPinned = false,
   });
+
+  UserPlaylist withPinned(bool pinned) => UserPlaylist(
+        id: id,
+        name: name,
+        createdAt: createdAt,
+        tracks: tracks,
+        isPinned: pinned,
+      );
 
   factory UserPlaylist.fromJson(Map<String, Object?> json) {
     final rawTracks = json['tracks'];
     return UserPlaylist(
       id: json['id'] as String,
       name: json['name'] as String? ?? 'Untitled playlist',
+      isPinned: json['isPinned'] == true,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       tracks: [
@@ -48,6 +59,7 @@ class UserPlaylist {
   Map<String, Object?> toJson() => {
         'id': id,
         'name': name,
+        'isPinned': isPinned,
         'createdAt': createdAt.toIso8601String(),
         'tracks': tracks.map((track) => track.toJson()).toList(),
       };
@@ -142,7 +154,12 @@ class PlaylistStore {
 
   Future<List<UserPlaylist>> load(String ownerId) async {
     try {
-      return (await _read(ownerId)).playlists;
+      final playlists = (await _read(ownerId)).playlists;
+      // Stable partition preserves historical order within each group.
+      return [
+        ...playlists.where((p) => p.isPinned),
+        ...playlists.where((p) => !p.isPinned),
+      ];
     } catch (_) {
       // Local filesystem can be unavailable on restricted platforms.
       // Never write a default empty state over an unreadable snapshot.
@@ -239,6 +256,9 @@ class PlaylistStore {
           merged.add(UserPlaylist(
             id: id,
             name: row['name'] as String? ?? cached?.name ?? 'Untitled playlist',
+            isPinned: row['isPinned'] is bool
+                ? row['isPinned'] == true
+                : cached?.isPinned ?? false,
             createdAt: DateTime.tryParse(row['createdAt'] as String? ?? '') ??
                 cached?.createdAt ?? DateTime.now().toUtc(),
             tracks: rawItems is List ? tracks : (cached?.tracks ?? const []),
@@ -300,6 +320,7 @@ class PlaylistStore {
           name: current.name,
           createdAt: current.createdAt,
           tracks: List<FavoriteTrack>.unmodifiable(tracks),
+          isPinned: current.isPinned,
         );
         await _save(ownerId, doc);
         return true;
@@ -321,9 +342,23 @@ class PlaylistStore {
           name: normalized,
           createdAt: current.createdAt,
           tracks: current.tracks,
+          isPinned: current.isPinned,
         );
         _queue(ownerId, doc, 'rename', playlistId, {'name': normalized});
         await _save(ownerId, doc);
+      });
+
+  /// Pin/unpin and its pending cloud edit share one atomic local snapshot.
+  Future<bool> setPinned(String ownerId, String playlistId, bool pinned) =>
+      _serialize(() async {
+        final doc = await _read(ownerId);
+        final index =
+            doc.playlists.indexWhere((playlist) => playlist.id == playlistId);
+        if (index < 0 || doc.playlists[index].isPinned == pinned) return false;
+        doc.playlists[index] = doc.playlists[index].withPinned(pinned);
+        _queue(ownerId, doc, 'pin', playlistId, {'pinned': pinned});
+        await _save(ownerId, doc);
+        return true;
       });
 
   Future<void> delete(String ownerId, String playlistId) =>
@@ -375,6 +410,7 @@ class PlaylistStore {
             name: current.name,
             createdAt: current.createdAt,
             tracks: [...current.tracks, track],
+            isPinned: current.isPinned,
           );
           _queue(ownerId, doc, 'add', current.id, {
             'track': track.toJson(),
@@ -416,6 +452,7 @@ class PlaylistStore {
           name: current.name,
           createdAt: current.createdAt,
           tracks: tracks,
+          isPinned: current.isPinned,
         );
         _queue(ownerId, doc, 'reorder', playlistId, {
           'tracks': tracks.map((track) => track.toJson()).toList(),
@@ -441,6 +478,7 @@ class PlaylistStore {
           name: current.name,
           createdAt: current.createdAt,
           tracks: current.tracks.where((track) => track.id != trackId).toList(),
+          isPinned: current.isPinned,
         );
         _queue(ownerId, doc, 'remove', playlistId, {'track': removed.toJson()});
         await _save(ownerId, doc);
@@ -475,6 +513,7 @@ class PlaylistStore {
             name: old.name,
             createdAt: old.createdAt,
             tracks: old.tracks,
+            isPinned: old.isPinned,
           );
           converted.add({
             'operationId': _newId(),
@@ -482,6 +521,14 @@ class PlaylistStore {
             'playlistId': nextId,
             'name': old.name,
           });
+          if (old.isPinned) {
+            converted.add({
+              'operationId': _newId(),
+              'type': 'pin',
+              'playlistId': nextId,
+              'pinned': true,
+            });
+          }
           for (final track in old.tracks) {
             converted.add({
               'operationId': _newId(),
@@ -563,6 +610,12 @@ class PlaylistStore {
         return;
       case 'rename':
         await api.renamePlaylist(id, operation['name'] as String);
+        return;
+      case 'pin':
+        if (operation['pinned'] is! bool) {
+          throw const FormatException('Invalid playlist pin operation');
+        }
+        await api.pinPlaylist(id, operation['pinned'] as bool);
         return;
       case 'delete':
         try {

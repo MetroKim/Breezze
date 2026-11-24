@@ -37,6 +37,11 @@ class FakePlaylistApi extends BreezzeApi {
     return {'trackId': trackId};
   }
   @override
+  Future<Map<String, dynamic>> pinPlaylist(String playlistId, bool pinned) async {
+    calls.add('pin:$playlistId:$pinned');
+    return {'id': playlistId, 'isPinned': pinned};
+  }
+  @override
   Future<Map<String, dynamic>> renamePlaylist(String playlistId, String name) async {
     calls.add('rename:$playlistId:$name');
     return {'name': name};
@@ -108,6 +113,59 @@ void main() {
     ]);
     expect(await store.pendingCount(owner), 0);
     expect((await store.load(owner)).single.tracks.single.id, bId);
+  });
+
+  test('pinned playlists survive restart, retry and remote refresh',
+      () async {
+    const owner = 'user-a';
+    final regular = await store.create(owner, 'Regular');
+    final other = await store.create(owner, 'Other');
+    expect(await store.setPinned(owner, regular, true), isTrue);
+    expect(await store.setPinned(owner, regular, true), isFalse);
+    expect((await store.load(owner)).first.id, regular);
+    final restored = PlaylistStore(documentsDirectory: () async => root);
+    expect((await restored.load(owner)).first.isPinned, isTrue);
+    final api = FakePlaylistApi()..failCreate = true;
+    expect(await restored.syncOwner(owner, api, ownerStillActive: () => true),
+      isFalse);
+    expect((await restored.load(owner)).first.isPinned, isTrue);
+    expect(await restored.syncOwner(owner, api, ownerStillActive: () => true),
+      isTrue);
+    expect(api.calls, contains('pin:$regular:true'));
+    expect(await restored.pendingCount(owner), 0);
+    await restored.mergeRemote(owner, [
+      {'id': other, 'name': 'Other', 'isPinned': false, 'items': []},
+      {'id': regular, 'name': 'Regular', 'isPinned': true, 'items': []},
+    ]);
+    expect((await restored.load(owner)).first.id, regular);
+    expect(await restored.setPinned(owner, regular, false), isTrue);
+    expect((await restored.load(owner)).every((p) => !p.isPinned), isTrue);
+  });
+
+  test('pending offline pin wins over stale remote snapshot', () async {
+    const owner = 'user-a';
+    final id = await store.create(owner, 'Local');
+    await store.setPinned(owner, id, true);
+    await store.mergeRemote(owner, [
+      {'id': id, 'name': 'Stale', 'isPinned': false, 'items': []},
+    ]);
+    expect((await store.load(owner)).single.isPinned, isTrue);
+    expect(await store.pendingCount(owner), 2);
+    expect(await store.setPinned('user-b', id, false), isFalse);
+  });
+
+  test('pin persists through edits, rename and other-account isolation',
+      () async {
+    final id = await store.create('user-a', 'Mix');
+    await store.setPinned('user-a', id, true);
+    await store.addTrack('user-a', id, a);
+    await store.rename('user-a', id, 'Renamed');
+    await store.addTrack('user-a', id, b);
+    await store.reorderTracks('user-a', id, 0, 1);
+    await store.removeTrack('user-a', id, aId);
+    expect((await store.load('user-a')).single.isPinned, isTrue);
+    expect(await store.setPinned('user-b', id, false), isFalse);
+    expect((await store.load('user-a')).single.isPinned, isTrue);
   });
 
   test('unavailable cloud keeps pending operations through restart', () async {

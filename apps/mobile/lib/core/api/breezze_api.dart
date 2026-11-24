@@ -567,6 +567,12 @@ class BreezzeApi {
     );
   }
 
+  Future<Map<String, dynamic>> pinPlaylist(String playlistId, bool pinned) =>
+      _patch(
+        '/playlists/${Uri.encodeComponent(playlistId)}/pin',
+        {'pinned': pinned},
+      );
+
   Future<Map<String, dynamic>> renamePlaylist(
     String playlistId,
     String name,
