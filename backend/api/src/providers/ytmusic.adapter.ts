@@ -18,6 +18,34 @@ interface TrackPayload {
   track?: ProviderTrack;
 }
 
+export interface YtMusicArtist {
+  artistId: string;
+  name: string;
+  artworkUrl?: string | null;
+  subscribers?: string | null;
+  rank?: string | number | null;
+}
+
+export interface YtMusicArtistSearch {
+  source: string;
+  artists: YtMusicArtist[];
+}
+
+export interface YtMusicArtistDetail {
+  source: string;
+  artist: { artistId: string; name: string; description?: string | null; artworkUrl?: string | null;
+    subscribers?: string | null; topSongs: Array<{ providerTrackId: string; title: string; artworkUrl?: string | null }>;
+    albums: Array<{ browseId: string; title: string; year?: string | null; artworkUrl?: string | null }> };
+}
+
+export interface YtMusicCharts {
+  source: string;
+  country: string;
+  artists: YtMusicArtist[];
+  musicVideoPlaylists: Array<{ playlistId: string; title: string; artworkUrl?: string | null }>;
+  songRankingAvailable: boolean;
+}
+
 @Injectable()
 export class YtMusicAdapter implements ProviderAdapter {
   readonly providerId = 'youtube_music';
@@ -33,6 +61,8 @@ export class YtMusicAdapter implements ProviderAdapter {
     availability: false,
     playback: false,
     download: false,
+    artists: true,
+    charts: true,
   };
 
   private readonly inFlight = new Map<string, Promise<ProviderResult<unknown>>>();
@@ -161,6 +191,77 @@ export class YtMusicAdapter implements ProviderAdapter {
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
       }
     }));
+  }
+
+  /** Supplementary YouTube Music public metadata; never an audio entitlement. */
+  private async fetchSupplemental<T>(
+    cacheKey: string,
+    resource: string,
+    isValid: (payload: unknown) => payload is T,
+    ttlSeconds: number,
+  ): Promise<ProviderResult<T>> {
+    if (!this.enabled) return providerUnsupported('YouTube Music metadata provider is disabled');
+    const cached = await this.cache.get<ProviderResult<T>>(cacheKey);
+    if (cached) return cached;
+    return this.coalesce(cacheKey, () => this.withCircuit(async () => {
+      try {
+        const response = await fetch(new URL(resource, this.baseUrl), { signal: AbortSignal.timeout(4500) });
+        if (!response.ok) {
+          return providerError('YTMUSIC_METADATA_FAILED', `Metadata provider returned HTTP ${response.status}`,
+            response.status >= 500 || response.status === 429);
+        }
+        const payload: unknown = await response.json();
+        if (!isValid(payload)) {
+          return providerError('YTMUSIC_INVALID_RESPONSE', 'Unexpected YouTube Music metadata response', false);
+        }
+        const result = providerOk(payload, 'YouTube Music metadata via sigma67/ytmusicapi; no full-song playback grant');
+        await this.cache.set(cacheKey, result, this.cacheTtl(ttlSeconds));
+        return result;
+      } catch {
+        return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata temporarily unavailable', true);
+      }
+    }));
+  }
+
+  searchArtists(query: string): Promise<ProviderResult<YtMusicArtistSearch>> {
+    const q = query.trim();
+    if (q.length < 2 || q.length > 120) return Promise.resolve(providerOk({ source: 'youtube_music', artists: [] }));
+    const hash = crypto.createHash('sha256').update(q.toLowerCase()).digest('hex');
+    const url = new URL('/artists/search', this.baseUrl);
+    url.searchParams.set('q', q);
+    url.searchParams.set('limit', '20');
+    return this.fetchSupplemental(`provider:youtube_music:artists:v1:${hash}`, url.pathname + url.search,
+      (payload): payload is YtMusicArtistSearch =>
+        typeof payload === 'object' && payload !== null &&
+        Array.isArray((payload as YtMusicArtistSearch).artists), 180);
+  }
+
+  getArtist(artistId: string): Promise<ProviderResult<YtMusicArtistDetail>> {
+    if (!/^[A-Za-z0-9_-]{10,64}$/.test(artistId)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_ARTIST_ID', 'Invalid artist identifier', false));
+    }
+    return this.fetchSupplemental(`provider:youtube_music:artist:v1:${artistId}`,
+      `/artists/${encodeURIComponent(artistId)}`,
+      (payload): payload is YtMusicArtistDetail =>
+        typeof payload === 'object' && payload !== null &&
+        typeof (payload as YtMusicArtistDetail).artist?.name === 'string' &&
+        Array.isArray((payload as YtMusicArtistDetail).artist?.topSongs) &&
+        Array.isArray((payload as YtMusicArtistDetail).artist?.albums), 900);
+  }
+
+  getCharts(country = 'ZZ'): Promise<ProviderResult<YtMusicCharts>> {
+    const territory = country.toUpperCase();
+    if (!/^[A-Z]{2}$/.test(territory)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_CHART_COUNTRY', 'Expected a two-letter country code or ZZ', false));
+    }
+    return this.fetchSupplemental(`provider:youtube_music:charts:v1:${territory}`,
+      `/charts?country=${territory}`,
+      (payload): payload is YtMusicCharts =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as YtMusicCharts).country === territory &&
+        Array.isArray((payload as YtMusicCharts).artists) &&
+        Array.isArray((payload as YtMusicCharts).musicVideoPlaylists) &&
+        typeof (payload as YtMusicCharts).songRankingAvailable === 'boolean', 300);
   }
 
   async getAvailability(): Promise<ProviderResult<{ available: boolean }>> {
