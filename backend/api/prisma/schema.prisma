@@ -41,6 +41,8 @@ model User {
   followedArtists UserFollowedArtist[]
   savedCatalogAlbums UserSavedCatalogAlbum[]
   socialIdentities SocialAuthIdentity[]
+  youtubeAccountConnection YoutubeAccountConnection?
+  youtubeAccountFlows YoutubeAccountLinkFlow[]
 }
 
 model UserFollowedArtist {
@@ -94,6 +96,37 @@ model SocialAuthIdentity {
 
 /// Browser OAuth pairing. The browser never sees the Flutter refresh token.
 /// Flow secret is hashed and the result is AES-GCM sealed at rest.
+/// Separately consented, read-only YouTube Data API authorization.
+/// Supabase/Google sign-in NEVER supplies this token. Each token is sealed
+/// with server-side AES-GCM and associated with the owning Breezze user.
+model YoutubeAccountConnection {
+  userId                 String   @id
+  channelId              String   @unique
+  channelTitle           String?
+  accessTokenCiphertext  String
+  refreshTokenCiphertext String
+  accessExpiresAt        DateTime
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// One-time, owner-bound OAuth PKCE flows; server never sends verifier to app.
+model YoutubeAccountLinkFlow {
+  id          String   @id @default(uuid())
+  userId      String
+  stateHash   String   @unique
+  codeVerifier String
+  status      String   @default("pending")
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([expiresAt])
+}
+
 model SocialLoginFlow {
   id            String    @id @default(uuid())
   provider      String
