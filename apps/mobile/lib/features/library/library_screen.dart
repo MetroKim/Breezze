@@ -672,15 +672,31 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             album.artist + (album.isPinned ? ' · Pinned' : ''),
             maxLines: 1, overflow: TextOverflow.ellipsis,
           ),
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => AppleAlbumCatalogScreen(
-              albumId: album.id,
-              title: album.title,
-              artist: album.artist,
-              artworkUrl: album.artworkUrl,
-              appleUrl: album.catalogUrl,
-            ),
-          )),
+          onTap: () {
+            // A historical saved Apple/iTunes album numeric ID is not a
+            // Deezer album ID. Never silently open a different recording.
+            final uri = Uri.tryParse(album.catalogUrl ?? '');
+            if (uri == null || uri.scheme != 'https' ||
+                !(uri.host == 'www.deezer.com' || uri.host == 'deezer.com') ||
+                !RegExp(r'^/album/[0-9]+').hasMatch(uri.path)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text(
+                  'This saved album uses an older catalog source. '
+                  'Search for it on Deezer to view its current tracklist.',
+                )),
+              );
+              return;
+            }
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => DeezerAlbumCatalogScreen(
+                albumId: album.id,
+                title: album.title,
+                artist: album.artist,
+                artworkUrl: album.artworkUrl,
+                deezerUrl: album.catalogUrl,
+              ),
+            ));
+          },
           trailing: PopupMenuButton<String>(
             tooltip: 'Album actions',
             icon: const BzSvgIcon(name: 'more-vertical'),
