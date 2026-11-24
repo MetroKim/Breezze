@@ -44,6 +44,9 @@ async function register(label) {
     password: 'Breezze-QA-' + randomBytes(27).toString('base64url') + '!Aa1',
     token: null,
   };
+  // Journal intended account BEFORE sending the request: registration might
+  // commit on the server and then time out before we see its response.
+  users.push(user);
   const res = await request('POST', '/api/v1/auth/register', null, {
     email: user.email,
     password: user.password,
@@ -53,7 +56,6 @@ async function register(label) {
   assert.equal(typeof res.data.accessToken, 'string');
   assert.equal(typeof res.data.user?.id, 'string');
   user.token = res.data.accessToken;
-  users.push(user);
   report('Disposable ' + label + ' created; account ID withheld');
   return user;
 }
@@ -219,6 +221,20 @@ try {
 } finally {
   for (const user of users.reverse()) {
     try {
+      if (!user.token) {
+        // Reconnect to clean an account that was created remotely but whose
+        // registration response was lost. If login fails with bad
+        // credentials, registration never completed and nothing was left.
+        const recovered = await request('POST', '/api/v1/auth/login', null, {
+          email: user.email, password: user.password,
+        });
+        if (recovered.status === 401) {
+          report('No abandoned account after interrupted registration');
+          continue;
+        }
+        status(recovered.status, 200, 'test-account cleanup recovery');
+        user.token = recovered.data.accessToken;
+      }
       const deleted = await request('DELETE', '/api/v1/users/me', user.token, {
         password: user.password,
       });
