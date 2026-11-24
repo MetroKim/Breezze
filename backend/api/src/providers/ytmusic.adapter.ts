@@ -38,6 +38,14 @@ export interface YtMusicArtistDetail {
     albums: Array<{ browseId: string; title: string; year?: string | null; artworkUrl?: string | null }> };
 }
 
+export interface YtMusicWatchQueue {
+  source: 'youtube_music';
+  seedVideoId: string;
+  playlistId: string | null;
+  tracks: ProviderTrack[];
+  playbackAvailable: false;
+}
+
 export interface YtMusicCharts {
   source: string;
   country: string;
@@ -262,6 +270,26 @@ export class YtMusicAdapter implements ProviderAdapter {
         Array.isArray((payload as YtMusicCharts).artists) &&
         Array.isArray((payload as YtMusicCharts).musicVideoPlaylists) &&
         typeof (payload as YtMusicCharts).songRankingAvailable === 'boolean', 300);
+  }
+
+  /** Get unofficial YouTube Music next-track suggestions, metadata only. */
+  getWatchQueue(videoId: string, limit = 20): Promise<ProviderResult<YtMusicWatchQueue>> {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_ID', 'Expected an 11-character YouTube Music ID', false));
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 25) {
+      return Promise.resolve(providerError('INVALID_YTMUSIC_QUEUE_LIMIT', 'Queue limit must be 1 to 25', false));
+    }
+    return this.fetchSupplemental(
+      `provider:youtube_music:watch-queue:v1:${videoId}:${limit}`,
+      `/watch-queue/${encodeURIComponent(videoId)}?limit=${limit}`,
+      (payload): payload is YtMusicWatchQueue =>
+        typeof payload === 'object' && payload !== null &&
+        (payload as YtMusicWatchQueue).source === 'youtube_music' &&
+        (payload as YtMusicWatchQueue).seedVideoId === videoId &&
+        (payload as YtMusicWatchQueue).playbackAvailable === false &&
+        Array.isArray((payload as YtMusicWatchQueue).tracks), 60,
+    );
   }
 
   async getAvailability(): Promise<ProviderResult<{ available: boolean }>> {
