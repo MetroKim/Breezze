@@ -491,6 +491,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       await openYouTubePlayer(
         context: context,
         ref: ref,
+        enableExperimentalNativeAudio: true,
         videoId: track.id.substring('bz:youtube_music:'.length),
         title: track.title,
         artist: track.artist,
