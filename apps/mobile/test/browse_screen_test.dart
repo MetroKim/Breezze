@@ -81,6 +81,29 @@ class _BrowseChartApi extends BreezzeApi {
       };
 }
 
+class _YouTubeBrowseApi extends _BrowseChartApi {
+  @override
+  Future<Map<String, dynamic>> ytMusicExplore() async => {
+    'kind': 'ok',
+    'value': {
+      'source': 'youtube_music',
+      'newReleases': [
+        {'albumId': 'MPREabcdefghij', 'title': 'Client Album'},
+      ],
+      'trending': [],
+      'newVideos': [],
+      'topSongsAvailable': false,
+      'playbackAvailable': false,
+    },
+  };
+
+  @override
+  Future<Map<String, dynamic>> ytMusicMoods() async => {
+    'kind': 'ok',
+    'value': {'source': 'youtube_music', 'sections': []},
+  };
+}
+
 class _BrowseSession extends AuthSessionController {
   _BrowseSession(this.catalogApi);
 
@@ -204,6 +227,23 @@ void main() {
     expect(find.textContaining('Catalog metadata only'), findsOneWidget);
     expect(find.textContaining('Deezer'), findsWidgets);
   });
+  testWidgets('Browse opens real YouTube Music companion without a fifth tab',
+      (tester) async {
+    final source = _BrowseSource();
+    await _mountBrowse(tester, source, api: _YouTubeBrowseApi());
+    source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('YouTube Music'));
+    await tester.tap(find.text('YouTube Music'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Explore YouTube Music'), findsOneWidget);
+    expect(find.text('Client Album'), findsOneWidget);
+    expect(find.textContaining('personal YouTube Music library is not connected'),
+        findsOneWidget);
+  });
+
   testWidgets('Unavailable Browse sections do not invent charts',
       (tester) async {
     final source = _BrowseSource();
