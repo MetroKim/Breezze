@@ -1,7 +1,14 @@
 # Breezze music providers — YouTube Music and Deezer
 
-**Requested source ownership (24 November 2026):** YouTube provides official visible music-video playback. Deezer is the primary music metadata/search backend for tracks, charts, artists, albums and releases, with short official previews. YouTube Music is the **requested full-song audio backend** for the native Breezze player, but that role is **not yet authorized or live**: the public third-party audio-only playback API/license is unavailable. Its unofficial `ytmusicapi` adapter stays metadata-only and can supplement Deezer for track matching and YouTube official video discovery. Deezer `chart/0` is global, never a regional or guaranteed daily ranking.
+**Authoritative three-source-role contract (24 November 2026):**
 
+| Breezze feature | Assigned upstream | Implemented availability |
+| --- | --- | --- |
+| Charts, artists, albums, song titles, search, catalog metadata, release data | **Deezer** | Implemented for public catalog metadata. Official Deezer clips are **30-second previews only**, not the full-song backend. |
+| Native **full-song music audio**, queue, seek and background audio | **YouTube Music** (product target) | **BLOCKED, not implemented**: the existing [sigma67/ytmusicapi](https://github.com/sigma67/ytmusicapi) service supports metadata and matching, not authorized full-song audio streaming. Requires an explicitly permitted third-party audio integration and passing native tests. |
+| Official music videos | **YouTube official player** | Visible official video playback path, distinct from Breezze's native audio player; no audio extraction. |
+
+Deezer remains primary for discovery data and charts; YouTube Music metadata may be used to match the desired audio recording and locate its official video. Deezer `chart/0` is global, never a regional or guaranteed daily ranking. **Audius is forbidden** as an active source. Do not mislabel Deezer previews as the product's desired music-audio backend, or label YouTube Music audio as delivered before rights and playback QA pass.
 
 
 The only external music catalogue providers are **YouTube Music** and **Deezer**. 
