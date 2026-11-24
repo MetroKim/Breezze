@@ -66,6 +66,30 @@ async function run() {
   assert.equal(health.data.status, 'ok');
   report('Production edge health');
 
+  // M1 D1 public discovery: separate metadata results from playback grants.
+  // These checks must run against the real deployed edge, not mocked sources.
+  const shortSearch = await request('GET', '/api/v1/providers/search?q=a');
+  status(shortSearch.status, 200, 'short catalog query');
+  assert.equal(shortSearch.data.query, 'a');
+  assert.deepEqual(shortSearch.data.providers, []);
+  report('Federated search rejects one-character queries without upstream calls');
+
+  const discovery = await request('GET', '/api/v1/providers/search?q=adele');
+  status(discovery.status, 200, 'federated metadata discovery');
+  assert.equal(discovery.data.query, 'adele');
+  assert.ok(Array.isArray(discovery.data.providers),
+    'federated discovery must return a provider-by-provider status list');
+  const usableSources = discovery.data.providers.filter(row =>
+    row && typeof row.providerId === 'string' &&
+    row.result?.kind === 'ok' &&
+    Array.isArray(row.result.value) &&
+    row.result.value.some(track =>
+      typeof track?.title === 'string' && track.title.trim() &&
+      typeof track?.artist === 'string' && track.artist.trim()));
+  assert.ok(usableSources.length > 0,
+    'production discovery returned no real tracks from any music provider');
+  report('Real federated discovery returns usable song metadata without assuming streaming rights');
+
   const noToken = await request('GET', '/api/v1/playlists');
   status(noToken.status, 401, 'unsigned playlist access');
   report('Unauthenticated playlist access rejected');
