@@ -203,6 +203,10 @@ class BreezzeApi {
   Future<Map<String, dynamic>> ytMusicCharts({String country = 'ZZ'}) =>
       _get('/providers/youtube_music/charts?country=${Uri.encodeQueryComponent(country)}');
 
+  /// Non-production feasibility only; not a full-song distribution grant.
+  Future<Map<String, dynamic>> ytMusicAudioCandidate(String videoId) =>
+      _get('/providers/youtube_music/audio-candidate/${Uri.encodeComponent(videoId)}');
+
   Future<Map<String, dynamic>> ytMusicWatchQueue(String videoId, {int limit = 20}) =>
       _get('/providers/youtube_music/watch-queue/${Uri.encodeComponent(videoId)}?limit=$limit');
 
