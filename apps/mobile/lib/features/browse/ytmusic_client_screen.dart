@@ -91,7 +91,9 @@ Widget _ytRow(
   required VoidCallback? onTap,
   String? actionLabel,
 }) {
-  return ListTile(
+  return Material(
+    color: Colors.transparent,
+    child: ListTile(
     leading: _ytArtwork(item['artworkUrl'] as String?),
     title: Text(
       item['title'] as String? ?? 'Untitled',
@@ -104,6 +106,7 @@ Widget _ytRow(
       icon: const BzSvgIcon(name: 'chevron-right', size: 20),
     ),
     onTap: onTap,
+    ),
   );
 }
 
