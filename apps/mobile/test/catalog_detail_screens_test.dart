@@ -6,7 +6,58 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
+class _InMemoryFavorites extends FavoritesStore {
+  final saved = <String>{};
+
+  String _key(String ownerId, String trackId) => '$ownerId::$trackId';
+
+  @override
+  Future<bool> isFavorite(String id, {String ownerId = 'guest'}) async =>
+      saved.contains(_key(ownerId, id));
+
+  @override
+  Future<bool> toggle(FavoriteTrack track, {String ownerId = 'guest'}) async {
+    final key = _key(ownerId, track.id);
+    if (!saved.add(key)) {
+      saved.remove(key);
+      return false;
+    }
+    return true;
+  }
+}
+
 void main() {
+  testWidgets('song detail saves and removes favorites with live button state',
+      (tester) async {
+    final store = _InMemoryFavorites();
+    const song = TrackInfo(
+      id: 'bz:youtube_music:favorite-ui-test',
+      title: 'Favorite UI QA Song',
+      artist: 'Breezze QA',
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [favoritesStoreProvider.overrideWithValue(store)],
+        child: MaterialApp(
+          theme: bzLightTheme(),
+          home: const TrackDetailScreen(track: song),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Add to Library'), findsOneWidget);
+    await tester.ensureVisible(find.text('Add to Library'));
+    await tester.tap(find.text('Add to Library'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(await store.isFavorite(song.id), isTrue);
+    expect(find.text('Remove from Library'), findsOneWidget);
+
+    await tester.tap(find.text('Remove from Library'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(await store.isFavorite(song.id), isFalse);
+    expect(find.text('Add to Library'), findsOneWidget);
+  });
+
   testWidgets('YouTube song details enable the in-app player', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
