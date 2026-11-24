@@ -289,7 +289,7 @@ jobs:
         run: npm test -- --runInBand
 
       - name: Test PostgreSQL concurrency constraints
-        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts src/library/saved-albums.integration.spec.ts
+        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts src/library/saved-albums.integration.spec.ts src/playlists/playlists.http.integration.spec.ts
 
       - name: Build backend
         run: npm run build
