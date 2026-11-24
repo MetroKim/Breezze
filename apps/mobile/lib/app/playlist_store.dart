@@ -395,6 +395,21 @@ class PlaylistStore {
   Future<void> _adoptLegacyDrafts(String ownerId) => _serialize(() async {
         final doc = await _read(ownerId);
         var changed = false;
+
+        // The older app used non-UUID local IDs when server creation failed.
+        // Those IDs never existed on the backend. Coalesce any pending edits
+        // into the local draft's CURRENT state rather than replaying unusable
+        // numeric-ID operations or recreating an already deleted draft.
+        if (doc.pending.any((op) =>
+            op['playlistId'] is String &&
+            !_uuidPattern.hasMatch(op['playlistId'] as String))) {
+          doc.pending.removeWhere((op) =>
+              op['playlistId'] is String &&
+              !_uuidPattern.hasMatch(op['playlistId'] as String));
+          changed = true;
+        }
+
+        final converted = <Map<String, dynamic>>[];
         for (var i = 0; i < doc.playlists.length; i++) {
           final old = doc.playlists[i];
           if (_uuidPattern.hasMatch(old.id)) continue;
@@ -405,12 +420,23 @@ class PlaylistStore {
             createdAt: old.createdAt,
             tracks: old.tracks,
           );
-          _queue(ownerId, doc, 'create', nextId, {'name': old.name});
+          converted.add({
+            'operationId': _newId(),
+            'type': 'create',
+            'playlistId': nextId,
+            'name': old.name,
+          });
           for (final track in old.tracks) {
-            _queue(ownerId, doc, 'add', nextId, {'track': track.toJson()});
+            converted.add({
+              'operationId': _newId(),
+              'type': 'add',
+              'playlistId': nextId,
+              'track': track.toJson(),
+            });
           }
           changed = true;
         }
+        if (converted.isNotEmpty) doc.pending.insertAll(0, converted);
         if (changed) await _save(ownerId, doc);
       });
 
