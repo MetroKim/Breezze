@@ -118,7 +118,8 @@ export class VideoAssetsService {
     let asset;
     try {
       asset = await this.asset(assetId);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) throw error;
       return revoke('VIDEO_ASSET_UNAVAILABLE');
     }
     const decision = await this.rights.decide({
@@ -140,7 +141,7 @@ export class VideoAssetsService {
   }
 
   async list(userId: string) {
-    return this.prisma.videoDownloadRecord.findMany({
+    const items = await this.prisma.videoDownloadRecord.findMany({
       where: { userId, status: 'active' },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -151,6 +152,7 @@ export class VideoAssetsService {
         videoAsset: { select: { track: { select: { id: true, title: true } } } },
       },
     });
+    return { items };
   }
 
   async remove(userId: string, assetId: string) {
