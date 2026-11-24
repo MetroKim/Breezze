@@ -257,6 +257,34 @@ void main() {
     expect((await store.load(owner)).single.isPinned, isTrue);
   });
 
+  test('stale metadata sync must not erase another device pin', () async {
+    final cloud = _FakeCloud();
+    final storageA = _MemoryStore();
+    final storageB = _MemoryStore();
+    final deviceA = SavedAlbumStore(keyValueStore: storageA);
+    final deviceB = SavedAlbumStore(keyValueStore: storageB);
+
+    await deviceA.save(owner, _album('123'));
+    await deviceA.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    await deviceA.setPinned(owner, '123', true);
+    await deviceA.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+
+    // Device B has an old offline bookmark without the pin field. Its first
+    // upload must leave the server's already-pinned membership unchanged.
+    await deviceB.save(owner, _album('123'));
+    await deviceB.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    expect((await deviceB.load(owner)).single.isPinned, isTrue);
+    expect(cloud.albums['123']?['isPinned'], isTrue);
+
+    // Explicit unpin survives a later generic album metadata save.
+    await deviceB.setPinned(owner, '123', false);
+    await deviceB.save(owner, _album('123'));
+    await deviceB.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    expect(cloud.albums['123']?['isPinned'], isFalse);
+    await deviceA.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    expect((await deviceA.load(owner)).single.isPinned, isFalse);
+  });
+
   test('local albums belong to the selected owner only', () async {
     final memory = _MemoryStore();
     final store = SavedAlbumStore(keyValueStore: memory);

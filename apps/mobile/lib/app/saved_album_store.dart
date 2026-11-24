@@ -227,7 +227,13 @@ class SavedAlbumStore {
             ? album
             : album.withPinned(existing.first.isPinned || album.isPinned);
         // Persist intent before updating visible state. Replays are idempotent.
-        ops[album.id] = {'action': 'upsert', 'album': effective.toJson()};
+        final explicitPin = ops[album.id]?['pinExplicit'] == true ||
+            effective.isPinned;
+        ops[album.id] = {
+          'action': 'upsert',
+          'album': effective.toJson(),
+          if (explicitPin) 'pinExplicit': true,
+        };
         await _writeOps(ownerId, ops);
         albums.removeWhere((item) => item.id == album.id);
         albums.insert(0, effective);
@@ -248,7 +254,11 @@ class SavedAlbumStore {
         if (original.isPinned == pinned) return false;
         final updated = original.withPinned(pinned);
         final ops = await _readOps(ownerId);
-        ops[albumId] = {'action': 'upsert', 'album': updated.toJson()};
+        ops[albumId] = {
+          'action': 'upsert',
+          'album': updated.toJson(),
+          'pinExplicit': true,
+        };
         await _writeOps(ownerId, ops);
         albums[index] = updated;
         await _storage.write(
@@ -298,6 +308,7 @@ class SavedAlbumStore {
             ops.putIfAbsent(album.id, () => {
               'action': 'upsert',
               'album': album.toJson(),
+              if (album.isPinned) 'pinExplicit': true,
             });
           }
           await _writeOps(ownerId, ops);
@@ -325,7 +336,9 @@ class SavedAlbumStore {
               catalogUrl: album.catalogUrl,
               genres: album.genres,
               isCompilation: album.isCompilation,
-              isPinned: album.isPinned,
+              // A stale metadata-only save must not overwrite a pin
+              // changed on another device since this cache was created.
+              isPinned: item['pinExplicit'] == true ? album.isPinned : null,
             );
           } else {
             // Damaged outbox entries must not be silently discarded.
