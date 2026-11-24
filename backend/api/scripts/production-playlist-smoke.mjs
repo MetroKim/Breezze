@@ -373,6 +373,52 @@ async function run() {
     ?.track?.title, firstTwo[0].title);
   report('Favorites add, idempotency and real track hydration across sessions');
 
+  // M1 D3: two independently authenticated accounts must never share their
+  // private Home rails. The same listener's second session must see both
+  // their recent listening history and favorites.
+  status((await request('GET', '/api/v1/home')).status, 401,
+    'anonymous home feed');
+  const recent = await request('POST', '/api/v1/home/recent',
+    owner.token, { trackId: favoriteId });
+  status(recent.status, 201, 'record owner-recent metadata');
+  assert.equal(recent.data.recorded, true);
+  const ownerFeed = await request('GET', '/api/v1/home', owner.token);
+  const sameOwnerFeed = await request('GET', '/api/v1/home', secondToken);
+  const strangerFeed = await request('GET', '/api/v1/home', stranger.token);
+  for (const [label, feed] of [
+    ['owner', ownerFeed], ['second session', sameOwnerFeed],
+    ['unrelated account', strangerFeed],
+  ]) {
+    status(feed.status, 200, label + ' home feed');
+    assert.ok(Array.isArray(feed.data), label + ' feed must be a list');
+  }
+  for (const feed of [ownerFeed, sameOwnerFeed]) {
+    assert.ok(feed.data.some(section =>
+      section.sectionType === 'favorites' &&
+      section.trackIds.includes(favoriteId)));
+    assert.ok(feed.data.some(section =>
+      section.sectionType === 'recently_played' &&
+      section.trackIds.includes(favoriteId)));
+  }
+  assert.equal(strangerFeed.data.some(section =>
+    (section.sectionType === 'favorites' ||
+      section.sectionType === 'recently_played') &&
+    section.trackIds.includes(favoriteId)), false,
+  'unrelated account must never see a listener\'s private Home music');
+  report('Two-account production Home isolation and same-owner session sync');
+
+  // M1 D5 negative real-production authorization: these tracks were
+  // discovered in a metadata API and have no explicit full-stream right.
+  // Never fabricate a grant just to turn this smoke green.
+  const denied = await request('POST', '/api/v1/playback/sessions',
+    owner.token, { trackId: favoriteId });
+  status(denied.status, 406, 'unlicensed catalog full-stream rejection');
+  assert.match(JSON.stringify(denied.data),
+    /(NOT_AVAILABLE_IN_TERRITORY|NO_EXPLICIT_AUTHORIZATION|TAKEDOWN_ACTIVE|RIGHTS_EXPIRED)/,
+    'unlicensed catalog track must fail at the canonical rights gate');
+  assert.equal(denied.data.playback?.streamUrl, undefined);
+  report('Catalog metadata cannot issue a signed or provider full-stream session');
+
   const otherBefore = await request('GET', favoritesRoute, stranger.token);
   status(otherBefore.status, 200, 'other-account cloud favorites');
   assert.equal(otherBefore.data.some(row => row.trackId === favoriteId), false);
