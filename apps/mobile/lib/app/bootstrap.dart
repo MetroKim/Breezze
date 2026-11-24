@@ -208,46 +208,17 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
-    // The backend only exposes this route in explicitly opted-in development
-    // environments. It chooses a direct, already-resolved audio URL without
-    // deciphering signatures or proxying files. Expired/unavailable streams
-    // fall through to the normal rights-aware resolver and preview fallback.
-    if (isYouTubeSongId(track.id)) {
-      try {
-        final response = await api.ytMusicAudioCandidate(track.id.split(':').last);
-        if (response['kind'] == 'ok') {
-          final value = response['value'];
-          final candidate = value is Map ? value['candidate'] : null;
-          if (candidate is Map &&
-              candidate['streamUrl'] is String &&
-              candidate['mimeType'] is String &&
-              (candidate['mimeType'] as String).startsWith('audio/') &&
-              candidate['expiresAt'] is String) {
-            final uri = Uri.tryParse(candidate['streamUrl'] as String);
-            final expiry = DateTime.tryParse(candidate['expiresAt'] as String)?.toUtc();
-            if (uri != null && uri.scheme == 'https' &&
-                (uri.host == 'googlevideo.com' || uri.host.endsWith('.googlevideo.com')) &&
-                expiry != null && expiry.isAfter(DateTime.now().toUtc().add(const Duration(minutes: 1)))) {
-              return PlayableSource(
-                trackId: track.id,
-                streamUrl: uri.toString(),
-                expiresAtUtc: expiry,
-              );
-            }
-          }
-        }
-      } catch (_) {
-        // Experimental stream not available; ordinary playback still runs.
-      }
-    }
+    // YouTube Music is discovery/official video only in the Deezer-first
+    // player configuration. Never resolve an unofficial media URL in the
+    // native audio engine, including for previously saved YouTube items.
+    if (isYouTubeSongId(track.id)) return null;
 
     try {
-      final youtubeSong = isYouTubeSongId(track.id);
-      final catalogId = youtubeSong ? null : await _resolveCatalogId(api, track);
-      if (!youtubeSong && catalogId == null) return null;
+      final catalogId = await _resolveCatalogId(api, track);
+      if (catalogId == null) return null;
 
       final providerIdentity = _providerIdentity(track.id);
-      if (!youtubeSong && providerIdentity != null) {
+      if (providerIdentity != null) {
         final session = await api.startPlaybackSession(
           providerId: providerIdentity.$1,
           providerTrackId: providerIdentity.$2,
@@ -277,7 +248,6 @@ class LiveResolver implements PlaybackResolver {
       final preferences = await DownloadPreferencesStore().load();
       final session = await api.startPlaybackSession(
         trackId: catalogId,
-        externalTrackId: youtubeSong ? track.id : null,
         requestedQuality: preferences.streamingQuality,
       );
       final sessionId = session['id'] as String?;
