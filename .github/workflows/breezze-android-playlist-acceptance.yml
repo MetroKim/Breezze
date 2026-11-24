@@ -52,7 +52,4 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 600
-          script: |
-            cd apps/mobile
-            flutter devices
-            flutter test integration_test/playlist_sync_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+          script: cd apps/mobile && flutter devices && flutter test integration_test/playlist_sync_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
