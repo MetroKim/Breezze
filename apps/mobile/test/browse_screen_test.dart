@@ -198,7 +198,7 @@ void main() {
 
     expect(find.text('Verified metadata result'), findsOneWidget);
     expect(
-      find.textContaining('Deezer global chart'),
+      find.textContaining('Deezer global ranking'),
       findsOneWidget,
     );
     expect(find.textContaining('Catalog metadata only'), findsOneWidget);
