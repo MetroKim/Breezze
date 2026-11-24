@@ -150,7 +150,8 @@ class FavoritesDao {
     final ownerPrefix = '$ownerId::';
     return _db.transaction(() async {
       final pending = await (_db.select(_db.syncOutbox)
-            ..where((t) => t.trackId.like('$ownerPrefix%')))
+            ..where((t) => t.trackId.like('$ownerPrefix%') &
+                (t.op.equals('favorite.add') | t.op.equals('favorite.remove'))))
           .get();
       if (pending.isNotEmpty) return false;
 
