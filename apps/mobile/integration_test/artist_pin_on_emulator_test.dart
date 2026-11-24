@@ -343,11 +343,17 @@ void main() {
       expect(apiA.albums[albumId]?['genres'], ['Afrobeats']);
       expect(apiA.albums[albumId]?['isPinned'], isFalse);
 
-      // Pin on the real iOS Keychain / Android Keystore while offline.
+      // Tap the real saved-album Pin action while offline. The native
+      // Keychain / Keystore persists it through a complete page remount.
       apiA.offline = true;
-      expect(await SavedAlbumStore().setPinned(ownerA, albumId, true), isTrue);
+      await waitForLabel('Pin album to top');
+      await tester.ensureVisible(find.text('Pin album to top'));
+      await tester.tap(find.text('Pin album to top'));
+      await waitForLabel('Unpin album');
+      expect((await SavedAlbumStore().load(ownerA)).single.isPinned, isTrue);
       await mountAlbum(ownerA);
       await waitForLabel('Saved in Library');
+      await waitForLabel('Unpin album');
       expect((await SavedAlbumStore().load(ownerA)).single.isPinned, isTrue);
 
       // Reconnect and replay the durable pin journal into owner A's cloud.
