@@ -230,6 +230,15 @@ export class YoutubeAccountService {
       if (existing && existing.userId !== flow.userId) {
         throw new ConflictException('YOUTUBE_ACCOUNT_ALREADY_LINKED');
       }
+      const current = await this.prisma.youtubeAccountConnection.findUnique({
+        where: { userId: flow.userId },
+        select: { channelId: true },
+      });
+      // Require explicit unlink before switching YouTube channels so an old
+      // refresh token is not silently replaced without revocation.
+      if (current && current.channelId !== channel.channelId) {
+        throw new ConflictException('YOUTUBE_DISCONNECT_OLD_ACCOUNT_FIRST');
+      }
       // Atomically claim the finishing flow and store encrypted tokens.
       // A concurrent disconnect cancels pending/processing flows.
       await this.prisma.$transaction(async (tx) => {
