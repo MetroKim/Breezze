@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# Both values are public client configuration, not server secrets.
+# The publishable key is intentionally present in shipped app binaries.
+env:
+  BREEZZE_SUPABASE_URL: https://djwvyjtebmsavhcrmhxf.supabase.co
+  BREEZZE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ZloCmmQPo86OqHbH3Yqgsw_xZGPqSi3
+
 concurrency:
   group: breezze-quality-${{ github.ref }}
   cancel-in-progress: true
@@ -101,6 +107,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: P0 native PCM DSP feasibility (host synthetic benchmark)
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -O2 -std=c++17 -Wall -Wextra -Werror tool/audio_engine_feasibility/pcm_native_probe.cpp -o "$RUNNER_TEMP/breezze-pcm-probe"
+          "$RUNNER_TEMP/breezze-pcm-probe"
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -133,7 +146,7 @@ jobs:
 
       - name: Build Linux desktop
         working-directory: apps/mobile
-        run: flutter build linux --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build linux --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Package Linux desktop build
         working-directory: apps/mobile
@@ -141,10 +154,10 @@ jobs:
 
       - name: Build Android APK
         working-directory: apps/mobile
-        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
       - name: Build Android release APK
         working-directory: apps/mobile
-        run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Prepare Drift WebAssembly database assets
         working-directory: apps/mobile
@@ -152,7 +165,7 @@ jobs:
 
       - name: Build Web
         working-directory: apps/mobile
-        run: flutter build web --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build web --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Publish installable test builds
         uses: actions/upload-artifact@v4
@@ -168,10 +181,32 @@ jobs:
 
   flutter_macos:
     name: Flutter macOS and iOS builds
-    runs-on: macos-latest
+    # macos-latest currently selects ARM64 runners with acquisition failures.
+    runs-on: macos-15-intel
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: P0 native PCM DSP feasibility (host synthetic benchmark)
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -O2 -std=c++17 -Wall -Wextra -Werror tool/audio_engine_feasibility/pcm_native_probe.cpp -o "$RUNNER_TEMP/breezze-pcm-probe"
+          "$RUNNER_TEMP/breezze-pcm-probe"
+
+      - name: Select Xcode 26 for Swift video_player compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          xcodes=(/Applications/Xcode_26*.app)
+          if (( ${#xcodes[@]} == 0 )); then
+            echo "Xcode 26 is required by the Flutter AVFoundation plugin" >&2
+            exit 1
+          fi
+          selected=$(printf '%s\n' "${xcodes[@]}" | sort | tail -n 1)
+          sudo xcode-select --switch "$selected/Contents/Developer"
+          xcodebuild -version
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -191,13 +226,17 @@ jobs:
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
 
+      - name: Test playlist persistence on macOS host
+        working-directory: apps/mobile
+        run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
+
       - name: Build macOS desktop
         working-directory: apps/mobile
-        run: flutter build macos --debug
+        run: flutter build macos --debug --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Build iOS
         working-directory: apps/mobile
-        run: flutter build ios --no-codesign
+        run: flutter build ios --no-codesign --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
   flutter_windows:
     name: Flutter Windows desktop build
@@ -224,6 +263,10 @@ jobs:
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
 
+      - name: Test playlist persistence on Windows host
+        working-directory: apps/mobile
+        run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
+
       - name: Build Windows desktop
         working-directory: apps/mobile
         env:
@@ -231,7 +274,7 @@ jobs:
           # coroutine header; VS 2026 promotes its deprecation to an error.
           # Silence that upstream compatibility diagnostic for this build.
           CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
-        run: flutter build windows --debug
+        run: flutter build windows --debug --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
   backend:
     name: NestJS and Prisma validation
@@ -289,7 +332,7 @@ jobs:
         run: npm test -- --runInBand
 
       - name: Test PostgreSQL concurrency constraints
-        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts src/library/saved-albums.integration.spec.ts
+        run: npx jest --runInBand src/artist_portal/artist-claim.integration.spec.ts src/auth/auth-session.integration.spec.ts src/home/home-play-event.integration.spec.ts src/library/saved-albums.integration.spec.ts src/playlists/playlists.http.integration.spec.ts
 
       - name: Build backend
         run: npm run build
@@ -335,3 +378,5 @@ jobs:
           node -e "const a=require('/tmp/breezze-worker-audit.json'); console.log('WORKER_AUDIT_TOTALS', JSON.stringify(a.metadata?.vulnerabilities)); for (const [name, v] of Object.entries(a.vulnerabilities || {})) console.log('WORKER_AUDIT_PACKAGE', name, JSON.stringify({severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,range:x.range,url:x.url})}));"
       - name: Typecheck Worker
         run: npm run check
+      - name: Verify signed audio and byte-range media delivery
+        run: npm run test

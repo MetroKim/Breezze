@@ -1,0 +1,161 @@
+name: Breezze iOS Playlist Simulator Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/breezze-ios-playlist-acceptance.yml
+      - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
+      - apps/mobile/lib/core/api/breezze_api.dart
+      - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
+      - apps/mobile/integration_test/native_playback_on_emulator_test.dart
+      - apps/mobile/lib/features/player/player_controller.dart
+      - apps/mobile/lib/core/audio/audio_service_bridge.dart
+      - apps/mobile/lib/core/audio/playback_queue_store.dart
+      - packages/audio_contracts/lib/src/queue_manager.dart
+      - apps/mobile/lib/app/playlist_store.dart
+      - apps/mobile/lib/app/saved_album_store.dart
+      - apps/mobile/lib/app/bootstrap.dart
+      - apps/mobile/lib/features/catalog/catalog_detail_screens.dart
+      - apps/mobile/lib/features/search/search_screen.dart
+      - apps/mobile/lib/app/search_history_store.dart
+      - apps/mobile/lib/features/library/library_screen.dart
+      - apps/mobile/pubspec.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: breezze-ios-playlist-acceptance
+  cancel-in-progress: true
+
+jobs:
+  simulator-acceptance:
+    name: iPhone simulator offline and production cloud sync
+    # Explicit Intel runner avoids current macOS ARM64 hosted-runner capacity failures.
+    runs-on: macos-15-intel
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26 for Swift video_player compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          xcodes=(/Applications/Xcode_26*.app)
+          if (( ${#xcodes[@]} == 0 )); then
+            echo "Xcode 26 is required by the Flutter AVFoundation plugin" >&2
+            exit 1
+          fi
+          selected=$(printf '%s\n' "${xcodes[@]}" | sort | tail -n 1)
+          sudo xcode-select --switch "$selected/Contents/Developer"
+          xcodebuild -version
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Apply upstream Flutter iOS simulator log stream fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Flutter stable 3.50.1 does not contain flutter/flutter#193142.
+          # Pin the official merged upstream patch; keep the app on stable.
+          # This fixes VM-service discovery *before* test execution rather
+          # than skipping assertions or marking a launch timeout as passed.
+          patch_file="$RUNNER_TEMP/flutter-ios-log-stream-ready.patch"
+          curl --fail --location --retry 3 --silent --show-error \
+            "https://github.com/flutter/flutter/commit/c3ed85ef987759ee54a6bce275490cde2a238dc1.patch" \
+            --output "$patch_file"
+          cd "$FLUTTER_ROOT"
+          sdk_file="packages/flutter_tools/lib/src/ios/simulators.dart"
+          if grep -Fq "await logReader._ready.future;" "$sdk_file"; then
+            echo "Upstream VM-service log-reader fix is already in this SDK"
+          else
+            git apply --check --include="$sdk_file" "$patch_file"
+            git apply --include="$sdk_file" "$patch_file"
+            grep -Fq "await logReader._ready.future;" "$sdk_file"
+            # Invalidate compiled flutter_tools so the patched tool is used.
+            rm -f bin/cache/flutter_tools.snapshot bin/cache/flutter_tools.stamp
+            flutter --version
+          fi
+      - name: Generate native iOS runner
+        working-directory: apps/mobile
+        run: bash tool/generate_platform_targets.sh
+      - name: Resolve Flutter dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+      - name: Generate Drift database code
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Boot available iPhone simulator
+        id: sim
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available
+          simulator=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data=json.load(sys.stdin)["devices"]
+          phones=[device for runtime, devices in data.items()
+                  if "iOS" in runtime for device in devices
+                  if device.get("isAvailable") and "iPhone" in device.get("name","")]
+          if not phones:
+              raise SystemExit("No available iPhone simulator in CI")
+          print(phones[0]["udid"])
+          ')
+          echo "id=$simulator" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$simulator" || true
+          xcrun simctl bootstatus "$simulator" -b
+      - name: Verify real iOS app storage and production playlist sync
+        working-directory: apps/mobile
+        timeout-minutes: 55
+        env:
+          SIMULATOR_ID: ${{ steps.sim.outputs.id }}
+        run: |
+          set -euo pipefail
+          flutter devices
+          # Simulator launch can hang after Xcode has built successfully.
+          # Bound each launch, restart the simulator once on an actual hang,
+          # and never retry assertion/test failures.
+          python3 - <<'PY'
+          import os
+          import signal
+          import subprocess
+          import sys
+
+          simulator = os.environ["SIMULATOR_ID"]
+          for test_file in (
+              "integration_test/playlist_sync_on_emulator_test.dart",
+              "integration_test/artist_pin_on_emulator_test.dart",
+              "integration_test/native_playback_on_emulator_test.dart",
+          ):
+              for attempt in (1, 2):
+                  print(f"iPhone acceptance: {test_file}, attempt {attempt}", flush=True)
+                  command = [
+                      "flutter", "test", test_file, "-d", simulator,
+                      "--no-pub", "--reporter", "expanded",
+                      "--dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev",
+                  ]
+                  process = subprocess.Popen(command, start_new_session=True)
+                  try:
+                      return_code = process.wait(timeout=12 * 60)
+                  except subprocess.TimeoutExpired:
+                      print(f"iPhone simulator test launch timed out for {test_file}", flush=True)
+                      os.killpg(process.pid, signal.SIGTERM)
+                      try:
+                          process.wait(timeout=10)
+                      except subprocess.TimeoutExpired:
+                          os.killpg(process.pid, signal.SIGKILL)
+                          process.wait()
+                      if attempt == 2:
+                          raise SystemExit(f"Native test did not launch after simulator restart: {test_file}")
+                      subprocess.run(["xcrun", "simctl", "shutdown", simulator], check=False)
+                      subprocess.run(["xcrun", "simctl", "boot", simulator], check=True)
+                      subprocess.run(["xcrun", "simctl", "bootstatus", simulator, "-b"], check=True)
+                      continue
+                  if return_code:
+                      raise SystemExit(return_code)
+                  print(f"iPhone acceptance PASS: {test_file}", flush=True)
+                  break
+          PY

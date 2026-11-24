@@ -17,6 +17,32 @@ permissions:
   contents: read
 
 jobs:
+  independent_identity:
+    name: Breezze independent identity and playback scaffold guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate canonical Flutter package and reject fake audio scaffold
+        run: python3 tools/check_independent_identity.py
+
   quality:
     name: Breezze quality gates
     uses: ./.github/workflows/breezze-quality.yml
+
+  youtube_music_catalog:
+    name: Private YouTube Music catalog contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated metadata adapter dependencies
+        run: python -m pip install -r backend/ytmusicapi/requirements.txt
+      - name: Validate Python syntax
+        run: python -m py_compile backend/ytmusicapi/main.py
+      - name: Run offline metadata and sanitization tests
+        env:
+          PYTHONPATH: backend/ytmusicapi
+        run: python -m unittest discover -s backend/ytmusicapi -p 'test_*.py' -v
