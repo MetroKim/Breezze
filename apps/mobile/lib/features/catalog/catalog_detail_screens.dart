@@ -223,7 +223,6 @@ class TrackDetailScreen extends ConsumerWidget {
                           await openYouTubePlayer(
                             context: context,
                             ref: ref,
-        enableExperimentalNativeAudio: true,
                             videoId: track.id.substring('bz:youtube_music:'.length),
                             title: trackTitle,
                             artist: artistName,
@@ -639,7 +638,6 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                                 await openYouTubePlayer(
                                   context: context,
                                   ref: ref,
-        enableExperimentalNativeAudio: true,
                                   videoId: first.id.substring('bz:youtube_music:'.length),
                                   title: first.title,
                                   artist: first.artist,
@@ -729,7 +727,6 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                               await openYouTubePlayer(
                                 context: context,
                                 ref: ref,
-        enableExperimentalNativeAudio: true,
                                 videoId: song.id.substring('bz:youtube_music:'.length),
                                 title: song.title,
                                 artist: song.artist,
@@ -768,7 +765,6 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                                 await openYouTubePlayer(
                                   context: context,
                                   ref: ref,
-        enableExperimentalNativeAudio: true,
                                   videoId: song.id.substring('bz:youtube_music:'.length),
                                   title: song.title,
                                   artist: song.artist,
@@ -1305,7 +1301,6 @@ class AlbumDetailScreen extends ConsumerWidget {
         await openYouTubePlayer(
           context: context,
           ref: ref,
-        enableExperimentalNativeAudio: true,
           videoId: track.id.substring('bz:youtube_music:'.length),
           title: track.title ?? 'YouTube Music',
           artist: track.artist ?? artist,
