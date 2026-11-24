@@ -448,13 +448,23 @@ async function run() {
   status(canonicalAudius.status, 201, 'canonical Audius recording');
   let audiusSessionId = null;
   try {
-    const grant = await request('POST', '/api/v1/playback/sessions',
-      owner.token, {
-        providerId: 'audius',
-        providerTrackId: audiusTrack.providerTrackId,
-        canonicalTrackId: canonicalAudius.data.id,
-      });
-    status(grant.status, 201, 'authenticated Audius OML playback grant');
+    // One bounded retry is permitted only after a 503 from the read-only
+    // upstream entitlement lookup. An HTTP 406 rights denial is final:
+    // NEVER retry or bypass an artist's unavailable/gated recording.
+    let grant;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      grant = await request('POST', '/api/v1/playback/sessions',
+        owner.token, {
+          providerId: 'audius',
+          providerTrackId: audiusTrack.providerTrackId,
+          canonicalTrackId: canonicalAudius.data.id,
+        });
+      if (grant.status !== 503 || attempt === 2) break;
+      await new Promise(resolve => setTimeout(resolve, 750));
+    }
+    assert.equal(grant.status, 201,
+      'authenticated Audius OML playback grant returned HTTP ' +
+      grant.status + ' (' + String(grant.data?.message ?? grant.data?.code ?? 'unknown error').slice(0, 120) + ')');
     assert.equal(typeof grant.data.id, 'string');
     audiusSessionId = grant.data.id;
     assert.ok(grant.data.playback?.attribution?.startsWith('Audius OML:'),
