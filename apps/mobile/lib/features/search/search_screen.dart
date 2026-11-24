@@ -675,10 +675,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         ? Center(
                             child: Padding(
                               padding: const EdgeInsets.all(24),
-                              child: Text(
-                                _error!,
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodyMedium,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _error!,
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  OutlinedButton(
+                                    onPressed: _controller.text.trim().isEmpty
+                                        ? null
+                                        : () => _search(
+                                              _controller.text,
+                                              recordHistory: false,
+                                            ),
+                                    child: const Text('Try again'),
+                                  ),
+                                ],
                               ),
                             ),
                           )

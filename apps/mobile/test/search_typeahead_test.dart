@@ -186,4 +186,34 @@ void main() {
   });
 
 
+
+  testWidgets('Search network errors offer a retry that recovers catalog results',
+      (tester) async {
+    final source = _SearchSource();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [catalogSourceProvider.overrideWithValue(source)],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+
+    await tester.enterText(find.byType(TextField), 'retry example');
+    await tester.pump(const Duration(milliseconds: 500));
+    source.pending['retry example']!
+        .complete(ProviderError('temporary_provider_failure'));
+    await tester.pump();
+    expect(
+      find.text('Search could not be completed. Try again in a moment.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    expect(source.calls, ['retry example', 'retry example']);
+    source.pending['retry example']!.complete(_result('Recovered song'));
+    await tester.pump();
+    expect(find.text('Recovered song'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+  });
+
 }
