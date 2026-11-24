@@ -19,7 +19,7 @@ The production-target client is Flutter in `apps/mobile`, with NestJS in `backen
 - No artist portal, artist upload workflow, subscriptions, billing, memberships or paywalls in this release.
 - Artist and album pages are listener-facing catalog experiences only.
 - Search metadata is not a playback licence. Playback requires a backend-authorized source with applicable rights.
-- YouTube Music through `ytmusicapi` is metadata/discovery only. Audius is an in-app playback source for eligible public, ungated, API-accessible tracks. Breezze owns the playback UI and queue; provider sources never require opening another app.
+- The only external music catalogue providers are YouTube Music (through `ytmusicapi`, metadata/discovery only) and Deezer (catalogue metadata plus any officially available short previews). Breezze owns the playback UI and queue.
 - Breezze does not extract YouTube audio, bypass provider access controls, or re-host third-party recordings.
 
 ## Repository layout
@@ -88,7 +88,7 @@ The local API defaults to `http://localhost:3000`; Swagger is exposed at `/api/d
 
 - Flutter uses one global `PlayerController` backed by the shared audio-engine adapter.
 - The NestJS backend owns canonical track identity, provider selection, rights checks and playback resolution.
-- Audius public ungated tracks may be resolved through its official API; gated or API-restricted tracks are rejected.
+- Audius and Jamendo are removed. Full songs require separately authorized recordings with valid territorial `stream.full` rights; neither YouTube Music metadata nor Deezer preview links grant full-song streaming permissions.
 - YouTube Music metadata is never passed to the native audio engine as a playable source.
 - Audio is streamed directly from an approved provider to the device by default. Cloudflare Workers and NestJS do not proxy audio segments.
 - Local files remain user-controlled. Offline downloads require explicit download rights and backend authorization.
