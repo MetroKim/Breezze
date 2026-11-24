@@ -1,4 +1,4 @@
-name: One-time permanent Breezze source history archive
+name: One-time complete original Breezze source archive
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   source-history:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       SOURCE_SHA: 5fe8263d7f93db4e8b08ad6b16e675e95afe0e51
       ARCHIVE_TAG: breezze-pre-fork-retirement-20261125
@@ -22,31 +22,57 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Create independently restorable history bundle
+      - name: Export every source branch and tag, not only main
         shell: bash
         run: |
           set -euo pipefail
           git remote add old-breezze https://github.com/MetroKim/Breezze.git
-          git fetch --no-tags old-breezze main
-          actual="$(git rev-parse FETCH_HEAD)"
+          git fetch --no-tags old-breezze '+refs/heads/*:refs/remotes/old-breezze/*'
+          git fetch --no-tags old-breezze '+refs/tags/*:refs/tags/breezze-source/*'
+          actual="$(git rev-parse refs/remotes/old-breezze/main)"
           test "$actual" = "$SOURCE_SHA" || {
-            echo "::error::Source advanced since migration. Do not silently archive a different commit."
+            echo "::error::Source main advanced; review before archive"
             exit 1
           }
-          git bundle create "$RUNNER_TEMP/breezze-full-fork-history.bundle" refs/remotes/old-breezze/main
-          git bundle verify "$RUNNER_TEMP/breezze-full-fork-history.bundle"
-          test "$(stat -c %s "$RUNNER_TEMP/breezze-full-fork-history.bundle")" -gt 1000000
-      - name: Publish permanent repository release with original history bundle
+          mapfile -t refs < <(git for-each-ref --format='%(refname)' \
+            refs/remotes/old-breezze refs/tags/breezze-source)
+          echo "Snapshot contains ${#refs[@]} source refs"
+          test "${#refs[@]}" -ge 11
+          git bundle create "$RUNNER_TEMP/breezze-all-branches-and-tags.bundle" "${refs[@]}"
+          git bundle verify "$RUNNER_TEMP/breezze-all-branches-and-tags.bundle"
+          git bundle list-heads "$RUNNER_TEMP/breezze-all-branches-and-tags.bundle" \
+            | tee "$RUNNER_TEMP/archived-source-ref-list.txt"
+      - name: Export pull requests, review notes, and issue discussions
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$ARCHIVE_TAG" >/dev/null 2>&1; then
-            echo "::error::Archive release already exists; manual review required to prevent replacing a backup."
-            exit 1
-          fi
-          gh release create "$ARCHIVE_TAG" \
-            --target main \
-            --title "Breezze original fork history backup — 25 Nov 2026" \
-            --notes "Complete git bundle of original MetroKim/Breezze commit $SOURCE_SHA, preserved before migration into the independent MetroMusic repository. Keep this archive after removing the source fork." \
-            "$RUNNER_TEMP/breezze-full-fork-history.bundle"
-          gh release view "$ARCHIVE_TAG" --json assets --jq '.assets[] | [.name, .size] | @tsv'
+          archive="$RUNNER_TEMP/breezze-pr-history"
+          mkdir -p "$archive/pulls"
+          gh api 'repos/MetroKim/Breezze/pulls?state=all&per_page=100' > "$archive/pull-requests.json"
+          gh api 'repos/MetroKim/Breezze/issues?state=all&per_page=100' > "$archive/issues.json"
+          gh api 'repos/MetroKim/Breezze/branches?per_page=100' > "$archive/branches.json"
+          for number in $(seq 1 8); do
+            gh api "repos/MetroKim/Breezze/pulls/$number" > "$archive/pulls/$number.json"
+            gh api "repos/MetroKim/Breezze/pulls/$number/reviews?per_page=100" > "$archive/pulls/$number-reviews.json"
+            gh api "repos/MetroKim/Breezze/pulls/$number/comments?per_page=100" > "$archive/pulls/$number-code-comments.json"
+            gh api "repos/MetroKim/Breezze/issues/$number/comments?per_page=100" > "$archive/pulls/$number-discussion.json"
+          done
+          cp "$RUNNER_TEMP/archived-source-ref-list.txt" "$archive/archived-source-ref-list.txt"
+          (cd "$RUNNER_TEMP" && zip -qr breezze-pr-and-branch-metadata.zip breezze-pr-history)
+      - name: Upload additional permanent assets to the existing migration release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$ARCHIVE_TAG" >/dev/null
+          for item in breezze-all-branches-and-tags.bundle breezze-pr-and-branch-metadata.zip; do
+            if gh release view "$ARCHIVE_TAG" --json assets \
+              --jq '.assets[].name' | grep -Fxq "$item"; then
+              echo "::error::Backup asset already exists; never replace it automatically"
+              exit 1
+            fi
+          done
+          gh release upload "$ARCHIVE_TAG" \
+            "$RUNNER_TEMP/breezze-all-branches-and-tags.bundle" \
+            "$RUNNER_TEMP/breezze-pr-and-branch-metadata.zip"
+          gh release view "$ARCHIVE_TAG" --json assets \
+            --jq '.assets[] | [.name, .size] | @tsv'
