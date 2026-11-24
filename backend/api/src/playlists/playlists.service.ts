@@ -1,20 +1,45 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
 export class PlaylistsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userId: string, name: string) {
-    return this.prisma.playlist.create({
-      data: { userId, name },
-    });
+  async create(userId: string, name: string, id?: string) {
+    // A client-generated UUID makes offline creation replayable. The owner
+    // scope is checked even when a conflicting identifier already exists.
+    try {
+      return await this.prisma.playlist.create({
+        data: { userId, name, ...(id ? { id } : {}) },
+      });
+    } catch (error) {
+      if (id && (error as { code?: string } | null)?.code === 'P2002') {
+        const owned = await this.prisma.playlist.findFirst({
+          where: { id, userId },
+        });
+        if (owned) return owned; // Retried offline creation; idempotent.
+        throw new ConflictException('PLAYLIST_ID_CONFLICT');
+      }
+      throw error;
+    }
   }
 
   async list(userId: string) {
+    // A single owner-filtered snapshot hydrates tracks on another device
+    // without an N+1 fetch for each playlist.
     return this.prisma.playlist.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      include: {
+        items: {
+          orderBy: { position: 'asc' },
+          include: {
+            track: {
+              include: { artist: true, album: true },
+            },
+          },
+        },
+      },
     });
   }
 
