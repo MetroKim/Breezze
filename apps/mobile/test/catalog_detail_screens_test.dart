@@ -81,7 +81,9 @@ void main() {
         ),
       ),
     );
-    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Play'));
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Play on YouTube'),
+    );
     expect(button.onPressed, isNotNull);
   });
 
