@@ -107,6 +107,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       await openYouTubePlayer(
         context: context,
         ref: ref,
+        enableExperimentalNativeAudio: true,
         videoId: selected.id.substring('bz:youtube_music:'.length),
         title: selected.title,
         artist: selected.artist,
@@ -710,6 +711,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       await openYouTubePlayer(
         context: context,
         ref: ref,
+        enableExperimentalNativeAudio: true,
         videoId: selected.id.substring('bz:youtube_music:'.length),
         title: selected.title,
         artist: selected.artist,
