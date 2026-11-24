@@ -79,6 +79,22 @@ void main() {
     expect(await favorites.list(ownerId: 'user-b'), hasLength(1));
   });
 
+  test('unrelated recent-play outbox work does not block favorite downloads', () async {
+    await db.into(db.syncOutbox).insert(
+      SyncOutboxCompanion.insert(
+        op: 'recent.play',
+        trackId: 'user-a::some-recent-track',
+      ),
+    );
+    expect(await favorites.reconcileCloud(
+      ownerId: 'user-a',
+      tracks: [cloudSong],
+    ), isTrue);
+    expect((await favorites.list(ownerId: 'user-a')).single.id.value,
+      cloudSong.id);
+    expect(await outbox.pending(ownerId: 'user-a'), hasLength(1));
+  });
+
   test('cloud uses known external IDs and supports canonical removal', () async {
     const externalId = 'bz:jamendo:track-1';
     await favorites.add(
