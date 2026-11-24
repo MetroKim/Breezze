@@ -81,11 +81,11 @@ void main() {
     expect(calls.map((c) => c.method).toList(),
       ['GET', 'POST', 'PATCH', 'DELETE']);
     expect(calls.first.url.path, '/api/v1/library/artists');
-    expect(calls[1].url.path, '/api/v1/library/artists/apple:123');
+    expect(calls[1].url.path, '/api/v1/library/artists/apple%3A123');
     expect(jsonDecode(calls[1].body), {'displayName': 'Verified Name'});
-    expect(calls[2].url.path, '/api/v1/library/artists/apple:123/pin');
+    expect(calls[2].url.path, '/api/v1/library/artists/apple%3A123/pin');
     expect(jsonDecode(calls[2].body), {'pinned': true});
-    expect(calls.last.url.path, '/api/v1/library/artists/apple:123');
+    expect(calls.last.url.path, '/api/v1/library/artists/apple%3A123');
     expect(calls.every((c) =>
         c.headers['Authorization'] == 'Bearer owner-token'), isTrue);
   });
