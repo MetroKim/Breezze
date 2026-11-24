@@ -7,6 +7,7 @@ import 'package:breezze/features/player/player_controller.dart' show TrackInfo;
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/features/catalog/catalog_detail_screens.dart';
+import 'package:breezze/features/search/search_screen.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -39,6 +40,30 @@ class _ArtistApi extends BreezzeApi {
 
   void _checkOnline() {
     if (offline) throw StateError('Simulated offline connection');
+  }
+
+  @override
+  Future<Map<String, dynamic>> searchAllProviders(String query) async {
+    _checkOnline();
+    return {
+      'query': query,
+      'providers': [
+        {
+          'providerId': 'youtube_music',
+          'result': {
+            'kind': 'ok',
+            'value': [
+              {
+                'providerTrackId': 'abcdefghijk',
+                'title': 'Native Search QA Song',
+                'artist': 'Breezze QA Artist',
+                'durationSec': 180,
+              },
+            ],
+          },
+        },
+      ],
+    };
   }
 
   @override
@@ -492,6 +517,93 @@ void main() {
         for (final event in await SyncOutboxDao(breezzeDb)
             .pending(ownerId: owner)) {
           await SyncOutboxDao(breezzeDb).discard(event.id);
+        }
+      }
+    }
+  });
+
+  testWidgets('native Search menu saves song and isolates account data',
+      (tester) async {
+    final seed = DateTime.now().microsecondsSinceEpoch.toString();
+    final ownerA = 'search-ui-a-' + seed;
+    final ownerB = 'search-ui-b-' + seed;
+    const trackId = 'bz:youtube_music:abcdefghijk';
+    const favorite = FavoriteTrack(
+      id: trackId,
+      title: 'Native Search QA Song',
+      artist: 'Breezze QA Artist',
+      durationMs: 180000,
+    );
+    final cloud = _ArtistCloud();
+    final apiA = _ArtistApi(cloud, ownerA);
+    final apiB = _ArtistApi(cloud, ownerB);
+    final current = _CurrentApi(apiA);
+    final favorites = FavoritesStore();
+
+    Future<void> mountSearch(String ownerId) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWith(
+            () => _SignedInArtistSession(current, ownerId),
+          ),
+        ],
+        child: MaterialApp(
+          theme: bzLightTheme(),
+          home: const Scaffold(body: SearchScreen()),
+        ),
+      ));
+    }
+
+    Future<void> waitForSearchResult() async {
+      for (var i = 0; i < 70; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+        if (find.text('Native Search QA Song').evaluate().isNotEmpty) return;
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+      }
+      fail('Native federated search result did not render');
+    }
+
+    try {
+      await mountSearch(ownerA);
+      await tester.enterText(find.byType(TextField).first, 'native search');
+      await tester.pump(const Duration(milliseconds: 500));
+      await waitForSearchResult();
+
+      await tester.ensureVisible(find.byTooltip('Song actions'));
+      await tester.tap(find.byTooltip('Song actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add to Library').last);
+
+      for (var i = 0; i < 70; i++) {
+        await tester.pump(const Duration(milliseconds: 150));
+        if (await favorites.isFavorite(trackId, ownerId: ownerA)) break;
+      }
+      expect(await favorites.isFavorite(trackId, ownerId: ownerA), isTrue);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SearchScreen)),
+      );
+      expect(container.read(favoritesRefreshProvider), 1);
+
+      // A different signed-in account must not see the previous owner's
+      // persisted favorite, even when the search metadata ID is identical.
+      current.value = apiB;
+      await mountSearch(ownerB);
+      expect(await favorites.isFavorite(trackId, ownerId: ownerB), isFalse);
+      current.value = apiA;
+      await mountSearch(ownerA);
+      expect(await favorites.isFavorite(trackId, ownerId: ownerA), isTrue);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      for (final owner in [ownerA, ownerB]) {
+        if (await favorites.isFavorite(trackId, ownerId: owner)) {
+          await favorites.toggle(favorite, ownerId: owner);
+        }
+        final dao = SyncOutboxDao(breezzeDb);
+        for (final event in await dao.pending(ownerId: owner)) {
+          await dao.discard(event.id);
         }
       }
     }
