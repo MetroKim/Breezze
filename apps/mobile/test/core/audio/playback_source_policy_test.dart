@@ -8,7 +8,7 @@ void main() {
         'bz:youtube_music:abc',
         'bz:deezer:123',
         'bz:soundcloud:456',
-        'bz:audius:retired',
+        'bz:audius:../../invalid',
         'bz:apple_catalog:789',
         'bzv:dQw4w9WgXcQ',
         '',

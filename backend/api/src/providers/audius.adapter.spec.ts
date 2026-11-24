@@ -13,6 +13,7 @@ describe('AudiusAdapter', () => {
     is_unlisted: false, is_delete: false, access: { stream: true },
     allowed_api_keys: null, access_authorities: null, stream_conditions: null,
     artwork: { '480x480': 'https://audius-nodes.com/test.jpg' },
+    permalink: '/originalartist/original-recording',
   });
   const response = (data: unknown) => ({
     ok: true,
@@ -58,6 +59,11 @@ describe('AudiusAdapter', () => {
       },
     });
     expect(adapter.capabilities.download).toBe(false);
+    expect(check).toMatchObject({
+      attribution: expect.stringContaining(
+        'source https://audius.co/originalartist/original-recording',
+      ),
+    });
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 

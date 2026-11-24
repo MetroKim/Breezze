@@ -9,6 +9,7 @@ interface AudiusTrack {
   id?: string;
   title?: string;
   duration?: number;
+  permalink?: string;
   is_available?: boolean;
   is_streamable?: boolean;
   is_stream_gated?: boolean;
@@ -70,6 +71,17 @@ export class AudiusAdapter implements ProviderAdapter {
     return await response.json() as AudiusResponse<T>;
   }
 
+  private trackSourceUrl(track: AudiusTrack): string {
+    const path = track.permalink;
+    if (path && /^\/[A-Za-z0-9._/-]{2,350}$/.test(path) &&
+        !path.startsWith('//') && !path.includes('..')) {
+      return new URL(path, 'https://audius.co').toString();
+    }
+    // An exact track API URI remains a valid reference when an artist
+    // has not published a canonical public permalink.
+    return `https://api.audius.co/v1/tracks/${track.id}`;
+  }
+
   private map(track: AudiusTrack): ProviderTrack | null {
     if (!track.id || !this.validId(track.id) || !track.title?.trim() ||
         !track.user?.name?.trim()) return null;
@@ -80,7 +92,7 @@ export class AudiusAdapter implements ProviderAdapter {
       artworkUrl: track.artwork?.['480x480'],
       durationSec: typeof track.duration === 'number' &&
           track.duration > 0 ? track.duration : undefined,
-      sourceUrl: `https://audius.co/tracks/${track.id}`,
+      sourceUrl: this.trackSourceUrl(track),
     };
   }
 
@@ -156,7 +168,7 @@ export class AudiusAdapter implements ProviderAdapter {
       }
       const artist = track.user?.name ?? 'Audius creator';
       const attribution = `Audius OML: "${track.title ?? 'Track'}" by ${artist}; ` +
-        `source https://audius.co/tracks/${providerTrackId}; ` +
+        `source ${this.trackSourceUrl(track)}; ` +
         'public third-party API streaming only; no download or rehosting';
       return providerOk({ available: true }, attribution);
     } catch {

@@ -419,6 +419,107 @@ async function run() {
   assert.equal(denied.data.playback?.streamUrl, undefined);
   report('Catalog metadata cannot issue a signed or provider full-stream session');
 
+  // M1 D5 positive production grant. The official Audius Open Music License
+  // applies only to publicly API-streamable creator releases. This test
+  // verifies fresh permission against the actual provider, our authenticated
+  // session, transport delivery, ownership and session lifecycle. It does not
+  // copy, download or rehost the recording.
+  const publicAudio = await request('GET',
+    '/api/v1/providers/audius/search?q=ambient');
+  status(publicAudio.status, 200, 'Audius OML public discovery');
+  assert.equal(publicAudio.data.kind, 'ok',
+    'Audius is enabled and returns live artist-permitted music');
+  const audiusTrack = publicAudio.data.value?.find(track =>
+    typeof track?.providerTrackId === 'string' &&
+    /^[A-Za-z0-9]{4,32}$/.test(track.providerTrackId) &&
+    typeof track.title === 'string' && track.title.trim() &&
+    typeof track.artist === 'string' && track.artist.trim() &&
+    Number.isInteger(track.durationSec) && track.durationSec >= 1);
+  assert.ok(audiusTrack, 'Audius must have a public OML recording for this test');
+
+  const canonicalAudius = await request('POST', '/api/v1/catalog/resolve',
+    owner.token, {
+      externalId: 'bz:audius:' + audiusTrack.providerTrackId,
+      source: 'audius',
+      title: audiusTrack.title,
+      artistName: audiusTrack.artist,
+      durationSec: audiusTrack.durationSec,
+    });
+  status(canonicalAudius.status, 201, 'canonical Audius recording');
+  let audiusSessionId = null;
+  try {
+    const grant = await request('POST', '/api/v1/playback/sessions',
+      owner.token, {
+        providerId: 'audius',
+        providerTrackId: audiusTrack.providerTrackId,
+        canonicalTrackId: canonicalAudius.data.id,
+      });
+    status(grant.status, 201, 'authenticated Audius OML playback grant');
+    assert.equal(typeof grant.data.id, 'string');
+    audiusSessionId = grant.data.id;
+    assert.ok(grant.data.playback?.attribution?.startsWith('Audius OML:'),
+      'licensed grant must preserve artist, source and OML attribution');
+    const streamUrl = new URL(grant.data.playback.streamUrl);
+    assert.equal(streamUrl.protocol, 'https:');
+    assert.equal(streamUrl.hostname, 'api.audius.co');
+    assert.equal(streamUrl.pathname,
+      '/v1/tracks/' + audiusTrack.providerTrackId + '/stream');
+    assert.ok(Date.parse(grant.data.playback.expiresAt) > Date.now(),
+      'streaming grant must have a future expiry');
+
+    const playable = await fetch(streamUrl, {
+      headers: { Range: 'bytes=0-1023', Accept: 'audio/mpeg' },
+      signal: AbortSignal.timeout(20_000),
+    });
+    assert.ok(playable.status === 200 || playable.status === 206,
+      'Audius audio range request returned HTTP ' + playable.status);
+    assert.match(playable.headers.get('content-type') ?? '',
+      /audio\/(mpeg|mp3|mp4|aac|ogg)/i,
+      'authorized stream must return actual playable audio');
+    const reader = playable.body?.getReader();
+    assert.ok(reader, 'authorized audio stream has a readable body');
+    try {
+      const firstBytes = await reader.read();
+      assert.ok(firstBytes.value?.byteLength > 0,
+        'the stream must deliver real audio bytes to a listener');
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+    report('Live Audius OML session grants a range-capable audio stream');
+
+    const foreignPause = await request('POST',
+      '/api/v1/playback/sessions/' + audiusSessionId + '/pause',
+      stranger.token);
+    status(foreignPause.status, 404, 'foreign playback-session pause');
+
+    const beat = await request('POST',
+      '/api/v1/playback/sessions/' + audiusSessionId + '/heartbeat',
+      owner.token, { eventId: randomUUID(), sequence: 1 });
+    status(beat.status, 200, 'licensed session heartbeat');
+    assert.equal(beat.data.accepted, true);
+
+    const paused = await request('POST',
+      '/api/v1/playback/sessions/' + audiusSessionId + '/pause',
+      owner.token);
+    status(paused.status, 200, 'licensed playback pause');
+    const resumed = await request('POST',
+      '/api/v1/playback/sessions/' + audiusSessionId + '/resume',
+      secondToken);
+    status(resumed.status, 200, 'same-owner second-device playback resume');
+    const stopped = await request('POST',
+      '/api/v1/playback/sessions/' + audiusSessionId + '/stop',
+      owner.token);
+    status(stopped.status, 200, 'licensed playback stop');
+    audiusSessionId = null;
+    report('Live server-scoped playback heartbeat, ownership and stop');
+  } finally {
+    if (audiusSessionId) {
+      await request('POST',
+        '/api/v1/playback/sessions/' + audiusSessionId + '/stop',
+        owner.token).catch(() => {});
+    }
+  }
+
   const otherBefore = await request('GET', favoritesRoute, stranger.token);
   status(otherBefore.status, 200, 'other-account cloud favorites');
   assert.equal(otherBefore.data.some(row => row.trackId === favoriteId), false);
