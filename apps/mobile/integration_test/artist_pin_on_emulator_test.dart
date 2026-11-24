@@ -1,6 +1,6 @@
 import 'package:breezze/app/followed_artist_store.dart';
 import 'package:breezze/app/saved_album_store.dart';
-import 'package:breezze/app/bootstrap.dart' show FavoriteTrack, FavoritesStore;
+import 'package:breezze/app/bootstrap.dart' show FavoriteTrack, FavoritesStore, favoritesRefreshProvider;
 import 'package:breezze/core/database/db_instance.dart';
 import 'package:breezze/core/database/sync_outbox_dao.dart';
 import 'package:breezze/features/player/player_controller.dart' show TrackInfo;
