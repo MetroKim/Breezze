@@ -1,5 +1,9 @@
 import 'package:breezze/app/followed_artist_store.dart';
 import 'package:breezze/app/saved_album_store.dart';
+import 'package:breezze/app/bootstrap.dart' show FavoriteTrack, FavoritesStore;
+import 'package:breezze/core/database/db_instance.dart';
+import 'package:breezze/core/database/sync_outbox_dao.dart';
+import 'package:breezze/features/player/player_controller.dart' show TrackInfo;
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/features/catalog/catalog_detail_screens.dart';
@@ -129,6 +133,21 @@ class _ArtistApi extends BreezzeApi {
     _checkOnline();
     albums.remove(externalAlbumId);
   }
+
+  @override
+  Future<Map<String, dynamic>> discoveryTrackSearch(String query) async =>
+      {'items': <Map<String, dynamic>>[]};
+
+  // Keep the local favorites outbox pending while simulated cloud sync is
+  // unavailable; the production HTTP smoke separately tests cloud delivery.
+  @override
+  Future<Map<String, dynamic>> resolveCatalogTrack({
+    required String externalId,
+    required String source,
+    required String title,
+    required String artistName,
+    required int durationSec,
+  }) async => throw StateError('Native favorites offline fixture');
 
   @override
   Future<Map<String, dynamic>> discoveryArtistSearch(String query) async =>
@@ -386,6 +405,94 @@ void main() {
         await storage.delete(key: 'breezze:saved_albums:v1:' + suffix);
         await storage.delete(key: 'breezze:saved_albums:pending:v1:' + suffix);
         await storage.delete(key: 'breezze:saved_albums:cloud_ready:v1:' + suffix);
+      }
+    }
+  });
+
+  testWidgets('native song detail favorites survive app restart and isolate owners',
+      (tester) async {
+    final seed = DateTime.now().microsecondsSinceEpoch.toString();
+    final ownerA = 'favorite-ui-a-' + seed;
+    final ownerB = 'favorite-ui-b-' + seed;
+    final trackId = 'bz:youtube_music:favorite_native_' + seed;
+    final favorite = FavoriteTrack(
+      id: trackId,
+      title: 'Native Favorites QA Song',
+      artist: 'Breezze QA Artist',
+    );
+    final cloud = _ArtistCloud();
+    final apiA = _ArtistApi(cloud, ownerA);
+    final apiB = _ArtistApi(cloud, ownerB);
+    final current = _CurrentApi(apiA);
+    final favorites = FavoritesStore();
+
+    Future<void> waitForLabel(String label) async {
+      for (var attempt = 0; attempt < 80; attempt++) {
+        await tester.pump(const Duration(milliseconds: 200));
+        if (find.text(label).evaluate().isNotEmpty) return;
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+      }
+      fail('Favorite screen never displayed ' + label);
+    }
+
+    Future<void> mountSong(String ownerId) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWith(
+            () => _SignedInArtistSession(current, ownerId),
+          ),
+        ],
+        child: MaterialApp(
+          theme: bzLightTheme(),
+          home: TrackDetailScreen(
+            track: TrackInfo(
+              id: trackId,
+              title: favorite.title,
+              artist: favorite.artist,
+            ),
+          ),
+        ),
+      ));
+    }
+
+    try {
+      await mountSong(ownerA);
+      await waitForLabel('Add to Library');
+      await tester.ensureVisible(find.text('Add to Library'));
+      await tester.tap(find.text('Add to Library'));
+      await waitForLabel('Remove from Library');
+      expect(await favorites.isFavorite(trackId, ownerId: ownerA), isTrue);
+
+      // New page and provider scope, same native owner-prefixed SQLite.
+      await mountSong(ownerA);
+      await waitForLabel('Remove from Library');
+      current.value = apiB;
+      await mountSong(ownerB);
+      await waitForLabel('Add to Library');
+      expect(await favorites.isFavorite(trackId, ownerId: ownerB), isFalse);
+
+      current.value = apiA;
+      await mountSong(ownerA);
+      await waitForLabel('Remove from Library');
+      await tester.ensureVisible(find.text('Remove from Library'));
+      await tester.tap(find.text('Remove from Library'));
+      await waitForLabel('Add to Library');
+      expect(await favorites.isFavorite(trackId, ownerId: ownerA), isFalse);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      // Delete only test-owned local rows/outbox entries; no real account
+      // data is involved and neither other owners nor guest are touched.
+      for (final owner in [ownerA, ownerB]) {
+        if (await favorites.isFavorite(trackId, ownerId: owner)) {
+          await favorites.toggle(favorite, ownerId: owner);
+        }
+        for (final event in await SyncOutboxDao(breezzeDb)
+            .pending(ownerId: owner)) {
+          await SyncOutboxDao(breezzeDb).discard(event.id);
+        }
       }
     }
   });
