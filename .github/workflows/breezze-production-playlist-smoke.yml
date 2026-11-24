@@ -1,0 +1,29 @@
+name: Breezze Production Playlist Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/breezze-production-playlist-smoke.yml
+      - backend/api/scripts/production-playlist-smoke.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: breezze-production-playlist-smoke
+  cancel-in-progress: false
+
+jobs:
+  production-playlist:
+    name: Live edge playlist HTTP and cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Confirm production API revision and run disposable-account acceptance
+        working-directory: backend/api
+        run: node scripts/production-playlist-smoke.mjs
