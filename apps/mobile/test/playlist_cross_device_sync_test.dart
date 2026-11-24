@@ -20,7 +20,7 @@ class FakePlaylistApi extends BreezzeApi {
 
   @override
   Future<Map<String, dynamic>> createPlaylist(String name, {String? id}) async {
-    calls.add('create:$'+'id:$'+'name');
+    calls.add('create:$id:$name');
     if (failCreate) {
       failCreate = false;
       throw const BreezzeApiException(code: 'OFFLINE', message: 'Offline');
@@ -30,26 +30,26 @@ class FakePlaylistApi extends BreezzeApi {
   }
   @override
   Future<Map<String, dynamic>> addPlaylistTrack(String playlistId, String trackId) async {
-    calls.add('add:$'+'playlistId:$'+'trackId');
+    calls.add('add:$playlistId:$trackId');
     return {'trackId': trackId};
   }
   @override
   Future<Map<String, dynamic>> renamePlaylist(String playlistId, String name) async {
-    calls.add('rename:$'+'playlistId:$'+'name');
+    calls.add('rename:$playlistId:$name');
     return {'name': name};
   }
   @override
   Future<Map<String, dynamic>> reorderPlaylistTracks(String playlistId, List<String> trackIds) async {
-    calls.add('reorder:$'+'playlistId:$'+'{trackIds.join(",")}');
+    calls.add('reorder:$playlistId:${trackIds.join(",")}');
     return {'reordered': true};
   }
   @override
   Future<void> removePlaylistTrack(String playlistId, String trackId) async {
-    calls.add('remove:$'+'playlistId:$'+'trackId');
+    calls.add('remove:$playlistId:$trackId');
   }
   @override
   Future<void> deletePlaylist(String playlistId) async {
-    calls.add('delete:$'+'playlistId');
+    calls.add('delete:$playlistId');
   }
 }
 
@@ -76,12 +76,12 @@ void main() {
     final api = FakePlaylistApi();
     expect(await store.syncOwner(owner, api, ownerStillActive: () => true), isTrue);
     expect(api.calls, [
-      'create:$'+'id:Road trip',
-      'add:$'+'id:$'+'aId',
-      'add:$'+'id:$'+'bId',
-      'rename:$'+'id:Road trip 2',
-      'reorder:$'+'id:$'+'bId,$'+'aId',
-      'remove:$'+'id:$'+'aId',
+      'create:$id:Road trip',
+      'add:$id:$aId',
+      'add:$id:$bId',
+      'rename:$id:Road trip 2',
+      'reorder:$id:$bId,$aId',
+      'remove:$id:$aId',
     ]);
     expect(await store.pendingCount(owner), 0);
     expect((await store.load(owner)).single.tracks.single.id, bId);
