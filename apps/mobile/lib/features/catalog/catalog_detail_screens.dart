@@ -9,6 +9,7 @@ import '../../app/followed_artist_store.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../core/audio/youtube_player_handoff.dart';
 import '../video/official_music_video_screen.dart';
+import '../video/open_youtube_player.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
@@ -218,6 +219,17 @@ class TrackDetailScreen extends ConsumerWidget {
                       onPressed: isMetadataOnlyTrackId(track.id)
                           ? null
                           : () async {
+                        if (isYouTubeSongId(track.id)) {
+                          await openYouTubePlayer(
+                            context: context,
+                            ref: ref,
+                            videoId: track.id.substring('bz:youtube_music:'.length),
+                            title: trackTitle,
+                            artist: artistName,
+                            artworkUrl: track.artworkUrl,
+                          );
+                          return;
+                        }
                         await ref.read(playerControllerProvider.notifier).playTrack(
                           trackId: track.id,
                           queue: queue,
@@ -228,7 +240,8 @@ class TrackDetailScreen extends ConsumerWidget {
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
                       label: Text(isMetadataOnlyTrackId(track.id)
-                          ? 'Playback unavailable' : 'Play'),
+                          ? 'Playback unavailable'
+                          : isYouTubeSongId(track.id) ? 'Play on YouTube' : 'Play'),
                     ),
                     OutlinedButton.icon(
                       // Never display an actionable-looking "Add" state
@@ -1242,6 +1255,17 @@ class AlbumDetailScreen extends ConsumerWidget {
     Future<void> playAt(int index, {bool shuffle = false}) async {
       if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
       final track = tracks[index];
+      if (isYouTubeSongId(track.id)) {
+        await openYouTubePlayer(
+          context: context,
+          ref: ref,
+          videoId: track.id.substring('bz:youtube_music:'.length),
+          title: track.title ?? 'YouTube Music',
+          artist: track.artist ?? artist,
+          artworkUrl: track.artworkUrl,
+        );
+        return;
+      }
       if (isMetadataOnlyTrackId(track.id)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
