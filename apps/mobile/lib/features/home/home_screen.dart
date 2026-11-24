@@ -36,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<TrackInfo> _madeForYou = [];
   Map<String, dynamic>? _replay;
   bool _loading = true;
+  bool _localDataUnavailable = false;
   int _refreshVersion = 0;
 
   @override
@@ -51,6 +52,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // A broken local store must not leave Listen Now on skeletons forever.
     // Continue to fetch any independent remote sections without claiming
     // that missing local rows are real history or recommendations.
+    var localDataUnavailable = false;
     List<RecentEntry> recent;
     try {
       final load = widget.loadRecent;
@@ -59,6 +61,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           : await RecentStore().load(ownerId: ownerId);
     } catch (_) {
       recent = [];
+      localDataUnavailable = true;
     }
     if (!mounted || version != _refreshVersion) return;
     List<FavoriteTrack> favorites;
@@ -66,6 +69,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     } catch (_) {
       favorites = [];
+      localDataUnavailable = true;
     }
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
@@ -129,6 +133,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _madeForYou = madeForYou;
       _replay = replay;
       _loading = false;
+      _localDataUnavailable = localDataUnavailable;
     });
   }
 
@@ -211,6 +216,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _madeForYou = [];
         _replay = null;
         _loading = true;
+        _localDataUnavailable = false;
       });
       _refresh();
     });
@@ -310,6 +316,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 18),
             const BzSkeletonArtworkGrid(itemCount: 4),
           ],
+          if (!_loading && _localDataUnavailable) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Could not load your saved music',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text('Your listening history or saved songs are temporarily unavailable. Your library has not been erased.',
+                      style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 14),
+                  OutlinedButton(
+                    onPressed: _refresh,
+                    child: const Text('Try again'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
           if (!_loading && shortcuts.isNotEmpty) ...[
             _ShortcutGrid(tracks: shortcuts.values.toList(), onPlay: _play),
             const SizedBox(height: 28),
@@ -361,7 +393,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
-          if (!_loading && _recentlyPlayed.isEmpty && _favorites.isEmpty)
+          if (!_loading && !_localDataUnavailable && _recentlyPlayed.isEmpty && _favorites.isEmpty)
             _FirstRunCard(
               onSearch: () => ref.read(homeTabHintProvider.notifier).state = MainTab.search.index,
             ),
