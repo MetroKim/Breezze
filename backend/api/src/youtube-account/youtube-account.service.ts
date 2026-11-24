@@ -349,7 +349,10 @@ export class YoutubeAccountService {
         if (typeof id !== 'string' || !PLAYLIST_ID.test(id)) return [];
         const title = item.snippet?.title;
         const artwork = item.snippet?.thumbnails?.default?.url;
-        const parsed = typeof artwork === 'string' ? URL.parse(artwork) : null;
+        let parsed: URL | null = null;
+        if (typeof artwork === 'string') {
+          try { parsed = new URL(artwork); } catch { /* Ignore invalid thumbnails. */ }
+        }
         const host = parsed?.hostname.toLowerCase() ?? '';
         const permittedArtwork = parsed?.protocol === 'https:' &&
           (host === 'ytimg.com' || host.endsWith('.ytimg.com') ||
