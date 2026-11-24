@@ -45,8 +45,10 @@ if 'BreezzeShell' not in root:
 for tab in ('Home', 'Browse', 'Library', 'Search'):
     if not re.search(rf"_TabDestination\('{tab}'\s*,", shell):
         issues.append(f'missing canonical tab: {tab}')
-if re.search(r'\bTimer\.periodic\s*\(', player):
-    issues.append('player_controller.dart must not simulate playback position using Timer.periodic')
+# Heartbeat/sleep timers are legitimate. Reject only the legacy fake player
+# pattern that advances elapsed audio position from a clock tick.
+if re.search(r'(?s)Timer\.periodic\s*\(.{0,900}?\b(?:_position|position)\s*\+=', player):
+    issues.append('player_controller.dart must not fake playback position with a periodic timer')
 
 if issues:
     print('Breezze identity contract FAILED:')
