@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { LibraryService } from './library.service';
@@ -44,12 +44,38 @@ describeIntegration('Saved albums PostgreSQL ownership and idempotency', () => {
     const key = 'apple:21';
     await Promise.all([service.setFollowing(listener, key, true),
       service.setFollowing(listener, key, true)]);
-    expect(await service.artistStatus(listener, key)).toEqual({ following: true });
-    expect(await service.artistStatus(other, key)).toEqual({ following: false });
+    expect(await service.artistStatus(listener, key)).toEqual({ following: true, isPinned: false });
+    expect(await service.artistStatus(other, key)).toEqual({ following: false, isPinned: false });
     await service.setFollowing(other, key, false);
-    expect(await service.artistStatus(listener, key)).toEqual({ following: true });
+    expect(await service.artistStatus(listener, key)).toEqual({ following: true, isPinned: false });
     await service.setFollowing(listener, key, false);
-    expect(await service.artistStatus(listener, key)).toEqual({ following: false });
+    expect(await service.artistStatus(listener, key)).toEqual({ following: false, isPinned: false });
+  });
+
+  it('lists only owned followed artists, pins first and preserves pins on metadata updates',
+      async () => {
+    const a = await createUser();
+    const b = await createUser();
+    await service.setFollowing(a, 'apple:901', true, 'Artist A');
+    await service.setFollowing(a, 'apple:902', true, 'Artist B');
+    await service.setFollowing(b, 'apple:901', true, 'Other account name');
+    expect((await service.listFollowedArtists(a)).items).toHaveLength(2);
+    expect((await service.listFollowedArtists(b)).items).toHaveLength(1);
+    await expect(service.setArtistPinned(b, 'apple:902', true))
+      .rejects.toBeInstanceOf(NotFoundException);
+    await service.setArtistPinned(a, 'apple:901', true);
+    let albums = (await service.listFollowedArtists(a)).items;
+    expect(albums[0].artistKey).toBe('apple:901');
+    expect(albums[0].isPinned).toBe(true);
+    expect(albums[0].displayName).toBe('Artist A');
+    expect((await service.listFollowedArtists(b)).items[0].isPinned).toBe(false);
+    await service.setFollowing(a, 'apple:901', true, 'Artist A — new name');
+    expect((await service.artistStatus(a, 'apple:901')).isPinned).toBe(true);
+    expect((await service.listFollowedArtists(a)).items[0].displayName)
+      .toBe('Artist A — new name');
+    await service.setArtistPinned(a, 'apple:901', false);
+    expect((await service.listFollowedArtists(a)).items
+      .every(row => !row.isPinned)).toBe(true);
   });
 
   it('keeps the same public album ID separate for two users', async () => {

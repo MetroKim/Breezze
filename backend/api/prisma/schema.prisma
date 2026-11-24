@@ -43,11 +43,15 @@ model User {
 }
 
 model UserFollowedArtist {
-  userId    String
-  artistKey String
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  artistKey    String
+  displayName  String?
+  isPinned     Boolean  @default(false)
+  followedAt   DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, artistKey])
+  @@index([userId, isPinned, followedAt, artistKey])
 }
 
 /// Per-user catalog bookmarks only; they are never media playback rights.

@@ -3,6 +3,13 @@ import { LibraryService } from './library.service';
 
 describe('LibraryService tenant isolation', () => {
   const prisma = {
+    userFollowedArtist: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     track: { findUnique: jest.fn() },
     favorite: {
       findMany: jest.fn(),
@@ -16,6 +23,34 @@ describe('LibraryService tenant isolation', () => {
     jest.clearAllMocks();
     prisma.track.findUnique.mockResolvedValue({ id: 'track-1' });
     service = new LibraryService(prisma as any);
+  });
+
+  it('owner-scoped artist pin requires a followed record', async () => {
+    prisma.userFollowedArtist.updateMany.mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    await expect(service.setArtistPinned('other-user', 'apple:10', true))
+      .rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.setArtistPinned('user-a', 'apple:10', true))
+      .resolves.toEqual({ following: true, isPinned: true });
+    expect(prisma.userFollowedArtist.updateMany).toHaveBeenLastCalledWith({
+      where: { userId: 'user-a', artistKey: 'apple:10' },
+      data: { isPinned: true },
+    });
+  });
+
+  it('lists followed artists using the authenticated account only', async () => {
+    prisma.userFollowedArtist.findMany.mockResolvedValue([]);
+    await expect(service.listFollowedArtists('user-a'))
+      .resolves.toEqual({ items: [] });
+    expect(prisma.userFollowedArtist.findMany).toHaveBeenCalledWith({
+      where: { userId: 'user-a' },
+      orderBy: [
+        { isPinned: 'desc' }, { followedAt: 'desc' }, { artistKey: 'asc' },
+      ],
+      select: {
+        artistKey: true, displayName: true, isPinned: true, followedAt: true,
+      },
+    });
   });
 
   it('lists favorites for the authenticated user only', async () => {

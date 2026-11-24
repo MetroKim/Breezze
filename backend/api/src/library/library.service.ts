@@ -5,22 +5,49 @@ import { PrismaService } from '../prisma.service';
 export class LibraryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listFollowedArtists(userId: string) {
+    const items = await this.prisma.userFollowedArtist.findMany({
+      where: { userId },
+      orderBy: [{ isPinned: 'desc' }, { followedAt: 'desc' }, { artistKey: 'asc' }],
+      select: { artistKey: true, displayName: true, isPinned: true, followedAt: true },
+    });
+    return { items };
+  }
+
   async artistStatus(userId: string, artistKey: string) {
     const row = await this.prisma.userFollowedArtist.findUnique({
       where: { userId_artistKey: { userId, artistKey } },
     });
-    return { following: row !== null };
+    return { following: row !== null, isPinned: row?.isPinned ?? false };
   }
 
-  async setFollowing(userId: string, artistKey: string, following: boolean) {
+  async setFollowing(
+    userId: string, artistKey: string, following: boolean, displayName?: string,
+  ) {
     if (following) {
-      await this.prisma.userFollowedArtist.createMany({
-        data: [{ userId, artistKey }], skipDuplicates: true,
+      const name = displayName?.trim() || null;
+      await this.prisma.userFollowedArtist.upsert({
+        where: { userId_artistKey: { userId, artistKey } },
+        create: { userId, artistKey, displayName: name },
+        update: name === null ? {} : { displayName: name },
       });
     } else {
-      await this.prisma.userFollowedArtist.deleteMany({ where: { userId, artistKey } });
+      await this.prisma.userFollowedArtist.deleteMany({
+        where: { userId, artistKey },
+      });
     }
     return { following };
+  }
+
+  async setArtistPinned(userId: string, artistKey: string, pinned: boolean) {
+    const updated = await this.prisma.userFollowedArtist.updateMany({
+      where: { userId, artistKey },
+      data: { isPinned: pinned },
+    });
+    if (updated.count !== 1) {
+      throw new NotFoundException('ARTIST_NOT_FOLLOWED');
+    }
+    return { following: true, isPinned: pinned };
   }
 
   private static readonly savedAlbumSource = 'apple_itunes';
