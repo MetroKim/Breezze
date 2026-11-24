@@ -1,6 +1,6 @@
 import {
   Controller, Delete, Get, Header, HttpCode, HttpStatus,
-  Post, Query, Res, UseGuards,
+  Post, Query, Res, UseGuards, Param,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -35,6 +35,16 @@ export class YoutubeAccountController {
   @UseGuards(JwtAuthGuard)
   playlists(@CurrentUser() userId: string) {
     return this.accounts.playlists(userId);
+  }
+
+  @Get('playlists/:playlistId/items')
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(JwtAuthGuard)
+  playlistItems(
+    @CurrentUser() userId: string,
+    @Param('playlistId') playlistId: string,
+  ) {
+    return this.accounts.playlistItems(userId, playlistId);
   }
 
   @Delete('connection')
