@@ -464,7 +464,8 @@ export class YoutubeAccountService {
   }
 
   async disconnect(userId: string) {
-    const cfg = this.config();
+    // Data deletion must work even if Google credentials were disabled or
+    // rotated after the listener linked their account.
     const record = await this.prisma.youtubeAccountConnection.findUnique({
       where: { userId },
       select: { refreshTokenCiphertext: true },
@@ -480,6 +481,7 @@ export class YoutubeAccountService {
       // Google revocation is best-effort; local token deletion is mandatory
       // even when Google is offline or revocation fails.
       try {
+        const cfg = this.config();
         const token = unsealToken(record.refreshTokenCiphertext, userId, cfg.key);
         await fetch(REVOKE_ENDPOINT, {
           method: 'POST',
