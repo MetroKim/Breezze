@@ -54,7 +54,17 @@ export class DiscoveryService {
 
   async dailyTop100(country?: string) {
     const token = process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
-    if (!token) throw new Error('APPLE_MUSIC_API_NOT_CONFIGURED');
+    if (!token) {
+      // A public regional chart is better than a 503, but Apple's RSS
+      // Most Played chart is not the distinct Daily Top 100 API chart.
+      const feed = await this.songsChart(country);
+      return {
+        ...feed,
+        title: 'Regional Most Played (RSS; not Daily Top 100)',
+        chartType: 'regional_most_played' as const,
+        dailyTop100Available: false,
+      };
+    }
     const territory = this.country(country);
     const url = new URL(`https://api.music.apple.com/v1/catalog/${territory}/charts`);
     url.searchParams.set('types', 'songs');

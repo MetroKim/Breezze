@@ -104,4 +104,32 @@ describe('DiscoveryService album metadata', () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({ id: 'abcDEF12_-3', title: 'Official video' });
   });
+  it('uses the public RSS regional chart without claiming Daily Top 100 when no Apple token is configured', async () => {
+    const previous = process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
+    delete process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
+    try {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ feed: { title: 'Most Played', results: [
+          { id: 'one', name: 'Song One', artistName: 'Artist One' },
+        ] } }),
+      } as unknown as Response);
+      const result = await service.dailyTop100('TZ');
+      expect(result).toMatchObject({
+        source: 'Apple Music RSS',
+        title: 'Regional Most Played (RSS; not Daily Top 100)',
+        territory: 'TZ',
+        chartType: 'regional_most_played',
+        dailyTop100Available: false,
+      });
+      expect(result.items).toHaveLength(1);
+      expect((global.fetch as jest.Mock).mock.calls[0][0].toString())
+        .toContain('/tz/music/most-played/100/songs.json');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      if (previous === undefined) delete process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
+      else process.env.APPLE_MUSIC_DEVELOPER_TOKEN = previous;
+    }
+  });
+
 });
