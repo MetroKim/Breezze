@@ -197,6 +197,32 @@ void main() {
         throwsA(isA<BreezzeApiException>()),
       );
 
+      // Pin survives offline mode, process restart and cloud hydration.
+      expect(await phoneA.setPinned(userId, playlistId, true), isTrue);
+      final previousPin = PlaylistStore(documentsDirectory: () async => dirA);
+      expect((await previousPin.load(userId)).single.isPinned, isTrue);
+      expect(await phoneA.syncOwner(
+        userId, offlineApi, ownerStillActive: () => true,
+      ), isFalse);
+      phoneA = PlaylistStore(documentsDirectory: () async => dirA);
+      expect((await phoneA.load(userId)).single.isPinned, isTrue);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect((await phoneB.load(userId)).single.isPinned, isTrue);
+      expect((await apiSecond.getPlaylist(playlistId))['isPinned'], isTrue);
+      await expectLater(
+        apiOther.pinPlaylist(playlistId, false),
+        throwsA(isA<BreezzeApiException>()),
+      );
+      expect(await phoneB.setPinned(userId, playlistId, false), isTrue);
+      expect(await phoneB.syncOwner(
+        userId, apiSecond, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneA.mergeRemote(userId, await apiA.playlists());
+      expect((await phoneA.load(userId)).single.isPinned, isFalse);
+
       // Multi-select must preserve all chosen memberships in a single
       // device-local write and replay the same two songs on a second login
       // session after an offline app restart. Provider IDs are user-facing;
