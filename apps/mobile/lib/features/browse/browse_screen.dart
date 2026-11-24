@@ -9,6 +9,7 @@ import '../../core/audio/playback_source_policy.dart';
 import '../video/official_music_video_screen.dart';
 import '../video/device_video.dart';
 import '../video/open_youtube_player.dart';
+import 'ytmusic_client_screen.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -95,8 +96,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   void _openCollection(_BrowseDestination destination) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _BrowseCollectionScreen(destination: destination),
+      MaterialPageRoute<void>(
+        builder: (_) => destination.title == 'YouTube Music'
+            ? const YouTubeMusicClientScreen()
+            : _BrowseCollectionScreen(destination: destination),
       ),
     );
   }
@@ -434,6 +437,7 @@ class _BrowseDestination {
 }
 
 const _browseDestinations = <_BrowseDestination>[
+  _BrowseDestination('YouTube Music', 'Explore public releases, trending songs, moods and playlists in Breezze.', 'music-note'),
   _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
   _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
