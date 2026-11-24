@@ -499,6 +499,20 @@ class BreezzeApi {
   Future<Map<String, dynamic>> recordRecent(String trackId) =>
       _post('/home/recent', {'trackId': trackId});
 
+  /// Snapshot of this account's saved songs, with display metadata from the
+  /// canonical catalog. The server owns tenant filtering and authorization.
+  Future<List<Map<String, dynamic>>> fetchCloudFavorites() async {
+    final response = await _get('/library/favorites');
+    final data = response['data'];
+    if (data is! List || data.any((item) => item is! Map)) {
+      throw const BreezzeApiException(
+        code: 'CLOUD_FAVORITES_INVALID',
+        message: 'The cloud library returned an invalid favorites snapshot.',
+      );
+    }
+    return _asMapList(data);
+  }
+
   Future<Map<String, dynamic>> addFavorite(String trackId) =>
       _post('/library/favorites', {'trackId': trackId});
 

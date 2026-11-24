@@ -440,6 +440,25 @@ class FavoritesStore {
 
   Future<bool> isFavorite(String id, {String ownerId = 'guest'}) =>
       _dao.contains(id, ownerId: ownerId);
+
+  /// One-way hydration from a validated, account-scoped cloud snapshot.
+  /// This does not produce local edits or upload the same rows again.
+  Future<bool> reconcileCloud(
+    String ownerId,
+    List<FavoriteTrack> remote,
+  ) => _dao.reconcileCloud(
+        ownerId: ownerId,
+        tracks: [
+          for (final track in remote)
+            (
+              id: track.id,
+              title: track.title,
+              artist: track.artist,
+              artworkUrl: track.artworkUrl,
+              durationMs: track.durationMs,
+            ),
+        ],
+      );
 }
 
 /// App-wide favorites store provider.

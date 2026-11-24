@@ -45,6 +45,36 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   List<FavoriteTrack> _favorites = [];
   List<SavedAlbum> _albums = [];
   var _loading = true;
+  int _refreshGeneration = 0;
+
+  bool _ownerStillActive(String ownerId) {
+    if (!mounted) return false;
+    final active = ref.read(authSessionProvider);
+    final current = active is AuthSignedIn ? active.userId : 'guest';
+    return current == ownerId;
+  }
+
+  List<FavoriteTrack> _decodeCloudFavorites(List<Map<String, dynamic>> cloud) {
+    final favorites = <FavoriteTrack>[];
+    for (final row in cloud) {
+      final trackId = row['trackId'];
+      final rawTrack = row['track'];
+      if (trackId is! String || trackId.isEmpty ||
+          rawTrack is! Map || rawTrack['title'] is! String ||
+          rawTrack['artist'] is! Map ||
+          (rawTrack['artist'] as Map)['name'] is! String ||
+          rawTrack['duration'] is! num) {
+        throw const FormatException('Invalid cloud favorites record');
+      }
+      favorites.add(FavoriteTrack(
+        id: trackId,
+        title: rawTrack['title'] as String,
+        artist: (rawTrack['artist'] as Map)['name'] as String,
+        durationMs: ((rawTrack['duration'] as num) * 1000).toInt(),
+      ));
+    }
+    return favorites;
+  }
 
   @override
   void initState() {
@@ -53,14 +83,40 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _refresh() async {
+    final generation = ++_refreshGeneration;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
+    var favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     var playlists = await _playlistStore.load(ownerId);
     final albumStore = SavedAlbumStore();
     var savedAlbums = await albumStore.load(ownerId);
     final visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
     if (auth is AuthSignedIn) {
+      try {
+        // Upload local edits before accepting a remote snapshot. If an edit
+        // remains pending, the transactional DAO will refuse reconciliation.
+        await ref.read(outboxSyncProvider).drainIfSignedIn();
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        final cloud = await ref
+            .read(authSessionProvider.notifier)
+            .api.fetchCloudFavorites();
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        final validated = _decodeCloudFavorites(cloud);
+        if (await ref.read(favoritesStoreProvider)
+            .reconcileCloud(ownerId, validated)) {
+          favorites = await ref.read(favoritesStoreProvider)
+              .load(ownerId: ownerId);
+        }
+      } catch (_) {
+        // Preserve the owner's offline favorites and unsynced changes.
+      }
+      if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+        return;
+      }
       try {
         await albumStore.syncWithCloud(
           ownerId,
@@ -86,7 +142,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final currentAuth = ref.read(authSessionProvider);
     final currentOwnerId =
         currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
-    if (!mounted || currentOwnerId != ownerId) return;
+    if (!mounted || currentOwnerId != ownerId ||
+        generation != _refreshGeneration) return;
     setState(() {
       _ownerId = ownerId;
       _favorites = favorites;

@@ -24,7 +24,19 @@ describe('LibraryService tenant isolation', () => {
     expect(prisma.favorite.findMany).toHaveBeenCalledWith({
       where: { userId: 'user-a' },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, trackId: true, createdAt: true },
+      select: {
+        id: true,
+        trackId: true,
+        createdAt: true,
+        track: {
+          select: {
+            id: true,
+            title: true,
+            duration: true,
+            artist: { select: { name: true } },
+          },
+        },
+      },
     });
   });
 

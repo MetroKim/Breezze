@@ -156,7 +156,19 @@ export class LibraryService {
     return this.prisma.favorite.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, trackId: true, createdAt: true },
+      select: {
+        id: true,
+        trackId: true,
+        createdAt: true,
+        track: {
+          select: {
+            id: true,
+            title: true,
+            duration: true,
+            artist: { select: { name: true } },
+          },
+        },
+      },
     });
   }
 
