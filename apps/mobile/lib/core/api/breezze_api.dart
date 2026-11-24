@@ -190,6 +190,40 @@ class BreezzeApi {
       _get('/providers/${Uri.encodeComponent(providerId)}/tracks/${Uri.encodeComponent(providerTrackId)}');
 
 
+  // ---- unofficial YouTube Music discovery (metadata only) ----
+  // These endpoints proxy the private ytmusicapi service through Breezze's
+  // normal API. The provider result has an explicit kind (ok/error/unsupported);
+  // never interpret it as an audio stream or offline-download grant.
+  Future<Map<String, dynamic>> ytMusicSearchArtists(String query) =>
+      _get('/providers/youtube_music/artists/search?q=${Uri.encodeQueryComponent(query)}');
+
+  Future<Map<String, dynamic>> ytMusicArtist(String artistId) =>
+      _get('/providers/youtube_music/artists/${Uri.encodeComponent(artistId)}');
+
+  Future<Map<String, dynamic>> ytMusicCharts({String country = 'ZZ'}) =>
+      _get('/providers/youtube_music/charts?country=${Uri.encodeQueryComponent(country)}');
+
+  Future<Map<String, dynamic>> ytMusicWatchQueue(String videoId, {int limit = 20}) =>
+      _get('/providers/youtube_music/watch-queue/${Uri.encodeComponent(videoId)}?limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicSuggestions(String query, {int limit = 10}) =>
+      _get('/providers/youtube_music/suggestions?q=${Uri.encodeQueryComponent(query)}&limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicAlbum(String albumId) =>
+      _get('/providers/youtube_music/albums/${Uri.encodeComponent(albumId)}');
+
+  Future<Map<String, dynamic>> ytMusicPlaylist(String playlistId, {int limit = 50}) =>
+      _get('/providers/youtube_music/playlists/${Uri.encodeComponent(playlistId)}?limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicMoods() =>
+      _get('/providers/youtube_music/moods');
+
+  Future<Map<String, dynamic>> ytMusicMoodPlaylists(String params, {int limit = 20}) =>
+      _get('/providers/youtube_music/moods/playlists?params=${Uri.encodeQueryComponent(params)}&limit=$limit');
+
+  Future<Map<String, dynamic>> ytMusicExplore() =>
+      _get('/providers/youtube_music/explore');
+
   // ---- public catalog discovery (metadata only; never playback grants) ----
   Future<Map<String, dynamic>> discoveryDailyTop100({String country = 'us'}) =>
       _get('/discovery/charts/daily-top-100?country=${Uri.encodeQueryComponent(country)}');
