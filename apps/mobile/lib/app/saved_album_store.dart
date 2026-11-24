@@ -373,7 +373,7 @@ class SavedAlbumStore {
       });
 
 
-  Future<void> _serialize(Future<void> Function() action) {
+  Future<T> _serialize<T>(Future<T> Function() action) {
     final next = _pending.then((_) => action());
     _pending = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     return next;
