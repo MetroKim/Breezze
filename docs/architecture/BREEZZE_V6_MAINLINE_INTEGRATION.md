@@ -5,6 +5,9 @@
 **Canonical version:** **Breezze Unified v6**. This is the **single authoritative v5+v6 integration and release roadmap**; older v5/v4 structural sketches and root outlines are historical. Preserve existing operational details and deployed data until migration acceptance. All feature statuses are evidence-gated, not source-file-count claims.  
 **Product contract:** Free, no subscriptions/ads, four primary tabs: Home, Browse, Library, Search. One global player and mini-player.
 
+**Provider capability clarification (25 November 2026):** Audius is retired. The supported external catalog providers are Deezer and unofficial YouTube Music (`ytmusicapi`). The YouTube Music adapter enables song/album/artist/playlist/mood/chart/video **discovery**, and separately exposes an authenticated **non-production experimental direct-audio candidate** flow behind a development-only flag. This updates older broad "metadata-only" descriptions, but does **not** enable production media `playback`/`download` grants or bypass any provider authorization. See `docs/architecture/YOUTUBE_MUSIC_PRIMARY_PROVIDER.md`.
+
+
 
 ### Unified v5 + v6 decisions (applies to every phase)
 
@@ -18,7 +21,7 @@ This specification merges the v5 module mapping and v6 feasibility roadmap into 
 | Identity | Existing Supabase integration adapter plus legacy account mapping and safe fallback; complete Google/Apple signed-device setup before cutover | Deleting the live Prisma `User`/legacy auth tables or claiming Supabase Auth replaces all app-level authorization |
 | API and database | NestJS + Prisma in `backend/api` on a Node-compatible host; existing Prisma-managed app tables, migration history and user IDs | Deploying NestJS/Prisma directly as a generic Cloudflare Worker; replacing migration history with `0001`–`0011` sketches |
 | Edge and media | Existing Cloudflare `api-worker` proxy and `media-worker` for **app-owned or licensed assets**, authorized downloads, models and exports | Generic rehosting/caching of third-party music, public caching of account-bound stream grants |
-| Content and playback | YT Music for metadata only; provider-approved or Breezze-owned licensed playback resolved against listener, territory, expiry and rights | Using Deezer ARL/cookies to bypass access limits; claiming previews grant full-stream or offline rights |
+| Content and playback | YT Music discovery plus an isolated, non-production opt-in direct-audio feasibility path; production playback remains provider-approved or Breezze-owned licensed media, resolved against listener, territory, expiry and rights | Using Deezer ARL/cookies to bypass access limits; claiming previews grant full-stream or offline rights |
 | B-Quality, B-Upscale, B-Spatial | Extend existing audio contracts; optional audited ONNX/FFI modules **after** sample-rate, license, thermal, CPU and listening tests | Shipping NovaSR on every lossy 44.1/48-kHz stream; claiming synthetic super-resolution is genuine lossless/Hi-Res |
 | B-Mix | Existing automix/crossfade contracts, then a verified native sample-accurate DSP scheduler | Parallel player and unchecked zero-latency Rust/Dart or SoLoud guarantees |
 | On-device AI | One optional runtime abstraction with validated model checksums, size and platform capabilities; benchmark a **single** compatible engine first | Installing every `flutter_edge_ai` engine or asserting one package handles arbitrary audio DSP models on all OS targets |
