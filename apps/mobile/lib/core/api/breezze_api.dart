@@ -234,6 +234,7 @@ class BreezzeApi {
     String? catalogUrl,
     List<String> genres = const [],
     bool isCompilation = false,
+    bool? isPinned,
   }) =>
       _post('/library/albums', {
         'externalAlbumId': externalAlbumId,
@@ -243,6 +244,7 @@ class BreezzeApi {
         if (catalogUrl != null) 'catalogUrl': catalogUrl,
         'genres': genres,
         'isCompilation': isCompilation,
+        if (isPinned != null) 'isPinned': isPinned,
       });
 
   Future<void> deleteSavedAlbum(String externalAlbumId) async {

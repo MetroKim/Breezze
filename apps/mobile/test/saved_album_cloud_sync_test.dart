@@ -37,6 +37,7 @@ class _FakeCloud extends BreezzeApi {
     String? catalogUrl,
     List<String> genres = const [],
     bool isCompilation = false,
+    bool? isPinned,
   }) async {
     upserts++;
     if (failNextUpsert) {
@@ -52,6 +53,7 @@ class _FakeCloud extends BreezzeApi {
       'catalogUrl': catalogUrl,
       'genres': genres,
       'isCompilation': isCompilation,
+      'isPinned': isPinned ?? albums[externalAlbumId]?['isPinned'] ?? false,
       'savedAt': DateTime.utc(2026).toIso8601String(),
     };
     onUpsert?.call();
@@ -197,6 +199,62 @@ void main() {
     await store.syncWithCloud(owner, api, ownerStillActive: () => true);
     expect(api.albums, isEmpty);
     expect(await store.load(owner), isEmpty);
+  });
+
+  test('pins save offline, survive restart and hydrate on another device',
+      () async {
+    final memoryA = _MemoryStore();
+    final memoryB = _MemoryStore();
+    final cloud = _FakeCloud();
+    final deviceA = SavedAlbumStore(keyValueStore: memoryA);
+    final deviceB = SavedAlbumStore(keyValueStore: memoryB);
+    await deviceA.save(owner, _album('123'));
+    await deviceA.save(owner, _album('456'));
+    await deviceA.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+
+    expect(await deviceA.setPinned(owner, '123', true), isTrue);
+    expect(await deviceA.setPinned(owner, '123', true), isFalse);
+    expect((await deviceA.load(owner)).first.id, '123');
+    expect((await deviceA.load(owner)).first.isPinned, isTrue);
+
+    // The remote read cannot erase a pending pin while offline.
+    cloud.failNextUpsert = true;
+    await expectLater(
+      deviceA.syncWithCloud(owner, cloud, ownerStillActive: () => true),
+      throwsException,
+    );
+    final restarted = SavedAlbumStore(keyValueStore: memoryA);
+    expect((await restarted.load(owner)).first.isPinned, isTrue);
+    await restarted.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    await deviceB.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    expect((await deviceB.load(owner)).first.id, '123');
+    expect((await deviceB.load(owner)).first.isPinned, isTrue);
+
+    expect(await deviceB.setPinned(owner, '123', false), isTrue);
+    await deviceB.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    await restarted.syncWithCloud(owner, cloud, ownerStillActive: () => true);
+    expect((await restarted.load(owner)).every((a) => !a.isPinned), isTrue);
+  });
+
+  test('pinning cannot modify another account or an unsaved album',
+      () async {
+    final memory = _MemoryStore();
+    final store = SavedAlbumStore(keyValueStore: memory);
+    await store.save('user-a', _album('123'));
+    await store.save('user-b', _album('987'));
+    expect(await store.setPinned('user-a', '987', true), isFalse);
+    expect(await store.setPinned('user-a', '123', true), isTrue);
+    expect((await store.load('user-b')).single.isPinned, isFalse);
+    expect((await store.load('user-a')).single.isPinned, isTrue);
+  });
+
+  test('metadata re-save does not clear an already pinned album', () async {
+    final memory = _MemoryStore();
+    final store = SavedAlbumStore(keyValueStore: memory);
+    await store.save(owner, _album('123'));
+    await store.setPinned(owner, '123', true);
+    await store.save(owner, _album('123'));
+    expect((await store.load(owner)).single.isPinned, isTrue);
   });
 
   test('local albums belong to the selected owner only', () async {
