@@ -92,6 +92,85 @@ async function run() {
   assert.notEqual(secondToken, owner.token);
   report('Two independently issued sessions for the same account');
 
+  // Owner-scoped B-Pin album acceptance uses only synthetic catalog bookmarks.
+  // No playback grants or music downloads are requested.
+  const pinAlbumId = BigInt('0x' + randomBytes(6).toString('hex')).toString(10);
+  const otherAlbumId = BigInt('0x' + randomBytes(6).toString('hex')).toString(10);
+  const albumsRoute = '/api/v1/library/albums';
+
+  status((await request('GET', albumsRoute)).status, 401,
+    'unsigned saved album access');
+  const baseAlbum = {
+    externalAlbumId: pinAlbumId, title: 'Disposable pinned album',
+    artist: 'Breezze QA', genres: ['Synthetic'],
+  };
+  status((await request('POST', albumsRoute, owner.token, baseAlbum)).status,
+    201, 'save synthetic album');
+  status((await request('POST', albumsRoute, owner.token, {
+    ...baseAlbum, externalAlbumId: otherAlbumId, title: 'Other synthetic album',
+  })).status, 201, 'save second album');
+  const unpinned = await request('GET', albumsRoute, secondToken);
+  status(unpinned.status, 200, 'second session before pin');
+  assert.deepEqual(unpinned.data.items.map(x => x.isPinned), [false, false]);
+  assert.equal((await request('GET', albumsRoute, stranger.token))
+    .data.items.length, 0);
+  report('Saved album bookmarks are private and initially unpinned');
+
+  const pin = await request('POST', albumsRoute, owner.token, {
+    ...baseAlbum, isPinned: true,
+  });
+  status(pin.status, 201, 'pin saved album');
+  assert.equal(pin.data.isPinned, true);
+  const secondPinned = await request('GET', albumsRoute, secondToken);
+  status(secondPinned.status, 200, 'pinned second session snapshot');
+  assert.equal(secondPinned.data.items[0].externalAlbumId, pinAlbumId);
+  assert.equal(secondPinned.data.items[0].isPinned, true);
+  assert.equal(secondPinned.data.items[1].isPinned, false);
+  report('Album pin moves to top and reaches a second authenticated session');
+
+  const updateWithoutPin = await request('POST', albumsRoute,
+    secondToken, { ...baseAlbum, title: 'Metadata-only updated title' });
+  status(updateWithoutPin.status, 201, 'metadata-only album update');
+  assert.equal(updateWithoutPin.data.isPinned, true);
+  report('Metadata-only album update does not erase the remote pin');
+
+  // Another user may bookmark the same public catalog ID but must never
+  // inherit or modify this owner's private pin state.
+  const strangerSave = await request('POST', albumsRoute,
+    stranger.token, { ...baseAlbum, title: 'Independent catalog bookmark' });
+  status(strangerSave.status, 201, 'other account private bookmark');
+  const strangerView = await request('GET', albumsRoute, stranger.token);
+  status(strangerView.status, 200, 'other account album listing');
+  assert.equal(strangerView.data.items.length, 1);
+  assert.equal(strangerView.data.items[0].isPinned, false);
+  assert.equal(strangerView.data.items[0].title, 'Independent catalog bookmark');
+  report('Same catalog ID has account-isolated metadata and pin settings');
+
+  status((await request('POST', albumsRoute, owner.token, {
+    ...baseAlbum, isPinned: 'yes',
+  })).status, 400, 'invalid pinned type rejected');
+  const unpin = await request('POST', albumsRoute, secondToken, {
+    ...baseAlbum, isPinned: false,
+  });
+  status(unpin.status, 201, 'unpin saved album');
+  assert.equal(unpin.data.isPinned, false);
+  const finalPinned = await request('GET', albumsRoute, owner.token);
+  status(finalPinned.status, 200, 'unpin reflected in owner session');
+  assert.equal(finalPinned.data.items.every(item => !item.isPinned), true);
+  assert.equal((await request('GET', albumsRoute, stranger.token))
+    .data.items[0].isPinned, false);
+  report('Unpin syncs between sessions and validates boolean input');
+
+  for (const item of [pinAlbumId, otherAlbumId]) {
+    status((await request('DELETE', albumsRoute + '/' + item,
+      owner.token)).status, 200, 'owner pin smoke bookmark cleanup');
+  }
+  status((await request('DELETE', albumsRoute + '/' + pinAlbumId,
+    stranger.token)).status, 200, 'other account pin smoke cleanup');
+  assert.equal((await request('GET', albumsRoute, secondToken))
+    .data.items.length, 0);
+  report('Synthetic saved album bookmarks removed after acceptance');
+
   const id = randomUUID();
   const createBody = { id, name: 'Breezze temporary offline playlist' };
   const firstCreate = await request('POST', '/api/v1/playlists',
