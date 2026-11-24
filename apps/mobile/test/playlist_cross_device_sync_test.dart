@@ -17,6 +17,9 @@ class FakePlaylistApi extends BreezzeApi {
   final calls = <String>[];
   bool failCreate = false;
   bool changeToken = false;
+  bool rejectNextReorder = false;
+  bool switchTokenDuringConflictRead = false;
+  List<String> currentServerTrackIds = const [];
 
   @override
   Future<Map<String, dynamic>> createPlaylist(String name, {String? id}) async {
@@ -41,7 +44,27 @@ class FakePlaylistApi extends BreezzeApi {
   @override
   Future<Map<String, dynamic>> reorderPlaylistTracks(String playlistId, List<String> trackIds) async {
     calls.add('reorder:$playlistId:${trackIds.join(",")}');
+    if (rejectNextReorder) {
+      rejectNextReorder = false;
+      throw const BreezzeApiException(
+        code: 'PLAYLIST_ORDER_MISMATCH', message: 'Changed on another device',
+      );
+    }
     return {'reordered': true};
+  }
+
+  @override
+  Future<Map<String, dynamic>> getPlaylist(String playlistId) async {
+    calls.add('get:$playlistId');
+    if (switchTokenDuringConflictRead) {
+      accessToken = 'different-user-token';
+    }
+    return {
+      'id': playlistId,
+      'items': [
+        for (final id in currentServerTrackIds) {'trackId': id},
+      ],
+    };
   }
   @override
   Future<void> removePlaylistTrack(String playlistId, String trackId) async {
@@ -148,6 +171,63 @@ void main() {
     expect((await store.load('user-a')).single.tracks.single.id, aId);
     expect(await store.pendingCount('user-a'), 0);
     expect(api.calls.length, 2);
+  });
+
+  test('offline reorder preserves a song added by another device', () async {
+    final id = await store.create('user-a', 'Friends');
+    await store.addTrack('user-a', id, a);
+    await store.addTrack('user-a', id, b);
+    final api = FakePlaylistApi();
+    expect(await store.syncOwner('user-a', api,
+      ownerStillActive: () => true), isTrue);
+    api.calls.clear();
+    await store.reorderTracks('user-a', id, 0, 1);
+    const cId = '33333333-3333-4333-8333-333333333333';
+    api.currentServerTrackIds = [aId, bId, cId];
+    api.rejectNextReorder = true;
+
+    expect(await store.syncOwner('user-a', api,
+      ownerStillActive: () => true), isTrue);
+    expect(api.calls, [
+      'reorder:$id:$bId,$aId',
+      'get:$id',
+      'reorder:$id:$bId,$aId,$cId',
+    ]);
+    expect(await store.pendingCount('user-a'), 0);
+  });
+
+  test('offline reorder rebases when another device removed a song', () async {
+    final id = await store.create('user-a', 'Friends');
+    await store.addTrack('user-a', id, a);
+    await store.addTrack('user-a', id, b);
+    final api = FakePlaylistApi();
+    await store.syncOwner('user-a', api, ownerStillActive: () => true);
+    api.calls.clear();
+    await store.reorderTracks('user-a', id, 0, 1);
+    api.currentServerTrackIds = [bId];
+    api.rejectNextReorder = true;
+    expect(await store.syncOwner('user-a', api,
+      ownerStillActive: () => true), isTrue);
+    expect(api.calls.last, 'reorder:$id:$bId');
+    expect(await store.pendingCount('user-a'), 0);
+  });
+
+  test('token switch during reorder rebase never retries as another user',
+      () async {
+    final id = await store.create('user-a', 'Private');
+    await store.addTrack('user-a', id, a);
+    await store.addTrack('user-a', id, b);
+    final api = FakePlaylistApi();
+    await store.syncOwner('user-a', api, ownerStillActive: () => true);
+    api.calls.clear();
+    await store.reorderTracks('user-a', id, 0, 1);
+    api.currentServerTrackIds = [aId, bId];
+    api.rejectNextReorder = true;
+    api.switchTokenDuringConflictRead = true;
+    expect(await store.syncOwner('user-a', api,
+      ownerStillActive: () => true), isFalse);
+    expect(api.calls, ['reorder:$id:$bId,$aId', 'get:$id']);
+    expect(await store.pendingCount('user-a'), 1);
   });
 
   test('guest playlists remain device-only', () async {

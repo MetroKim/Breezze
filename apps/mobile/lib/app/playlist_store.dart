@@ -500,8 +500,17 @@ class PlaylistStore {
 
   Future<void> _sendOperation(
     BreezzeApi api,
-    Map<String, dynamic> operation,
-  ) async {
+    Map<String, dynamic> operation, {
+    required String issuedForToken,
+  }) async {
+    // A queued operation belongs to one authenticated session. Never make
+    // follow-up network calls under a different token after an async gap.
+    void assertSession() {
+      if (api.accessToken != issuedForToken) {
+        throw StateError('PLAYLIST_SYNC_SESSION_CHANGED');
+      }
+    }
+    assertSession();
     final id = operation['playlistId'];
     if (id is! String || !_uuidPattern.hasMatch(id)) {
       throw const FormatException('Invalid playlist operation ID');
@@ -522,29 +531,77 @@ class PlaylistStore {
         return;
       case 'add':
         final track = Map<String, dynamic>.from(operation['track'] as Map);
-        await api.addPlaylistTrack(id, await _canonicalTrackId(api, track));
+        final canonical = await _canonicalTrackId(api, track);
+        assertSession();
+        await api.addPlaylistTrack(id, canonical);
         return;
       case 'remove':
         final track = Map<String, dynamic>.from(operation['track'] as Map);
-        await api.removePlaylistTrack(id, await _canonicalTrackId(api, track));
+        final canonical = await _canonicalTrackId(api, track);
+        assertSession();
+        await api.removePlaylistTrack(id, canonical);
         return;
       case 'reorder':
         final tracks = operation['tracks'] as List;
         final ids = <String>[];
         for (final item in tracks) {
+          assertSession();
           ids.add(await _canonicalTrackId(
             api, Map<String, dynamic>.from(item as Map),
           ));
         }
-        await api.reorderPlaylistTracks(id, ids);
+        assertSession();
+        try {
+          await api.reorderPlaylistTracks(id, ids);
+        } on BreezzeApiException catch (error) {
+          if (error.code != 'PLAYLIST_ORDER_MISMATCH') rethrow;
+          // Device B may have added or removed tracks while device A was
+          // offline. Rebase A's relative ordering onto B's current
+          // membership; never delete B's newly added tracks.
+          assertSession();
+          final remote = await api.getPlaylist(id);
+          assertSession();
+          final items = remote['items'];
+          if (items is! List) {
+            throw const FormatException('Playlist conflict response invalid');
+          }
+          final remoteIds = <String>[];
+          for (final raw in items) {
+            if (raw is! Map || raw['trackId'] is! String) {
+              throw const FormatException('Playlist track identity missing');
+            }
+            final trackId = raw['trackId'] as String;
+            if (!_uuidPattern.hasMatch(trackId)) {
+              throw const FormatException('Playlist track identity invalid');
+            }
+            remoteIds.add(trackId);
+          }
+          if (remoteIds.toSet().length != remoteIds.length) {
+            throw const FormatException('Duplicate remote playlist identity');
+          }
+          final serverSet = remoteIds.toSet();
+          final rebased = <String>[];
+          final seen = <String>{};
+          for (final trackId in ids) {
+            if (serverSet.contains(trackId) && seen.add(trackId)) {
+              rebased.add(trackId);
+            }
+          }
+          for (final trackId in remoteIds) {
+            if (seen.add(trackId)) rebased.add(trackId);
+          }
+          assertSession();
+          await api.reorderPlaylistTracks(id, rebased);
+        }
         return;
       default:
         throw const FormatException('Unknown playlist operation');
     }
   }
 
-  /// Replay durable operations in strict order. A network error, mismatched
-  /// playlist membership, or permission denial leaves the operation pending.
+  /// Replay durable operations in strict order. A network error or ownership
+  /// denial leaves the operation pending; concurrent membership changes
+  /// rebase reorder intent without dropping another device's songs.
   /// Only a confirmed server response deletes a journal entry.
   Future<bool> syncOwner(
     String ownerId,
@@ -554,7 +611,7 @@ class PlaylistStore {
     if (ownerId == 'guest' || !ownerStillActive() ||
         api.accessToken == null || api.accessToken!.isEmpty ||
         !_syncingOwners.add(ownerId)) return false;
-    final issuedForToken = api.accessToken;
+    final issuedForToken = api.accessToken!;
     try {
       await _adoptLegacyDrafts(ownerId);
       while (ownerStillActive() && api.accessToken == issuedForToken) {
@@ -562,7 +619,9 @@ class PlaylistStore {
         if (doc.pending.isEmpty) return true;
         final operation = doc.pending.first;
         try {
-          await _sendOperation(api, operation);
+          await _sendOperation(
+            api, operation, issuedForToken: issuedForToken,
+          );
         } catch (_) {
           // Never discard an edit just because the server is offline or
           // another device changed playlist membership meanwhile.
