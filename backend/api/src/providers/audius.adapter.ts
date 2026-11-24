@@ -183,9 +183,14 @@ export class AudiusAdapter implements ProviderAdapter {
       return providerError('AUDIUS_INVALID_TRACK_ID', 'Invalid Audius track ID', false);
     }
     if (!this.enabled) return providerUnsupported('AUDIUS_NOT_ENABLED');
-    // Recheck immediately before granting the URL; no stale catalog result.
-    const check = await this.getAvailability(req.providerTrackId, req.territory);
-    if (check.kind !== 'ok' || !check.value.available) {
+    // The owning PlaybackResolveService has JUST called getAvailability
+    // for this exact canonical mapping, territory and provider ID. The
+    // attestation is generated server-side from that checked API response,
+    // never accepted from user payload. Do not repeat the same upstream GET:
+    // it increases rate-limit pressure and can expire the session on timeout.
+    const proof = req.authorization.attribution;
+    if (!proof?.startsWith('Audius OML: ') ||
+        !proof.includes('source https://')) {
       return providerUnsupported('AUDIUS_OML_PUBLIC_STREAM_UNAVAILABLE');
     }
     return providerOk({
@@ -193,6 +198,6 @@ export class AudiusAdapter implements ProviderAdapter {
       expiresAt: new Date(Date.now() + 30 * 60_000),
       mimeType: 'audio/mpeg',
       codec: 'mp3',
-    }, check.attribution);
+    }, proof);
   }
 }

@@ -44,11 +44,12 @@ describe('AudiusAdapter', () => {
       value: { available: true },
       attribution: expect.stringContaining('Audius OML:'),
     });
+    const proof = check.kind === 'ok' ? check.attribution ?? null : null;
     const resolved = await adapter.resolvePlayback({
       providerTrackId: 'V66vyPP',
       territory: 'TZ',
       authorization: {
-        action: 'stream.full', expiresAt: null, attribution: null,
+        action: 'stream.full', expiresAt: null, attribution: proof,
       },
     });
     expect(resolved).toMatchObject({
@@ -64,7 +65,9 @@ describe('AudiusAdapter', () => {
         'source https://audius.co/originalartist/original-recording',
       ),
     });
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    // The resolver's fresh live permission check is sufficient for one
+    // grant. No second call to Audius is needed just to format the URL.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it.each([
