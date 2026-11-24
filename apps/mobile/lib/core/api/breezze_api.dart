@@ -531,8 +531,12 @@ class BreezzeApi {
   Future<List<Map<String, dynamic>>> playlists() async =>
       _asMapList(await _get('/playlists'));
 
-  Future<Map<String, dynamic>> createPlaylist(String name) =>
-      _post('/playlists', {'name': name});
+  /// Client UUID supports retry-safe creation after an offline session.
+  Future<Map<String, dynamic>> createPlaylist(String name, {String? id}) =>
+      _post('/playlists', {
+        'name': name,
+        if (id != null) 'id': id,
+      });
 
   Future<Map<String, dynamic>> getPlaylist(String playlistId) =>
       _get('/playlists/${Uri.encodeComponent(playlistId)}');
