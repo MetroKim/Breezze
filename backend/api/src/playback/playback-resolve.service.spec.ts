@@ -282,8 +282,13 @@ describe('PlaybackResolveService', () => {
     }
   });
 
-  it('denies an external provider when no explicit full-stream grant exists', async () => {
+  it('denies non-OML providers before lookup when no full-stream grant exists', async () => {
     prepareCanonicalTrack();
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1',
+      source: 'jamendo',
+      externalId: 'bz:jamendo:track123',
+    });
     rights.decide.mockResolvedValue({
       allowed: false,
       previewOnly: false,
@@ -291,8 +296,9 @@ describe('PlaybackResolveService', () => {
     });
     providers.get.mockReturnValue(validAdapter());
 
-    await expect(service.resolveProvider('user-1', providerRequest, 'TZ'))
-      .rejects.toThrow('NO_EXPLICIT_AUTHORIZATION');
+    await expect(service.resolveProvider('user-1', {
+      ...providerRequest, providerId: 'jamendo',
+    }, 'TZ')).rejects.toThrow('NO_EXPLICIT_AUTHORIZATION');
     expect(rights.decide).toHaveBeenCalledWith({
       userId: 'user-1',
       trackId: 'canonical-1',
