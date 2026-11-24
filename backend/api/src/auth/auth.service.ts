@@ -59,8 +59,12 @@ export class AuthService {
     refreshOverride?: string,
     existingFamilyId?: string,
     mfaVerified = false,
+    supabaseVerified = false,
   ): Promise<AuthResult> {
-    const familyId = existingFamilyId ?? randomUUID();
+    // A Supabase-issued family is only a short-lived, revocable API bridge;
+    // it cannot be renewed through Breezze's legacy refresh endpoint.
+    const familyId = existingFamilyId ??
+      (supabaseVerified ? `sb:${randomUUID()}` : randomUUID());
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, sid: familyId, mfaVerified },
       { expiresIn: '15m' },
@@ -72,7 +76,9 @@ export class AuthService {
           tokenHash: this.hashRefreshToken(refreshToken),
           familyId,
           userId: user.id,
-          expiresAt: this.refreshExpiry(),
+          expiresAt: supabaseVerified
+            ? new Date(Date.now() + 16 * 60 * 1000)
+            : this.refreshExpiry(),
           mfaVerified,
         },
       });
@@ -90,7 +96,10 @@ export class AuthService {
 
   /// Called only after SocialAuthService verifies a provider-signed ID token
   /// and resolves its unique provider subject to an existing or new user.
-  async issueVerifiedSocialSession(userId: string): Promise<AuthResult> {
+  async issueVerifiedSocialSession(
+    userId: string,
+    options: { supabaseVerified?: boolean } = {},
+  ): Promise<AuthResult> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -100,7 +109,8 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException('SOCIAL_USER_MISSING');
     // Never bypass the administrator MFA security boundary.
-    return this.issueTokens(user);
+    return this.issueTokens(user, undefined, undefined, false,
+      options.supabaseVerified === true);
   }
 
   async register(
@@ -167,6 +177,12 @@ export class AuthService {
         });
       }
       throw new UnauthorizedException('REFRESH_REUSED_OR_INVALID');
+    }
+
+    // Never let a stolen, Supabase-derived Breezze refresh token extend
+    // identity authority after the user's Supabase session expires/revokes.
+    if (token.familyId.startsWith('sb:')) {
+      throw new UnauthorizedException('SUPABASE_REFRESH_REQUIRED');
     }
 
     const rotated = randomBytes(32).toString('hex');

@@ -80,7 +80,7 @@ describe('SupabaseExchangeService', () => {
       select: { id: true },
     });
     expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith(
-      'breezze-user-id',
+      'breezze-user-id', { supabaseVerified: true },
     );
     const [url, init] = (globalThis.fetch as jest.Mock).mock.calls[0];
     expect(String(url)).toContain('/auth/v1/user');
@@ -95,7 +95,7 @@ describe('SupabaseExchangeService', () => {
     expect(prisma.user.findFirst).not.toHaveBeenCalled();
     expect(prisma.user.create).not.toHaveBeenCalled();
     expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith(
-      'existing-breezze-user',
+      'existing-breezze-user', { supabaseVerified: true },
     );
   });
 
@@ -144,7 +144,7 @@ describe('SupabaseExchangeService', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ userId: 'winner-user' });
     await service.exchange(token);
-    expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith('winner-user');
+    expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith('winner-user', { supabaseVerified: true });
   });
 
   it('fails closed if the Supabase project is not configured', async () => {
@@ -213,7 +213,7 @@ describe('SupabaseExchangeService', () => {
         },
       });
       expect(prisma.user.create).not.toHaveBeenCalled();
-      expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith('legacy-account-id');
+      expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith('legacy-account-id', { supabaseVerified: true });
       expect(prisma.$transaction).toHaveBeenCalledWith(
         expect.any(Function),
         { isolationLevel: 'Serializable' },
@@ -287,7 +287,7 @@ describe('SupabaseExchangeService', () => {
       });
       await service.linkLegacy(token, oldEmail, oldPassword);
       expect(prisma.socialAuthIdentity.create).not.toHaveBeenCalled();
-      expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith('legacy-account-id');
+      expect(auth.issueVerifiedSocialSession).toHaveBeenCalledWith('legacy-account-id', { supabaseVerified: true });
     });
 
     it('returns a conflict rather than claiming an identity on a race', async () => {

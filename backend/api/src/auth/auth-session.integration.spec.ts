@@ -158,6 +158,9 @@ describeIntegration('Auth session PostgreSQL integration', () => {
       );
       const linked = await exchange.linkLegacy(token, original.email, oldPassword);
       expect(linked.user.id).toBe(original.id);
+      // Even a leaked Breezze refresh token cannot renew Supabase sessions.
+      await expect(service.refresh(linked.refreshToken))
+        .rejects.toThrow('SUPABASE_REFRESH_REQUIRED');
 
       const mapping = await prisma.socialAuthIdentity.findUniqueOrThrow({
         where: { provider_subject: {

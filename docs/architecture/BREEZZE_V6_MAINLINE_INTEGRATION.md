@@ -178,3 +178,19 @@ current email. Clearing/canceling migration locally clears the pending
 choice. Privileged/MFA and legacy social-only identities still need a more
 specialized high-assurance migration process; no identity is linked by
 matching an email or copying a row.
+
+
+### Supabase session renewal boundary
+
+Mapped Breezze API access JWTs are valid for at most 15 minutes and
+remain revocable via an owner-scoped token-family row. Families issued
+after **verified Supabase identity exchange** carry a distinct `sb:`
+prefix and expire after 16 minutes. The legacy `POST /auth/refresh`
+endpoint explicitly rejects those families (`SUPABASE_REFRESH_REQUIRED`);
+only another independently verified Supabase session can obtain a fresh
+Breezze API token through `POST /auth/supabase/exchange`.
+
+This keeps a stolen transitional Breezze refresh token from extending
+access independently for 30 days after a Supabase session is revoked.
+Legacy password/social sessions retain their existing rotation scheme.
+The family marker and short expiration require no schema migration.

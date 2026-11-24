@@ -38,7 +38,9 @@ export class SupabaseExchangeService {
   async exchange(accessToken: string): Promise<AuthResult> {
     const { subject, email } = await this.verifiedIdentity(accessToken);
     const userId = await this.findOrCreateBreezzeIdentity(subject, email);
-    return this.auth.issueVerifiedSocialSession(userId);
+    return this.auth.issueVerifiedSocialSession(
+      userId, { supabaseVerified: true },
+    );
   }
 
   /**
@@ -108,7 +110,9 @@ export class SupabaseExchangeService {
       throw error;
     }
 
-    return this.auth.issueVerifiedSocialSession(userId);
+    return this.auth.issueVerifiedSocialSession(
+      userId, { supabaseVerified: true },
+    );
   }
 
   private async verifiedIdentity(

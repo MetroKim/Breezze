@@ -40,6 +40,7 @@ describe('AuthService refresh-token rotation', () => {
         findFirst: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'supabase-refresh-record' }),
       },
       $transaction: jest.fn((callback: (tx: any) => unknown) =>
         callback({ refreshToken: transactionRefreshToken }),
@@ -47,6 +48,43 @@ describe('AuthService refresh-token rotation', () => {
     };
     jwt = { signAsync: jest.fn().mockResolvedValue('new-access-token') };
     service = new AuthService(prisma as PrismaService, jwt as JwtService);
+  });
+
+  it('issues short-lived Supabase families that cannot use legacy refresh', async () => {
+    prisma.user = {
+      findUnique: jest.fn().mockResolvedValue({
+        ...user,
+        role: 'user',
+        mfaEnabled: false,
+      }),
+    };
+    const session = await service.issueVerifiedSocialSession(
+      user.id, { supabaseVerified: true },
+    );
+    const issued = prisma.refreshToken.create.mock.calls[0][0].data;
+    expect(issued.familyId).toMatch(/^sb:[0-9a-f-]{36}$/);
+    expect(issued.expiresAt.getTime() - Date.now())
+      .toBeLessThanOrEqual(16 * 60 * 1000);
+    expect(issued.expiresAt.getTime() - Date.now())
+      .toBeGreaterThan(15 * 60 * 1000);
+    expect(issued.tokenHash).toBe(
+      createHash('sha256').update(session.refreshToken, 'utf8').digest('hex'),
+    );
+    expect(jwt.signAsync).toHaveBeenCalledWith(
+      {
+        sub: user.id, email: user.email,
+        sid: issued.familyId, mfaVerified: false,
+      },
+      { expiresIn: '15m' },
+    );
+
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      ...activeToken(),
+      familyId: issued.familyId,
+    });
+    await expect(service.refresh(session.refreshToken))
+      .rejects.toThrow('SUPABASE_REFRESH_REQUIRED');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('stores only a SHA-256 hash and rotates within the same token family', async () => {
