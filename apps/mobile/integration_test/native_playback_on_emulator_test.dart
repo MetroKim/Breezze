@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -218,6 +220,51 @@ void main() {
     } finally {
       await store.clear(ownerA);
       await store.clear(ownerB);
+    }
+  });
+
+  testWidgets('real native engine decodes an official Deezer preview over HTTPS',
+      (tester) async {
+    // Verify the actual supported preview path, not metadata-only "playback".
+    // Deezer provides a limited preview; no full song, bypass, cookie, media
+    // extraction or offline copy is needed for this test.
+    final payload = await tester.runAsync(() async {
+      final response = await http.get(
+        Uri.https('api.deezer.com', '/track/3135553'),
+      ).timeout(const Duration(seconds: 12));
+      expect(response.statusCode, 200);
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    });
+    expect(payload, isNotNull);
+    expect(payload!['id'], 3135553);
+    final preview = Uri.tryParse(payload['preview'] as String? ?? '');
+    expect(preview, isNotNull);
+    expect(preview!.scheme, 'https');
+    expect(preview.host.endsWith('.dzcdn.net'), isTrue,
+        reason: 'Deezer preview must remain on the official provider CDN');
+
+    final engine = JustAudioEngineAdapter();
+    try {
+      await tester.runAsync(() async {
+        await engine.prepare(PlayableSource(
+          trackId: 'bz:deezer_preview:3135553',
+          streamUrl: preview.toString(),
+          expiresAtUtc: DateTime.now().toUtc()
+              .add(const Duration(minutes: 1)),
+        )).timeout(const Duration(seconds: 25));
+      });
+      expect(engine.duration, greaterThan(const Duration(seconds: 5)),
+          reason: 'Native decoder must parse real streamed MP3 duration');
+      unawaited(engine.play());
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        await engine.pause();
+        await engine.seek(const Duration(seconds: 3));
+      });
+      expect(engine.position.inSeconds, greaterThanOrEqualTo(3));
+      await engine.stop();
+    } finally {
+      await engine.dispose();
     }
   });
 

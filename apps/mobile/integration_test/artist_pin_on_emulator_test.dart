@@ -138,7 +138,7 @@ class _ArtistApi extends BreezzeApi {
     _checkOnline();
     final previous = albums[externalAlbumId];
     albums[externalAlbumId] = {
-      'source': 'apple_itunes',
+      'source': 'deezer',
       'externalAlbumId': externalAlbumId,
       'title': title,
       'artist': artist,
@@ -368,7 +368,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: bzLightTheme(),
-          home: AppleAlbumCatalogScreen(
+          home: DeezerAlbumCatalogScreen(
             albumId: albumId,
             title: 'Breezze Native QA Album',
             artist: 'Breezze QA Artist',
