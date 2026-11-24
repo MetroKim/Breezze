@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:breezze/app/bootstrap.dart';
 import 'package:breezze/core/auth/auth_session.dart';
+import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/features/search/search_screen.dart';
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
@@ -71,6 +72,38 @@ class _SearchSignedInSession extends AuthSessionController {
   void switchTo(String owner) {
     state = AuthSignedIn(userId: owner, email: '$owner@example.test');
   }
+}
+
+class _VideoDiscoveryApi extends BreezzeApi {
+  _VideoDiscoveryApi() : super(baseUrl: 'https://breezze.example.test');
+
+  @override
+  Future<Map<String, dynamic>> discoveryMusicVideos({
+    String query = 'official music video',
+  }) async => {
+        'items': query == 'no video match'
+            ? <Map<String, dynamic>>[]
+            : <Map<String, dynamic>>[
+                {
+                  'id': 'abcdefghijk',
+                  'title': 'Official Video QA',
+                  'artist': 'Breezze QA',
+                  'durationSec': 180,
+                },
+              ],
+      };
+}
+
+class _VideoSearchSession extends AuthSessionController {
+  _VideoSearchSession(this.videoApi);
+
+  final BreezzeApi videoApi;
+
+  @override
+  AuthState build() => const AuthSignedOut();
+
+  @override
+  BreezzeApi get api => videoApi;
 }
 
 void main() {
@@ -214,6 +247,37 @@ void main() {
     await tester.pump();
     expect(find.text('Recovered song'), findsOneWidget);
     expect(find.text('Try again'), findsNothing);
+  });
+
+
+  testWidgets('Music Videos filter renders external video action and honest empty state',
+      (tester) async {
+    final api = _VideoDiscoveryApi();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authSessionProvider.overrideWith(() => _VideoSearchSession(api)),
+      ],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    await tester.tap(find.widgetWithText(BzFilterPill, 'Music Videos'));
+    await tester.enterText(find.byType(TextField), 'official qa');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(find.text('Official Video QA'), findsOneWidget);
+    expect(find.byTooltip('Watch music video'), findsOneWidget);
+    expect(find.byTooltip('Song actions'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'no video match');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(
+      find.text('No official videos found for "no video match"'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Watch music video'), findsNothing);
   });
 
 }
