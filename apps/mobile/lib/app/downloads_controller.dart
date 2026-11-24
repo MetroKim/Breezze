@@ -191,7 +191,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     required String videoAssetId,
     required String title,
   }) async {
-    if (!RegExp(r'^[0-9a-fA-F-]{36}$'.hasMatch(videoAssetId)) return;
+    if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) return;
     final key = 'video:$videoAssetId';
     if (state.containsKey(key) ||
         ref.read(downloadJobStatusProvider)[key] == 'downloaded') return;
@@ -223,7 +223,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       final leaseRaw = result['offlineLeaseExpiresAt'] as String?;
       final lease = DateTime.tryParse(leaseRaw ?? '')?.toUtc();
       final uri = url == null ? null : Uri.tryParse(url);
-      if (uri == null || uri.scheme != 'https' || uri.pathSegments.length != 3 ||
+      if (url == null || uri == null || uri.scheme != 'https' || uri.pathSegments.length != 3 ||
           uri.pathSegments.first != 'video' ||
           uri.pathSegments[1] != videoAssetId ||
           uri.pathSegments.last != 'download' ||
