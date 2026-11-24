@@ -42,6 +42,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final _playlistStore = PlaylistStore();
   String _ownerId = 'guest';
   List<UserPlaylist> _playlists = [];
+  Set<String> _pendingPlaylistIds = {};
   List<FavoriteTrack> _favorites = [];
   List<SavedAlbum> _albums = [];
   var _loading = true;
@@ -160,10 +161,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
     if (!mounted || currentOwnerId != ownerId ||
         generation != _refreshGeneration) return;
+    // Pending status is read from the same atomic playlist file as the edits.
+    final pendingPlaylistIds = await _playlistStore.pendingPlaylistIds(ownerId);
+    if (!mounted || !_ownerStillActive(ownerId) ||
+        generation != _refreshGeneration) return;
     setState(() {
       _ownerId = ownerId;
       _favorites = favorites;
       _playlists = playlists;
+      _pendingPlaylistIds = pendingPlaylistIds;
       _albums = savedAlbums;
       _visibleSections = visibleSections;
       if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
@@ -492,7 +498,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           title: Text(playlist.name,
               maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
-            '${playlist.tracks.length} songs · On this device',
+            '${playlist.tracks.length} songs · '
+            '${_ownerId == 'guest' ? 'On this device' : _pendingPlaylistIds.contains(playlist.id) ? 'Pending sync' : 'Synced'}',
             style: TextStyle(color: theme.bzText2),
           ),
           trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),

@@ -152,6 +152,15 @@ class PlaylistStore {
         : doc.pending.where((op) => op['playlistId'] == playlistId).length;
   }
 
+  /// Used by Library to label the exact playlists with offline changes.
+  Future<Set<String>> pendingPlaylistIds(String ownerId) async {
+    final doc = await _read(ownerId);
+    return {
+      for (final op in doc.pending)
+        if (op['playlistId'] is String) op['playlistId'] as String,
+    };
+  }
+
   Future<void> _save(String ownerId, _PlaylistDocument doc) async {
     final file = await _file(ownerId);
     final temp = File('${file.path}.tmp');

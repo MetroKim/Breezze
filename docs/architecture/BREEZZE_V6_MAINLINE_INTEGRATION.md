@@ -194,3 +194,34 @@ This keeps a stolen transitional Breezze refresh token from extending
 access independently for 30 days after a Supabase session is revoked.
 Legacy password/social sessions retain their existing rotation scheme.
 The family marker and short expiration require no schema migration.
+
+
+## 9. Cross-device playlist synchronization (Feature 5)
+
+The existing `PlaylistStore` remains the local playback/metadata cache.
+Its `playlists.json` now uses one atomic envelope holding both the playlists
+and an ordered `pending` edit journal. Legacy list-only files are supported.
+Creates, renames, deletes, song additions, removals, and reorders write the
+local state and retry intent to the same temp-file/rename transaction, so
+offline edits are durable across app restarts. Guest playlists remain local.
+
+The API accepts optional validated **v4 client UUIDs** on playlist create,
+replays an already-owned UUID idempotently without overwriting subsequent
+renames, and rejects attempts to claim another account's UUID. The owner-
+filtered playlist list includes ordered canonical track metadata, restoring
+full playlists on a second device instead of only titles.
+
+On sign-in/Library refresh, Breezze attempts strict-order replay via the
+existing authenticated endpoints, resolving external track IDs through the
+canonical catalog first. The source-to-catalog mapping is cached in Drift.
+A network failure, permission denial, or concurrent reorder membership
+conflict **keeps the operation pending**. A cloud snapshot never overwrites
+a playlist with pending local edits, while remote deletion is respected
+after the journal drains. Auth-token or account changes abort further replay
+and prevent acknowledgement of the previous account's operations.
+
+Known conflict behavior: if different devices reorder and edit the same
+playlist while disconnected, the server rejects incompatible membership
+rather than deleting or silently replacing a device's pending changes.
+Those edits remain local until reconciled; automatic collaborative conflict
+resolution is outside this transitional synchronization feature.

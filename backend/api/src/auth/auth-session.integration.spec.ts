@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { SupabaseExchangeService } from './supabase-exchange.service';
+import { PlaylistsService } from '../playlists/playlists.service';
 import { LibraryService } from '../library/library.service';
 import { PlaylistsService } from '../playlists/playlists.service';
 import * as argon2 from 'argon2';
@@ -122,6 +123,32 @@ describeIntegration('Auth session PostgreSQL integration', () => {
       where: { tokenHash: createHash('sha256').update(token, 'utf8').digest('hex') },
     });
     expect(stored.revokedAt).toBeNull();
+  });
+
+  it('replays offline playlist UUIDs idempotently and enforces account ownership', async () => {
+    const owner = await createUser();
+    const stranger = await createUser();
+    const playlistId = randomUUID();
+    const playlists = new PlaylistsService(prisma as unknown as PrismaService);
+
+    const created = await playlists.create(owner.id, 'Offline music', playlistId);
+    const retried = await playlists.create(owner.id, 'Old retry name', playlistId);
+    expect(retried.id).toBe(created.id);
+    expect(retried.name).toBe('Offline music');
+
+    await expect(playlists.create(stranger.id, 'Foreign claim', playlistId))
+      .rejects.toThrow('PLAYLIST_ID_CONFLICT');
+    expect(await playlists.list(stranger.id)).toEqual([]);
+    await expect(playlists.get(stranger.id, playlistId))
+      .rejects.toThrow('PLAYLIST_NOT_FOUND');
+
+    await playlists.rename(owner.id, playlistId, 'Synced name');
+    const ownerRows = await playlists.list(owner.id);
+    expect(ownerRows).toHaveLength(1);
+    expect(ownerRows[0].name).toBe('Synced name');
+
+    await playlists.delete(owner.id, playlistId);
+    expect(await playlists.list(owner.id)).toEqual([]);
   });
 
   it('links an existing user without changing library ownership in PostgreSQL', async () => {
