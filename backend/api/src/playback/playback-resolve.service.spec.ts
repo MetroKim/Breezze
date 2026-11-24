@@ -249,6 +249,39 @@ describe('PlaybackResolveService', () => {
       ServiceUnavailableException,
     );
   });
+  it('allows an Audius OML grant only with live public-source permission and noncommercial configuration', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'canonical-1', source: 'audius', externalId: 'bz:audius:track123',
+    });
+    prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
+    rights.decide.mockResolvedValue({
+      allowed: false, previewOnly: false,
+      reason: 'NOT_AVAILABLE_IN_TERRITORY',
+    });
+    const adapter = validAdapter();
+    adapter.getAvailability.mockResolvedValue({
+      kind: 'ok', value: { available: true },
+      attribution: 'Audius OML: public third-party API streaming; track track123',
+    });
+    providers.get.mockReturnValue(adapter);
+    const request = { ...providerRequest, providerId: 'audius' };
+    const previous = process.env.BREEZZE_NONCOMMERCIAL;
+    try {
+      process.env.BREEZZE_NONCOMMERCIAL = 'true';
+      await expect(service.resolveProvider('user-1', request, 'TZ'))
+        .resolves.toMatchObject({
+          providerId: 'audius',
+          attribution: expect.stringContaining('Audius OML:'),
+        });
+      process.env.BREEZZE_NONCOMMERCIAL = 'false';
+      await expect(service.resolveProvider('user-1', request, 'TZ'))
+        .rejects.toThrow('NOT_AVAILABLE_IN_TERRITORY');
+    } finally {
+      if (previous === undefined) delete process.env.BREEZZE_NONCOMMERCIAL;
+      else process.env.BREEZZE_NONCOMMERCIAL = previous;
+    }
+  });
+
   it('denies an external provider when no explicit full-stream grant exists', async () => {
     prepareCanonicalTrack();
     rights.decide.mockResolvedValue({

@@ -84,20 +84,24 @@ export class PlaybackResolveService {
     });
     if (takedown) throw new NotAcceptableException('TAKEDOWN_ACTIVE');
 
-    // Provider availability describes a catalog item, not our legal right to
-    // distribute its full audio. Require a current territory-specific,
-    // canonical full-stream grant before involving the provider adapter.
+    // A local full-stream permission is normally mandatory. Audius OML is
+    // an exception only for recordings independently proven to be public,
+    // free and third-party-API-streamable at this exact request. The metadata
+    // lookup cannot create an entitlement: the signed-in session, mapping,
+    // takedown and live provider permission must all pass.
     const decision = await this.rights.decide({
       userId,
       trackId: dto.canonicalTrackId,
       action: 'stream.full',
       territory,
     });
-    if (!decision.allowed) {
-      throw new NotAcceptableException(decision.reason);
-    }
-    if (decision.previewOnly) {
-      throw new NotAcceptableException('PREVIEW_ONLY');
+    if (decision.previewOnly ||
+        (!decision.allowed &&
+         !['NOT_AVAILABLE_IN_TERRITORY', 'NO_EXPLICIT_AUTHORIZATION']
+           .includes(decision.reason))) {
+      throw new NotAcceptableException(
+        decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason,
+      );
     }
 
     const provider = this.providers.get(dto.providerId);
@@ -125,6 +129,12 @@ export class PlaybackResolveService {
     if (!availability.value.available) {
       throw new NotAcceptableException('PROVIDER_TRACK_UNAVAILABLE');
     }
+    const publicAudiusGrant = dto.providerId === 'audius' &&
+      process.env.BREEZZE_NONCOMMERCIAL === 'true' &&
+      availability.attribution?.startsWith('Audius OML: ') === true;
+    if (!decision.allowed && !publicAudiusGrant) {
+      throw new NotAcceptableException(decision.reason);
+    }
 
     const result = await provider.resolvePlayback({
       providerTrackId: dto.providerTrackId,
@@ -133,7 +143,9 @@ export class PlaybackResolveService {
       authorization: {
         action: 'stream.full',
         expiresAt: decision.expiresAt,
-        attribution: decision.attribution ?? availability.attribution ?? null,
+        attribution: publicAudiusGrant
+          ? availability.attribution!
+          : decision.attribution ?? availability.attribution ?? null,
       },
     });
     if (result.kind === 'unsupported') {

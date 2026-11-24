@@ -3,6 +3,7 @@ import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
 import { JamendoAdapter } from './jamendo.adapter';
+import { AudiusAdapter } from './audius.adapter';
 
 describe('ProviderRegistry', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -15,12 +16,14 @@ describe('ProviderRegistry', () => {
   const youtube = makeAdapter('youtube_music', 100);
   const deezer = makeAdapter('deezer', 95);
   const jamendo = makeAdapter('jamendo', 110, true, true);
+  const audius = makeAdapter('audius', 105, true, true);
 
   const registry = () => new ProviderRegistry(
     internal as unknown as InternalCatalogAdapter,
     youtube as unknown as YtMusicAdapter,
     deezer as unknown as DeezerAdapter,
     jamendo as unknown as JamendoAdapter,
+    audius as unknown as AudiusAdapter,
   );
 
   it('searches internal and external providers and preserves partial failures', async () => {
@@ -28,10 +31,11 @@ describe('ProviderRegistry', () => {
     youtube.search.mockResolvedValue({ kind: 'error', code: 'YTMUSIC_UNAVAILABLE', retryable: true, message: 'offline' });
     deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'deezer-1' }] });
     jamendo.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'jamendo-1' }] });
+    audius.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'audius-1' }] });
     const result = await registry().searchAll('  afrobeats  ');
     expect(result.query).toBe('afrobeats');
     expect(result.providers.map((item) => item.providerId))
-      .toEqual(['breezze_internal', 'youtube_music', 'deezer', 'jamendo']);
+      .toEqual(['breezze_internal', 'youtube_music', 'deezer', 'jamendo', 'audius']);
     expect(internal.search).toHaveBeenCalledWith('afrobeats');
     expect(result.providers.find((item) => item.providerId === 'breezze_internal')?.result)
       .toMatchObject({ kind: 'ok', value: [{ providerTrackId: 'licensed-1' }] });
@@ -46,23 +50,24 @@ describe('ProviderRegistry', () => {
     expect(youtube.search).not.toHaveBeenCalled();
     expect(deezer.search).not.toHaveBeenCalled();
     expect(jamendo.search).not.toHaveBeenCalled();
+    expect(audius.search).not.toHaveBeenCalled();
   });
 
   it('lists enabled providers and declares Deezer metadata-only', () => {
     const providers = registry().list();
     expect(providers.map((provider) => provider.providerId))
-      .toEqual(['jamendo', 'youtube_music', 'deezer', 'breezze_internal']);
+      .toEqual(['jamendo', 'audius', 'youtube_music', 'deezer', 'breezze_internal']);
     expect(providers.find((provider) => provider.providerId === 'deezer')?.capabilities)
       .toMatchObject({ search: true, metadata: true, playback: false, availability: false });
   });
 
   it('selects only providers that explicitly declare both playback and availability', () => {
-    expect(registry().getPlaybackCandidates().map((provider) => provider.providerId)).toEqual(['jamendo']);
+    expect(registry().getPlaybackCandidates().map((provider) => provider.providerId)).toEqual(['jamendo', 'audius']);
     const licensed = { ...internal, providerId: 'licensed_provider',
       capabilities: { ...internal.capabilities, playback: true }, priority: 200 };
     const instance = registry();
     instance.register(licensed as unknown as InternalCatalogAdapter);
     expect(instance.getPlaybackCandidates().map((provider) => provider.providerId))
-      .toEqual(['licensed_provider', 'jamendo']);
+      .toEqual(['licensed_provider', 'jamendo', 'audius']);
   });
 });

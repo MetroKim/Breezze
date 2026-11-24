@@ -52,4 +52,12 @@ void main() {
       expect(isYouTubeSongId('bz:deezer:dQw4w9WgXcQ'), isFalse);
     });
   });
+  test('Audius OML provider IDs can queue but never inherit download rights', () {
+    expect(isAudiusSongId('bz:audius:V66vyPP'), isTrue);
+    expect(canQueueTrackId('bz:audius:V66vyPP'), isTrue);
+    expect(canRequestOfflineDownload('bz:audius:V66vyPP'), isFalse);
+    expect(isMetadataOnlyTrackId('bz:audius:../../unsafe'), isTrue);
+  });
+
 }
+
