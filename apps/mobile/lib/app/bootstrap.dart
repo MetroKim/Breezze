@@ -208,6 +208,39 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
+    // The backend only exposes this route in explicitly opted-in development
+    // environments. It chooses a direct, already-resolved audio URL without
+    // deciphering signatures or proxying files. Expired/unavailable streams
+    // fall through to the normal rights-aware resolver and preview fallback.
+    if (isYouTubeSongId(track.id)) {
+      try {
+        final response = await api.ytMusicAudioCandidate(track.id.split(':').last);
+        if (response['kind'] == 'ok') {
+          final value = response['value'];
+          final candidate = value is Map ? value['candidate'] : null;
+          if (candidate is Map &&
+              candidate['streamUrl'] is String &&
+              candidate['mimeType'] is String &&
+              (candidate['mimeType'] as String).startsWith('audio/') &&
+              candidate['expiresAt'] is String) {
+            final uri = Uri.tryParse(candidate['streamUrl'] as String);
+            final expiry = DateTime.tryParse(candidate['expiresAt'] as String)?.toUtc();
+            if (uri != null && uri.scheme == 'https' &&
+                (uri.host == 'googlevideo.com' || uri.host.endsWith('.googlevideo.com')) &&
+                expiry != null && expiry.isAfter(DateTime.now().toUtc().add(const Duration(minutes: 1)))) {
+              return PlayableSource(
+                trackId: track.id,
+                streamUrl: uri.toString(),
+                expiresAtUtc: expiry,
+              );
+            }
+          }
+        }
+      } catch (_) {
+        // Experimental stream not available; ordinary playback still runs.
+      }
+    }
+
     try {
       final youtubeSong = isYouTubeSongId(track.id);
       final catalogId = youtubeSong ? null : await _resolveCatalogId(api, track);
