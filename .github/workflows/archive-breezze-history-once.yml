@@ -1,0 +1,52 @@
+name: One-time permanent Breezze source history archive
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/archive-breezze-history-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  source-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_SHA: 5fe8263d7f93db4e8b08ad6b16e675e95afe0e51
+      ARCHIVE_TAG: breezze-pre-fork-retirement-20261125
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create independently restorable history bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add old-breezze https://github.com/MetroKim/Breezze.git
+          git fetch --no-tags old-breezze main
+          actual="$(git rev-parse FETCH_HEAD)"
+          test "$actual" = "$SOURCE_SHA" || {
+            echo "::error::Source advanced since migration. Do not silently archive a different commit."
+            exit 1
+          }
+          git bundle create "$RUNNER_TEMP/breezze-full-fork-history.bundle" refs/remotes/old-breezze/main
+          git bundle verify "$RUNNER_TEMP/breezze-full-fork-history.bundle"
+          test "$(stat -c %s "$RUNNER_TEMP/breezze-full-fork-history.bundle")" -gt 1000000
+      - name: Publish permanent repository release with original history bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$ARCHIVE_TAG" >/dev/null 2>&1; then
+            echo "::error::Archive release already exists; manual review required to prevent replacing a backup."
+            exit 1
+          fi
+          gh release create "$ARCHIVE_TAG" \
+            --target main \
+            --title "Breezze original fork history backup — 25 Nov 2026" \
+            --notes "Complete git bundle of original MetroKim/Breezze commit $SOURCE_SHA, preserved before migration into the independent MetroMusic repository. Keep this archive after removing the source fork." \
+            "$RUNNER_TEMP/breezze-full-fork-history.bundle"
+          gh release view "$ARCHIVE_TAG" --json assets --jq '.assets[] | [.name, .size] | @tsv'
