@@ -59,20 +59,21 @@ jobs:
           done
           cp "$RUNNER_TEMP/archived-source-ref-list.txt" "$archive/archived-source-ref-list.txt"
           (cd "$RUNNER_TEMP" && zip -qr breezze-pr-and-branch-metadata.zip breezze-pr-history)
-      - name: Upload additional permanent assets to the existing migration release
+      - name: Publish a new immutable release for every source ref and PR record
         shell: bash
+        env:
+          FULL_ARCHIVE_TAG: breezze-all-refs-pre-retirement-20261125
         run: |
           set -euo pipefail
-          gh release view "$ARCHIVE_TAG" >/dev/null
-          for item in breezze-all-branches-and-tags.bundle breezze-pr-and-branch-metadata.zip; do
-            if gh release view "$ARCHIVE_TAG" --json assets \
-              --jq '.assets[].name' | grep -Fxq "$item"; then
-              echo "::error::Backup asset already exists; never replace it automatically"
-              exit 1
-            fi
-          done
-          gh release upload "$ARCHIVE_TAG" \
+          if gh release view "$FULL_ARCHIVE_TAG" >/dev/null 2>&1; then
+            echo "::error::Complete-archive release already exists; never overwrite a backup."
+            exit 1
+          fi
+          gh release create "$FULL_ARCHIVE_TAG" \
+            --target main \
+            --title "Breezze complete legacy source branches and PR backup" \
+            --notes "This immutable release contains the original fork's complete all-branch Git bundle (11 source refs; the prior separate release preserved main), plus public PR, review, and discussion metadata. Prepared before deleting MetroKim/Breezze, which belongs to the BitChord fork network." \
             "$RUNNER_TEMP/breezze-all-branches-and-tags.bundle" \
             "$RUNNER_TEMP/breezze-pr-and-branch-metadata.zip"
-          gh release view "$ARCHIVE_TAG" --json assets \
+          gh release view "$FULL_ARCHIVE_TAG" --json assets \
             --jq '.assets[] | [.name, .size] | @tsv'
