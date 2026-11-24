@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:breezze/core/audio/audio_service_bridge.dart';
+import 'package:breezze/core/audio/just_audio_engine_adapter.dart';
 import 'package:breezze/core/audio/playback_queue_store.dart';
 import 'package:breezze/features/player/player_controller.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
@@ -8,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 
 class _NativeQaResolver implements PlaybackResolver {
   int grants = 0;
@@ -73,6 +78,41 @@ const _two = TrackInfo(
   title: 'Native QA Two',
   artist: 'Breezze QA',
 );
+
+
+Uint8List _testStereoWav() {
+  const sampleRate = 44100;
+  const seconds = 3;
+  const channels = 2;
+  const bytesPerSample = 2;
+  const header = 44;
+  const dataSize = sampleRate * seconds * channels * bytesPerSample;
+  final data = ByteData(header + dataSize);
+  void tag(int offset, String text) {
+    for (var i = 0; i < text.length; i++) {
+      data.setUint8(offset + i, text.codeUnitAt(i));
+    }
+  }
+  tag(0, 'RIFF');
+  data.setUint32(4, data.lengthInBytes - 8, Endian.little);
+  tag(8, 'WAVE');
+  tag(12, 'fmt ');
+  data.setUint32(16, 16, Endian.little);
+  data.setUint16(20, 1, Endian.little); // PCM
+  data.setUint16(22, channels, Endian.little);
+  data.setUint32(24, sampleRate, Endian.little);
+  data.setUint32(28, sampleRate * channels * bytesPerSample, Endian.little);
+  data.setUint16(32, channels * bytesPerSample, Endian.little);
+  data.setUint16(34, 16, Endian.little);
+  tag(36, 'data');
+  data.setUint32(40, dataSize, Endian.little);
+  for (var frame = 0; frame < sampleRate * seconds; frame++) {
+    final sample = (math.sin(frame * 2 * math.pi * 440 / sampleRate) * 7000).round();
+    data.setInt16(header + frame * 4, sample, Endian.little);
+    data.setInt16(header + frame * 4 + 2, sample, Endian.little);
+  }
+  return data.buffer.asUint8List();
+}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -179,4 +219,55 @@ void main() {
       await store.clear(ownerB);
     }
   });
+
+  testWidgets('actual platform audio engine decodes app-owned PCM and obeys controls',
+      (tester) async {
+    // This is real ExoPlayer/AVFoundation decoding, not a fake engine. A
+    // synthetic QA tone does not require a third-party music entitlement.
+    final directory = await getTemporaryDirectory();
+    final file = File('${directory.path}/breezze-native-pcm-${DateTime.now().microsecondsSinceEpoch}.wav');
+    await file.writeAsBytes(_testStereoWav(), flush: true);
+    final engine = JustAudioEngineAdapter();
+    final container = ProviderContainer();
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    try {
+      await player.playTrack(
+        trackId: 'device:native-pcm-acceptance',
+        title: 'Breezze native QA PCM',
+        artist: 'Synthetic test source',
+        localFilePath: file.path,
+        duration: const Duration(seconds: 3),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+      expect(engine.duration, greaterThan(Duration.zero));
+      expect(player.state.playbackState, PlaybackState.playing);
+
+      await player.seekTo(const Duration(milliseconds: 900));
+      expect(player.state.position.inMilliseconds, greaterThanOrEqualTo(900));
+      await player.pause();
+      expect(player.state.playbackState, PlaybackState.paused);
+
+      final media = AudioServiceBridge(container);
+      await media.update(
+        title: 'Breezze native QA PCM',
+        artist: 'Synthetic test source',
+        playing: false,
+      );
+      expect(media.mediaItem.value?.id, 'device:native-pcm-acceptance');
+      await media.play();
+      expect(player.state.playbackState, PlaybackState.playing);
+      await media.stop();
+      expect(player.state.playbackState, PlaybackState.idle);
+    } finally {
+      await player.stop();
+      container.dispose();
+      await engine.dispose();
+      if (await file.exists()) await file.delete();
+    }
+  });
+
 }

@@ -229,5 +229,14 @@ void main() {
           repeat: RepeatMode.off,
           shuffleEnabled: false), throwsArgumentError);
     });
+
+    test('Previous wraps in shuffled repeat-all mode', () {
+      final q = QueueManager();
+      q.replaceWith([entry('a'), entry('b'), entry('c')]);
+      q.toggleShuffle();
+      q.cycleRepeat();
+      final last = q.shuffledOrder.last;
+      expect(q.previous()!.entryId, last);
+    });
   });
 }

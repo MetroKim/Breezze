@@ -252,6 +252,16 @@ class QueueManager {
           return _entries[prev];
         }
       }
+      if (pos == 0 && repeatMode == RepeatMode.repeatAll &&
+          _shuffledOrder.isNotEmpty) {
+        final lastId = _shuffledOrder.last;
+        final last = _entries.indexWhere((e) => e.entryId == lastId);
+        if (last >= 0) {
+          _currentIndex = last;
+          onQueueChanged?.call();
+          return _entries[last];
+        }
+      }
       return current;
     }
     if (_currentIndex! > 0) {
