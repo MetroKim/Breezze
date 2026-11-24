@@ -12,7 +12,7 @@ describe('ProviderRegistry', () => {
   });
   const internal = makeAdapter('breezze_internal', 50, false, true);
   const youtube = makeAdapter('youtube_music', 100);
-  const deezer = makeAdapter('deezer', 95);
+  const deezer = makeAdapter('deezer', 110);
   const registry = () => new ProviderRegistry(
     internal as unknown as InternalCatalogAdapter,
     youtube as unknown as YtMusicAdapter,
@@ -26,7 +26,7 @@ describe('ProviderRegistry', () => {
     const result = await registry().searchAll('  afrobeats  ');
     expect(result.query).toBe('afrobeats');
     expect(result.providers.map(item => item.providerId))
-      .toEqual(['breezze_internal', 'youtube_music', 'deezer']);
+      .toEqual(['deezer', 'youtube_music', 'breezze_internal']);
     expect(internal.search).toHaveBeenCalledWith('afrobeats');
     expect(result.providers.find(item => item.providerId === 'breezze_internal')?.result)
       .toMatchObject({ kind: 'ok', value: [{ providerTrackId: 'licensed-1' }] });
@@ -44,7 +44,7 @@ describe('ProviderRegistry', () => {
   it('contains only the requested external providers and never resolves their catalog metadata as full audio', () => {
     const instance = registry();
     expect(instance.list().map(item => item.providerId))
-      .toEqual(['youtube_music', 'deezer', 'breezze_internal']);
+      .toEqual(['deezer', 'youtube_music', 'breezze_internal']);
     for (const id of ['youtube_music', 'deezer']) {
       expect(instance.get(id)?.capabilities).toMatchObject({
         search: true, metadata: true, playback: false, download: false,

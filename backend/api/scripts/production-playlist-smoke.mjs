@@ -425,12 +425,12 @@ async function run() {
   const listed = await request('GET', '/api/v1/providers');
   status(listed.status, 200, 'active external music providers');
   assert.deepEqual(listed.data.map(item => item.providerId),
-    ['youtube_music', 'deezer', 'breezze_internal']);
+    ['deezer', 'youtube_music', 'breezze_internal']);
   const federated = await request('GET',
     '/api/v1/providers/search?q=ambient');
   status(federated.status, 200, 'two-source federated discovery');
   assert.deepEqual(federated.data.providers.map(item => item.providerId),
-    ['breezze_internal', 'youtube_music', 'deezer']);
+    ['deezer', 'youtube_music', 'breezze_internal']);
   for (const retired of ['audius', 'jamendo']) {
     const missing = await request('GET',
       '/api/v1/providers/' + retired + '/search?q=ambient');
