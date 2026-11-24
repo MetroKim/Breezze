@@ -335,3 +335,82 @@ def get_charts(country: str = Query(default="ZZ", pattern=r"^[A-Z]{2}$")) -> dic
         raise HTTPException(status_code=502, detail="YTMUSIC_CHARTS_UNAVAILABLE") from exc
     finally:
         PROVIDER_SLOTS.release()
+
+
+# YouTube Music's watch queue is useful for discovery and recommendations.
+# It is NOT a playable audio queue and must not contain provider media URLs.
+WATCH_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _watch_duration(value: Any) -> int | None:
+    if isinstance(value, int) and value >= 0:
+        return value
+    if not isinstance(value, str):
+        return None
+    segments = value.split(":")
+    if not 1 <= len(segments) <= 3 or any(not part.isdigit() for part in segments):
+        return None
+    seconds = 0
+    for part in segments:
+        seconds = seconds * 60 + int(part)
+    return seconds if seconds < 24 * 60 * 60 else None
+
+
+def normalize_watch_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    video_id, title = item.get("videoId"), item.get("title")
+    if not isinstance(video_id, str) or not WATCH_VIDEO_ID.fullmatch(video_id):
+        return None
+    if not isinstance(title, str) or not title.strip():
+        return None
+    artists = item.get("artists") or []
+    artist_names = [
+        artist["name"].strip() for artist in artists
+        if isinstance(artist, dict) and isinstance(artist.get("name"), str)
+        and artist["name"].strip()
+    ] if isinstance(artists, list) else []
+    thumbs = item.get("thumbnail") or item.get("thumbnails") or []
+    artwork = _safe_artwork({"thumbnails": thumbs})
+    return {
+        "providerTrackId": video_id,
+        "title": title.strip(),
+        "artist": ", ".join(artist_names) or "Unknown artist",
+        "artworkUrl": artwork,
+        "durationSec": _watch_duration(item.get("length") or item.get("duration_seconds")),
+    }
+
+
+@app.get("/watch-queue/{video_id}")
+def get_watch_queue(
+    video_id: str,
+    limit: int = Query(default=20, ge=1, le=25),
+) -> dict[str, Any]:
+    if not WATCH_VIDEO_ID.fullmatch(video_id):
+        raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_ID")
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail="YTMUSIC_CAPACITY_EXCEEDED",
+            headers={"Retry-After": "2"},
+        )
+    try:
+        raw = YTMusic().get_watch_playlist(videoId=video_id, limit=limit)
+        if not isinstance(raw, dict) or not isinstance(raw.get("tracks"), list):
+            raise HTTPException(status_code=502, detail="YTMUSIC_INVALID_WATCH_QUEUE")
+        tracks = [
+            track for item in raw["tracks"][:limit]
+            if isinstance(item, dict) and (track := normalize_watch_item(item))
+        ]
+        playlist_id = raw.get("playlistId")
+        return {
+            "source": "youtube_music",
+            "seedVideoId": video_id,
+            "playlistId": playlist_id if isinstance(playlist_id, str) else None,
+            "tracks": tracks,
+            "playbackAvailable": False,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="YTMUSIC_WATCH_QUEUE_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()
