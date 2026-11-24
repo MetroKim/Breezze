@@ -9,6 +9,7 @@ import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../app/playlist_store.dart';
 import '../../app/saved_album_store.dart';
+import '../../app/followed_artist_store.dart';
 import '../../app/library_section_preferences_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -48,6 +49,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Set<String> _pendingPlaylistIds = {};
   List<FavoriteTrack> _favorites = [];
   List<SavedAlbum> _albums = [];
+  List<FollowedArtist> _followedArtists = [];
   var _loading = true;
   int _refreshGeneration = 0;
 
@@ -94,6 +96,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     var playlists = await _playlistStore.load(ownerId);
     final albumStore = SavedAlbumStore();
     var savedAlbums = await albumStore.load(ownerId);
+    final followedStore = FollowedArtistStore();
+    var followedArtists = await followedStore.load(ownerId);
     final visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
     if (auth is AuthSignedIn) {
       try {
@@ -137,6 +141,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       }
       try {
         final api = ref.read(authSessionProvider.notifier).api;
+        await followedStore.syncWithCloud(
+          ownerId, api,
+          ownerStillActive: () =>
+              _ownerStillActive(ownerId) && generation == _refreshGeneration,
+        );
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        followedArtists = await followedStore.load(ownerId);
+      } catch (_) {
+        // Preserve cached follows and queued pin edits while offline.
+      }
+      try {
+        final api = ref.read(authSessionProvider.notifier).api;
         // Replay durable offline edits before accepting a remote snapshot.
         // Failed edits remain journaled, and mergeRemote preserves their
         // local state instead of replacing it with stale server data.
@@ -174,6 +192,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       _playlists = playlists;
       _pendingPlaylistIds = pendingPlaylistIds;
       _albums = savedAlbums;
+      _followedArtists = followedArtists;
       _visibleSections = visibleSections;
       if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
         _selected = _allSections.firstWhere(_visibleSections.contains);
@@ -859,30 +878,126 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemBuilder: (_, __) => const BzSkeletonTrackRow(),
     );
-    final grouped = <String, List<FavoriteTrack>>{};
+
+    final songsByArtist = <String, List<FavoriteTrack>>{};
     for (final track in _favorites) {
-      grouped.putIfAbsent(track.artist.trim().isEmpty ? 'Unknown artist' : track.artist, () => []).add(track);
+      final name = track.artist.trim().isEmpty
+          ? 'Unknown artist'
+          : track.artist.trim();
+      songsByArtist.putIfAbsent(name, () => []).add(track);
     }
-    if (grouped.isEmpty) return _emptyState(theme, 'No artists yet', 'Save songs to build your artist library.');
-    final artists = grouped.entries.toList()..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    final followedNames = <String>{};
+    final artists = <({
+      String name,
+      String? key,
+      bool pinned,
+      List<FavoriteTrack> tracks,
+    })>[];
+    for (final artist in _followedArtists) {
+      final name = artist.displayName;
+      followedNames.add(name.toLowerCase());
+      artists.add((
+        name: name,
+        key: artist.artistKey,
+        pinned: artist.isPinned,
+        tracks: songsByArtist[name] ?? const <FavoriteTrack>[],
+      ));
+    }
+    for (final entry in songsByArtist.entries) {
+      if (followedNames.contains(entry.key.toLowerCase())) continue;
+      artists.add((
+        name: entry.key,
+        key: null,
+        pinned: false,
+        tracks: entry.value,
+      ));
+    }
+    if (artists.isEmpty) {
+      return _emptyState(
+        theme, 'No artists yet',
+        'Follow artists or save their songs to build your library.',
+      );
+    }
+    artists.sort((a, b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+      if ((a.key != null) != (b.key != null)) return a.key != null ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 150),
       itemCount: artists.length,
       itemBuilder: (context, index) {
         final entry = artists[index];
         return ListTile(
-          leading: CircleAvatar(backgroundColor: theme.bzSurface2, child: BzSvgIcon(name: 'mic', color: theme.bzText1)),
-          title: Text(entry.key),
-          subtitle: Text('${entry.value.length} saved songs'),
-          trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ArtistDetailScreen(
-                artist: entry.key,
-                savedTracks: entry.value,
-              ),
-            ),
+          leading: CircleAvatar(
+            backgroundColor: theme.bzSurface2,
+            child: BzSvgIcon(name: 'mic', color: theme.bzText1),
           ),
+          title: Text(entry.name),
+          subtitle: Text(
+            '${entry.tracks.length} saved songs'
+            '${entry.key == null ? '' : ' · Following'}'
+            '${entry.pinned ? ' · Pinned' : ''}',
+          ),
+          trailing: entry.key == null
+              ? BzSvgIcon(name: 'chevron-right', color: theme.bzText2)
+              : PopupMenuButton<String>(
+                  tooltip: 'Artist options',
+                  icon: const BzSvgIcon(name: 'more-vertical'),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'pin',
+                      child: Row(
+                        children: [
+                          BzSvgIcon(name: entry.pinned ? 'star-filled' : 'star'),
+                          const SizedBox(width: 12),
+                          Text(entry.pinned ? 'Unpin artist' : 'Pin to top'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (action) async {
+                    if (action != 'pin' || entry.key == null) return;
+                    final owner = _ownerId;
+                    try {
+                      final store = FollowedArtistStore();
+                      if (!await store.setPinned(
+                        owner, entry.key!, !entry.pinned,
+                      )) return;
+                      if (!mounted || !_ownerStillActive(owner)) return;
+                      await _refresh();
+                      if (!mounted || !_ownerStillActive(owner)) return;
+                      final pending = await store.pendingCount(owner);
+                      if (!mounted || !_ownerStillActive(owner)) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(pending > 0
+                            ? 'Pin saved on this device. Cloud sync will retry.'
+                            : 'Artist pin updated.'),
+                      ));
+                    } catch (_) {
+                      if (mounted && _ownerStillActive(owner)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not update artist pin.'),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ArtistDetailScreen(
+                artist: entry.name,
+                savedTracks: entry.tracks,
+                canonicalArtistId: entry.key != null &&
+                        entry.key!.startsWith('catalog:')
+                    ? entry.key!.substring('catalog:'.length)
+                    : null,
+              ),
+            ));
+            if (mounted) await _refresh();
+          },
         );
       },
     );

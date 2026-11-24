@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/saved_album_store.dart';
+import '../../app/followed_artist_store.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../core/audio/youtube_player_handoff.dart';
 import '../video/official_music_video_screen.dart';
@@ -13,9 +14,24 @@ import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
-final _artistFollowing = FutureProvider.autoDispose.family<bool, String>((ref, key) {
-  ref.watch(authSessionProvider);
-  return ref.read(authSessionProvider.notifier).api.artistFollowing(key);
+final _artistFollowing =
+    FutureProvider.autoDispose.family<FollowedArtist?, String>((ref, key) async {
+  final session = ref.watch(authSessionProvider);
+  if (session is! AuthSignedIn) return null;
+  final store = FollowedArtistStore();
+  try {
+    await store.syncWithCloud(
+      session.userId,
+      ref.read(authSessionProvider.notifier).api,
+      ownerStillActive: () {
+        final current = ref.read(authSessionProvider);
+        return current is AuthSignedIn && current.userId == session.userId;
+      },
+    );
+  } catch (_) {
+    // An offline library remains usable from the owner-scoped secure cache.
+  }
+  return store.find(session.userId, key);
 });
 
 final _artistVideos = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
@@ -419,6 +435,52 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+    Future<void> _changeArtistMembership(
+    String key, {
+    bool? follow,
+    bool? pinned,
+  }) async {
+    if (_changingFollow) return;
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return;
+    setState(() => _changingFollow = true);
+    final store = FollowedArtistStore();
+    try {
+      if (follow == true) {
+        await store.follow(auth.userId, key, artist);
+      } else if (follow == false) {
+        await store.unfollow(auth.userId, key);
+      } else if (pinned != null) {
+        await store.setPinned(auth.userId, key, pinned);
+      }
+      try {
+        await store.syncWithCloud(
+          auth.userId,
+          ref.read(authSessionProvider.notifier).api,
+          ownerStillActive: () {
+            final current = ref.read(authSessionProvider);
+            return current is AuthSignedIn && current.userId == auth.userId;
+          },
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Saved on this device. Sync will retry online.'),
+          ));
+        }
+      }
+      if (mounted) ref.invalidate(_artistFollowing(key));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not update this artist. Try again.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _changingFollow = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -536,25 +598,31 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                           onPressed: () => ref.invalidate(_artistFollowing(artistKey)),
                           child: const Text('Retry follow status'),
                         ),
-                        data: (active) => OutlinedButton.icon(
-                          icon: BzSvgIcon(name: active ? 'check' : 'user-round-plus'),
-                          label: Text(active ? 'Following' : 'Follow'),
-                          onPressed: _changingFollow ? null : () async {
-                            setState(() => _changingFollow = true);
-                            try {
-                              await ref.read(authSessionProvider.notifier).api
-                                  .followArtist(artistKey, !active);
-                              if (mounted) ref.invalidate(_artistFollowing(artistKey));
-                            } catch (_) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Could not update this artist. Try again.')),
-                                );
-                              }
-                            } finally {
-                              if (mounted) setState(() => _changingFollow = false);
-                            }
-                          },
+                        data: (record) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            OutlinedButton.icon(
+                              icon: BzSvgIcon(name: record != null
+                                  ? 'check' : 'user-round-plus'),
+                              label: Text(record != null ? 'Following' : 'Follow'),
+                              onPressed: _changingFollow ? null : () =>
+                                  _changeArtistMembership(
+                                    artistKey, follow: record == null,
+                                  ),
+                            ),
+                            if (record != null) ...[
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                icon: BzSvgIcon(name: record.isPinned
+                                    ? 'star-filled' : 'star'),
+                                label: Text(record.isPinned ? 'Unpin' : 'Pin'),
+                                onPressed: _changingFollow ? null : () =>
+                                    _changeArtistMembership(
+                                      artistKey, pinned: !record.isPinned,
+                                    ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                   ],
