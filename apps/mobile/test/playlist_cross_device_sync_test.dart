@@ -71,7 +71,7 @@ void main() {
     await store.addTrack(owner, id, b);
     await store.rename(owner, id, 'Road trip 2');
     await store.reorderTracks(owner, id, 0, 1);
-    await store.removeTrack(owner, id, a);
+    await store.removeTrack(owner, id, aId);
     expect(await store.pendingCount(owner), 6);
     final api = FakePlaylistApi();
     expect(await store.syncOwner(owner, api, ownerStillActive: () => true), isTrue);
