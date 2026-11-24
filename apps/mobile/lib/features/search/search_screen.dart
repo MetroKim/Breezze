@@ -295,7 +295,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     final store = PlaylistStore();
-    final count = await addSongToMultiplePlaylists(
+    final int? count;
+    try {
+      count = await addSongToMultiplePlaylists(
       context: context,
       store: store,
       ownerId: ownerId,
@@ -308,7 +310,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
       ownerStillActive: stillOwner,
       requestPlaylistName: _requestPlaylistName,
-    );
+      );
+    } catch (_) {
+      if (stillOwner()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not update playlists. Try again.'),
+        ));
+      }
+      return;
+    }
     if (count == null || count == 0 || !stillOwner()) return;
     if (initialAuth is AuthSignedIn) {
       unawaited(store.syncOwner(

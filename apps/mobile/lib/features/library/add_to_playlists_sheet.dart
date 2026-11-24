@@ -90,6 +90,14 @@ Future<Set<String>?> showMultiPlaylistPicker({
                               selected.add(created.id);
                             });
                           }
+                        } catch (_) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text(
+                                'Could not create playlist. Try again.',
+                              )),
+                            );
+                          }
                         } finally {
                           if (context.mounted) {
                             setSheetState(() => creating = false);

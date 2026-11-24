@@ -235,14 +235,24 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           : initialAuth is AuthSignedOut && current is AuthSignedOut;
     }
 
-    final count = await addSongToMultiplePlaylists(
+    final int? count;
+    try {
+      count = await addSongToMultiplePlaylists(
       context: context,
       store: _playlistStore,
       ownerId: ownerId,
       track: track,
       ownerStillActive: stillOwner,
       requestPlaylistName: _requestPlaylistName,
-    );
+      );
+    } catch (_) {
+      if (stillOwner()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not update playlists. Try again.'),
+        ));
+      }
+      return;
+    }
     if (count == null || count == 0 || !stillOwner()) return;
     if (initialAuth is AuthSignedIn) {
       unawaited(_playlistStore.syncOwner(

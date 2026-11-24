@@ -63,6 +63,36 @@ void main() {
     expect(result, {'first', 'second'});
   });
 
+  testWidgets('failed creation stays in picker and shows an error',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              await showMultiPlaylistPicker(
+                context: context,
+                initialPlaylists: const [],
+                trackId: 'song-1',
+                createPlaylist: () async => throw StateError('disk unavailable'),
+              );
+            },
+            child: const Text('Open picker'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open picker'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New Playlist'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not create playlist. Try again.'),
+        findsOneWidget);
+    expect(find.text('Add to Playlists'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('new playlist is immediately selected for one-step addition',
       (tester) async {
     Set<String>? result;

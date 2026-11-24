@@ -260,15 +260,20 @@ void main() {
     final api = FakePlaylistApi();
     expect(await restarted.syncOwner('user-a', api,
       ownerStillActive: () => true), isTrue);
-    expect(api.calls, [
+    expect(api.calls.take(3), [
       'create:$first:Daily mix',
       'create:$second:Road trip',
       'create:$third:Workout',
+    ]);
+    // Each membership is delivered exactly once. Different playlists may be
+    // iterated in persistent display order instead of the selection order.
+    expect(api.calls.skip(3).toSet(), {
       'add:$first:$aId',
       'add:$second:$aId',
       'add:$second:$bId',
       'add:$third:$bId',
-    ]);
+    });
+    expect(api.calls, hasLength(7));
     expect(await restarted.pendingCount('user-a'), 0);
     expect(await restarted.pendingCount('user-b'), 1);
   });
