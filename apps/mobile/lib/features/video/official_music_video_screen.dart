@@ -86,7 +86,7 @@ class _OfficialMusicVideoScreenState
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid or unavailable music video.')),
+          const SnackBar(content: Text('Invalid or unavailable YouTube video.'))
         );
       }
     }
@@ -108,7 +108,7 @@ class _OfficialMusicVideoScreenState
     return Scaffold(
       backgroundColor: theme.bzBackground,
       appBar: AppBar(
-        title: const Text('Music Video'),
+        title: const Text('YouTube player'),
         leading: IconButton(
           tooltip: 'Back to music',
           icon: const BzSvgIcon(name: 'chevron-left'),
