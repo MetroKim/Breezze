@@ -484,6 +484,9 @@ class BreezzeApi {
 
   // Licensed Breezze R2 video assets only. YouTube Music IDs cannot be
   // used here and never produce downloadable media grants.
+  Future<Map<String, dynamic>> licensedVideos() =>
+      _get('/videos/catalog');
+
   Future<Map<String, dynamic>> videoPlayback(String videoAssetId) =>
       _get('/videos/${Uri.encodeComponent(videoAssetId)}/playback');
 
