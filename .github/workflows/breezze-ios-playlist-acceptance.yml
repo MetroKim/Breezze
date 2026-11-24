@@ -21,7 +21,7 @@ jobs:
   simulator-acceptance:
     name: iPhone simulator offline and production cloud sync
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
       - name: Set up Flutter
@@ -59,11 +59,52 @@ jobs:
           xcrun simctl bootstatus "$simulator" -b
       - name: Verify real iOS app storage and production playlist sync
         working-directory: apps/mobile
-        timeout-minutes: 27
+        timeout-minutes: 55
         env:
           SIMULATOR_ID: ${{ steps.sim.outputs.id }}
         run: |
           set -euo pipefail
           flutter devices
-          flutter test integration_test/playlist_sync_on_emulator_test.dart -d "$SIMULATOR_ID" --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
-          flutter test integration_test/artist_pin_on_emulator_test.dart -d "$SIMULATOR_ID" --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+          # Simulator launch can hang after Xcode has built successfully.
+          # Bound each launch, restart the simulator once on an actual hang,
+          # and never retry assertion/test failures.
+          python3 - <<'PY'
+          import os
+          import signal
+          import subprocess
+          import sys
+
+          simulator = os.environ["SIMULATOR_ID"]
+          for test_file in (
+              "integration_test/playlist_sync_on_emulator_test.dart",
+              "integration_test/artist_pin_on_emulator_test.dart",
+          ):
+              for attempt in (1, 2):
+                  print(f"iPhone acceptance: {test_file}, attempt {attempt}", flush=True)
+                  command = [
+                      "flutter", "test", test_file, "-d", simulator,
+                      "--no-pub", "--reporter", "expanded",
+                      "--dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev",
+                  ]
+                  process = subprocess.Popen(command, start_new_session=True)
+                  try:
+                      return_code = process.wait(timeout=12 * 60)
+                  except subprocess.TimeoutExpired:
+                      print(f"iPhone simulator test launch timed out for {test_file}", flush=True)
+                      os.killpg(process.pid, signal.SIGTERM)
+                      try:
+                          process.wait(timeout=10)
+                      except subprocess.TimeoutExpired:
+                          os.killpg(process.pid, signal.SIGKILL)
+                          process.wait()
+                      if attempt == 2:
+                          raise SystemExit(f"Native test did not launch after simulator restart: {test_file}")
+                      subprocess.run(["xcrun", "simctl", "shutdown", simulator], check=False)
+                      subprocess.run(["xcrun", "simctl", "boot", simulator], check=True)
+                      subprocess.run(["xcrun", "simctl", "bootstatus", simulator, "-b"], check=True)
+                      continue
+                  if return_code:
+                      raise SystemExit(return_code)
+                  print(f"iPhone acceptance PASS: {test_file}", flush=True)
+                  break
+          PY
