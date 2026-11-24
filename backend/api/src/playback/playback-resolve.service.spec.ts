@@ -24,7 +24,7 @@ describe('PlaybackResolveService', () => {
     territory: 'US', // Deliberately spoofed; only the edge header is trusted.
   };
   const providerRequest = {
-    providerId: 'audius',
+    providerId: 'licensed_partner',
     providerTrackId: 'track123',
     canonicalTrackId: 'canonical-1',
     territory: 'US', // Deliberately spoofed; only the edge header is trusted.
@@ -117,24 +117,24 @@ describe('PlaybackResolveService', () => {
     getAvailability: jest.fn().mockResolvedValue({
       kind: 'ok',
       value: { available: true },
-      attribution: 'Audius public catalogue',
+      attribution: 'Approved label',
     }),
     resolvePlayback: jest.fn().mockResolvedValue({
       kind: 'ok',
       value: {
-        url: 'https://api.audius.co/v1/tracks/track123/stream',
+        url: 'https://media.licensed.example/audio/track123',
         expiresAt: new Date(Date.now() + 600_000),
         mimeType: 'audio/mpeg',
       },
-      attribution: 'Audius public catalogue',
+      attribution: 'Approved label',
     }),
   });
 
   const prepareCanonicalTrack = () => {
     prisma.track.findUnique.mockResolvedValue({
       id: 'canonical-1',
-      source: 'audius',
-      externalId: 'bz:audius:track123',
+      source: 'licensed_partner',
+      externalId: 'bz:licensed_partner:track123',
     });
     prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
   };
@@ -145,10 +145,10 @@ describe('PlaybackResolveService', () => {
     providers.get.mockReturnValue(adapter);
 
     await expect(service.resolveProvider('user-1', providerRequest, 'TZ')).resolves.toMatchObject({
-      providerId: 'audius',
+      providerId: 'licensed_partner',
       providerTrackId: 'track123',
-      streamUrl: 'https://api.audius.co/v1/tracks/track123/stream',
-      attribution: 'Audius public catalogue',
+      streamUrl: 'https://media.licensed.example/audio/track123',
+      attribution: 'Approved label',
     });
     expect(adapter.getAvailability).toHaveBeenCalledWith('track123', 'TZ');
     expect(adapter.resolvePlayback).toHaveBeenCalledWith(expect.objectContaining({
@@ -179,7 +179,7 @@ describe('PlaybackResolveService', () => {
     const adapter = validAdapter();
     adapter.getAvailability.mockResolvedValue({
       kind: 'error',
-      code: 'AUDIUS_AVAILABILITY_FAILED',
+      code: 'PROVIDER_AVAILABILITY_FAILED',
       retryable: true,
       message: 'Provider unavailable',
     });
@@ -239,7 +239,7 @@ describe('PlaybackResolveService', () => {
     adapter.resolvePlayback.mockResolvedValue({
       kind: 'ok',
       value: {
-        url: 'https://api.audius.co/v1/tracks/track123/stream',
+        url: 'https://media.licensed.example/audio/track123',
         expiresAt: new Date(Date.now() - 1000),
       },
     });
@@ -249,45 +249,12 @@ describe('PlaybackResolveService', () => {
       ServiceUnavailableException,
     );
   });
-  it('allows an Audius OML grant only with live public-source permission and noncommercial configuration', async () => {
-    prisma.track.findUnique.mockResolvedValue({
-      id: 'canonical-1', source: 'audius', externalId: 'bz:audius:track123',
-    });
-    prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
-    rights.decide.mockResolvedValue({
-      allowed: false, previewOnly: false,
-      reason: 'NOT_AVAILABLE_IN_TERRITORY',
-    });
-    const adapter = validAdapter();
-    adapter.getAvailability.mockResolvedValue({
-      kind: 'ok', value: { available: true },
-      attribution: 'Audius OML: public third-party API streaming; track track123',
-    });
-    providers.get.mockReturnValue(adapter);
-    const request = { ...providerRequest, providerId: 'audius' };
-    const previous = process.env.BREEZZE_NONCOMMERCIAL;
-    try {
-      process.env.BREEZZE_NONCOMMERCIAL = 'true';
-      await expect(service.resolveProvider('user-1', request, 'TZ'))
-        .resolves.toMatchObject({
-          providerId: 'audius',
-          attribution: expect.stringContaining('Audius OML:'),
-        });
-      process.env.BREEZZE_NONCOMMERCIAL = 'false';
-      await expect(service.resolveProvider('user-1', request, 'TZ'))
-        .rejects.toThrow('NOT_AVAILABLE_IN_TERRITORY');
-    } finally {
-      if (previous === undefined) delete process.env.BREEZZE_NONCOMMERCIAL;
-      else process.env.BREEZZE_NONCOMMERCIAL = previous;
-    }
-  });
-
-  it('denies non-OML providers before lookup when no full-stream grant exists', async () => {
+  it('denies unlicensed providers before lookup when no full-stream grant exists', async () => {
     prepareCanonicalTrack();
     prisma.track.findUnique.mockResolvedValue({
       id: 'canonical-1',
-      source: 'jamendo',
-      externalId: 'bz:jamendo:track123',
+      source: 'licensed_partner',
+      externalId: 'bz:licensed_partner:track123',
     });
     rights.decide.mockResolvedValue({
       allowed: false,
@@ -297,7 +264,7 @@ describe('PlaybackResolveService', () => {
     providers.get.mockReturnValue(validAdapter());
 
     await expect(service.resolveProvider('user-1', {
-      ...providerRequest, providerId: 'jamendo',
+      ...providerRequest, providerId: 'licensed_partner',
     }, 'TZ')).rejects.toThrow('NO_EXPLICIT_AUTHORIZATION');
     expect(rights.decide).toHaveBeenCalledWith({
       userId: 'user-1',
@@ -338,11 +305,11 @@ describe('PlaybackResolveService', () => {
     adapter.resolvePlayback.mockResolvedValue({
       kind: 'ok',
       value: {
-        url: 'https://api.audius.co/v1/tracks/track123/stream',
+        url: 'https://media.licensed.example/audio/track123',
         expiresAt: new Date(Date.now() + 30_000),
         mimeType: 'audio/mpeg',
       },
-      attribution: 'Audius public catalogue',
+      attribution: 'Approved label',
     });
     providers.get.mockReturnValue(adapter);
 

@@ -2,8 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
-import { JamendoAdapter } from './jamendo.adapter';
-import { AudiusAdapter } from './audius.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
 
@@ -18,14 +16,10 @@ export class ProviderRegistry {
     internal: InternalCatalogAdapter,
     youtubeMusic: YtMusicAdapter,
     deezer: DeezerAdapter,
-    jamendo: JamendoAdapter,
-    audius: AudiusAdapter,
   ) {
     this.register(internal);
     this.register(youtubeMusic);
     this.register(deezer);
-    this.register(jamendo);
-    this.register(audius);
   }
 
   register(adapter: ProviderAdapter) {

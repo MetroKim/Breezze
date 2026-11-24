@@ -4,8 +4,6 @@ import { ProviderRegistry } from './provider-registry.service';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
-import { JamendoAdapter } from './jamendo.adapter';
-import { AudiusAdapter } from './audius.adapter';
 import { ProviderCacheService } from './provider-cache.service';
 
 @Module({
@@ -15,8 +13,6 @@ import { ProviderCacheService } from './provider-cache.service';
     InternalCatalogAdapter,
     YtMusicAdapter,
     DeezerAdapter,
-    JamendoAdapter,
-    AudiusAdapter,
     ProviderCacheService,
   ],
   exports: [ProviderRegistry],

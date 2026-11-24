@@ -84,24 +84,15 @@ export class PlaybackResolveService {
     });
     if (takedown) throw new NotAcceptableException('TAKEDOWN_ACTIVE');
 
-    // A local full-stream permission is normally mandatory. Audius OML is
-    // an exception only for recordings independently proven to be public,
-    // free and third-party-API-streamable at this exact request. The metadata
-    // lookup cannot create an entitlement: the signed-in session, mapping,
-    // takedown and live provider permission must all pass.
+    // Search metadata, previews and even upstream availability do not convey
+    // full-audio rights. A canonical territory-aware permission is mandatory.
     const decision = await this.rights.decide({
       userId,
       trackId: dto.canonicalTrackId,
       action: 'stream.full',
       territory,
     });
-    if (decision.previewOnly ||
-        (!decision.allowed &&
-         (dto.providerId !== 'audius' ||
-          !['NOT_AVAILABLE_IN_TERRITORY', 'NO_EXPLICIT_AUTHORIZATION']
-            .includes(decision.reason)))) {
-      // All other providers require a locally auditable full-track grant.
-      // The Audius OML exemption only proceeds to a fresh live proof.
+    if (!decision.allowed || decision.previewOnly) {
       throw new NotAcceptableException(
         decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason,
       );
@@ -132,13 +123,6 @@ export class PlaybackResolveService {
     if (!availability.value.available) {
       throw new NotAcceptableException('PROVIDER_TRACK_UNAVAILABLE');
     }
-    const publicAudiusGrant = dto.providerId === 'audius' &&
-      process.env.BREEZZE_NONCOMMERCIAL === 'true' &&
-      availability.attribution?.startsWith('Audius OML: ') === true;
-    if (!decision.allowed && !publicAudiusGrant) {
-      throw new NotAcceptableException(decision.reason);
-    }
-
     const result = await provider.resolvePlayback({
       providerTrackId: dto.providerTrackId,
       canonicalTrackId: dto.canonicalTrackId,
@@ -146,9 +130,7 @@ export class PlaybackResolveService {
       authorization: {
         action: 'stream.full',
         expiresAt: decision.expiresAt,
-        attribution: publicAudiusGrant
-          ? availability.attribution!
-          : decision.attribution ?? availability.attribution ?? null,
+        attribution: decision.attribution ?? availability.attribution ?? null,
       },
     });
     if (result.kind === 'unsupported') {
@@ -185,12 +167,8 @@ export class PlaybackResolveService {
       expiresAt: result.value.expiresAt,
       mimeType: result.value.mimeType,
       codec: result.value.codec,
-      // Preserve the artist's legally relevant OML notice. A provider
-      // response's generic attribution must never override the terms and
-      // source link from the live permission check.
-      attribution: publicAudiusGrant
-        ? availability.attribution!
-        : result.attribution ?? availability.attribution ?? null,
+      attribution: decision.attribution ??
+        result.attribution ?? availability.attribution ?? null,
     };
   }
 }
