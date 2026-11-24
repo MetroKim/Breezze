@@ -11,8 +11,12 @@ describe('YtMusicAdapter capability contract', () => {
       availability: false,
       playback: false,
       download: false,
+      albums: true,
       artists: true,
+      playlists: true,
+      videos: true,
       charts: true,
+      moods: true,
     });
   });
 
