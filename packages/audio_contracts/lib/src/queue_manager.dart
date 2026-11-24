@@ -59,6 +59,53 @@ class QueueManager {
 
   int get length => _entries.length;
 
+  /// Read-only stable order for serialization; stream URLs are never stored.
+  List<QueueEntry> get entries => List.unmodifiable(_entries);
+  List<String> get shuffledOrder => List.unmodifiable(_shuffledOrder);
+
+  /// Restores the same queue without starting an unauthorized media source.
+  void restore(
+    List<QueueEntry> entries, {
+    required String currentEntryId,
+    required RepeatMode repeat,
+    required bool shuffleEnabled,
+    List<String> shuffledOrder = const [],
+  }) {
+    final ids = entries.map((e) => e.entryId).toSet();
+    final index = entries.indexWhere((e) => e.entryId == currentEntryId);
+    if (entries.isEmpty || ids.length != entries.length || index < 0) {
+      throw ArgumentError('INVALID_QUEUE_SNAPSHOT');
+    }
+    _entries
+      ..clear()
+      ..addAll(entries);
+    _history.clear();
+    _currentIndex = index;
+    repeatMode = repeat;
+    shuffle = shuffleEnabled;
+    if (shuffle &&
+        shuffledOrder.length == entries.length &&
+        shuffledOrder.toSet().length == ids.length &&
+        shuffledOrder.toSet().containsAll(ids)) {
+      _shuffledOrder = List.of(shuffledOrder);
+    } else {
+      _shuffledOrder = [];
+      _rebuildShuffle();
+    }
+    onQueueChanged?.call();
+  }
+
+  /// Explicit Stop and account switches must not leak prior queue modes.
+  void reset() {
+    _entries.clear();
+    _history.clear();
+    _currentIndex = null;
+    repeatMode = RepeatMode.off;
+    shuffle = false;
+    _shuffledOrder = [];
+    onQueueChanged?.call();
+  }
+
   // ------------------------------------------------------------------
   // Mutations
   // ------------------------------------------------------------------

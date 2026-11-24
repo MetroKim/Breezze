@@ -290,6 +290,9 @@ class PlayerController extends Notifier<PlayerState> {
       // Ignore events emitted by the previous media item while the new
       // source is being resolved/prepared.
       if (state.playbackState == PlaybackState.idle ||
+          (_activeSource == null &&
+              state.playbackState == PlaybackState.paused &&
+              engineState == PlaybackState.idle) ||
           state.playbackState == PlaybackState.resolving ||
           state.playbackState == PlaybackState.loading ||
           state.playbackState == PlaybackState.transitioning) {
@@ -422,7 +425,7 @@ class PlayerController extends Notifier<PlayerState> {
     final currentTrackId = state.currentTrack?.id;
     if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
     await _closePlaybackSession();
-    _queue.clear(keepCurrent: false);
+    _queue.reset();
     _trackInfos.clear();
     _activeSource = null;
     _machine.dispatch(StopRequested(requestId: requestId));
@@ -463,6 +466,11 @@ class PlayerController extends Notifier<PlayerState> {
     if (activeSource != null && activeSource.isExpired && currentTrack != null) {
       // Provider grants are short-lived. Resolve a fresh grant instead of
       // attempting to resume a stale URL after a long pause/background.
+      await _resolveAndPlay(currentTrack, initialPosition: state.position);
+      return;
+    }
+    if (activeSource == null && currentTrack != null) {
+      // A restored queue contains metadata only, never an old signed URL.
       await _resolveAndPlay(currentTrack, initialPosition: state.position);
       return;
     }
@@ -656,6 +664,133 @@ class PlayerController extends Notifier<PlayerState> {
 
   /// Read-only metadata lookup for queue and playlist surfaces.
   TrackInfo? trackInfoFor(String trackId) => _trackInfoFor(trackId);
+
+  /// A versioned account-local queue snapshot containing metadata only.
+  /// Never persist source URLs, grants, server-session IDs or local paths.
+  Map<String, dynamic>? exportQueueSnapshot() {
+    final current = state.currentTrack;
+    final selected = _queue.current;
+    final entries = _queue.entries;
+    if (current == null || selected == null || entries.length > 200 ||
+        entries.any((e) => e.trackId.startsWith('device:') ||
+            !canQueueTrackId(e.trackId) ||
+            _trackInfos[e.trackId]?.localFilePath != null)) {
+      return null;
+    }
+    return {
+      'v': 1,
+      'selected': selected.entryId,
+      'repeat': _queue.repeatMode.name,
+      'shuffle': _queue.shuffle,
+      'shuffledOrder': _queue.shuffledOrder,
+      'positionMs': state.position.inMilliseconds,
+      'entries': [
+        for (final e in entries)
+          {
+            'id': e.entryId,
+            'track': e.trackId,
+            'origin': e.origin,
+            'context': e.sourceContext,
+            'collection': e.sourceCollectionId,
+            'insertedAtMs': e.insertedAtMs,
+            'version': e.trackVersion,
+          }
+      ],
+      'tracks': [
+        for (final id in entries.map((e) => e.trackId).toSet())
+          {
+            'id': id,
+            'title': _trackInfos[id]?.title,
+            'artist': _trackInfos[id]?.artist,
+            'durationMs': _trackInfos[id]?.duration.inMilliseconds ?? 0,
+          },
+      ],
+    };
+  }
+
+  /// Restores paused metadata, not actual audio. A tap on Play must obtain
+  /// a new server grant from the regular resolver before preparing the engine.
+  bool restoreQueueSnapshot(Map<String, dynamic> snapshot) {
+    if (state.currentTrack != null || _queue.current != null ||
+        state.playbackState != PlaybackState.idle ||
+        snapshot['v'] != 1) {
+      return false;
+    }
+    try {
+      final rows = snapshot['entries'];
+      final infos = snapshot['tracks'];
+      if (rows is! List || rows.isEmpty || rows.length > 200 ||
+          infos is! List || infos.length > 200) return false;
+      final entries = <QueueEntry>[];
+      for (final row in rows) {
+        if (row is! Map) return false;
+        final id = row['id'];
+        final track = row['track'];
+        if (id is! String || id.isEmpty || id.length > 256 ||
+            track is! String || track.isEmpty || track.length > 256 ||
+            track.startsWith('device:') || !canQueueTrackId(track)) {
+          return false;
+        }
+        entries.add(QueueEntry(
+          entryId: id,
+          trackId: track,
+          origin: (row['origin'] as String?) ?? 'restored',
+          sourceContext: (row['context'] as String?) ?? 'Restored queue',
+          sourceCollectionId: row['collection'] as String?,
+          insertedAtMs: (row['insertedAtMs'] as num?)?.toInt() ?? 0,
+          trackVersion: (row['version'] as String?) ?? 'v1',
+        ));
+      }
+      final tracks = <String, TrackInfo>{};
+      for (final row in infos) {
+        if (row is! Map || row['id'] is! String) return false;
+        final id = row['id'] as String;
+        final title = row['title'];
+        final artist = row['artist'];
+        if (title is String && title.length > 512 ||
+            artist is String && artist.length > 512 ||
+            !canQueueTrackId(id)) return false;
+        final durationMs = (row['durationMs'] as num?)?.toInt() ?? 0;
+        if (durationMs < 0 || durationMs > 24 * 60 * 60 * 1000) return false;
+        tracks[id] = TrackInfo(
+          id: id,
+          title: title is String ? title : null,
+          artist: artist is String ? artist : null,
+          duration: Duration(milliseconds: durationMs),
+        );
+      }
+      final selectedId = snapshot['selected'];
+      final currentEntry = entries.where((e) => e.entryId == selectedId).firstOrNull;
+      if (currentEntry == null || !tracks.containsKey(currentEntry.trackId) ||
+          entries.any((e) => !tracks.containsKey(e.trackId))) return false;
+      final mode = RepeatMode.values.where(
+          (m) => m.name == snapshot['repeat']).firstOrNull ?? RepeatMode.off;
+      final orderRaw = snapshot['shuffledOrder'];
+      final order = orderRaw is List && orderRaw.every((x) => x is String)
+          ? orderRaw.cast<String>() : <String>[];
+      final ms = (snapshot['positionMs'] as num?)?.toInt() ?? 0;
+      if (ms < 0 || ms > 24 * 60 * 60 * 1000) return false;
+
+      _queue.restore(entries, currentEntryId: currentEntry.entryId,
+          repeat: mode, shuffleEnabled: snapshot['shuffle'] == true,
+          shuffledOrder: order);
+      _trackInfos
+        ..clear()
+        ..addAll(tracks);
+      _activeSource = null;
+      _requestGeneration++;
+      _machine.dispatch(RestorePaused(currentEntry.trackId));
+      state = state.copyWith(
+        currentTrack: tracks[currentEntry.trackId],
+        position: Duration(milliseconds: ms),
+        duration: tracks[currentEntry.trackId]!.duration,
+      );
+      return true;
+    } catch (_) {
+      // Corrupted snapshots fail closed, without activating any media URL.
+      return false;
+    }
+  }
 
   bool _isCurrentRequest(int requestId) =>
       requestId == _requestGeneration && _engine != null;

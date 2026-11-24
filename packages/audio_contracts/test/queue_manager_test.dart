@@ -191,5 +191,43 @@ void main() {
       q.advance();
       expect(changed, before + 1);
     });
+
+    test('restored shuffle keeps stable entry IDs, repeat and upcoming order', () {
+      final q = QueueManager();
+      q.replaceWith([entry('a'), entry('b'), entry('c')]);
+      q.toggleShuffle();
+      q.cycleRepeat();
+      final savedOrder = q.shuffledOrder;
+      final nextBefore = q.upNext.map((e) => e.entryId).toList();
+
+      final fresh = QueueManager();
+      fresh.restore(q.entries,
+          currentEntryId: q.current!.entryId,
+          repeat: q.repeatMode,
+          shuffleEnabled: q.shuffle,
+          shuffledOrder: savedOrder);
+      expect(fresh.current!.entryId, 'a');
+      expect(fresh.repeatMode, RepeatMode.repeatAll);
+      expect(fresh.shuffle, isTrue);
+      expect(fresh.upNext.map((e) => e.entryId).toList(), nextBefore);
+      expect(fresh.advance()!.entryId, nextBefore.first);
+
+      fresh.reset();
+      expect(fresh.length, 0);
+      expect(fresh.shuffle, isFalse);
+      expect(fresh.repeatMode, RepeatMode.off);
+    });
+
+    test('restoration refuses invalid current or duplicate entry IDs', () {
+      final q = QueueManager();
+      expect(() => q.restore([entry('a')],
+          currentEntryId: 'missing',
+          repeat: RepeatMode.off,
+          shuffleEnabled: false), throwsArgumentError);
+      expect(() => q.restore([entry('a'), entry('a')],
+          currentEntryId: 'a',
+          repeat: RepeatMode.off,
+          shuffleEnabled: false), throwsArgumentError);
+    });
   });
 }

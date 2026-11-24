@@ -283,6 +283,81 @@ void main() {
     expect(resolver.calls, 2);
   });
 
+
+  test('restored queue is paused and must resolve a new authorized URL', () async {
+    final originalResolver = _FakeResolver();
+    final originalEngine = _FakeAudioEngine();
+    final original = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(originalResolver),
+    ]);
+    addTearDown(() async {
+      original.dispose();
+      await originalEngine.dispose();
+    });
+    final player = original.read(playerControllerProvider.notifier);
+    player.attachEngine(originalEngine);
+    const first = TrackInfo(id: 'bz:jamendo:restore-1',
+        title: 'Resume this track', artist: 'Breezze QA');
+    const second = TrackInfo(id: 'bz:jamendo:restore-2',
+        title: 'Upcoming', artist: 'Breezze QA');
+    await player.playTrack(trackId: first.id, queue: const [first, second]);
+    await player.seekTo(const Duration(seconds: 36));
+    player.toggleShuffle();
+    final serialized = player.exportQueueSnapshot()!;
+    expect(serialized.toString(), isNot(contains('https://media.example')));
+    expect(serialized.toString(), isNot(contains('sessionId')));
+    expect(serialized['positionMs'], 36000);
+
+    final newResolver = _FakeResolver();
+    final newEngine = _FakeAudioEngine();
+    final fresh = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(newResolver),
+    ]);
+    addTearDown(() async {
+      fresh.dispose();
+      await newEngine.dispose();
+    });
+    final restored = fresh.read(playerControllerProvider.notifier);
+    restored.attachEngine(newEngine);
+    expect(restored.restoreQueueSnapshot(serialized), isTrue);
+    expect(restored.state.currentTrack?.title, first.title);
+    expect(restored.state.playbackState, PlaybackState.paused);
+    expect(restored.state.position, const Duration(seconds: 36));
+    expect(restored.queue.shuffle, isTrue);
+    expect(newEngine.prepareCount, 0);
+    expect(newResolver.calls, 0);
+
+    newEngine.emit(PlaybackState.idle);
+    await Future<void>.delayed(Duration.zero);
+    expect(restored.state.playbackState, PlaybackState.paused);
+
+    await restored.resume();
+    expect(newResolver.calls, 1);
+    expect(newEngine.prepareCount, 1);
+    expect(newEngine.lastSeekPosition, const Duration(seconds: 36));
+    expect(restored.state.playbackState, PlaybackState.playing);
+  });
+
+  test('queue restoration rejects metadata-only and corrupt snapshots', () {
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(_FakeResolver()),
+    ]);
+    addTearDown(container.dispose);
+    final player = container.read(playerControllerProvider.notifier);
+    final snapshot = <String, dynamic>{
+      'v': 1,
+      'selected': 'one',
+      'entries': [
+        {'id': 'one', 'track': 'bz:apple_catalog:123', 'origin': 'fake'}
+      ],
+      'tracks': [
+        {'id': 'bz:apple_catalog:123', 'title': 'Unlicensed'}
+      ],
+    };
+    expect(player.restoreQueueSnapshot(snapshot), isFalse);
+    expect(player.state.playbackState, PlaybackState.idle);
+  });
+
 }
 
 class _FakePlaybackSessionClient implements PlaybackSessionClient {
