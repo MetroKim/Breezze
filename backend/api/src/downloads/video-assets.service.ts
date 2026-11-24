@@ -40,6 +40,54 @@ export class VideoAssetsService {
     return asset;
   }
 
+  async catalog(userId: string, edgeCountry?: string) {
+    const territory = this.requireTerritory(edgeCountry);
+    const assets = await this.prisma.videoAsset.findMany({
+      where: {
+        status: 'ready',
+        mimeType: 'video/mp4',
+        track: {
+          source: 'breezze_internal',
+          territories: { some: { territory } },
+        },
+      },
+      take: 25,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        track: { select: {
+          id: true, title: true,
+          artist: { select: { name: true } },
+        } },
+      },
+    });
+    // Catalog discovery is not a playback grant. Keep only songs whose
+    // video.play rights are valid in the trusted edge territory.
+    const checked = await Promise.all(assets.map(async (asset) => {
+      const playback = await this.rights.decide({
+        userId, trackId: asset.track.id, territory, action: 'video.play',
+      });
+      if (!playback.allowed || playback.previewOnly) return null;
+      const download = await this.rights.decide({
+        userId, trackId: asset.track.id, territory, action: 'video.download',
+      });
+      return {
+        id: asset.id,
+        videoAssetId: asset.id,
+        trackId: asset.track.id,
+        title: asset.track.title,
+        artist: asset.track.artist.name,
+        downloadAvailable: download.allowed && !download.previewOnly,
+      };
+    }));
+    return {
+      source: 'Breezze licensed videos',
+      territory,
+      fetchedAt: new Date().toISOString(),
+      items: checked.filter((item) => item !== null),
+    };
+  }
+
   async playback(userId: string, assetId: string, edgeCountry?: string) {
     const territory = this.requireTerritory(edgeCountry);
     const asset = await this.asset(assetId);
