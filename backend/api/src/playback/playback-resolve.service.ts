@@ -97,8 +97,11 @@ export class PlaybackResolveService {
     });
     if (decision.previewOnly ||
         (!decision.allowed &&
-         !['NOT_AVAILABLE_IN_TERRITORY', 'NO_EXPLICIT_AUTHORIZATION']
-           .includes(decision.reason))) {
+         (dto.providerId !== 'audius' ||
+          !['NOT_AVAILABLE_IN_TERRITORY', 'NO_EXPLICIT_AUTHORIZATION']
+            .includes(decision.reason)))) {
+      // All other providers require a locally auditable full-track grant.
+      // The Audius OML exemption only proceeds to a fresh live proof.
       throw new NotAcceptableException(
         decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason,
       );
@@ -182,7 +185,12 @@ export class PlaybackResolveService {
       expiresAt: result.value.expiresAt,
       mimeType: result.value.mimeType,
       codec: result.value.codec,
-      attribution: result.attribution ?? availability.attribution ?? null,
+      // Preserve the artist's legally relevant OML notice. A provider
+      // response's generic attribution must never override the terms and
+      // source link from the live permission check.
+      attribution: publicAudiusGrant
+        ? availability.attribution!
+        : result.attribution ?? availability.attribution ?? null,
     };
   }
 }
