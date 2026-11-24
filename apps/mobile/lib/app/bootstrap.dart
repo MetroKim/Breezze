@@ -52,14 +52,19 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
   ProviderTrack _trackFromJson(Map value, {String providerId = 'youtube_music'}) {
     final trackId = value['providerTrackId'] as String? ?? '';
     final duration = value['durationSec'];
+    final isPreview = providerId == 'deezer' &&
+        RegExp(r'^[0-9]{1,20}$').hasMatch(trackId) &&
+        value['previewUrl'] is String &&
+        (value['previewUrl'] as String).isNotEmpty;
     return ProviderTrack(
-      breezzeTrackId: 'bz:$providerId:$trackId',
-      hasPreview: providerId == 'deezer' && value['previewUrl'] is String,
+      breezzeTrackId: isPreview
+          ? 'bz:deezer_preview:$trackId' : 'bz:$providerId:$trackId',
+      hasPreview: isPreview,
       providerTrackId: '$providerId:$trackId',
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
       artworkUrl: value['artworkUrl'] as String?,
-      duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+      duration: Duration(seconds: isPreview ? 30 : duration is num ? duration.toInt() : 0),
     );
   }
 

@@ -485,13 +485,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
       return;
     }
-    if (track.id.startsWith('bz:deezer:')) {
+    if (isDeezerPreview(track.id) ||
+        (track.id.startsWith('bz:deezer:') && track.hasPreview)) {
       final id = track.id.replaceFirst('bz:deezer:', 'bz:deezer_preview:');
       final preview = TrackInfo(id: id, title: track.title, artist: track.artist,
-          artworkUrl: track.artworkUrl);
+          artworkUrl: track.artworkUrl, duration: const Duration(seconds: 30));
       ref.read(playerControllerProvider.notifier).playTrack(
         trackId: id, queue: [preview], startIndex: 0, origin: 'search',
-        sourceContext: 'Deezer preview',
+        sourceContext: 'Deezer preview (up to 30 seconds)',
       );
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()));
       return;
@@ -751,8 +752,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            track.id.startsWith('bz:deezer:')
-                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer preview' : 'Deezer catalog'}'
+                                            track.id.startsWith('bz:deezer:') || isDeezerPreview(track.id)
+                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer preview (30s)' : 'Deezer catalog'}'
                                                 : track.id.startsWith('bz:youtube_music:')
                                                     ? '${track.artist} · YouTube Music'
                                                     : track.artist,
