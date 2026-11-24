@@ -1,3 +1,11 @@
+## Current music backends — 24 November 2026
+
+**YouTube Music** via `ytmusicapi` powers primary song search and track metadata, plus official music-video discovery using the visible embedded YouTube player. **Deezer** powers catalog enrichment, artist search and discographies, album lists/tracklists, global charts, recent releases with verified album dates, and official short previews for the Breezze audio engine.
+
+The public Deezer `chart/0` is global, not an official country-specific or daily chart. Full-length commercial audio is not granted by these public metadata/preview APIs; Breezze does not extract YouTube music audio, use ARL cookies, or allow media downloads without separate rights. Audius and Jamendo remain removed. Apple RSS/iTunes are no longer used by the active music discovery API.
+
+---
+
 # Breezze Discovery Provider Setup
 
 This document records the real providers used by Browse and the exact runtime configuration still required. Provider credentials belong in the backend deployment secret manager, never in Flutter, Cloudflare public variables, Git, or client-side URLs.

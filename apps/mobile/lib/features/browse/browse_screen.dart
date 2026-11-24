@@ -12,6 +12,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
+import '../../features/player/now_playing_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Browse uses live source search for genre discovery. It does not label
@@ -458,12 +459,12 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   DateTime? _catalogFetchedAt;
 
   bool get _latestSongs => widget.destination.title == 'Latest Songs';
-  bool get _appleChart => widget.destination.title == 'Charts';
+  bool get _deezerChart => widget.destination.title == 'Charts';
   bool get _dailyChart => widget.destination.title == 'Daily Top 100';
-  bool get _appleReleases => widget.destination.title == 'New Releases';
+  bool get _deezerReleases => widget.destination.title == 'New Releases';
   bool get _videoFeed => widget.destination.title == 'Music Videos';
   bool get _concertFeed => widget.destination.title == 'Upcoming Concerts';
-  bool get _liveProviderCatalog => _latestSongs || _appleChart || _dailyChart || _appleReleases || _videoFeed || _concertFeed;
+  bool get _liveProviderCatalog => _latestSongs || _deezerChart || _dailyChart || _deezerReleases || _videoFeed || _concertFeed;
 
   bool get _genre => widget.destination.title == 'Browse by Genre';
   bool get _mood => widget.destination.title == 'Moods & Activities';
@@ -505,11 +506,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
           : 'us';
       final data = _latestSongs
           ? await api.discoveryLatestSongs(country: territory)
-          : _appleReleases
+          : _deezerReleases
           ? await api.discoveryNewReleases(country: territory)
           : _dailyChart
               ? await api.discoveryDailyTop100(country: territory)
-              : _appleChart
+              : _deezerChart
                   ? await api.discoverySongsChart(country: territory)
                   : _videoFeed
                   ? await api.discoveryMusicVideos()
@@ -539,26 +540,52 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     }
   }
 
+  Future<void> _playCatalogPreview(Map<String, dynamic> item) async {
+    final trackId = item['id']?.toString() ?? '';
+    if (!RegExp(r'^[0-9]{1,20}$').hasMatch(trackId) ||
+        item['previewUrl'] is! String) return;
+    // The music resolver rechecks Deezer metadata and its trusted preview
+    // host; the cached browse URL itself is never a streaming entitlement.
+    final id = 'bz:deezer_preview:$trackId';
+    await ref.read(playerControllerProvider.notifier).playTrack(
+      trackId: id,
+      queue: [TrackInfo(
+        id: id,
+        title: item['title'] as String?,
+        artist: item['artist'] as String?,
+        artworkUrl: item['artworkUrl'] as String?,
+        duration: const Duration(seconds: 30),
+      )],
+      startIndex: 0,
+      origin: 'browse',
+      sourceContext: 'Deezer preview (up to 30 seconds)',
+    );
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => const NowPlayingScreen(),
+    ));
+  }
+
   Future<void> _openCatalogItem(Map<String, dynamic> item) async {
     final itemId = item['id']?.toString();
     final title = item['title'] as String? ?? 'Untitled';
     final artist = item['artist'] as String? ?? 'Unknown artist';
     final artwork = item['artworkUrl'] as String?;
-    if (_appleReleases && itemId != null &&
+    if (_deezerReleases && itemId != null &&
         RegExp(r'^[0-9]{1,20}$').hasMatch(itemId)) {
       Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => AppleAlbumCatalogScreen(
+        builder: (_) => DeezerAlbumCatalogScreen(
           albumId: itemId, title: title, artist: artist,
-          artworkUrl: artwork, appleUrl: item['url'] as String?,
+          artworkUrl: artwork, deezerUrl: item['url'] as String?,
         ),
       ));
       return;
     }
-    if ((_latestSongs || _appleChart || _dailyChart) && itemId != null) {
+    if ((_latestSongs || _deezerChart || _dailyChart) && itemId != null) {
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => TrackDetailScreen(
           track: TrackInfo(
-            id: 'bz:apple_catalog:$itemId',
+            id: 'bz:deezer:$itemId',
             title: title, artist: artist,
             artworkUrl: artwork, duration: Duration.zero,
           ),
@@ -712,7 +739,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: _liveProviderCatalog
-                ? _appleCatalogContent(theme)
+                ? _deezerCatalogContent(theme)
                 : _searchable
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -819,8 +846,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     );
   }
 
-  Widget _appleCatalogContent(ThemeData theme) {
-    final isReleaseFeed = _appleReleases || _latestSongs;
+  Widget _deezerCatalogContent(ThemeData theme) {
+    final isReleaseFeed = _deezerReleases || _latestSongs;
     final isVideoFeed = _videoFeed;
     final isConcertFeed = _concertFeed;
     return Column(
@@ -838,7 +865,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                 const SizedBox(height: 8),
               ],
               if (_dailyChartFallback) ...[
-                Text('Daily Top 100 is unavailable from this source. These are regional Most Played rankings, not the daily chart.',
+                Text('This is a Deezer global ranking, not a verified daily or country-specific Top 100.',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
                 const SizedBox(height: 8),
               ],
@@ -942,13 +969,22 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                 overflow: TextOverflow.ellipsis,
                               ),
                               trailing: IconButton(
-                                tooltip: isVideoFeed
+                                tooltip: !isVideoFeed && !isConcertFeed && item['previewUrl'] is String
+                                    ? 'Play Deezer preview (30 seconds)'
+                                    : isVideoFeed
                                     ? 'Watch official video'
                                     : isConcertFeed
                                         ? 'Open event details'
                                         : 'View details in Breezze',
-                                icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
-                                onPressed: () => _openCatalogItem(item),
+                                icon: BzSvgIcon(
+                                  name: !isVideoFeed && !isConcertFeed &&
+                                          item['previewUrl'] is String
+                                      ? 'play' : 'arrow-up-right',
+                                  size: 19,
+                                ),
+                                onPressed: () => !isVideoFeed && !isConcertFeed &&
+                                        item['previewUrl'] is String
+                                    ? _playCatalogPreview(item) : _openCatalogItem(item),
                               ),
                               onTap: () => _openCatalogItem(item),
                             );

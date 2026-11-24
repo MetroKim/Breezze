@@ -59,7 +59,7 @@ final _artistConcerts = FutureProvider.autoDispose.family<List<Map>, String>((re
   }).toList();
 });
 
-final _appleTrackMatchesProvider =
+final _deezerTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
   final data = await ref
       .read(authSessionProvider.notifier)
@@ -71,7 +71,7 @@ final _appleTrackMatchesProvider =
       item.map((key, value) => MapEntry(key.toString(), value))).toList();
 });
 
-final _appleAlbumTracksProvider =
+final _deezerAlbumTracksProvider =
     FutureProvider.family<Map<String, dynamic>, String>((ref, albumId) async {
   return ref
       .read(authSessionProvider.notifier)
@@ -102,7 +102,7 @@ class TrackDetailScreen extends ConsumerWidget {
     final favoriteState = ref.watch(isTrackFavoriteProvider(favoriteKey));
     final artistName = track.artist ?? 'Unknown artist';
     final trackTitle = track.title ?? 'Unknown track';
-    final appleTrackMatches = ref.watch(_appleTrackMatchesProvider('$trackTitle $artistName'));
+    final appleTrackMatches = ref.watch(_deezerTrackMatchesProvider('$trackTitle $artistName'));
     final artistTracks = relatedTracks
         .where((item) => (item.artist ?? '').trim().toLowerCase() == artistName.trim().toLowerCase())
         .toList();
@@ -299,7 +299,7 @@ class TrackDetailScreen extends ConsumerWidget {
                 appleTrackMatches.when(
                   loading: () => _CatalogSection(
                     title: 'Album',
-                    subtitle: 'Checking the Apple catalog for an exact track-to-album relationship.',
+                    subtitle: 'Checking the Deezer catalog for an exact track-to-album relationship.',
                     available: true,
                     child: const Padding(
                       padding: EdgeInsets.all(14),
@@ -308,7 +308,7 @@ class TrackDetailScreen extends ConsumerWidget {
                   ),
                   error: (_, __) => _CatalogSection(
                     title: 'Album',
-                    subtitle: 'The Apple catalog could not verify an album relationship for this track.',
+                    subtitle: 'The Deezer catalog could not verify an album relationship for this track.',
                     available: false,
                   ),
                   data: (matches) {
@@ -324,14 +324,14 @@ class TrackDetailScreen extends ConsumerWidget {
                     if (exact.isEmpty) {
                       return _CatalogSection(
                         title: 'Album',
-                        subtitle: 'No exact Apple catalog track match was found. Breezze will not infer an album from similar titles or artist names.',
+                        subtitle: 'No exact Deezer catalog track match was found. Breezze will not infer an album from similar titles or artist names.',
                         available: false,
                       );
                     }
                     final album = exact.first;
                     return _CatalogSection(
                       title: 'Verified album relationship',
-                      subtitle: 'Exact title and artist match from Apple iTunes catalog metadata.',
+                      subtitle: 'Exact title and artist match from Deezer Deezer catalog metadata.',
                       available: true,
                       child: ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -344,7 +344,7 @@ class TrackDetailScreen extends ConsumerWidget {
                           [
                             if (album['releaseDate'] is String)
                               (album['releaseDate'] as String).split('T').first,
-                            'Apple catalog',
+                            'Deezer catalog',
                           ].join(' · '),
                         ),
                         trailing: const BzSvgIcon(name: 'arrow-up-right', size: 19),
@@ -352,12 +352,12 @@ class TrackDetailScreen extends ConsumerWidget {
                           final albumId = album['albumId'];
                           if (albumId == null) return;
                           Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => AppleAlbumCatalogScreen(
+                            builder: (_) => DeezerAlbumCatalogScreen(
                               albumId: albumId.toString(),
                               title: album['albumTitle'] as String? ?? 'Unknown album',
                               artist: album['artist'] as String? ?? artistName,
                               artworkUrl: album['artworkUrl'] as String?,
-                              appleUrl: album['albumUrl'] as String?,
+                              deezerUrl: album['albumUrl'] as String?,
                             ),
                           ));
                         },
@@ -410,10 +410,10 @@ class ArtistDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
-  List<Map<String, dynamic>> _appleAlbums = [];
+  List<Map<String, dynamic>> _deezerAlbums = [];
   bool _discographyLoading = true;
   String? _discographyError;
-  String? _appleArtistId;
+  String? _deezerArtistId;
   bool _changingFollow = false;
 
   String get artist => widget.artist;
@@ -425,10 +425,10 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAppleDiscography();
+    _loadDeezerDiscography();
   }
 
-  Future<void> _loadAppleDiscography() async {
+  Future<void> _loadDeezerDiscography() async {
     try {
       final api = ref.read(authSessionProvider.notifier).api;
       final search = await api.discoveryArtistSearch(artist);
@@ -455,8 +455,8 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
       final rawAlbums = result['items'];
       if (!mounted) return;
       setState(() {
-        _appleArtistId = id.toString();
-        _appleAlbums = rawAlbums is List
+        _deezerArtistId = id.toString();
+        _deezerAlbums = rawAlbums is List
             ? rawAlbums.whereType<Map>().map((item) =>
                 item.map((key, value) => MapEntry(key.toString(), value))).toList()
             : [];
@@ -465,13 +465,13 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _discographyError = 'Apple artist catalog is temporarily unavailable.';
+        _discographyError = 'Deezer artist catalog is temporarily unavailable.';
         _discographyLoading = false;
       });
     }
   }
 
-  Future<void> _openAppleAlbum(Map<String, dynamic> album) async {
+  Future<void> _openDeezerAlbum(Map<String, dynamic> album) async {
     final rawUrl = album['url'];
     final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
     if (uri == null || uri.scheme != 'https') return;
@@ -529,7 +529,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
     final theme = Theme.of(context);
     final artistKey = canonicalArtistId != null
         ? 'catalog:$canonicalArtistId'
-        : _appleArtistId != null ? 'apple:$_appleArtistId' : null;
+        : _deezerArtistId != null ? 'apple:$_deezerArtistId' : null;
     final signedIn = ref.watch(authSessionProvider) is AuthSignedIn;
     final following = signedIn && artistKey != null
         ? ref.watch(_artistFollowing(artistKey))
@@ -554,7 +554,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: BzAmbientBackdrop(
-              // Artist pages tint from cover art (Apple Music 7.0): the
+              // Artist pages tint from cover art (Deezer Music 7.0): the
               // hero blooms from the first available artwork while the
               // tracklist below stays readable on the plain ground.
               artworkUrl: heroArtwork,
@@ -736,20 +736,20 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                   )
                 else if (_discographyError != null)
                   _CatalogSection(
-                    title: 'Apple catalog discography',
+                    title: 'Deezer catalog discography',
                     subtitle: _discographyError!,
                     available: false,
                   )
                 else
                   _CatalogSection(
-                    title: 'Apple catalog discography',
-                    subtitle: _appleArtistId == null
-                        ? 'No exact artist match was returned by Apple for this name.'
-                        : 'Albums and singles linked to the exact Apple artist record. This is Apple catalog coverage, not a guarantee of every regional release.',
-                    available: _appleAlbums.isNotEmpty,
+                    title: 'Deezer catalog discography',
+                    subtitle: _deezerArtistId == null
+                        ? 'No exact artist match was returned by Deezer for this name.'
+                        : 'Albums and singles linked to the exact Deezer artist record. This is Deezer catalog coverage, not a guarantee of every regional release.',
+                    available: _deezerAlbums.isNotEmpty,
                     child: Column(
                       children: [
-                        for (final album in _appleAlbums)
+                        for (final album in _deezerAlbums)
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: _TrackArtwork(
@@ -772,20 +772,20 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: IconButton(
-                              tooltip: 'Open release in Apple Music',
+                              tooltip: 'Open release in Deezer Music',
                               icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
-                              onPressed: () => _openAppleAlbum(album),
+                              onPressed: () => _openDeezerAlbum(album),
                             ),
                             onTap: () {
                               final albumId = album['id'];
                               if (albumId == null) return;
                               Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => AppleAlbumCatalogScreen(
+                                builder: (_) => DeezerAlbumCatalogScreen(
                                   albumId: albumId.toString(),
                                   title: album['title'] as String? ?? 'Unknown album',
                                   artist: album['artist'] as String? ?? artist,
                                   artworkUrl: album['artworkUrl'] as String?,
-                                  appleUrl: album['url'] as String?,
+                                  deezerUrl: album['url'] as String?,
                                 ),
                               ));
                             },
@@ -869,22 +869,22 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
 }
 
 
-/// Metadata-only album detail from Apple's canonical collection and track records.
+/// Deezer album detail from the public album and track API.
 /// It never turns a preview URL into a full-track playback source.
-class AppleAlbumCatalogScreen extends ConsumerWidget {
+class DeezerAlbumCatalogScreen extends ConsumerWidget {
   final String albumId;
   final String title;
   final String artist;
   final String? artworkUrl;
-  final String? appleUrl;
+  final String? deezerUrl;
 
-  const AppleAlbumCatalogScreen({
+  const DeezerAlbumCatalogScreen({
     super.key,
     required this.albumId,
     required this.title,
     required this.artist,
     this.artworkUrl,
-    this.appleUrl,
+    this.deezerUrl,
   });
 
   Future<void> _open(String? rawUrl) async {
@@ -902,7 +902,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
     final savedKey = (ownerId: ownerId, albumId: albumId);
     final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
     final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
-    final tracks = ref.watch(_appleAlbumTracksProvider(albumId));
+    final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
     return Scaffold(
       backgroundColor: theme.bzBackground,
       appBar: AppBar(
@@ -929,10 +929,10 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                       const SizedBox(height: 12),
                       Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 8),
-                      Text('Apple could not return this album tracklist.', textAlign: TextAlign.center),
+                      Text('Deezer could not return this album tracklist.', textAlign: TextAlign.center),
                       const SizedBox(height: 12),
                       OutlinedButton(
-                        onPressed: () => ref.invalidate(_appleAlbumTracksProvider(albumId)),
+                        onPressed: () => ref.invalidate(_deezerAlbumTracksProvider(albumId)),
                         child: const Text('Try again'),
                       ),
                     ],
@@ -999,7 +999,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                                 title: title,
                                 artist: artist,
                                 artworkUrl: artworkUrl,
-                                catalogUrl: appleUrl,
+                                catalogUrl: deezerUrl,
                                 genres: albumGenres,
                                 isCompilation: isCompilation,
                                 addedAt: DateTime.now().toUtc(),
@@ -1123,9 +1123,9 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                       ],
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
-                        onPressed: appleUrl == null ? null : () => _open(appleUrl),
+                        onPressed: deezerUrl == null ? null : () => _open(deezerUrl),
                         icon: const BzSvgIcon(name: 'arrow-up-right'),
-                        label: const Text('Open album in Apple Music'),
+                        label: const Text('Open album on Deezer'),
                       ),
                       const SizedBox(height: 16),
                       Container(
@@ -1136,7 +1136,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                           border: Border.all(color: theme.bzSeparator),
                         ),
                         child: Text(
-                          'Verified Apple album tracklist. iTunes preview links, when supplied, are short previews only. Full-track playback inside Breezze requires a separate provider with approved streaming rights.',
+                          'Deezer album metadata and short audio previews. These are not full recordings; full-track and offline playback require separately authorized rights.',
                           style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
                         ),
                       ),
@@ -1144,7 +1144,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                       Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 8),
                       if (items.isEmpty)
-                        Text('Apple did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                        Text('Deezer did not return tracks for this album.', style: theme.textTheme.bodyMedium)
                       else
                         for (var i = 0; i < items.length; i++)
                           ListTile(
@@ -1163,9 +1163,33 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                                   : 'Duration not supplied',
                             ),
                             trailing: IconButton(
-                              tooltip: 'Open track in Apple Music',
-                              icon: const BzSvgIcon(name: 'arrow-up-right', size: 18),
-                              onPressed: () => _open(items[i]['url'] as String?),
+                              tooltip: items[i]['previewUrl'] is String
+                                  ? 'Play Deezer preview (30 seconds)' : 'Open track on Deezer',
+                              icon: BzSvgIcon(name: items[i]['previewUrl'] is String
+                                  ? 'play' : 'arrow-up-right', size: 18),
+                              onPressed: () async {
+                                final item = items[i];
+                                final trackId = item['id']?.toString() ?? '';
+                                if (item['previewUrl'] is String &&
+                                    RegExp(r'^[0-9]{1,20}$').hasMatch(trackId)) {
+                                  final id = 'bz:deezer_preview:$trackId';
+                                  await ref.read(playerControllerProvider.notifier).playTrack(
+                                    trackId: id,
+                                    queue: [TrackInfo(
+                                      id: id,
+                                      title: item['title'] as String?,
+                                      artist: artist,
+                                      artworkUrl: artworkUrl,
+                                      duration: const Duration(seconds: 30),
+                                    )],
+                                    startIndex: 0,
+                                    origin: 'album',
+                                    sourceContext: 'Deezer preview (up to 30 seconds)',
+                                  );
+                                } else {
+                                  await _open(item['url'] as String?);
+                                }
+                              },
                             ),
                           ),
                     ],
