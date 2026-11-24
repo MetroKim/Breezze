@@ -81,8 +81,12 @@ export class YtMusicAdapter implements ProviderAdapter {
     availability: false,
     playback: false,
     download: false,
+    albums: true,
     artists: true,
+    playlists: true,
+    videos: true,
     charts: true,
+    moods: true,
   };
 
   private readonly inFlight = new Map<string, Promise<ProviderResult<unknown>>>();
