@@ -11,6 +11,8 @@ import '../../app/recent_store.dart';
 import '../../app/playlist_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../core/audio/playback_source_policy.dart';
+import '../video/open_youtube_player.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_screen.dart';
 import '../settings/account_screen.dart';
@@ -209,8 +211,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.read(playlistRefreshSignalProvider.notifier).state++;
   }
 
-  void _play(TrackInfo track, List<TrackInfo> queue, int index) {
-    ref.read(playerControllerProvider.notifier).playTrack(
+  Future<void> _play(TrackInfo track, List<TrackInfo> queue, int index) async {
+    if (isYouTubeSongId(track.id)) {
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: track.id.substring('bz:youtube_music:'.length),
+        title: track.title ?? 'YouTube Music',
+        artist: track.artist ?? 'Unknown artist',
+        artworkUrl: track.artworkUrl,
+      );
+      return;
+    }
+    await ref.read(playerControllerProvider.notifier).playTrack(
           trackId: track.id,
           queue: queue,
           startIndex: index,
