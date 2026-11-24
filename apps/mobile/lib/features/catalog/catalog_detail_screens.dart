@@ -96,6 +96,10 @@ class TrackDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final favoriteKey = (ownerId: ownerId, trackId: track.id);
+    final favoriteState = ref.watch(isTrackFavoriteProvider(favoriteKey));
     final artistName = track.artist ?? 'Unknown artist';
     final trackTitle = track.title ?? 'Unknown track';
     final appleTrackMatches = ref.watch(_appleTrackMatchesProvider('$trackTitle $artistName'));
@@ -118,24 +122,50 @@ class TrackDetailScreen extends ConsumerWidget {
     ];
     final selectedIndex = queueTracks.indexWhere((item) => item.id == track.id);
 
-    Future<void> saveToLibrary() async {
-      final auth = ref.read(authSessionProvider);
-      final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-      final favorites = ref.read(favoritesStoreProvider);
-      if (!await favorites.isFavorite(track.id, ownerId: ownerId)) {
-        await favorites.toggle(FavoriteTrack(
-          id: track.id,
-          title: trackTitle,
-          artist: artistName,
-          artworkUrl: track.artworkUrl,
-          durationMs: track.duration.inMilliseconds,
-        ), ownerId: ownerId);
-        await ref.read(outboxSyncProvider).drainIfSignedIn();
+    Future<void> toggleLibrary() async {
+      // Never apply a stale song-detail action to an account that signed out
+      // or switched while this route remained in the navigation stack.
+      final current = ref.read(authSessionProvider);
+      if ((current is AuthSignedIn ? current.userId : 'guest') != ownerId) {
+        return;
       }
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Library updated')),
-      );
+      try {
+        final saved = await ref.read(favoritesStoreProvider).toggle(
+          FavoriteTrack(
+            id: track.id,
+            title: trackTitle,
+            artist: artistName,
+            artworkUrl: track.artworkUrl,
+            durationMs: track.duration.inMilliseconds,
+          ),
+          ownerId: ownerId,
+        );
+        if (!context.mounted) return;
+        ref.invalidate(isTrackFavoriteProvider(favoriteKey));
+        ref.read(favoritesRefreshProvider.notifier).state++;
+        try {
+          await ref.read(outboxSyncProvider).drainIfSignedIn();
+        } catch (_) {
+          // The local favorite and outbox are already durable. Failed cloud
+          // delivery must not turn a successful local edit into a UI error.
+        }
+        if (!context.mounted) return;
+        final latest = ref.read(authSessionProvider);
+        if ((latest is AuthSignedIn ? latest.userId : 'guest') != ownerId) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(saved
+              ? 'Saved to Library on this device'
+              : 'Removed from Library on this device'),
+        ));
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not update Library.')),
+          );
+        }
+      }
     }
 
     return Scaffold(
@@ -201,9 +231,12 @@ class TrackDetailScreen extends ConsumerWidget {
                           ? 'Playback unavailable' : 'Play'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: saveToLibrary,
-                      icon: const BzSvgIcon(name: 'plus'),
-                      label: const Text('Add to Library'),
+                      onPressed: favoriteState.isLoading ? null : toggleLibrary,
+                      icon: BzSvgIcon(name:
+                          favoriteState.valueOrNull == true ? 'check' : 'plus'),
+                      label: Text(favoriteState.valueOrNull == true
+                          ? 'Remove from Library'
+                          : 'Add to Library'),
                     ),
                     OutlinedButton.icon(
                       onPressed: isMetadataOnlyTrackId(track.id)
