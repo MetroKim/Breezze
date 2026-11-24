@@ -414,3 +414,240 @@ def get_watch_queue(
         raise HTTPException(status_code=502, detail="YTMUSIC_WATCH_QUEUE_UNAVAILABLE") from exc
     finally:
         PROVIDER_SLOTS.release()
+
+
+# Public unauthenticated catalog surfaces. All external fields are normalized
+# to bounded metadata; never expose provider cookies, signed media URLs, raw
+# upstream payloads, account-library data or third-party entitlements.
+PLAYLIST_ID = re.compile(r"^[A-Za-z0-9_-]{10,128}$")
+MOOD_PARAMS = re.compile(r"^[A-Za-z0-9_-]{6,256}$")
+ALBUM_ID = re.compile(r"^MPRE[A-Za-z0-9_-]{6,60}$")
+
+
+def _catalog_call(action: Any) -> dict[str, Any]:
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503, detail="YTMUSIC_CAPACITY_EXCEEDED",
+            headers={"Retry-After": "2"},
+        )
+    try:
+        return action()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail="YTMUSIC_CATALOG_UPSTREAM_UNAVAILABLE"
+        ) from exc
+    finally:
+        PROVIDER_SLOTS.release()
+
+
+def _catalog_artist_names(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    return [
+        item["name"].strip()
+        for item in raw[:12]
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+        and item["name"].strip()
+    ]
+
+
+def _catalog_track(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    entry = normalize_watch_item(raw)
+    if entry is None:
+        return None
+    duration = raw.get("duration_seconds")
+    if isinstance(duration, (int, float)) and 0 <= duration < 86400:
+        entry["durationSec"] = int(duration)
+    entry["isExplicit"] = raw.get("isExplicit") is True
+    entry["isAvailable"] = raw.get("isAvailable") is not False
+    return entry
+
+
+def _catalog_playlist(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    playlist_id, title = raw.get("playlistId"), raw.get("title")
+    if not isinstance(playlist_id, str) or not PLAYLIST_ID.fullmatch(playlist_id):
+        return None
+    if not isinstance(title, str) or not title.strip():
+        return None
+    return {
+        "playlistId": playlist_id,
+        "title": title.strip(),
+        "artworkUrl": _safe_artwork(raw),
+    }
+
+
+def _catalog_album(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    album_id, title = raw.get("browseId"), raw.get("title")
+    if not isinstance(album_id, str) or not ALBUM_ID.fullmatch(album_id):
+        return None
+    if not isinstance(title, str) or not title.strip():
+        return None
+    return {
+        "albumId": album_id,
+        "title": title.strip(),
+        "artists": _catalog_artist_names(raw.get("artists")),
+        "artworkUrl": _safe_artwork(raw),
+        "year": str(raw["year"]) if isinstance(raw.get("year"), (int, str)) else None,
+    }
+
+
+@app.get("/suggestions")
+def get_suggestions(
+    q: str = Query(min_length=2, max_length=120),
+    limit: int = Query(default=10, ge=1, le=10),
+) -> dict[str, Any]:
+    def query() -> dict[str, Any]:
+        raw = YTMusic().get_search_suggestions(q.strip())
+        if not isinstance(raw, list):
+            raise HTTPException(status_code=502, detail="YTMUSIC_INVALID_SUGGESTIONS")
+        return {
+            "source": "youtube_music",
+            "suggestions": [
+                candidate.strip() for candidate in raw[:limit]
+                if isinstance(candidate, str) and candidate.strip()
+            ],
+        }
+    return _catalog_call(query)
+
+
+@app.get("/albums/{album_id}")
+def get_album_catalog(album_id: str) -> dict[str, Any]:
+    if not ALBUM_ID.fullmatch(album_id):
+        raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_ALBUM_ID")
+    def query() -> dict[str, Any]:
+        raw = YTMusic().get_album(album_id)
+        if not isinstance(raw, dict) or not isinstance(raw.get("title"), str):
+            raise HTTPException(status_code=404, detail="YTMUSIC_ALBUM_NOT_FOUND")
+        tracks = raw.get("tracks") or []
+        return {
+            "source": "youtube_music",
+            "album": {
+                "albumId": album_id,
+                "title": raw["title"].strip(),
+                "artists": _catalog_artist_names(raw.get("artists")),
+                "artworkUrl": _safe_artwork(raw),
+                "year": str(raw["year"]) if isinstance(raw.get("year"), (str, int)) else None,
+                "tracks": [
+                    item for row in tracks[:100]
+                    if (item := _catalog_track(row)) is not None
+                ] if isinstance(tracks, list) else [],
+            },
+            "playbackAvailable": False,
+        }
+    return _catalog_call(query)
+
+
+@app.get("/playlists/{playlist_id}")
+def get_public_playlist_catalog(
+    playlist_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict[str, Any]:
+    if not PLAYLIST_ID.fullmatch(playlist_id):
+        raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_PLAYLIST_ID")
+    def query() -> dict[str, Any]:
+        raw = YTMusic().get_playlist(playlist_id, limit=limit)
+        if not isinstance(raw, dict) or not isinstance(raw.get("title"), str):
+            raise HTTPException(status_code=404, detail="YTMUSIC_PLAYLIST_NOT_FOUND")
+        tracks = raw.get("tracks") or []
+        return {
+            "source": "youtube_music",
+            "playlist": {
+                "playlistId": playlist_id,
+                "title": raw["title"].strip(),
+                "artworkUrl": _safe_artwork(raw),
+                "tracks": [
+                    item for row in tracks[:limit]
+                    if (item := _catalog_track(row)) is not None
+                ] if isinstance(tracks, list) else [],
+            },
+            "playbackAvailable": False,
+        }
+    return _catalog_call(query)
+
+
+@app.get("/moods")
+def get_mood_catalog() -> dict[str, Any]:
+    def query() -> dict[str, Any]:
+        raw = YTMusic().get_mood_categories()
+        if not isinstance(raw, dict):
+            raise HTTPException(status_code=502, detail="YTMUSIC_INVALID_MOODS")
+        sections = []
+        for section, categories in list(raw.items())[:12]:
+            if not isinstance(section, str) or not isinstance(categories, list):
+                continue
+            items = [
+                {"title": row["title"].strip(), "params": row["params"]}
+                for row in categories[:30] if isinstance(row, dict)
+                and isinstance(row.get("title"), str) and row["title"].strip()
+                and isinstance(row.get("params"), str)
+                and MOOD_PARAMS.fullmatch(row["params"])
+            ]
+            if items:
+                sections.append({"title": section, "categories": items})
+        return {"source": "youtube_music", "sections": sections}
+    return _catalog_call(query)
+
+
+@app.get("/moods/playlists")
+def get_mood_playlist_catalog(
+    params: str = Query(min_length=6, max_length=256),
+    limit: int = Query(default=20, ge=1, le=25),
+) -> dict[str, Any]:
+    if not MOOD_PARAMS.fullmatch(params):
+        raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_MOOD_PARAMS")
+    def query() -> dict[str, Any]:
+        raw = YTMusic().get_mood_playlists(params)
+        if not isinstance(raw, list):
+            raise HTTPException(status_code=502, detail="YTMUSIC_INVALID_MOOD_PLAYLISTS")
+        return {
+            "source": "youtube_music",
+            "playlists": [
+                item for row in raw[:limit]
+                if (item := _catalog_playlist(row)) is not None
+            ],
+        }
+    return _catalog_call(query)
+
+
+@app.get("/explore")
+def get_explore_catalog() -> dict[str, Any]:
+    def query() -> dict[str, Any]:
+        raw = YTMusic().get_explore()
+        if not isinstance(raw, dict):
+            raise HTTPException(status_code=502, detail="YTMUSIC_INVALID_EXPLORE")
+        releases = raw.get("new_releases") or []
+        new_videos = raw.get("new_videos") or []
+        trending = raw.get("trending") or {}
+        trending_rows = trending.get("items") if isinstance(trending, dict) else []
+        top_songs = raw.get("top_songs") or {}
+        ranked_rows = top_songs.get("items") if isinstance(top_songs, dict) else []
+        return {
+            "source": "youtube_music",
+            "newReleases": [
+                item for row in releases[:30]
+                if (item := _catalog_album(row)) is not None
+            ] if isinstance(releases, list) else [],
+            "newVideos": [
+                item for row in new_videos[:30]
+                if (item := normalize_video(row)) is not None
+            ] if isinstance(new_videos, list) else [],
+            "trending": [
+                item for row in trending_rows[:30]
+                if (item := _catalog_track(row)) is not None
+            ] if isinstance(trending_rows, list) else [],
+            "topSongsAvailable": bool(isinstance(ranked_rows, list) and ranked_rows),
+            "topSongs": [
+                item for row in ranked_rows[:30]
+                if (item := _catalog_track(row)) is not None
+            ] if isinstance(ranked_rows, list) else [],
+            "playbackAvailable": False,
+        }
+    return _catalog_call(query)
