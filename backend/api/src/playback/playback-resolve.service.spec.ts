@@ -294,6 +294,17 @@ describe('PlaybackResolveService', () => {
       attribution: 'Explicit license',
     });
     const adapter = validAdapter();
+    // The successful fixture must not outlive the license: a longer
+    // provider URL is now correctly rejected by the production resolver.
+    adapter.resolvePlayback.mockResolvedValue({
+      kind: 'ok',
+      value: {
+        url: 'https://api.audius.co/v1/tracks/track123/stream',
+        expiresAt: new Date(Date.now() + 30_000),
+        mimeType: 'audio/mpeg',
+      },
+      attribution: 'Audius public catalogue',
+    });
     providers.get.mockReturnValue(adapter);
 
     await service.resolveProvider('user-1', providerRequest, 'TZ');
