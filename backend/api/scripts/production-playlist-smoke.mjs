@@ -101,13 +101,23 @@ async function run() {
   const artistsPath = '/api/v1/library/artists';
   status((await request('GET', artistsPath)).status, 401,
     'artist list requires authentication');
-  const follow = await request('POST', artistPath, owner.token, {
-    displayName: 'Breezze synthetic artist',
-  });
-  status(follow.status, 201, 'follow artist');
-  status((await request('POST', artistPath, secondToken, {
-    displayName: 'Breezze synthetic artist',
-  })).status, 201, 'repeat follow is idempotent');
+  // The race caught by PostgreSQL CI must also pass against the deployed
+  // API under simultaneous requests from two independently issued sessions.
+  const concurrentFollows = await Promise.all([
+    request('POST', artistPath, owner.token, {
+      displayName: 'Breezze synthetic artist',
+    }),
+    request('POST', artistPath, secondToken, {
+      displayName: 'Breezze synthetic artist',
+    }),
+    request('POST', artistPath, owner.token, {
+      displayName: 'Breezze synthetic artist',
+    }),
+  ]);
+  for (const response of concurrentFollows) {
+    status(response.status, 201, 'concurrent artist follow');
+  }
+  report('Concurrent artist follows are idempotent under separate sessions');
   const artistList = await request('GET', artistsPath, secondToken);
   status(artistList.status, 200, 'second device followed artists');
   assert.equal(artistList.data.items.length, 1);
