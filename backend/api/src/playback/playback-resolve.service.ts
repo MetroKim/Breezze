@@ -27,6 +27,19 @@ export class PlaybackResolveService {
     edgeCountry?: string,
   ) {
     const territory = this.requireTerritory(edgeCountry);
+    // A catalogue metadata record cannot authorize a Breezze-hosted media URL.
+    // External providers must use the provider-specific resolver and deliver
+    // their own authorized playback source; an internal rights row alone is
+    // not proof that any audio bytes exist in Breezze's media storage.
+    const track = await this.prisma.track.findUnique({
+      where: { id: dto.trackId },
+      select: { source: true },
+    });
+    if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
+    if (track.source === 'youtube_music' || track.source === 'deezer') {
+      throw new NotAcceptableException('USE_PROVIDER_PLAYBACK_RESOLVER');
+    }
+
     const decision = await this.rights.decide({
       userId,
       trackId: dto.trackId,
