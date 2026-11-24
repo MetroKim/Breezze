@@ -482,6 +482,24 @@ class BreezzeApi {
         if (requestedQuality != null) 'requestedQuality': requestedQuality,
       });
 
+  // Licensed Breezze R2 video assets only. YouTube Music IDs cannot be
+  // used here and never produce downloadable media grants.
+  Future<Map<String, dynamic>> videoPlayback(String videoAssetId) =>
+      _get('/videos/${Uri.encodeComponent(videoAssetId)}/playback');
+
+  Future<Map<String, dynamic>> authorizeVideoDownload(String videoAssetId) =>
+      _post('/videos/${Uri.encodeComponent(videoAssetId)}/download', const {});
+
+  Future<Map<String, dynamic>> revalidateVideoDownload(String videoAssetId) =>
+      _post('/videos/${Uri.encodeComponent(videoAssetId)}/download/revalidate', const {});
+
+  Future<Map<String, dynamic>> videoDownloads() =>
+      _get('/videos/downloads');
+
+  Future<void> removeVideoDownload(String videoAssetId) async {
+    await _delete('/videos/${Uri.encodeComponent(videoAssetId)}/download');
+  }
+
   Future<Map<String, dynamic>> authorizeDownload({
     required String trackId,
     required String territory,
