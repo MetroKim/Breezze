@@ -419,6 +419,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
     ref.listen<int>(playlistRefreshSignalProvider, (previous, next) => _refresh());
     ref.listen<int>(savedAlbumRefreshProvider, (previous, next) => _refresh());
+    ref.listen<int>(favoritesRefreshProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
     final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
@@ -1080,10 +1081,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     if (action == 'playlists') {
                       await _addFavoriteToPlaylists(fav);
                     } else if (action == 'remove') {
-                      await ref.read(favoritesStoreProvider)
-                          .toggle(fav, ownerId: _ownerId);
-                      await ref.read(outboxSyncProvider).drainIfSignedIn();
-                      _refresh();
+                      final owner = _ownerId;
+                      try {
+                        await ref.read(favoritesStoreProvider)
+                            .toggle(fav, ownerId: owner);
+                        if (!mounted || !_ownerStillActive(owner)) return;
+                        ref.read(favoritesRefreshProvider.notifier).state++;
+                        try {
+                          await ref.read(outboxSyncProvider).drainIfSignedIn();
+                        } catch (_) {
+                          // Offline removal stays in the durable owner outbox.
+                        }
+                      } catch (_) {
+                        if (mounted && _ownerStillActive(owner)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content:
+                                Text('Could not remove saved song.')),
+                          );
+                        }
+                      }
                     }
                   },
                   itemBuilder: (context) => [
