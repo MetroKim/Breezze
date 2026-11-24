@@ -272,12 +272,15 @@ class _YouTubeMusicClientScreenState
     }
   }
 
-  Future<void> _openYoutubePlaylist(Map<String, dynamic> item) async {
+  void _openYoutubePlaylist(Map<String, dynamic> item) {
     final id = item['playlistId'];
     if (!_ytPlaylistId(id)) return;
-    final uri = Uri.https('www.youtube.com', '/playlist',
-      {'list': id as String});
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _YtConnectedPlaylistScreen(
+        playlistId: id as String,
+        title: item['title'] as String? ?? 'Your YouTube playlist',
+      ),
+    ));
   }
 
   Widget _accountSection(ThemeData theme) {
@@ -360,7 +363,7 @@ class _YouTubeMusicClientScreenState
                 ),
               for (final playlist in _accountPlaylists)
                 _ytRow(playlist,
-                  subtitle: 'YouTube playlist • opens on YouTube',
+                  subtitle: 'Your YouTube playlist • read-only',
                   onTap: _ytPlaylistId(playlist['playlistId'])
                       ? () => _openYoutubePlaylist(playlist) : null,
                 ),
@@ -688,4 +691,117 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
                 ),
     );
   }
+}
+
+
+/// Authorized playlists are obtained through the YouTube Data API; do not
+/// treat them as a complete YouTube Music library or as download grants.
+class _YtConnectedPlaylistScreen extends ConsumerStatefulWidget {
+  final String playlistId;
+  final String title;
+
+  const _YtConnectedPlaylistScreen({
+    required this.playlistId,
+    required this.title,
+  });
+
+  @override
+  ConsumerState<_YtConnectedPlaylistScreen> createState() =>
+      _YtConnectedPlaylistScreenState();
+}
+
+class _YtConnectedPlaylistScreenState
+    extends ConsumerState<_YtConnectedPlaylistScreen> {
+  List<Map<String, dynamic>>? _items;
+  String? _error;
+  bool _hasMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
+  }
+
+  Future<void> _load() async {
+    final current = ref.read(authSessionProvider);
+    if (current is! AuthSignedIn) return;
+    setState(() {
+      _items = null;
+      _error = null;
+    });
+    try {
+      final response = await ref.read(authSessionProvider.notifier).api
+          .youtubeAccountPlaylistItems(widget.playlistId);
+      if (response['source'] != 'youtube_data_api' ||
+          response['playlistId'] != widget.playlistId) {
+        throw const FormatException('UNTRUSTED_YOUTUBE_PLAYLIST');
+      }
+      final items = _ytRows(response['items']);
+      if (!mounted) return;
+      final latest = ref.read(authSessionProvider);
+      if (latest is! AuthSignedIn || latest.userId != current.userId) return;
+      setState(() {
+        _items = items;
+        _hasMore = response['hasMore'] == true;
+      });
+    } catch (_) {
+      if (mounted) setState(
+        () => _error = 'Your YouTube playlist is unavailable. Retry.',
+      );
+    }
+  }
+
+  Future<void> _watch(Map<String, dynamic> item) async {
+    final videoId = item['videoId'];
+    if (!_ytVideoId(videoId)) return;
+    await openYouTubePlayer(
+      context: context,
+      ref: ref,
+      videoId: videoId as String,
+      title: item['title'] as String? ?? 'YouTube video',
+      artist: _ytArtist(item),
+      artworkUrl: item['artworkUrl'] as String?,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.title)),
+    body: _error != null
+        ? Center(child: OutlinedButton(
+            onPressed: _load,
+            child: Text(_error!),
+          ))
+        : _items == null
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                children: [
+                  const ListTile(
+                    title: Text('Your YouTube playlist'),
+                    subtitle: Text(
+                      'Read-only • videos use the official YouTube player. '
+                      'Offline YouTube downloads are not available.',
+                    ),
+                  ),
+                  if (_items!.isEmpty)
+                    const ListTile(title: Text('No videos in this playlist')),
+                  for (final item in _items!)
+                    _ytRow(item,
+                      subtitle: _ytArtist(item),
+                      actionLabel: 'Open official YouTube player',
+                      onTap: _ytVideoId(item['videoId'])
+                          ? () => _watch(item) : null,
+                    ),
+                  if (_hasMore)
+                    const ListTile(
+                      title: Text('More playlist items available'),
+                      subtitle: Text(
+                        'Showing the first 50 items. Pagination is not yet available.',
+                      ),
+                    ),
+                ],
+              ),
+  );
 }
