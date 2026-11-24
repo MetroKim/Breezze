@@ -18,16 +18,18 @@ void main() {
     await api.youtubeAccountStatus();
     await api.youtubeAccountStart();
     await api.youtubeAccountPlaylists();
+    await api.youtubeAccountPlaylistItems('OLAK5uy_abcdefghij');
     await api.youtubeAccountDisconnect();
 
     expect(requests.map((r) => r.url.path).toList(), [
       '/api/v1/youtube-account/status',
       '/api/v1/youtube-account/start',
       '/api/v1/youtube-account/playlists',
+      '/api/v1/youtube-account/playlists/OLAK5uy_abcdefghij/items',
       '/api/v1/youtube-account/connection',
     ]);
     expect(requests.map((r) => r.method).toList(),
-        ['GET', 'POST', 'GET', 'DELETE']);
+        ['GET', 'POST', 'GET', 'GET', 'DELETE']);
     expect(requests.every((r) =>
         r.headers['Authorization'] == 'Bearer breezze-session-token'), isTrue);
     expect(requests.every((r) =>
