@@ -142,7 +142,12 @@ void main() {
     );
     await tester.pump();
 
-    final downloadButton = tester.widget<IconButton>(find.byTooltip('Download'));
+    final downloadButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Download'),
+        matching: find.byType(IconButton),
+      ),
+    );
     expect(downloadButton.onPressed, isNull);
 
     await tester.tap(find.text('Metadata only'));
