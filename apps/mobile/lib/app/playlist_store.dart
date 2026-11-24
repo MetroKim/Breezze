@@ -66,6 +66,11 @@ class _PlaylistDocument {
 /// No second playlist database: playlist data and its pending edit are
 /// committed together by temp-file rename, and replayed in operation order.
 class PlaylistStore {
+  PlaylistStore({Future<Directory> Function()? documentsDirectory})
+      : _documentsDirectory =
+            documentsDirectory ?? getApplicationDocumentsDirectory;
+
+  final Future<Directory> Function() _documentsDirectory;
   static Future<void> _pending = Future<void>.value();
   static final Set<String> _syncingOwners = <String>{};
   static final _uuidPattern = RegExp(
@@ -88,7 +93,7 @@ class PlaylistStore {
     if (safeOwner.isEmpty) {
       throw ArgumentError.value(ownerId, 'ownerId', 'must be non-empty');
     }
-    final base = await getApplicationDocumentsDirectory();
+    final base = await _documentsDirectory();
     final directory = Directory('${base.path}/playlists/$safeOwner');
     await directory.create(recursive: true);
     return directory;
@@ -538,10 +543,12 @@ class PlaylistStore {
     required bool Function() ownerStillActive,
   }) async {
     if (ownerId == 'guest' || !ownerStillActive() ||
+        api.accessToken == null || api.accessToken!.isEmpty ||
         !_syncingOwners.add(ownerId)) return false;
+    final issuedForToken = api.accessToken;
     try {
       await _adoptLegacyDrafts(ownerId);
-      while (ownerStillActive()) {
+      while (ownerStillActive() && api.accessToken == issuedForToken) {
         final doc = await _read(ownerId);
         if (doc.pending.isEmpty) return true;
         final operation = doc.pending.first;
@@ -552,7 +559,11 @@ class PlaylistStore {
           // another device changed playlist membership meanwhile.
           return false;
         }
-        if (!ownerStillActive()) return false;
+        // Switching sessions (even mid-request) must not acknowledge or
+        // replay an operation under a different bearer token.
+        if (!ownerStillActive() || api.accessToken != issuedForToken) {
+          return false;
+        }
         await _serialize(() async {
           final current = await _read(ownerId);
           if (current.pending.isNotEmpty &&
