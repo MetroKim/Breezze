@@ -8,6 +8,11 @@ on:
       - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
       - apps/mobile/lib/core/api/breezze_api.dart
       - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
+      - apps/mobile/integration_test/native_playback_on_emulator_test.dart
+      - apps/mobile/lib/features/player/player_controller.dart
+      - apps/mobile/lib/core/audio/audio_service_bridge.dart
+      - apps/mobile/lib/core/audio/playback_queue_store.dart
+      - packages/audio_contracts/lib/src/queue_manager.dart
       - apps/mobile/pubspec.yaml
       - apps/mobile/lib/app/playlist_store.dart
       - apps/mobile/lib/app/saved_album_store.dart
@@ -94,4 +99,4 @@ jobs:
           emulator-boot-timeout: 600
           script: |
             flutter devices
-            cd apps/mobile && flutter test integration_test/playlist_sync_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev && flutter test integration_test/artist_pin_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+            cd apps/mobile && flutter test integration_test/playlist_sync_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev && flutter test integration_test/artist_pin_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev && flutter test integration_test/native_playback_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev

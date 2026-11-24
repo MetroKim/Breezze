@@ -8,6 +8,11 @@ on:
       - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
       - apps/mobile/lib/core/api/breezze_api.dart
       - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
+      - apps/mobile/integration_test/native_playback_on_emulator_test.dart
+      - apps/mobile/lib/features/player/player_controller.dart
+      - apps/mobile/lib/core/audio/audio_service_bridge.dart
+      - apps/mobile/lib/core/audio/playback_queue_store.dart
+      - packages/audio_contracts/lib/src/queue_manager.dart
       - apps/mobile/lib/app/playlist_store.dart
       - apps/mobile/lib/app/saved_album_store.dart
       - apps/mobile/lib/app/bootstrap.dart
@@ -123,6 +128,7 @@ jobs:
           for test_file in (
               "integration_test/playlist_sync_on_emulator_test.dart",
               "integration_test/artist_pin_on_emulator_test.dart",
+              "integration_test/native_playback_on_emulator_test.dart",
           ):
               for attempt in (1, 2):
                   print(f"iPhone acceptance: {test_file}, attempt {attempt}", flush=True)
