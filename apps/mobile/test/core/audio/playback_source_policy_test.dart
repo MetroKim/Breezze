@@ -43,10 +43,10 @@ void main() {
       expect(canRequestOfflineDownload('catalog-uuid'), isTrue);
     });
 
-    test('YouTube song IDs queue only via the separately rights-gated resolver', () {
+    test('YouTube music IDs remain official-video-only, never native Deezer audio queue', () {
       const id = 'bz:youtube_music:dQw4w9WgXcQ';
       expect(isYouTubeSongId(id), isTrue);
-      expect(canQueueTrackId(id), isTrue);
+      expect(canQueueTrackId(id), isFalse);
       expect(canRequestOfflineDownload(id), isFalse);
       expect(isYouTubeSongId('bz:youtube_music:invalid'), isFalse);
       expect(isYouTubeSongId('bz:deezer:dQw4w9WgXcQ'), isFalse);
