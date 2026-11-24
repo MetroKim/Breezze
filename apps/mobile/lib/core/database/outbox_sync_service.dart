@@ -23,16 +23,26 @@ class OutboxSyncService {
     try {
       final outbox = _ref.read(syncOutboxDaoProvider);
       final api = _ref.read(authSessionProvider.notifier).api;
-
       final ownerId = auth.userId;
-      final ops = await outbox.pending(ownerId: ownerId);
+      final issuedForToken = api.accessToken;
+      if (issuedForToken == null || issuedForToken.isEmpty) return;
       final ownerPrefix = '$ownerId::';
-      for (final op in ops) {
-        if (!_isActiveOwner(ownerId)) return;
-        if (!op.trackId.startsWith(ownerPrefix)) continue;
+
+      bool sessionCurrent() =>
+          _isActiveOwner(ownerId) && api.accessToken == issuedForToken;
+
+      // Read one operation at a time. A local removal can be added while an
+      // earlier network request is in flight; a fixed initial snapshot would
+      // leave that compensating removal pending until a later user action.
+      while (sessionCurrent()) {
+        final ops = await outbox.pending(ownerId: ownerId);
+        if (!sessionCurrent() || ops.isEmpty) return;
+        final op = ops.first;
+        if (!op.trackId.startsWith(ownerPrefix)) return;
+
         final externalId = op.trackId.substring(ownerPrefix.length);
         final resolution = await _resolveCatalogId(api, externalId, ownerId);
-        if (!_isActiveOwner(ownerId)) return;
+        if (!sessionCurrent()) return;
         final catalogId = resolution.catalogId;
         if (catalogId == null) {
           // Only malformed/orphaned local operations are discarded. A
@@ -44,8 +54,11 @@ class OutboxSyncService {
           return;
         }
 
+        if (!sessionCurrent()) return;
         final ok = await _apply(api, op.op, catalogId, ownerId);
-        if (!ok) return;
+        // An account switch or token rotation during the network call must
+        // never acknowledge an operation issued by the previous session.
+        if (!ok || !sessionCurrent()) return;
         await outbox.remove(op.id);
       }
     } finally {

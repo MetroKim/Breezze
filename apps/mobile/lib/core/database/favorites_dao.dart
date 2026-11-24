@@ -70,12 +70,15 @@ class FavoritesDao {
               durationMs: Value(durationMs),
             ),
           );
-      await _db.into(_db.syncOutbox).insert(
-            SyncOutboxCompanion.insert(
-              op: 'favorite.add',
-              trackId: storageId,
-            ),
-          );
+      // Guest favorites never leave the device.
+      if (ownerId != 'guest') {
+        await _db.into(_db.syncOutbox).insert(
+              SyncOutboxCompanion.insert(
+                op: 'favorite.add',
+                trackId: storageId,
+              ),
+            );
+      }
     });
   }
 
@@ -86,19 +89,14 @@ class FavoritesDao {
             ..where((t) => t.id.equals(storageId)))
           .go();
 
-      // If the add has not reached the server yet, cancel it instead of
-      // queuing a remove that would need metadata already deleted locally.
-      final pendingAdds = await (_db.select(_db.syncOutbox)
-            ..where((t) =>
-                t.op.equals('favorite.add') &
-                t.trackId.equals(storageId)))
-          .get();
-      if (pendingAdds.isNotEmpty) {
-        final ids = pendingAdds.map((row) => row.id).toList();
-        await (_db.delete(_db.syncOutbox)..where((t) => t.id.isIn(ids))).go();
-        return;
-      }
+      if (ownerId == 'guest') return;
 
+      // Always preserve the compensating removal. A queued add may already
+      // have been sent to the backend while the user removes this favorite.
+      // Cancelling that add here would leave a phantom cloud favorite.
+      // The ordered outbox replays add then remove; if the unsent add cannot
+      // resolve after its local metadata was deleted, both operations safely
+      // become no-ops unless a canonical mapping was already established.
       await _db.into(_db.syncOutbox).insert(
             SyncOutboxCompanion.insert(
               op: 'favorite.remove',
