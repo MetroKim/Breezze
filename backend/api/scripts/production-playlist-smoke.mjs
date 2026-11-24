@@ -174,6 +174,45 @@ async function run() {
   assert.notEqual(canonicalIds[0], canonicalIds[1]);
   report('Two real songs resolved to distinct canonical track IDs');
 
+  // Library/Favorites acceptance uses the SAME two disposable identities
+  // and real catalog IDs. Never access or mutate real listeners' records.
+  const favoritesRoute = '/api/v1/library/favorites';
+  status((await request('GET', favoritesRoute)).status, 401,
+    'unsigned cloud favorites');
+  const favoriteId = canonicalIds[0];
+  status((await request('POST', favoritesRoute, owner.token,
+    { trackId: favoriteId })).status, 201, 'first-session favorite');
+  status((await request('POST', favoritesRoute, secondToken,
+    { trackId: favoriteId })).status, 201, 'idempotent second-session favorite');
+  const onSecondDevice = await request('GET', favoritesRoute, secondToken);
+  status(onSecondDevice.status, 200, 'second-session cloud favorites');
+  assert.equal(onSecondDevice.data.filter(row => row.trackId === favoriteId).length, 1);
+  assert.equal(onSecondDevice.data.find(row => row.trackId === favoriteId)
+    ?.track?.title, firstTwo[0].title);
+  report('Favorites add, idempotency and real track hydration across sessions');
+
+  const otherBefore = await request('GET', favoritesRoute, stranger.token);
+  status(otherBefore.status, 200, 'other-account cloud favorites');
+  assert.equal(otherBefore.data.some(row => row.trackId === favoriteId), false);
+  status((await request('DELETE', favoritesRoute + '/' + favoriteId,
+    stranger.token)).status, 200, 'foreign favorite removal is owner-scoped');
+  assert.equal((await request('GET', favoritesRoute, owner.token))
+    .data.some(row => row.trackId === favoriteId), true);
+  status((await request('POST', favoritesRoute, stranger.token,
+    { trackId: favoriteId })).status, 201,
+    'other user independently favorites same catalog track');
+  status((await request('DELETE', favoritesRoute + '/' + favoriteId,
+    owner.token)).status, 200, 'owner removes favorite');
+  assert.equal((await request('GET', favoritesRoute, secondToken))
+    .data.some(row => row.trackId === favoriteId), false);
+  assert.equal((await request('GET', favoritesRoute, stranger.token))
+    .data.some(row => row.trackId === favoriteId), true);
+  status((await request('DELETE', favoritesRoute + '/' + favoriteId,
+    stranger.token)).status, 200, 'other user clears own favorite');
+  assert.equal((await request('GET', favoritesRoute, stranger.token))
+    .data.some(row => row.trackId === favoriteId), false);
+  report('Favorites cross-account isolation and removal propagated to second session');
+
   const tracksRoute = '/api/v1/playlists/' + id + '/tracks';
   for (const canonicalId of canonicalIds) {
     status((await request('POST', tracksRoute, secondToken,
