@@ -11,6 +11,8 @@ on:
       - apps/mobile/lib/app/saved_album_store.dart
       - apps/mobile/lib/app/bootstrap.dart
       - apps/mobile/lib/features/catalog/catalog_detail_screens.dart
+      - apps/mobile/lib/features/search/search_screen.dart
+      - apps/mobile/lib/app/search_history_store.dart
       - apps/mobile/lib/features/library/library_screen.dart
       - apps/mobile/pubspec.yaml
 
