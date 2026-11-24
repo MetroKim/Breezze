@@ -36,6 +36,16 @@ export class ProvidersController {
     return this.youtubeMusic.getCharts(country || 'ZZ');
   }
 
+  @Get('youtube_music/watch-queue/:videoId')
+  getYoutubeMusicWatchQueue(
+    @Param('videoId') videoId: string,
+    @Query('limit') limit: string | undefined,
+  ) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    const parsedLimit = limit === undefined ? 20 : Number(limit);
+    return this.youtubeMusic.getWatchQueue(videoId, parsedLimit);
+  }
+
   @Get(':id/tracks/:trackId')
   getTrack(@Param('id') id: string, @Param('trackId') trackId: string) {
     if (id === 'breezze_internal') return { kind: 'unsupported', reason: 'USE_RIGHTS_AWARE_CATALOG_ENDPOINT' };
