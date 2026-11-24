@@ -632,12 +632,26 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                     FilledButton.icon(
                       onPressed: savedTracks.isEmpty
                           ? null
-                           : () => ref.read(playerControllerProvider.notifier).playTrack(
-                                trackId: savedTracks.first.id,
+                          : () async {
+                              final first = savedTracks.first;
+                              if (isYouTubeSongId(first.id)) {
+                                await openYouTubePlayer(
+                                  context: context,
+                                  ref: ref,
+                                  videoId: first.id.substring('bz:youtube_music:'.length),
+                                  title: first.title,
+                                  artist: first.artist,
+                                  artworkUrl: first.artworkUrl,
+                                );
+                                return;
+                              }
+                              await ref.read(playerControllerProvider.notifier).playTrack(
+                                trackId: first.id,
                                 queue: queue,
                                 origin: 'library',
                                 sourceContext: artist,
-                              ),
+                              );
+                            },
                       icon: BzSvgIcon(
                         name: 'play',
                         color: theme.bzBackground,
@@ -707,13 +721,27 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
-                            trackId: savedTracks[i].id,
-                            queue: queue,
-                            startIndex: i,
-                            origin: 'library',
-                            sourceContext: artist,
-                          ),
+                          onTap: () async {
+                            final song = savedTracks[i];
+                            if (isYouTubeSongId(song.id)) {
+                              await openYouTubePlayer(
+                                context: context,
+                                ref: ref,
+                                videoId: song.id.substring('bz:youtube_music:'.length),
+                                title: song.title,
+                                artist: song.artist,
+                                artworkUrl: song.artworkUrl,
+                              );
+                              return;
+                            }
+                            await ref.read(playerControllerProvider.notifier).playTrack(
+                              trackId: song.id,
+                              queue: queue,
+                              startIndex: i,
+                              origin: 'library',
+                              sourceContext: artist,
+                            );
+                          },
                         ),
                     ],
                   ),
@@ -731,13 +759,27 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                             leading: _TrackArtwork(url: searchTracks[i].artworkUrl, size: 48),
                             title: Text(searchTracks[i].title, maxLines: 1, overflow: TextOverflow.ellipsis),
                             subtitle: Text(searchTracks[i].artist, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
-                              trackId: searchTracks[i].id,
-                              queue: [for (final item in searchTracks) item.toTrackInfo()],
-                              startIndex: i,
-                              origin: 'search',
-                              sourceContext: artist,
-                            ),
+                            onTap: () async {
+                              final song = searchTracks[i];
+                              if (isYouTubeSongId(song.id)) {
+                                await openYouTubePlayer(
+                                  context: context,
+                                  ref: ref,
+                                  videoId: song.id.substring('bz:youtube_music:'.length),
+                                  title: song.title,
+                                  artist: song.artist,
+                                  artworkUrl: song.artworkUrl,
+                                );
+                                return;
+                              }
+                              await ref.read(playerControllerProvider.notifier).playTrack(
+                                trackId: song.id,
+                                queue: [for (final item in searchTracks) item.toTrackInfo()],
+                                startIndex: i,
+                                origin: 'search',
+                                sourceContext: artist,
+                              );
+                            },
                           ),
                       ],
                     ),
