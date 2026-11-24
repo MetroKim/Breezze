@@ -349,19 +349,11 @@ export class YoutubeAccountService {
         if (typeof id !== 'string' || !PLAYLIST_ID.test(id)) return [];
         const title = item.snippet?.title;
         const artwork = item.snippet?.thumbnails?.default?.url;
-        let parsed: URL | null = null;
-        if (typeof artwork === 'string') {
-          try { parsed = new URL(artwork); } catch { /* Ignore invalid thumbnails. */ }
-        }
-        const host = parsed?.hostname.toLowerCase() ?? '';
-        const permittedArtwork = parsed?.protocol === 'https:' &&
-          (host === 'ytimg.com' || host.endsWith('.ytimg.com') ||
-          host === 'ggpht.com' || host.endsWith('.ggpht.com') ||
-          host === 'googleusercontent.com' || host.endsWith('.googleusercontent.com'));
+        const sanitizedArtwork = this.safeYouTubeArtwork(artwork);
         return [{
           playlistId: id,
           title: typeof title === 'string' ? title.slice(0, 200) : 'YouTube playlist',
-          artworkUrl: permittedArtwork ? artwork : null,
+          artworkUrl: sanitizedArtwork,
           trackCount: Number.isSafeInteger(item.contentDetails?.itemCount)
             ? item.contentDetails?.itemCount : null,
         }];
@@ -370,6 +362,105 @@ export class YoutubeAccountService {
       // No nextPageToken is returned until cursor authentication and paging
       // are implemented. Never claim to return a complete YouTube Music library.
     };
+  }
+
+  async playlistItems(userId: string, playlistId: string) {
+    if (!PLAYLIST_ID.test(playlistId)) {
+      throw new BadRequestException('YOUTUBE_PLAYLIST_ID_INVALID');
+    }
+    // The playlist must belong to the same YouTube channel that the Breezze
+    // listener explicitly connected; the caller never supplies a channelId.
+    const connection = await this.prisma.youtubeAccountConnection.findUnique({
+      where: { userId },
+      select: { channelId: true },
+    });
+    if (!connection) throw new NotFoundException('YOUTUBE_ACCOUNT_NOT_CONNECTED');
+    const access = await this.refreshedToken(userId);
+    const playlistUrl = new URL('https://www.googleapis.com/youtube/v3/playlists');
+    playlistUrl.searchParams.set('part', 'snippet');
+    playlistUrl.searchParams.set('id', playlistId);
+    playlistUrl.searchParams.set('maxResults', '1');
+    const ownerResponse = await fetch(playlistUrl, {
+      headers: { Authorization: 'Bearer ' + access },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!ownerResponse.ok) {
+      throw new ServiceUnavailableException('YOUTUBE_PLAYLIST_LOOKUP_UNAVAILABLE');
+    }
+    const ownerData = await ownerResponse.json() as {
+      items?: Array<{ snippet?: { channelId?: unknown } }>;
+    };
+    if (!Array.isArray(ownerData.items) ||
+        ownerData.items[0]?.snippet?.channelId !== connection.channelId) {
+      throw new NotFoundException('YOUTUBE_PLAYLIST_NOT_OWNED');
+    }
+    const itemUrl = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
+    itemUrl.searchParams.set('part', 'snippet,contentDetails');
+    itemUrl.searchParams.set('playlistId', playlistId);
+    itemUrl.searchParams.set('maxResults', '50');
+    const response = await fetch(itemUrl, {
+      headers: { Authorization: 'Bearer ' + access },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new UnauthorizedException('YOUTUBE_ACCOUNT_RECONNECT_REQUIRED');
+    }
+    if (!response.ok) {
+      throw new ServiceUnavailableException('YOUTUBE_PLAYLIST_ITEMS_UNAVAILABLE');
+    }
+    const data = await response.json() as {
+      nextPageToken?: unknown;
+      items?: Array<{
+        snippet?: {
+          title?: unknown;
+          videoOwnerChannelTitle?: unknown;
+          thumbnails?: { default?: { url?: unknown } };
+          resourceId?: { videoId?: unknown };
+        };
+        contentDetails?: { videoId?: unknown };
+      }>;
+    };
+    const videoId = /^[A-Za-z0-9_-]{11}$/;
+    const items = Array.isArray(data.items) ? data.items.slice(0, 50) : [];
+    return {
+      source: 'youtube_data_api',
+      playlistId,
+      items: items.flatMap((item) => {
+        const id = item.contentDetails?.videoId ??
+          item.snippet?.resourceId?.videoId;
+        if (typeof id !== 'string' || !videoId.test(id)) return [];
+        const title = item.snippet?.title;
+        const artist = item.snippet?.videoOwnerChannelTitle;
+        return [{
+          videoId: id,
+          title: typeof title === 'string'
+            ? title.slice(0, 200) : 'YouTube video',
+          artist: typeof artist === 'string' && artist.trim()
+            ? artist.slice(0, 120) : 'YouTube',
+          artworkUrl: this.safeYouTubeArtwork(item.snippet?.thumbnails?.default?.url),
+          playback: 'visible_youtube_only',
+        }];
+      }),
+      hasMore: typeof data.nextPageToken === 'string' &&
+        data.nextPageToken.length > 0,
+    };
+  }
+
+  private safeYouTubeArtwork(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    try {
+      const url = new URL(raw);
+      const host = url.hostname.toLowerCase();
+      if (url.protocol !== 'https:' || url.username || url.password) return null;
+      if (!(
+        host === 'ytimg.com' || host.endsWith('.ytimg.com') ||
+        host === 'ggpht.com' || host.endsWith('.ggpht.com') ||
+        host === 'googleusercontent.com' || host.endsWith('.googleusercontent.com')
+      )) return null;
+      return url.toString();
+    } catch {
+      return null;
+    }
   }
 
   async disconnect(userId: string) {
