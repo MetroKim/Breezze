@@ -1,10 +1,15 @@
 import { AudiusAdapter } from './audius.adapter';
+import { ProviderCacheService } from './provider-cache.service';
 
 describe('AudiusAdapter', () => {
   let originalFetch: typeof global.fetch;
   let originalEnabled: string | undefined;
   let originalCommercial: string | undefined;
   let adapter: AudiusAdapter;
+  const cache = {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+  };
 
   const publicTrack = () => ({
     id: 'V66vyPP', title: 'Original Artist Recording',
@@ -25,7 +30,9 @@ describe('AudiusAdapter', () => {
     originalCommercial = process.env.BREEZZE_NONCOMMERCIAL;
     process.env.AUDIUS_ENABLED = 'true';
     process.env.BREEZZE_NONCOMMERCIAL = 'true';
-    adapter = new AudiusAdapter();
+    cache.get.mockReset().mockResolvedValue(null);
+    cache.set.mockReset().mockResolvedValue(undefined);
+    adapter = new AudiusAdapter(cache as unknown as ProviderCacheService);
     global.fetch = jest.fn().mockImplementation(async () =>
       response(publicTrack()));
   });
@@ -119,4 +126,30 @@ describe('AudiusAdapter', () => {
       kind: 'ok', value: [{ providerTrackId: 'V66vyPP' }],
     });
   });
+
+  it('caches only discovery metadata and always revalidates playback permission', async () => {
+    global.fetch = jest.fn().mockResolvedValue(response([publicTrack()]));
+    const first = await adapter.search('ambient');
+    expect(first.kind).toBe('ok');
+    expect(cache.set).toHaveBeenCalledWith(
+      expect.stringContaining('provider:audius:search:v1:'),
+      first, 90,
+    );
+    cache.get.mockResolvedValue(first);
+    const second = await adapter.search('AMBIENT');
+    expect(second).toEqual(first);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // A removed artist's API authorization is not inferred from a cached
+    // search row. getAvailability must always contact Audius again.
+    global.fetch = jest.fn().mockResolvedValue(response({
+      ...publicTrack(), is_streamable: false,
+    }));
+    const availability = await adapter.getAvailability('V66vyPP', 'TZ');
+    expect(availability).toMatchObject({
+      kind: 'ok', value: { available: false },
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
 });

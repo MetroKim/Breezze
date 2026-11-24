@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import {
   ProviderAdapter, ProviderCapabilities, ProviderPlaybackRequest,
   ProviderPlaybackSource, ProviderTrack,
 } from './provider-adapter.interface';
 import { ProviderResult, providerError, providerOk, providerUnsupported } from './provider-result';
+import { ProviderCacheService } from './provider-cache.service';
 
 interface AudiusTrack {
   id?: string;
@@ -47,6 +49,10 @@ export class AudiusAdapter implements ProviderAdapter {
     playlists: false, charts: true, genres: true,
   };
   private readonly endpoint = 'https://api.audius.co/v1/';
+
+  // Cache only public discovery metadata, never the current license grant.
+  // getAvailability() remains a fresh upstream read on EVERY playback session.
+  constructor(private readonly cache: ProviderCacheService) {}
 
   private validId(id: string): boolean {
     return /^[A-Za-z0-9]{4,32}$/.test(id);
@@ -115,6 +121,10 @@ export class AudiusAdapter implements ProviderAdapter {
     if (!this.enabled) return providerUnsupported('AUDIUS_NOT_ENABLED');
     const normalized = query.trim();
     if (normalized.length < 2 || normalized.length > 120) return providerOk([]);
+    const key = 'provider:audius:search:v1:' +
+      createHash('sha256').update(normalized.toLowerCase()).digest('hex');
+    const cached = await this.cache.get<ProviderResult<ProviderTrack[]>>(key);
+    if (cached) return cached;
     try {
       const data = await this.request<AudiusTrack[]>(
         'tracks/search', { query: normalized, limit: '20' },
@@ -122,12 +132,16 @@ export class AudiusAdapter implements ProviderAdapter {
       if (!Array.isArray(data.data)) {
         return providerError('AUDIUS_INVALID_RESPONSE', 'Audius returned invalid metadata', false);
       }
-      return providerOk(data.data
+      const result = providerOk(data.data
         .filter((row) => this.publicStreamingGrant(row))
         .map((row) => this.map(row))
         .filter((row): row is ProviderTrack => row !== null),
         'Public tracks from Audius; playback subject to the artist\'s live OML settings',
       );
+      // Brief metadata caching prevents search p95 from depending on the
+      // upstream Audius search latency. Authorization is NOT cached.
+      await this.cache.set(key, result, 90);
+      return result;
     } catch {
       return providerError('AUDIUS_SEARCH_FAILED', 'Audius discovery unavailable', true);
     }
