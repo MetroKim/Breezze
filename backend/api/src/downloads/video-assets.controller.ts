@@ -11,6 +11,14 @@ import { VideoAssetsService } from './video-assets.service';
 export class VideoAssetsController {
   constructor(private readonly videos: VideoAssetsService) {}
 
+  @Get('catalog')
+  catalog(
+    @CurrentUser() userId: string,
+    @Headers('x-breezze-country') territory?: string,
+  ) {
+    return this.videos.catalog(userId, territory);
+  }
+
   @Get('downloads')
   listDownloads(@CurrentUser() userId: string) {
     return this.videos.list(userId);
