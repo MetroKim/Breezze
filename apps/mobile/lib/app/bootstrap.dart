@@ -464,3 +464,16 @@ class FavoritesStore {
 /// App-wide favorites store provider.
 final favoritesStoreProvider =
     Provider<FavoritesStore>((ref) => FavoritesStore());
+
+/// Read-only favorite state is scoped to both account and catalog track.
+/// Album/follow providers use the same owner-aware invalidation convention.
+typedef FavoriteTrackKey = ({String ownerId, String trackId});
+
+final isTrackFavoriteProvider = FutureProvider.family<bool, FavoriteTrackKey>(
+  (ref, key) => ref.read(favoritesStoreProvider)
+      .isFavorite(key.trackId, ownerId: key.ownerId),
+);
+
+/// Invalidated after a saved-song mutation so the persistent Library tab
+/// refreshes without requiring a route restart or another account sign-in.
+final favoritesRefreshProvider = StateProvider<int>((ref) => 0);
