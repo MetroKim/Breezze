@@ -230,15 +230,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _removeHistory(String query) async {
-    final history = await _history.remove(query);
-    if (!mounted) return;
-    setState(() => _recentSearches = history);
+    final owner = ref.read(authSessionProvider);
+    final ownerId = owner is AuthSignedIn ? owner.userId : 'guest';
+    try {
+      final history = await _history.remove(query);
+      if (!mounted) return;
+      final active = ref.read(authSessionProvider);
+      if ((active is AuthSignedIn ? active.userId : 'guest') != ownerId) return;
+      setState(() => _recentSearches = history);
+    } catch (_) {
+      // Search stays usable if personal history cannot be written.
+    }
   }
 
   Future<void> _clearHistory() async {
-    await _history.clear();
-    if (!mounted) return;
-    setState(() => _recentSearches = []);
+    final owner = ref.read(authSessionProvider);
+    final ownerId = owner is AuthSignedIn ? owner.userId : 'guest';
+    try {
+      await _history.clear();
+      if (!mounted) return;
+      final active = ref.read(authSessionProvider);
+      if ((active is AuthSignedIn ? active.userId : 'guest') != ownerId) return;
+      setState(() => _recentSearches = []);
+    } catch (_) {
+      // Search stays usable if personal history cannot be written.
+    }
   }
 
   void _reuseSearch(String query) {
@@ -336,26 +352,61 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _addFavorite(BzTrack track) async {
-    final auth = ref.read(authSessionProvider);
-    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final favorites = ref.read(favoritesStoreProvider);
-    if (!await favorites.isFavorite(track.id, ownerId: ownerId)) {
-      await favorites.toggle(
-        FavoriteTrack(
-          id: track.id,
-          title: track.title,
-          artist: track.artist,
-          artworkUrl: track.artworkUrl,
-          durationMs: track.duration.inMilliseconds,
-        ),
-        ownerId: ownerId,
-      );
-      await ref.read(outboxSyncProvider).drainIfSignedIn();
+    final initialAuth = ref.read(authSessionProvider);
+    final ownerId =
+        initialAuth is AuthSignedIn ? initialAuth.userId : 'guest';
+    bool stillOwner() {
+      if (!mounted) return false;
+      final current = ref.read(authSessionProvider);
+      return initialAuth is AuthSignedIn
+          ? current is AuthSignedIn && current.userId == ownerId
+          : current is AuthSignedOut || current is AuthUninitialized;
     }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Library updated')),
-    );
+
+    try {
+      final favorites = ref.read(favoritesStoreProvider);
+      final alreadySaved =
+          await favorites.isFavorite(track.id, ownerId: ownerId);
+      // An async lookup may finish after sign-out/account switching. Never
+      // write a private favorite for a session that is no longer active.
+      if (!stillOwner()) return;
+      if (!alreadySaved) {
+        await favorites.toggle(
+          FavoriteTrack(
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            artworkUrl: track.artworkUrl,
+            durationMs: track.duration.inMilliseconds,
+          ),
+          ownerId: ownerId,
+        );
+      }
+      if (!stillOwner()) return;
+      ref.invalidate(isTrackFavoriteProvider(
+        (ownerId: ownerId, trackId: track.id),
+      ));
+      ref.read(favoritesRefreshProvider.notifier).state++;
+      // The local favorite and outbox are already durable. Network failures
+      // must not hide a successful offline save or lose its retry intent.
+      try {
+        await ref.read(outboxSyncProvider).drainIfSignedIn();
+      } catch (_) {
+        // The outbox will replay the operation when the user reconnects.
+      }
+      if (!stillOwner()) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(alreadySaved
+            ? 'Already in Library'
+            : 'Saved to Library on this device'),
+      ));
+    } catch (_) {
+      if (stillOwner()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save song to Library.')),
+        );
+      }
+    }
   }
 
   void _download(BzTrack track) {
