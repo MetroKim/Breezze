@@ -421,12 +421,12 @@ const _browseDestinations = <_BrowseDestination>[
   _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
   _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
-  _BrowseDestination('Daily Top 100', 'Apple Music Daily Global Top 100 for the selected territory.', 'star'),
+  _BrowseDestination('Daily Top 100', 'Daily chart where available; otherwise labeled regional most-played results.', 'star'),
   _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
-  _BrowseDestination('Music Videos', 'Music videos from channel owners verified by Breezze.', 'video'),
+  _BrowseDestination('Music Videos', 'Official music video discovery from YouTube Music; opens video playback separately.', 'video'),
   _BrowseDestination('Charts', 'Global, regional and genre charts with source attribution.', 'grid'),
   _BrowseDestination('Browse by Genre', 'Explore catalog music by genre and subgenre.', 'compass'),
-  _BrowseDestination('Moods & Activities', 'Curated listening collections for moods and activities.', 'favorite'),
+  _BrowseDestination('Moods & Activities', 'Explore track-search matches for moods and activities.', 'favorite'),
   _BrowseDestination('City Charts', 'City-level charts backed by verified regional data.', 'globe'),
   _BrowseDestination('Upcoming Concerts', 'Upcoming concerts and festivals with source-linked event details.', 'calendar'),
   _BrowseDestination('Seasonal Collections', 'Time-limited music collections and seasonal features.', 'disc-3'),
@@ -451,6 +451,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   int _generation = 0;
   List<Map<String, dynamic>> _catalogItems = [];
   String? _catalogSource;
+  String? _catalogTitle;
+  bool _dailyChartFallback = false;
   String? _catalogError;
   String? _catalogTerritory;
   DateTime? _catalogFetchedAt;
@@ -489,6 +491,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       _loading = true;
       _catalogError = null;
       _catalogItems = [];
+      _catalogSource = null;
+      _catalogTitle = null;
+      _catalogTerritory = null;
+      _catalogFetchedAt = null;
+      _dailyChartFallback = false;
     });
     try {
       final api = ref.read(authSessionProvider.notifier).api;
@@ -515,6 +522,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                 item.map((key, value) => MapEntry(key.toString(), value))).toList()
             : [];
         _catalogSource = data['source'] as String?;
+        _catalogTitle = data['title'] as String?;
+        _dailyChartFallback = _dailyChart && data['dailyTop100Available'] == false;
         _catalogTerritory = data['territory'] as String? ??
             (_videoFeed ? null : territory.toUpperCase());
         _catalogFetchedAt = DateTime.tryParse(data['fetchedAt'] as String? ?? '');
@@ -558,7 +567,451 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       ));
       return;
     }
-    if (_videoFeed && itemId != null) {
+    if (_videoFeed) {
+      if (itemId == null || !RegExp(r'^[A-Za-z0-9_-]{11}
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => OfficialMusicVideoScreen(
+          videoId: itemId,
+          title: title,
+          artist: artist,
+          artworkUrl: artwork,
+        ),
+      ));
+      return;
+    }
+    if (!mounted) return;
+    // Event details remain in Breezze; a ticket link is user-selected.
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(artist),
+              if (item['venue'] is String)
+                Text('Venue: ' + item['venue'].toString()),
+              if (item['city'] is String)
+                Text('City: ' + item['city'].toString()),
+              if (item['date'] is String)
+                Text('Date: ' + item['date'].toString()),
+              const SizedBox(height: 16),
+              if (item['url'] is String)
+                TextButton.icon(
+                  icon: const BzSvgIcon(name: 'arrow-up-right'),
+                  label: const Text('Official event details'),
+                  onPressed: () async {
+                    final uri = Uri.tryParse(item['url'] as String);
+                    if (uri == null || uri.scheme != 'https') return;
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _search(String choice) async {
+    final generation = ++_generation;
+    setState(() {
+      _selected = choice;
+      _loading = true;
+      _error = null;
+      _tracks = [];
+    });
+    try {
+      final result = await ref.read(catalogSourceProvider).search('$choice music');
+      if (!mounted || generation != _generation) return;
+      if (result is ProviderOk<List<ProviderTrack>>) {
+        setState(() {
+          _tracks = result.value.map((track) => BzTrack(
+            id: track.breezzeTrackId,
+            title: track.title,
+            artist: track.artist,
+            artworkUrl: track.artworkUrl,
+            duration: track.duration,
+          )).toList();
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _loading = false;
+          _error = 'The connected music source could not return search results.';
+        });
+      }
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not reach the music source. Check your connection and retry.';
+      });
+    }
+  }
+
+  Future<void> _play(int index) async {
+    if (_tracks.isEmpty) return;
+    final selected = _tracks[index];
+    if (!canQueueTrackId(selected.id)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
+        );
+      }
+      return;
+    }
+    final playableTracks = _tracks
+        .where((track) => canQueueTrackId(track.id))
+        .toList();
+    final queue = [for (final track in playableTracks) TrackInfo(
+      id: track.id, title: track.title, artist: track.artist,
+      artworkUrl: track.artworkUrl, duration: track.duration,
+    )];
+    final queueIndex = playableTracks.indexWhere((track) => track.id == selected.id);
+    if (queueIndex < 0) return;
+    await ref.read(playerControllerProvider.notifier).playTrack(
+      trackId: selected.id,
+      queue: queue,
+      startIndex: queueIndex,
+      origin: 'browse',
+      sourceContext: widget.destination.title + ': ' + _selected,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final progress = ref.watch(downloadProgressProvider);
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: Text(widget.destination.title),
+        leading: IconButton(
+          tooltip: 'Back to New',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: _liveProviderCatalog
+                ? _appleCatalogContent(theme)
+                : _searchable
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.destination.description, style: theme.textTheme.bodyMedium),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [for (final choice in _choices)
+                                BzFilterPill(
+                                  label: choice,
+                                  active: _selected == choice,
+                                  onTap: () => _search(choice),
+                                )],
+                            ),
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: theme.bzSurface1,
+                                borderRadius: BorderRadius.circular(BzRadius.card),
+                                border: Border.all(color: theme.bzSeparator),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  BzSvgIcon(name: 'info', size: 18, color: theme.bzText2),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Text(
+                                    'These are track-search matches from the connected source. They are not verified editorial playlists, mood classifications or official genre charts.',
+                                    style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                                  )),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(_genre ? 'Genre search matches' : 'Mood search matches', style: theme.textTheme.titleMedium),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: _loading
+                            ? ListView.separated(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: 6,
+                                separatorBuilder: (_, __) => const SizedBox(height: 14),
+                                itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                              )
+                            : _error != null
+                                ? _MessageState(
+                                    icon: 'wifi-off', title: 'Music source unavailable',
+                                    message: _error!, onRetry: () => _search(_selected),
+                                  )
+                                : _tracks.isEmpty
+                                    ? _MessageState(
+                                        icon: 'music-note', title: 'No matches found',
+                                        message: 'Try another selection or retry this search.',
+                                        onRetry: () => _search(_selected),
+                                      )
+                                    : ListView.builder(
+                                        padding: EdgeInsets.fromLTRB(0, 8, 0, BzBreakpoints.bottomClearance(context, compact: 220)),
+                                        itemCount: _tracks.length,
+                                        itemBuilder: (context, index) {
+                                          final track = _tracks[index];
+                                          final download = progress[track.id];
+                                          return ListTile(
+                                            leading: track.artworkUrl == null
+                                                ? BzBnoteMark(size: 48, color: theme.bzText2)
+                                                : ClipRRect(
+                                                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                                                    child: Image.network(
+                                                      track.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) => BzBnoteMark(size: 48, color: theme.bzText2),
+                                                    ),
+                                                  ),
+                                            title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            trailing: download != null
+                                                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                                                : IconButton(
+                                                    tooltip: 'Download',
+                                                    icon: const BzSvgIcon(name: 'download', size: 20),
+                                                    onPressed: !canRequestOfflineDownload(track.id)
+                                                        ? null
+                                                        : () => ref.read(downloadProgressProvider.notifier).download(track),
+                                                  ),
+                                            onTap: () => _play(index),
+                                          );
+                                        },
+                                      ),
+                      ),
+                    ],
+                  )
+                : _unavailable(theme),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _appleCatalogContent(ThemeData theme) {
+    final isReleaseFeed = _appleReleases || _latestSongs;
+    final isVideoFeed = _videoFeed;
+    final isConcertFeed = _concertFeed;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.destination.description, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              if (_catalogSource != null || _catalogTerritory != null) ...[
+                const SizedBox(height: 5),
+                Text(
+                  '${_catalogSource ?? 'Catalog source'} • ${_catalogTerritory ?? 'Territory'}'
+                  '${_catalogFetchedAt == null ? '' : ' • Updated ${_catalogFetchedAt!.toLocal()}'}',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: 8,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                )
+              : _catalogError != null
+                  ? _MessageState(
+                      icon: 'wifi-off',
+                      title: 'Catalog unavailable',
+                      message: _catalogError!,
+                      onRetry: _loadCatalog,
+                    )
+                  : _catalogItems.isEmpty
+                      ? _MessageState(
+                          icon: 'music-note',
+                          title: 'No catalog entries',
+                          message: 'The source returned no entries for this territory.',
+                          onRetry: _loadCatalog,
+                        )
+                      : ListView.separated(
+                          padding: EdgeInsets.fromLTRB(12, 4, 12, BzBreakpoints.bottomClearance(context, compact: 220)),
+                          itemCount: _catalogItems.length,
+                          separatorBuilder: (_, __) => Divider(height: 1, color: theme.bzSeparator),
+                          itemBuilder: (context, index) {
+                            final item = _catalogItems[index];
+                            final artwork = item['artworkUrl'];
+                            final title = item['title'] as String? ?? 'Untitled';
+                            final artist = item['artist'] as String? ?? 'Unknown artist';
+                            final rank = item['rank'];
+                            final meta = isReleaseFeed
+                                ? (item['releaseDate'] ?? 'Release date not supplied').toString()
+                                : isVideoFeed
+                                    ? (item['publishedAt'] ?? 'Publication date not supplied').toString()
+                                    : isConcertFeed
+                                        ? [
+                                            if (item['date'] is String) item['date'],
+                                            if (item['venue'] is String) item['venue'],
+                                            if (item['city'] is String) item['city'],
+                                          ].join(' · ')
+                                        : '';
+                            return ListTile(
+                              leading: SizedBox(
+                                width: 52,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (rank is int)
+                                      SizedBox(
+                                        width: 20,
+                                        child: Text(rank.toString(), style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2)),
+                                      ),
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(BzRadius.artwork),
+                                        child: artwork is String
+                                            ? Image.network(
+                                                artwork,
+                                                width: 48,
+                                                height: 48,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, __, ___) => BzBnoteMark(size: 44, color: theme.bzText2),
+                                              )
+                                            : BzBnoteMark(size: 44, color: theme.bzText2),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                isConcertFeed
+                                    ? (meta.isEmpty ? artist : meta)
+                                    : isVideoFeed
+                                        ? '$artist • $meta'
+                                        : isReleaseFeed
+                                            ? '$artist • $meta'
+                                            : artist,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: IconButton(
+                                tooltip: isVideoFeed
+                                    ? 'Watch official video'
+                                    : isConcertFeed
+                                        ? 'Open event details'
+                                        : 'View details in Breezze',
+                                icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
+                                onPressed: () => _openCatalogItem(item),
+                              ),
+                              onTap: () => _openCatalogItem(item),
+                            );
+                          },
+                        ),
+        ),
+      ],
+    );
+  }
+
+  Widget _unavailable(ThemeData theme) {
+    final destination = widget.destination;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: theme.bzSurface1,
+            borderRadius: BorderRadius.circular(BzRadius.card),
+            border: Border.all(color: theme.bzSeparator),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 54, height: 54,
+                decoration: BoxDecoration(color: theme.bzSurface2, borderRadius: BorderRadius.circular(15)),
+                alignment: Alignment.center,
+                child: BzSvgIcon(name: destination.icon, size: 27, color: theme.bzAccent),
+              ),
+              const SizedBox(height: 18),
+              Text(destination.title, style: theme.textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(destination.description, style: theme.textTheme.bodyMedium?.copyWith(color: theme.bzText2)),
+              const SizedBox(height: 22),
+              Row(children: [
+                BzSvgIcon(name: 'info', size: 19, color: theme.bzAccent),
+                const SizedBox(width: 9),
+                Text('Not available yet', style: theme.textTheme.titleMedium),
+              ]),
+              const SizedBox(height: 10),
+              Text(destination.availabilityMessage, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              Text(
+                'Breezze will publish this section only after its source, territory, metadata and usage permissions can be verified.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+              ),
+            ],
+          ),
+        ),
+        if (destination.previewSections.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text('What belongs in this section', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 10),
+          for (final item in destination.previewSections)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(children: [
+                BzSvgIcon(name: 'info', size: 17, color: theme.bzText2),
+                const SizedBox(width: 10),
+                Expanded(child: Text(item, style: theme.textTheme.bodyMedium)),
+              ]),
+            ),
+        ],
+        const SizedBox(height: 24),
+        OutlinedButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          child: const Text('Back to Browse'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Browse selection pill — capsule (spec --radius-pill), solid text1 fill
+/// when active, surface2 when not. Mirrors the Library and Search pills.
+).hasMatch(itemId)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('This video has no valid YouTube playback ID.'),
+          ));
+        }
+        return;
+      }
       await ref.read(playerControllerProvider.notifier).pause();
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -816,6 +1269,20 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
             children: [
               Text(widget.destination.description, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 8),
+              if (_catalogTitle != null) ...[
+                Text(_catalogTitle!, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+              ],
+              if (_dailyChartFallback) ...[
+                Text('Daily Top 100 is unavailable from this source. These are regional Most Played rankings, not the daily chart.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                const SizedBox(height: 8),
+              ],
+              if (!isVideoFeed && !isConcertFeed) ...[
+                Text('Catalog metadata only. Playback requires a separate authorized source.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                const SizedBox(height: 8),
+              ],
               if (_catalogSource != null || _catalogTerritory != null) ...[
                 const SizedBox(height: 5),
                 Text(
