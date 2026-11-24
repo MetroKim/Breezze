@@ -1,6 +1,6 @@
 # Breezze YouTube Music metadata adapter
 
-This isolated service uses the MIT-licensed `ytmusicapi` Python library for public YouTube Music search and track metadata. It is **not** an audio streaming proxy.
+This isolated service uses the MIT-licensed [sigma67/ytmusicapi](https://github.com/sigma67/ytmusicapi) Python library for public YouTube Music search and track metadata. It is **not** an audio streaming proxy.
 
 ## Endpoints
 
@@ -8,6 +8,7 @@ This isolated service uses the MIT-licensed `ytmusicapi` Python library for publ
 - `GET /search?q={query}&limit=20` — public music search metadata
 - `GET /videos?q={query}&limit=20` — only YouTube Music `MUSIC_VIDEO_TYPE_OMV` results
 - `GET /tracks/{videoId}` — track metadata
+- `GET /tracks/{videoId}/music-video` — official music-video counterpart when available
 
 The service deliberately drops YouTube's `streamingData`, adaptive formats, and signed media URLs. The NestJS provider adapter reports search and metadata capabilities only; playback, downloads, and rights availability remain disabled.
 
