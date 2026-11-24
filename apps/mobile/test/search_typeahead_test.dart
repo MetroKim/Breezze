@@ -138,6 +138,11 @@ void main() {
     await selectSave();
     expect(favorites.writes, 1);
     expect(container.read(favoritesRefreshProvider), 2);
+    // ScaffoldMessenger queues consecutive snackbars. The first successful
+    // save remains visible for its standard duration before the second
+    // idempotent-save confirmation is presented.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
     expect(find.text('Already in Library'), findsOneWidget);
   });
 
