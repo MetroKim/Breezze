@@ -58,7 +58,7 @@ export class PlaybackResolveService {
   }
 
   async resolveProvider(
-    _userId: string,
+    userId: string,
     dto: {
       providerId: string;
       providerTrackId: string;
@@ -83,6 +83,22 @@ export class PlaybackResolveService {
       where: { trackId: dto.canonicalTrackId, status: 'active' },
     });
     if (takedown) throw new NotAcceptableException('TAKEDOWN_ACTIVE');
+
+    // Provider availability describes a catalog item, not our legal right to
+    // distribute its full audio. Require a current territory-specific,
+    // canonical full-stream grant before involving the provider adapter.
+    const decision = await this.rights.decide({
+      userId,
+      trackId: dto.canonicalTrackId,
+      action: 'stream.full',
+      territory,
+    });
+    if (!decision.allowed) {
+      throw new NotAcceptableException(decision.reason);
+    }
+    if (decision.previewOnly) {
+      throw new NotAcceptableException('PREVIEW_ONLY');
+    }
 
     const provider = this.providers.get(dto.providerId);
     if (
@@ -116,8 +132,8 @@ export class PlaybackResolveService {
       territory,
       authorization: {
         action: 'stream.full',
-        expiresAt: null,
-        attribution: availability.attribution ?? null,
+        expiresAt: decision.expiresAt,
+        attribution: decision.attribution ?? availability.attribution ?? null,
       },
     });
     if (result.kind === 'unsupported') {

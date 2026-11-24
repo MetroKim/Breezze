@@ -137,5 +137,59 @@ void main() {
       q.toggleShuffle();
       expect(q.upNext.map((e) => e.entryId), ['b', 'c', 'd']);
     });
+
+    test('shuffle displayed Up Next is the actual playback sequence', () {
+      final q = QueueManager();
+      q.replaceWith([entry('a'), entry('b'), entry('c'), entry('d')]);
+      q.toggleShuffle();
+      final displayed = q.upNext.map((e) => e.entryId).toList();
+      final played = <String>[];
+      for (var i = 0; i < displayed.length; i++) {
+        played.add(q.advance()!.entryId);
+      }
+      expect(played, displayed);
+      expect(q.upNext, isEmpty);
+      expect(q.advance(), isNull);
+    });
+
+    test('Play Next has priority while shuffled without dropping remaining songs', () {
+      final q = QueueManager();
+      q.replaceWith([entry('a'), entry('b'), entry('c'), entry('d')]);
+      q.toggleShuffle();
+      final old = q.upNext.map((e) => e.entryId).toList();
+      q.playNext(entry('urgent'));
+      expect(q.upNext.map((e) => e.entryId).toList(), ['urgent', ...old]);
+      expect(q.advance()!.entryId, 'urgent');
+      expect(q.upNext.map((e) => e.entryId).toList(), old);
+    });
+
+    test('Play Last stays at end of shuffled playback order', () {
+      final q = QueueManager();
+      q.replaceWith([entry('a'), entry('b'), entry('c')]);
+      q.toggleShuffle();
+      final old = q.upNext.map((e) => e.entryId).toList();
+      q.playLast(entry('last'));
+      expect(q.upNext.map((e) => e.entryId).toList(), [...old, 'last']);
+    });
+
+    test('Previous follows played shuffle sequence and not physical indexes', () {
+      final q = QueueManager();
+      q.replaceWith([entry('a'), entry('b'), entry('c'), entry('d')]);
+      q.toggleShuffle();
+      final first = q.current!.entryId;
+      final second = q.advance()!.entryId;
+      expect(second, isNot(first));
+      expect(q.previous()!.entryId, first);
+      expect(q.advance()!.entryId, second);
+    });
+
+    test('queue-change listeners update when advancing shuffled order', () {
+      var changed = 0;
+      final q = QueueManager(onQueueChanged: () => changed++);
+      q.replaceWith([entry('a'), entry('b')]);
+      final before = changed;
+      q.advance();
+      expect(changed, before + 1);
+    });
   });
 }

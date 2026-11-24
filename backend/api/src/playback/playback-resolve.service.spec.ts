@@ -32,6 +32,14 @@ describe('PlaybackResolveService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    rights.decide.mockResolvedValue({
+      allowed: true,
+      previewOnly: false,
+      reason: 'OK',
+      qualityRestriction: null,
+      expiresAt: null,
+      attribution: 'Licensed full-track grant',
+    });
     service = new PlaybackResolveService(
       prisma as unknown as PrismaService,
       rights as unknown as RightsDecisionService,
@@ -241,4 +249,61 @@ describe('PlaybackResolveService', () => {
       ServiceUnavailableException,
     );
   });
+  it('denies an external provider when no explicit full-stream grant exists', async () => {
+    prepareCanonicalTrack();
+    rights.decide.mockResolvedValue({
+      allowed: false,
+      previewOnly: false,
+      reason: 'NO_EXPLICIT_AUTHORIZATION',
+    });
+    providers.get.mockReturnValue(validAdapter());
+
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ'))
+      .rejects.toThrow('NO_EXPLICIT_AUTHORIZATION');
+    expect(rights.decide).toHaveBeenCalledWith({
+      userId: 'user-1',
+      trackId: 'canonical-1',
+      territory: 'TZ',
+      action: 'stream.full',
+    });
+    expect(providers.get).not.toHaveBeenCalled();
+  });
+
+  it('refuses full provider audio even if a preview grant is active', async () => {
+    prepareCanonicalTrack();
+    rights.decide.mockResolvedValue({
+      allowed: true,
+      previewOnly: true,
+      reason: 'OK',
+    });
+    providers.get.mockReturnValue(validAdapter());
+
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ'))
+      .rejects.toThrow('PREVIEW_ONLY');
+    expect(providers.get).not.toHaveBeenCalled();
+  });
+
+  it('passes canonical full-stream rights expiry and attribution to provider', async () => {
+    prepareCanonicalTrack();
+    const expiresAt = new Date(Date.now() + 60_000);
+    rights.decide.mockResolvedValue({
+      allowed: true,
+      previewOnly: false,
+      reason: 'OK',
+      expiresAt,
+      attribution: 'Explicit license',
+    });
+    const adapter = validAdapter();
+    providers.get.mockReturnValue(adapter);
+
+    await service.resolveProvider('user-1', providerRequest, 'TZ');
+    expect(adapter.resolvePlayback).toHaveBeenCalledWith(expect.objectContaining({
+      authorization: {
+        action: 'stream.full',
+        expiresAt,
+        attribution: 'Explicit license',
+      },
+    }));
+  });
+
 });

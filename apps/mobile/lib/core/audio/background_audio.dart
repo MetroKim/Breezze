@@ -56,6 +56,9 @@ class BackgroundAudioSync {
   BackgroundAudioSync({required this.ref});
 
   void start() {
+    // Native media-session initialization can finish after the player has
+    // already selected a song. Restart to republish current metadata now.
+    _subscription?.close();
     _subscription = ref.listen(playerControllerProvider, (prev, next) {
       final track = next.currentTrack;
       final trackChanged = prev?.currentTrack?.id != track?.id;
@@ -98,8 +101,9 @@ class BackgroundAudioSync {
 final backgroundSyncProvider = Provider<BackgroundAudioSync>((ref) {
   final sync = BackgroundAudioSync(ref: ref);
   ref.listen(backgroundBridgeProvider, (_, __) {
-    // When the bridge changes, restart syncing so the new bridge gets
-    // the very next state update (and current state on next change).
+    // Republish immediately when audio_service becomes available, including
+    // when playback was already paused before native initialization.
+    sync.start();
   });
   ref.onDispose(sync.dispose);
   sync.start();
