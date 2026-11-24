@@ -12,6 +12,7 @@ This isolated service uses the MIT-licensed [sigma67/ytmusicapi](https://github.
 - `GET /artists/search?q={query}&limit=20` — YouTube Music artist discovery
 - `GET /artists/{artistId}` — public artist profile, songs and albums metadata
 - `GET /charts?country=ZZ` — YouTube Music artist charts and music-video chart playlists; `ZZ` means global
+- `GET /watch-queue/{videoId}?limit=20` — unofficial next-track suggestions from `get_watch_playlist`; IDs/metadata only, **not playable audio**
 
 The service deliberately drops YouTube's `streamingData`, adaptive formats, and signed media URLs. The NestJS provider adapter reports search and metadata capabilities only; playback, downloads, and rights availability remain disabled.
 
