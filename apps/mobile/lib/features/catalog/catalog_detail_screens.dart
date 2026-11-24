@@ -231,12 +231,22 @@ class TrackDetailScreen extends ConsumerWidget {
                           ? 'Playback unavailable' : 'Play'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: favoriteState.isLoading ? null : toggleLibrary,
+                      // Never display an actionable-looking "Add" state
+                      // before the native owner-scoped favorite lookup ends.
+                      // The button remains disabled on lookup failure.
+                      onPressed: favoriteState.isLoading ||
+                              favoriteState.hasError
+                          ? null
+                          : toggleLibrary,
                       icon: BzSvgIcon(name:
                           favoriteState.valueOrNull == true ? 'check' : 'plus'),
-                      label: Text(favoriteState.valueOrNull == true
-                          ? 'Remove from Library'
-                          : 'Add to Library'),
+                      label: Text(favoriteState.isLoading
+                          ? 'Checking Library...'
+                          : favoriteState.hasError
+                              ? 'Library unavailable'
+                              : favoriteState.valueOrNull == true
+                                  ? 'Remove from Library'
+                                  : 'Add to Library'),
                     ),
                     OutlinedButton.icon(
                       onPressed: isMetadataOnlyTrackId(track.id)
