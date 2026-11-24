@@ -891,6 +891,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     final savedKey = (ownerId: ownerId, albumId: albumId);
     final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
+    final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
     final tracks = ref.watch(_appleAlbumTracksProvider(albumId));
     return Scaffold(
       backgroundColor: theme.bzBackground,
@@ -1019,6 +1020,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                               }
                             }
                             ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.invalidate(isAlbumPinnedProvider(savedKey));
                             ref.read(savedAlbumRefreshProvider.notifier).state++;
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -1049,6 +1051,66 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                             ? 'Saved in Library'
                             : 'Add Album to Library'),
                       ),
+                      if (isSaved.valueOrNull == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: isPinned.isLoading ? null : () async {
+                            final active = ref.read(authSessionProvider);
+                            final activeOwner = active is AuthSignedIn
+                                ? active.userId : 'guest';
+                            if (activeOwner != ownerId) return;
+                            try {
+                              final store = SavedAlbumStore();
+                              final nextPinned = isPinned.valueOrNull != true;
+                              final updated = await store.setPinned(
+                                ownerId, albumId, nextPinned,
+                              );
+                              if (!updated || !context.mounted) return;
+                              var synced = active is! AuthSignedIn;
+                              if (active is AuthSignedIn) {
+                                try {
+                                  await store.syncWithCloud(
+                                    ownerId,
+                                    ref.read(authSessionProvider.notifier).api,
+                                    ownerStillActive: () {
+                                      if (!context.mounted) return false;
+                                      final current = ref.read(authSessionProvider);
+                                      return current is AuthSignedIn &&
+                                          current.userId == ownerId;
+                                    },
+                                  );
+                                  synced = true;
+                                } catch (_) {
+                                  // Pin remains durable locally when offline.
+                                }
+                              }
+                              if (!context.mounted) return;
+                              final latest = ref.read(authSessionProvider);
+                              if ((latest is AuthSignedIn
+                                  ? latest.userId : 'guest') != ownerId) return;
+                              ref.invalidate(isAlbumPinnedProvider(savedKey));
+                              ref.read(savedAlbumRefreshProvider.notifier).state++;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(synced
+                                    ? (nextPinned ? 'Album pinned to top'
+                                        : 'Album unpinned')
+                                    : 'Pin saved on this device. Cloud sync will retry.')),
+                              );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content:
+                                      Text('Could not update album pin.')),
+                                );
+                              }
+                            }
+                          },
+                          icon: BzSvgIcon(name:
+                              isPinned.valueOrNull == true ? 'star-filled' : 'star'),
+                          label: Text(isPinned.valueOrNull == true
+                              ? 'Unpin album' : 'Pin album to top'),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
                         onPressed: appleUrl == null ? null : () => _open(appleUrl),
