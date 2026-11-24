@@ -190,6 +190,20 @@ class BreezzeApi {
       _get('/providers/${Uri.encodeComponent(providerId)}/tracks/${Uri.encodeComponent(providerTrackId)}');
 
 
+  // ---- separate, consent-based YouTube Data API account connection ----
+  // These routes never receive Supabase Google OAuth credentials directly.
+  Future<Map<String, dynamic>> youtubeAccountStatus() =>
+      _get('/youtube-account/status');
+
+  Future<Map<String, dynamic>> youtubeAccountStart() =>
+      _post('/youtube-account/start', const {});
+
+  Future<Map<String, dynamic>> youtubeAccountPlaylists() =>
+      _get('/youtube-account/playlists');
+
+  Future<Map<String, dynamic>> youtubeAccountDisconnect() =>
+      _delete('/youtube-account/connection');
+
   // ---- unofficial YouTube Music discovery (metadata only) ----
   // These endpoints proxy the private ytmusicapi service through Breezze's
   // normal API. The provider result has an explicit kind (ok/error/unsupported);
