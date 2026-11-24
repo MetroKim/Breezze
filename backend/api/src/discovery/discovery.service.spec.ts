@@ -1,159 +1,138 @@
 import { DiscoveryService } from './discovery.service';
 
-describe('DiscoveryService album metadata', () => {
-  const service = new DiscoveryService();
-  let originalFetch: typeof fetch;
-
-  beforeEach(() => {
-    originalFetch = global.fetch;
-  });
-
+describe('DiscoveryService: Deezer catalog + YouTube Music video', () => {
+  const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;
     jest.restoreAllMocks();
   });
+  const reply = (data: unknown, status = 200) => ({
+    ok: status >= 200 && status < 300, status, json: async () => data,
+  }) as unknown as Response;
 
-  it('returns only recently released chart entries in release-date order', async () => {
-    const day = 86400000;
-    const date = (days: number) => new Date(Date.now() - days * day).toISOString().slice(0, 10);
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({
-      feed: { results: [10, 60, -10, 2].map(n => ({ id: String(n), releaseDate: date(n) })) },
-    }) });
-    const result = await service.recentChartReleases('songs', 'TZ');
-    expect(result.items.map(i => i.id)).toEqual(['2', '10']);
-    expect(result.items.every(i => i.rank === null)).toBe(true);
-    expect(result.sourceUrl).toContain('/tz/music/most-played/100/songs.json');
-  });
-
-  it('preserves only upstream-provided genre and compilation attributes', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: jest.fn().mockResolvedValue({
-        results: [
-          {
-            wrapperType: 'collection',
-            collectionId: 123,
-            collectionName: 'Collection A',
-            artistName: 'Artist',
-            primaryGenreName: 'Electronic',
-            isCompilation: true,
-          },
-          {
-            wrapperType: 'track',
-            trackId: 5,
-            trackName: 'Example',
-            artistName: 'Artist',
-          },
-        ],
-      }),
-    } as unknown as Response);
-    const result = await service.albumTracks('123');
-    expect(result.album).toMatchObject({
-      id: 123,
-      title: 'Collection A',
-      genres: ['Electronic'],
-      isCompilation: true,
+  it('uses Deezer global chart without falsely claiming a country or daily ranking', async () => {
+    global.fetch = jest.fn().mockResolvedValue(reply({ data: [
+      { id: 42, title: 'Example', duration: 123, artist: { id: 9, name: 'Artist' },
+        album: { id: 88, title: 'Record', cover_medium: 'https://images.test/a' },
+        preview: 'https://cdnt-preview.dzcdn.net/api/1/clip.mp3' },
+    ] }));
+    const service = new DiscoveryService();
+    const chart = await service.songsChart('TZ');
+    const daily = await service.dailyTop100('TZ');
+    expect(chart).toMatchObject({ source: 'Deezer', territory: 'GLOBAL' });
+    expect(chart.items[0]).toMatchObject({
+      id: '42', rank: 1, artist: 'Artist', albumId: 88,
+      playback: 'preview_only',
     });
-    expect(result.items).toHaveLength(1);
+    expect(daily).toMatchObject({
+      territory: 'GLOBAL', chartType: 'deezer_global_chart',
+      dailyTop100Available: false,
+    });
+    expect((global.fetch as jest.Mock).mock.calls[0][0].toString())
+      .toContain('/chart/0/tracks?limit=100');
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('does not infer unknown album categories', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: jest.fn().mockResolvedValue({
-        results: [
-          {
-            wrapperType: 'collection',
-            collectionId: 456,
-            collectionName: 'Greatest Hits',
-            artistName: 'Various Artists',
-          },
-        ],
-      }),
-    } as unknown as Response);
-    const result = await service.albumTracks('456');
-    expect(result.album).toMatchObject({
-      genres: [],
-      isCompilation: false,
+  it('requires verified release dates before showing Deezer albums as new', async () => {
+    const date = (n: number) =>
+      new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    global.fetch = jest.fn().mockImplementation(async (url: URL) => {
+      if (url.pathname === '/chart/0/albums') return reply({ data: [
+        { id: 10 }, { id: 11 }, { id: 12 },
+      ] });
+      if (url.pathname === '/album/10') return reply({
+        id: 10, title: 'Recent', release_date: date(4),
+        artist: { name: 'Singer' },
+      });
+      if (url.pathname === '/album/11') return reply({
+        id: 11, title: 'Old', release_date: date(90),
+        artist: { name: 'Singer' },
+      });
+      return reply({ id: 12, title: 'Unknown date', artist: { name: 'Singer' } });
     });
+    const service = new DiscoveryService();
+    const releases = await service.newReleases();
+    expect(releases.items.map(x => x.id)).toEqual(['10']);
+    expect(releases.items[0].releaseDate).toBe(date(4));
+    expect(releases.territory).toBe('GLOBAL');
+    expect(global.fetch).toHaveBeenCalledTimes(4);
   });
 
-  it('rejects invalid album IDs before network requests', async () => {
+  it('returns album tracks with Deezer preview metadata and upstream genres', async () => {
+    global.fetch = jest.fn().mockResolvedValue(reply({
+      id: 302127, title: 'Discovery', record_type: 'album',
+      artist: { id: 27, name: 'Daft Punk' },
+      genres: { data: [{ name: 'Electronic' }] },
+      tracks: { data: [
+        { id: 3135553, title: 'One More Time', duration: 320,
+          artist: { name: 'Daft Punk' }, preview: 'https://cdnt-preview.dzcdn.net/preview.mp3',
+          track_position: 1 },
+      ] },
+    }));
+    const result = await new DiscoveryService().albumTracks('302127');
+    expect(result.album).toMatchObject({
+      title: 'Discovery', genres: ['Electronic'], isCompilation: false,
+    });
+    expect(result.items[0]).toMatchObject({
+      id: '3135553', previewUrl: 'https://cdnt-preview.dzcdn.net/preview.mp3',
+      durationMs: 320000, trackNumber: 1, playback: 'preview_only',
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed Deezer IDs before network access', async () => {
     const spy = jest.fn();
     global.fetch = spy;
-    await expect(service.albumTracks('../user')).rejects.toThrow(
-      'INVALID_APPLE_ALBUM_ID',
-    );
+    const service = new DiscoveryService();
+    await expect(service.albumTracks('../user')).rejects.toThrow('INVALID_DEEZER_ALBUM_ID');
+    await expect(service.artistAlbums('../user')).rejects.toThrow('INVALID_DEEZER_ARTIST_ID');
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('drops malformed music-video IDs while preserving playable results', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ videos: [
-        null,
-        { title: 'Missing ID' },
-        { videoId: 'not a video', title: 'Invalid ID' },
-        { videoId: 'abcDEF12_-3', title: 'Official video', artist: 'Artist' },
-        { videoId: 'abcDEF12_-3', title: 'Duplicate video' },
-      ] }),
+  it('searches Deezer artists and tracks; never returns a non-Deezer preview host', async () => {
+    global.fetch = jest.fn().mockImplementation(async (url: URL) => {
+      if (url.pathname === '/search/track') return reply({ data: [{
+        id: 1, title: 'Example', artist: { name: 'Artist' },
+        preview: 'https://evil.example/mp3', album: { id: 9, title: 'Album' },
+      }] });
+      if (url.pathname === '/search/artist') return reply({ data: [{
+        id: 22, name: 'Artist', link: 'https://www.deezer.com/artist/22',
+      }] });
+      return reply({ data: [] });
     });
-
-    const result = await service.musicVideos('Artist');
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0]).toMatchObject({ id: 'abcDEF12_-3', title: 'Official video' });
-  });
-  it('uses the public RSS regional chart without claiming Daily Top 100 when no Apple token is configured', async () => {
-    const previous = process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
-    delete process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
-    try {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ feed: { title: 'Most Played', results: [
-          { id: 'one', name: 'Song One', artistName: 'Artist One' },
-        ] } }),
-      } as unknown as Response);
-      const result = await new DiscoveryService().dailyTop100('TZ');
-      expect(result).toMatchObject({
-        source: 'Apple Music RSS',
-        title: 'Regional Most Played (RSS; not Daily Top 100)',
-        territory: 'TZ',
-        chartType: 'regional_most_played',
-        dailyTop100Available: false,
-      });
-      expect(result.items).toHaveLength(1);
-      expect((global.fetch as jest.Mock).mock.calls[0][0].toString())
-        .toContain('/tz/music/most-played/100/songs.json');
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-    } finally {
-      if (previous === undefined) delete process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
-      else process.env.APPLE_MUSIC_DEVELOPER_TOKEN = previous;
-    }
+    const service = new DiscoveryService();
+    const songs = await service.searchTracks('example');
+    expect(songs.items[0]).toMatchObject({ id: '1', previewUrl: null, playback: 'external_catalog_only' });
+    const artists = await service.searchArtists('artist');
+    expect(artists.items).toMatchObject([{ id: '22', name: 'Artist' }]);
   });
 
-  it('retries one transient Apple RSS 503 and caches successful chart bytes', async () => {
-    const freshService = new DiscoveryService();
+  it('retries transient Deezer chart 503 once and caches only success', async () => {
     global.fetch = jest.fn()
-      .mockResolvedValueOnce({ ok: false, status: 503 })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({
-        feed: { title: 'Top Songs', results: [
-          { id: 'song-one', name: 'One', artistName: 'Artist One' },
-        ] },
-      }) });
-    const first = await freshService.songsChart('TZ');
-    const second = await freshService.songsChart('TZ');
-    expect(first).toMatchObject({ source: 'Apple Music RSS', territory: 'TZ' });
-    expect(first.items).toHaveLength(1);
-    expect(second).toEqual(first);
+      .mockResolvedValueOnce(reply(null, 503))
+      .mockResolvedValueOnce(reply({ data: [] }));
+    const service = new DiscoveryService();
+    await service.songsChart();
+    await service.songsChart();
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('does not retry a permanent Apple RSS 400', async () => {
-    const freshService = new DiscoveryService();
-    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 400 });
-    await expect(freshService.songsChart('TZ')).rejects.toThrow('APPLE_RSS_HTTP_400');
+  it('never retries Deezer 400 and does not invent chart results', async () => {
+    global.fetch = jest.fn().mockResolvedValue(reply({}, 400));
+    await expect(new DiscoveryService().songsChart('TZ')).rejects.toThrow('DEEZER_HTTP_400');
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps original YouTube Music video IDs and rejects malformed video rows', async () => {
+    global.fetch = jest.fn().mockResolvedValue(reply({ videos: [
+      { videoId: 'not-valid', title: 'Invalid' },
+      { videoId: 'abcDEF12_-3', title: 'Official', artist: 'Artist' },
+      { videoId: 'abcDEF12_-3', title: 'Duplicate' },
+    ] }));
+    const result = await new DiscoveryService().musicVideos('Artist');
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      id: 'abcDEF12_-3', title: 'Official', playback: 'external_youtube_only',
+    });
+  });
 });

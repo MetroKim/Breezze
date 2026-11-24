@@ -1,242 +1,243 @@
 import { Injectable } from '@nestjs/common';
 
-type AppleFeedItem = {
-  id?: string;
-  name?: string;
-  artistName?: string;
-  artworkUrl100?: string;
-  url?: string;
-  releaseDate?: string;
-  genres?: { name?: string }[];
+type DeezerArtist = {
+  id?: number; name?: string; link?: string;
+  picture_big?: string; picture_medium?: string;
 };
-
-type AppleFeedResponse = {
-  feed?: { title?: string; results?: AppleFeedItem[] };
+type DeezerAlbum = {
+  id?: number; title?: string; link?: string; release_date?: string;
+  cover_big?: string; cover_medium?: string; nb_tracks?: number;
+  record_type?: string; artist?: DeezerArtist;
+  genres?: { data?: { name?: string }[] };
+  tracks?: { data?: DeezerTrack[] };
 };
+type DeezerTrack = {
+  id?: number; title?: string; link?: string; duration?: number;
+  preview?: string; track_position?: number; artist?: DeezerArtist;
+  album?: DeezerAlbum;
+};
+type DeezerPage<T> = { data?: T[]; total?: number; error?: { message?: string } };
 
 @Injectable()
 export class DiscoveryService {
-  private readonly appleFeedCache = new Map<string, {
-    expiresAt: number;
-    fetchedAt: string;
-    payload: AppleFeedResponse;
-  }>();
+  private readonly deezerCache = new Map<string, { until: number; payload: unknown }>();
 
   private country(value?: string): string {
     const normalized = (value ?? 'us').trim().toLowerCase();
     return /^[a-z]{2}$/.test(normalized) && normalized !== 'ww' ? normalized : 'us';
   }
 
-  private async appleFeed(kind: 'songs' | 'albums', country?: string) {
-    const territory = this.country(country);
-    const url = `https://rss.marketingtools.apple.com/api/v2/${territory}/music/most-played/100/${kind}.json`;
-    const cached = this.appleFeedCache.get(url);
-    let payload: AppleFeedResponse;
-    let fetchedAt: string;
-    if (cached && cached.expiresAt > Date.now()) {
-      payload = cached.payload;
-      fetchedAt = cached.fetchedAt;
-    } else {
-      let response: Response | undefined;
-      // Only safe, idempotent reads may retry. Transient timeouts, 429 and
-      // upstream 5xx get one bounded retry; 4xx and invalid JSON fail closed.
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        } catch (error) {
-          if (attempt === 1) throw error;
-          continue;
-        }
-        if (!response.ok) {
-          if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
-            continue;
-          }
-          throw new Error(`APPLE_RSS_HTTP_${response.status}`);
-        }
-        break;
+  // The public Deezer chart is global; never label its results as a country-
+  // specific chart based on the requesting listener's location.
+  private async deezer<T>(
+    path: string,
+    params: Record<string, string> = {},
+    ttlMs = 0,
+  ): Promise<T> {
+    const url = new URL(path.replace(/^\//, ''), 'https://api.deezer.com/');
+    for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
+    const key = url.toString();
+    const cached = this.deezerCache.get(key);
+    if (cached && cached.until > Date.now()) return cached.payload as T;
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await fetch(url, {
+          headers: { accept: 'application/json', 'user-agent': 'Breezze/1.0' },
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch (error) {
+        if (attempt === 1) throw error;
+        continue;
       }
-      if (!response?.ok) throw new Error('APPLE_RSS_UNAVAILABLE');
-      payload = await response.json() as AppleFeedResponse;
-      if (!Array.isArray(payload.feed?.results)) {
-        throw new Error('APPLE_RSS_INVALID_RESPONSE');
-      }
-      const now = Date.now();
-      fetchedAt = new Date(now).toISOString();
-      // Charts update far less often than listener requests. Avoid repeated
-      // upstream pressure and preserve source fetch time for cached responses.
-      this.appleFeedCache.set(url, {
-        expiresAt: now + 10 * 60 * 1000,
-        fetchedAt,
-        payload,
-      });
+      if (response.ok) break;
+      if (attempt === 0 && (response.status === 429 || response.status >= 500)) continue;
+      throw new Error('DEEZER_HTTP_' + response.status);
     }
-    const results = payload.feed?.results;
-    if (!Array.isArray(results)) throw new Error('APPLE_RSS_INVALID_RESPONSE');
+    if (!response?.ok) throw new Error('DEEZER_UNAVAILABLE');
+    const payload = await response.json() as T & { error?: { message?: string } };
+    if (payload.error) throw new Error('DEEZER_API_REJECTED_REQUEST');
+    if (ttlMs > 0) {
+      if (this.deezerCache.size >= 120) this.deezerCache.clear();
+      this.deezerCache.set(key, { until: Date.now() + ttlMs, payload });
+    }
+    return payload;
+  }
+
+  private page<T>(payload: DeezerPage<T>): T[] {
+    if (!Array.isArray(payload.data)) throw new Error('DEEZER_INVALID_RESPONSE');
+    return payload.data;
+  }
+
+  private previewUrl(value?: string): string | null {
+    if (!value) return null;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && url.hostname.endsWith('.dzcdn.net')
+        ? url.toString() : null;
+    } catch { return null; }
+  }
+
+  private trackItem(track: DeezerTrack, index?: number) {
+    if (!Number.isSafeInteger(track.id) || !track.id ||
+        !track.title?.trim() || !track.artist?.name?.trim()) return null;
+    const previewUrl = this.previewUrl(track.preview);
     return {
-      source: 'Apple Music RSS',
-      sourceUrl: url,
-      territory: territory.toUpperCase(),
-      title: payload.feed?.title ?? 'Most Played',
-      fetchedAt,
-      items: results.map((item, index) => ({
-        id: item.id ?? null,
-        title: item.name ?? 'Untitled',
-        artist: item.artistName ?? 'Unknown artist',
-        artworkUrl: item.artworkUrl100 ?? null,
-        releaseDate: item.releaseDate ?? null,
-        genres: (item.genres ?? []).map((genre) => genre.name).filter(Boolean),
-        rank: index + 1,
-        url: item.url ?? null,
-        playback: 'external_catalog_only',
-      })),
+      id: String(track.id),
+      title: track.title.trim(),
+      artist: track.artist.name.trim(),
+      artistId: track.artist.id ?? null,
+      albumId: track.album?.id ?? null,
+      albumTitle: track.album?.title ?? null,
+      albumUrl: track.album?.link ?? null,
+      artworkUrl: track.album?.cover_big ?? track.album?.cover_medium ?? null,
+      durationMs: Number.isSafeInteger(track.duration) && (track.duration ?? 0) > 0
+        ? track.duration! * 1000 : null,
+      trackNumber: track.track_position ?? null,
+      url: track.link ?? null,
+      previewUrl,
+      rank: index == null ? null : index + 1,
+      playback: previewUrl ? 'preview_only' : 'external_catalog_only',
     };
   }
 
+  private albumItem(album: DeezerAlbum) {
+    if (!Number.isSafeInteger(album.id) || !album.id || !album.title?.trim()) return null;
+    return {
+      id: String(album.id),
+      title: album.title.trim(),
+      artist: album.artist?.name ?? 'Unknown artist',
+      artworkUrl: album.cover_big ?? album.cover_medium ?? null,
+      releaseDate: album.release_date ?? null,
+      trackCount: album.nb_tracks ?? null,
+      genres: album.genres?.data?.map(g => g.name).filter((g): g is string => !!g) ?? [],
+      isCompilation: album.record_type === 'compilation',
+      url: album.link ?? null,
+      playback: 'external_catalog_only',
+    };
+  }
+
+  async songsChart(_country?: string) {
+    const rows = this.page(await this.deezer<DeezerPage<DeezerTrack>>(
+      'chart/0/tracks', { limit: '100' }, 10 * 60_000,
+    ));
+    return {
+      source: 'Deezer',
+      sourceUrl: 'https://api.deezer.com/chart/0/tracks',
+      territory: 'GLOBAL',
+      title: 'Deezer Global Top Tracks',
+      fetchedAt: new Date().toISOString(),
+      items: rows.map((row, index) => this.trackItem(row, index))
+        .filter((row): row is NonNullable<typeof row> => row !== null),
+    };
+  }
 
   async dailyTop100(country?: string) {
-    const token = process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
-    if (!token) {
-      // A public regional chart is better than a 503, but Apple's RSS
-      // Most Played chart is not the distinct Daily Top 100 API chart.
-      const feed = await this.songsChart(country);
-      return {
-        ...feed,
-        title: 'Regional Most Played (RSS; not Daily Top 100)',
-        chartType: 'regional_most_played' as const,
-        dailyTop100Available: false,
-      };
-    }
-    const territory = this.country(country);
-    const url = new URL(`https://api.music.apple.com/v1/catalog/${territory}/charts`);
-    url.searchParams.set('types', 'songs');
-    url.searchParams.set('with', 'dailyGlobalTopCharts');
-    url.searchParams.set('limit', '100');
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) throw new Error(`APPLE_MUSIC_CHART_HTTP_${response.status}`);
-    const payload = await response.json() as {
-      results?: { songs?: { name?: string; data?: Record<string, any>[] }[] };
-    };
-    const charts = payload.results?.songs ?? [];
-    const chart = charts[0];
-    const items = chart?.data ?? [];
+    const chart = await this.songsChart(country);
     return {
-      source: 'Apple Music API',
-      title: chart?.name ?? 'Daily Global Top Songs',
-      territory: territory.toUpperCase(),
-      fetchedAt: new Date().toISOString(),
-      items: items.map((item, index) => {
-        const attributes = item.attributes ?? {};
-        const artwork = attributes.artwork?.url;
-        return {
-          id: item.id ?? null,
-          title: attributes.name ?? 'Untitled',
-          artist: attributes.artistName ?? 'Unknown artist',
-          artworkUrl: typeof artwork === 'string'
-            ? artwork.replace('{w}', '300').replace('{h}', '300')
-            : null,
-          rank: index + 1,
-          releaseDate: attributes.releaseDate ?? null,
-          url: attributes.url ?? null,
-          playback: 'external_catalog_only',
-        };
-      }),
+      ...chart,
+      title: 'Deezer Global Top Tracks (not a daily regional Top 100)',
+      chartType: 'deezer_global_chart' as const,
+      dailyTop100Available: false,
     };
   }
 
-  songsChart(country?: string) {
-    return this.appleFeed('songs', country);
+  // Deezer's global trending-album chart has no release dates. Verify real
+  // album release_date fields individually; never infer that chart placement
+  // means "new release".
+  async newReleases(_country?: string) {
+    const rows = this.page(await this.deezer<DeezerPage<DeezerAlbum>>(
+      'chart/0/albums', { limit: '30' }, 10 * 60_000,
+    ));
+    const relevant = rows.slice(0, 18).filter(row => Number.isSafeInteger(row.id));
+    const hydrated = await Promise.allSettled(relevant.map(row =>
+      this.deezer<DeezerAlbum>('album/' + row.id, {}, 10 * 60_000),
+    ));
+    const now = Date.now();
+    const earliest = now - 30 * 86400000;
+    const items = hydrated.flatMap((result) => {
+      if (result.status !== 'fulfilled') return [];
+      const item = this.albumItem(result.value);
+      const release = Date.parse(result.value.release_date ?? '');
+      return item && Number.isFinite(release) && release >= earliest && release <= now
+        ? [item] : [];
+    }).sort((a, b) =>
+      Date.parse(b.releaseDate ?? '') - Date.parse(a.releaseDate ?? ''),
+    );
+    return {
+      source: 'Deezer',
+      sourceUrl: 'https://api.deezer.com/chart/0/albums',
+      territory: 'GLOBAL',
+      title: 'Recently released albums appearing on Deezer global charts',
+      fetchedAt: new Date().toISOString(),
+      items,
+    };
   }
 
   async recentChartReleases(kind: 'songs' | 'albums', country?: string) {
-    const chart = await this.appleFeed(kind, country);
-    const now = Date.now();
-    const earliest = now - 30 * 24 * 60 * 60 * 1000;
-    const items = chart.items.filter(item => {
-      const released = Date.parse(item.releaseDate ?? '');
-      return released >= earliest && released <= now;
-    }).sort((a, b) => Date.parse(b.releaseDate!) - Date.parse(a.releaseDate!));
-    return { ...chart, title: 'Recent releases in the regional chart',
-      items: items.map(item => ({ ...item, rank: null })) };
-  }
-
-  newReleases(country?: string) {
-    return this.recentChartReleases('albums', country);
+    const releases = await this.newReleases(country);
+    if (kind === 'albums') return releases;
+    // "Latest Songs" lists tracks FROM independently dated new albums, not
+    // tracks falsely presumed to have been first released this month.
+    const recent = releases.items.slice(0, 6);
+    const pages = await Promise.allSettled(recent.map(album =>
+      this.albumTracks(album.id),
+    ));
+    const seen = new Set<string>();
+    const items = pages.flatMap((page, index) => {
+      if (page.status !== 'fulfilled') return [];
+      return page.value.items.map(track => ({
+        ...track,
+        releaseDate: recent[index].releaseDate,
+        rank: null,
+      })).filter(track => {
+        if (seen.has(track.id)) return false;
+        seen.add(track.id);
+        return true;
+      });
+    });
+    return { ...releases,
+      title: 'Tracks from recently released Deezer chart albums',
+      items,
+    };
   }
 
   async artistAlbums(artistId: string) {
-    if (!/^\d{1,20}$/.test(artistId)) throw new Error('INVALID_APPLE_ARTIST_ID');
-    const url = new URL('https://itunes.apple.com/lookup');
-    url.searchParams.set('id', artistId);
-    url.searchParams.set('entity', 'album');
-    url.searchParams.set('limit', '200');
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error(`ITUNES_LOOKUP_HTTP_${response.status}`);
-    const payload = await response.json() as { results?: Record<string, unknown>[] };
-    const rows = Array.isArray(payload.results) ? payload.results : [];
-    const artist = rows.find((row) => row.wrapperType === 'artist');
-    const albums = rows.filter((row) => row.wrapperType === 'collection');
+    if (!/^\d{1,20}$/.test(artistId)) throw new Error('INVALID_DEEZER_ARTIST_ID');
+    const [artist, albums] = await Promise.all([
+      this.deezer<DeezerArtist>('artist/' + artistId, {}, 5 * 60_000),
+      this.deezer<DeezerPage<DeezerAlbum>>('artist/' + artistId + '/albums', { limit: '100' }, 5 * 60_000),
+    ]);
+    const items = this.page(albums).map(row =>
+      this.albumItem({ ...row, artist: row.artist ?? artist }),
+    ).filter((row): row is NonNullable<typeof row> => row !== null);
     return {
-      source: 'Apple iTunes Search API',
-      artist: artist ? { id: artist.artistId, name: artist.artistName } : null,
+      source: 'Deezer',
+      artist: { id: String(artist.id ?? artistId), name: artist.name ?? null },
       fetchedAt: new Date().toISOString(),
-      items: albums.map((album) => ({
-        id: album.collectionId,
-        title: album.collectionName,
-        artist: album.artistName,
-        artworkUrl: album.artworkUrl100,
-        releaseDate: album.releaseDate,
-        trackCount: album.trackCount,
-        genres: typeof album.primaryGenreName === 'string'
-          ? [album.primaryGenreName].filter(Boolean) : [],
-        isCompilation: album.isCompilation === true,
-        url: album.collectionViewUrl,
-        playback: 'external_catalog_only',
-      })),
+      items,
     };
   }
 
   async albumTracks(albumId: string) {
-    if (!/^\d{1,20}$/.test(albumId)) throw new Error('INVALID_APPLE_ALBUM_ID');
-    const url = new URL('https://itunes.apple.com/lookup');
-    url.searchParams.set('id', albumId);
-    url.searchParams.set('entity', 'song');
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error(`ITUNES_LOOKUP_HTTP_${response.status}`);
-    const payload = await response.json() as { results?: Record<string, unknown>[] };
-    const rows = Array.isArray(payload.results) ? payload.results : [];
-    const album = rows.find((row) => row.wrapperType === 'collection');
-    const tracks = rows.filter((row) => row.wrapperType === 'track');
+    if (!/^\d{1,20}$/.test(albumId)) throw new Error('INVALID_DEEZER_ALBUM_ID');
+    const album = await this.deezer<DeezerAlbum>('album/' + albumId, {}, 5 * 60_000);
+    if (!album.id) throw new Error('DEEZER_ALBUM_UNAVAILABLE');
+    const trackRows = Array.isArray(album.tracks?.data)
+      ? album.tracks!.data!
+      : this.page(await this.deezer<DeezerPage<DeezerTrack>>(
+        'album/' + albumId + '/tracks', { limit: '100' }, 5 * 60_000,
+      ));
+    const items = trackRows.map(track =>
+      this.trackItem({ ...track, album: track.album ?? album }),
+    ).filter((row): row is NonNullable<typeof row> => row !== null);
     return {
-      source: 'Apple iTunes Search API',
-      album: album ? {
-        id: album.collectionId,
-        title: album.collectionName,
-        artist: album.artistName,
-        // Only report source-provided metadata, never infer genre/compilation
-        // from the artist name or the album title.
-        genres: typeof album.primaryGenreName === 'string'
-          ? [album.primaryGenreName].filter(Boolean) : [],
-        isCompilation: album.isCompilation === true,
-      } : null,
+      source: 'Deezer',
+      album: this.albumItem(album),
       fetchedAt: new Date().toISOString(),
-      items: tracks.map((track) => ({
-        id: track.trackId,
-        title: track.trackName,
-        artist: track.artistName,
-        artworkUrl: track.artworkUrl100,
-        durationMs: track.trackTimeMillis,
-        trackNumber: track.trackNumber,
-        url: track.trackViewUrl,
-        previewUrl: track.previewUrl,
-        playback: 'preview_only',
-      })),
+      items,
     };
   }
-
-
 
   async musicVideoForSong(id: string) {
     const base = process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000';
@@ -398,52 +399,32 @@ export class DiscoveryService {
 
   async searchTracks(query: string) {
     const q = query.trim().slice(0, 120);
-    if (q.length < 2) return { source: 'Apple iTunes Search API', items: [] };
-    const url = new URL('https://itunes.apple.com/search');
-    url.searchParams.set('term', q);
-    url.searchParams.set('entity', 'song');
-    url.searchParams.set('limit', '30');
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error(`ITUNES_TRACK_SEARCH_HTTP_${response.status}`);
-    const payload = await response.json() as { results?: Record<string, unknown>[] };
+    if (q.length < 2) return { source: 'Deezer', items: [] };
+    const rows = this.page(await this.deezer<DeezerPage<DeezerTrack>>(
+      'search/track', { q, limit: '30' }, 60_000,
+    ));
     return {
-      source: 'Apple iTunes Search API',
-      items: (payload.results ?? []).map((track) => ({
-        id: track.trackId,
-        title: track.trackName,
-        artist: track.artistName,
-        artistId: track.artistId,
-        albumId: track.collectionId,
-        albumTitle: track.collectionName,
-        albumUrl: track.collectionViewUrl,
-        artworkUrl: track.artworkUrl100,
-        releaseDate: track.releaseDate,
-        durationMs: track.trackTimeMillis,
-        trackNumber: track.trackNumber,
-        url: track.trackViewUrl,
-        previewUrl: track.previewUrl,
-        playback: 'preview_only',
-      })),
+      source: 'Deezer',
+      items: rows.map(row => this.trackItem(row))
+        .filter((row): row is NonNullable<typeof row> => row !== null),
     };
   }
 
   async searchArtists(query: string) {
     const q = query.trim().slice(0, 100);
-    if (q.length < 2) return { source: 'Apple iTunes Search API', items: [] };
-    const url = new URL('https://itunes.apple.com/search');
-    url.searchParams.set('term', q);
-    url.searchParams.set('entity', 'musicArtist');
-    url.searchParams.set('limit', '15');
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error(`ITUNES_SEARCH_HTTP_${response.status}`);
-    const payload = await response.json() as { results?: Record<string, unknown>[] };
+    if (q.length < 2) return { source: 'Deezer', items: [] };
+    const rows = this.page(await this.deezer<DeezerPage<DeezerArtist>>(
+      'search/artist', { q, limit: '15' }, 60_000,
+    ));
     return {
-      source: 'Apple iTunes Search API',
-      items: (payload.results ?? []).map((artist) => ({
-        id: artist.artistId,
-        name: artist.artistName,
-        url: artist.artistLinkUrl,
-      })),
+      source: 'Deezer',
+      items: rows.filter(row => Number.isSafeInteger(row.id) && !!row.name?.trim())
+        .map(row => ({
+          id: String(row.id),
+          name: row.name,
+          url: row.link ?? null,
+          artworkUrl: row.picture_big ?? row.picture_medium ?? null,
+        })),
     };
   }
 }
