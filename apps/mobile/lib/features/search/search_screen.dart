@@ -485,6 +485,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
       return;
     }
+    if (isYouTubeSongId(track.id)) {
+      // Foreground playback uses YouTube's visible player, not extracted
+      // audio or a native Breezze stream/background playback entitlement.
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: track.id.substring('bz:youtube_music:'.length),
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+      );
+      return;
+    }
     if (isDeezerPreview(track.id) ||
         (track.id.startsWith('bz:deezer:') && track.hasPreview)) {
       final id = track.id.replaceFirst('bz:deezer:', 'bz:deezer_preview:');
@@ -770,7 +783,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                           IconButton(
                                             tooltip: track.id.startsWith('bzv:')
                                                 ? 'Watch music video'
-                                                : track.hasPreview ? 'Play preview' : 'Play',
+                                                : isYouTubeSongId(track.id)
+                                                    ? 'Play on YouTube'
+                                                    : track.hasPreview ? 'Play preview' : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
