@@ -61,6 +61,10 @@ export class SavedCatalogAlbumDto {
   @IsOptional()
   @IsBoolean()
   isCompilation?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isPinned?: boolean;
 }
 
 @Controller('library')

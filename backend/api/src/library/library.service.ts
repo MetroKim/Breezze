@@ -63,7 +63,7 @@ export class LibraryService {
     }
     const rows = await this.prisma.userSavedCatalogAlbum.findMany({
       where: { userId, source: LibraryService.savedAlbumSource },
-      orderBy: [{ savedAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isPinned: 'desc' }, { savedAt: 'desc' }, { id: 'desc' }],
       take: 101,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
@@ -76,6 +76,7 @@ export class LibraryService {
         catalogUrl: true,
         genres: true,
         isCompilation: true,
+        isPinned: true,
         savedAt: true,
         updatedAt: true,
       },
@@ -97,6 +98,7 @@ export class LibraryService {
       catalogUrl?: string;
       genres?: string[];
       isCompilation?: boolean;
+      isPinned?: boolean;
     },
   ) {
     const source = LibraryService.savedAlbumSource;
@@ -120,8 +122,11 @@ export class LibraryService {
       where: {
         userId_source_externalAlbumId: { userId, source, externalAlbumId },
       },
-      create: { userId, source, externalAlbumId, ...payload },
-      update: payload,
+      create: { userId, source, externalAlbumId, ...payload, isPinned: dto.isPinned === true },
+      update: {
+        ...payload,
+        ...(dto.isPinned === undefined ? {} : { isPinned: dto.isPinned }),
+      },
       select: {
         id: true,
         source: true,
@@ -132,6 +137,7 @@ export class LibraryService {
         catalogUrl: true,
         genres: true,
         isCompilation: true,
+        isPinned: true,
         savedAt: true,
         updatedAt: true,
       },
