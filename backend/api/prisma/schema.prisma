@@ -27,6 +27,7 @@ model User {
   favorites      Favorite[]
   playlists      Playlist[]
   downloads      DownloadRecord[]
+  videoDownloads VideoDownloadRecord[]
   recentlyPlayed RecentlyPlayed[]
   listeningEvents ListeningEvent[]
   playbackSessions PlaybackSession[]
@@ -232,6 +233,7 @@ model Track {
   playbackSessions PlaybackSession[]
   playlistItems PlaylistItem[]
   downloads DownloadRecord[]
+  videoAsset VideoAsset?
   lyrics Lyrics?
 
   @@index([artistId, title])
@@ -368,6 +370,33 @@ model PlaylistItem {
   track      Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
 
   @@unique([playlistId, trackId])
+}
+
+/// Only a verified, Breezze-controlled MP4 R2 object can become a
+/// native playable/downloadable video. YouTube metadata never creates one.
+model VideoAsset {
+  id        String   @id @default(uuid())
+  trackId   String   @unique
+  status    String   @default("pending")
+  mimeType  String   @default("video/mp4")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  downloads VideoDownloadRecord[]
+}
+
+model VideoDownloadRecord {
+  id           String     @id @default(uuid())
+  userId       String
+  videoAssetId String
+  status       String     @default("active")
+  expiresAt    DateTime
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoAsset   VideoAsset @relation(fields: [videoAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoAssetId])
+  @@index([userId, status, createdAt])
 }
 
 model DownloadRecord {
