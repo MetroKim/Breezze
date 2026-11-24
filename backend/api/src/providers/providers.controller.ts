@@ -46,6 +46,44 @@ export class ProvidersController {
     return this.youtubeMusic.getWatchQueue(videoId, parsedLimit);
   }
 
+  // All these routes call the private ytmusicapi service for public catalog
+  // metadata. None return media bytes, signed streaming URLs or download grants.
+  @Get('youtube_music/suggestions')
+  getYoutubeMusicSuggestions(@Query('q') query: string, @Query('limit') limit?: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getSuggestions(query ?? '', limit === undefined ? 10 : Number(limit));
+  }
+
+  @Get('youtube_music/albums/:albumId')
+  getYoutubeMusicAlbum(@Param('albumId') albumId: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getAlbum(albumId);
+  }
+
+  @Get('youtube_music/playlists/:playlistId')
+  getYoutubeMusicPlaylist(@Param('playlistId') playlistId: string, @Query('limit') limit?: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getPlaylist(playlistId, limit === undefined ? 50 : Number(limit));
+  }
+
+  @Get('youtube_music/moods')
+  getYoutubeMusicMoods() {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getMoods();
+  }
+
+  @Get('youtube_music/moods/playlists')
+  getYoutubeMusicMoodPlaylists(@Query('params') params: string, @Query('limit') limit?: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getMoodPlaylists(params ?? '', limit === undefined ? 20 : Number(limit));
+  }
+
+  @Get('youtube_music/explore')
+  getYoutubeMusicExplore() {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getExplore();
+  }
+
   @Get(':id/tracks/:trackId')
   getTrack(@Param('id') id: string, @Param('trackId') trackId: string) {
     if (id === 'breezze_internal') return { kind: 'unsupported', reason: 'USE_RIGHTS_AWARE_CATALOG_ENDPOINT' };
