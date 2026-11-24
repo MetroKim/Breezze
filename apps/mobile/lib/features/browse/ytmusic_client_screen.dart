@@ -1,6 +1,7 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
@@ -112,12 +113,21 @@ class _YouTubeMusicClientScreenState
   Map<String, dynamic>? _moods;
   bool _loading = true;
   int _generation = 0;
+  bool _accountLoading = true;
+  bool _accountBusy = false;
+  String? _accountError;
+  Map<String, dynamic>? _account;
+  List<Map<String, dynamic>> _accountPlaylists = [];
+
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _load();
+      if (mounted) {
+        _load();
+        _loadConnection();
+      }
     });
   }
 
@@ -135,6 +145,230 @@ class _YouTubeMusicClientScreenState
       _moods = results[1];
       _loading = false;
     });
+  }
+
+  /// The YouTube account connection is independent of Breezze's login.
+  /// Server responses contain public channel/playlist data, never credentials.
+  Future<void> _loadConnection() async {
+    final current = ref.read(authSessionProvider);
+    if (current is! AuthSignedIn) {
+      if (mounted) setState(() {
+        _account = null;
+        _accountLoading = false;
+        _accountPlaylists = [];
+      });
+      return;
+    }
+    if (mounted) setState(() {
+      _accountLoading = true;
+      _accountError = null;
+    });
+    final api = ref.read(authSessionProvider.notifier).api;
+    try {
+      final status = await api.youtubeAccountStatus();
+      List<Map<String, dynamic>> playlists = [];
+      String? warning;
+      if (status['connected'] == true && status['available'] == true) {
+        try {
+          final response = await api.youtubeAccountPlaylists();
+          if (response['source'] == 'youtube_data_api') {
+            playlists = _ytRows(response['items']);
+          } else {
+            warning = 'YouTube playlists are unavailable right now.';
+          }
+        } catch (_) {
+          warning = 'Could not refresh YouTube playlists. Try again.';
+        }
+      }
+      if (!mounted) return;
+      final latest = ref.read(authSessionProvider);
+      if (latest is! AuthSignedIn || latest.userId != current.userId) return;
+      setState(() {
+        _account = status;
+        _accountPlaylists = playlists;
+        _accountError = warning;
+        _accountLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _accountLoading = false;
+        _accountError = 'YouTube account connection is not available.';
+      });
+    }
+  }
+
+  Future<void> _connectAccount() async {
+    final current = ref.read(authSessionProvider);
+    if (current is! AuthSignedIn || _accountBusy) return;
+    setState(() => _accountBusy = true);
+    try {
+      final flow = await ref.read(authSessionProvider.notifier).api
+          .youtubeAccountStart();
+      final raw = flow['authorizationUrl'];
+      final uri = raw is String ? Uri.tryParse(raw) : null;
+      if (uri == null || uri.scheme != 'https' ||
+          uri.host != 'accounts.google.com' ||
+          uri.path != '/o/oauth2/v2/auth' ||
+          uri.queryParameters['scope'] !=
+              'https://www.googleapis.com/auth/youtube.readonly') {
+        throw StateError('UNSAFE_GOOGLE_CONSENT_URL');
+      }
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) throw StateError('COULD_NOT_OPEN_CONSENT');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(
+          'Approve access in Google, then return here and tap Refresh connection.',
+        )),
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not start YouTube account linking.')),
+      );
+    } finally {
+      if (mounted) setState(() => _accountBusy = false);
+    }
+  }
+
+  Future<void> _disconnectAccount() async {
+    final current = ref.read(authSessionProvider);
+    if (current is! AuthSignedIn || _accountBusy) return;
+    final approve = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Disconnect YouTube account?'),
+        content: const Text(
+          'Breezze will remove its stored YouTube authorization. '
+          'Your YouTube account and playlists will remain unchanged.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (approve != true || !mounted) return;
+    setState(() => _accountBusy = true);
+    try {
+      await ref.read(authSessionProvider.notifier).api.youtubeAccountDisconnect();
+      if (!mounted) return;
+      setState(() {
+        _account = {'available': true, 'connected': false};
+        _accountPlaylists = [];
+        _accountError = null;
+      });
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not disconnect YouTube account.')),
+      );
+    } finally {
+      if (mounted) setState(() => _accountBusy = false);
+    }
+  }
+
+  Future<void> _openYoutubePlaylist(Map<String, dynamic> item) async {
+    final id = item['playlistId'];
+    if (!_ytPlaylistId(id)) return;
+    final uri = Uri.https('www.youtube.com', '/playlist',
+      {'list': id as String});
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _accountSection(ThemeData theme) {
+    final auth = ref.watch(authSessionProvider);
+    if (auth is! AuthSignedIn) return const SizedBox.shrink();
+    final account = _account;
+    final connected = account?['connected'] == true;
+    final available = account?['available'] == true;
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.bzSurface1,
+        borderRadius: BorderRadius.circular(BzRadius.card),
+        border: Border.all(color: theme.bzSeparator),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Your YouTube account', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Separate Google consent • read-only YouTube playlists. '
+            'Not a full YouTube Music library or music download permission.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.bzText2),
+          ),
+          if (_accountLoading) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(),
+          ] else ...[
+            const SizedBox(height: 12),
+            if (connected)
+              Text(
+                'Connected: ' + (account?['channelTitle'] as String? ??
+                  'YouTube channel'),
+              )
+            else
+              Text(available
+                ? 'Your YouTube account is not connected.'
+                : 'Account connection is not configured yet.'),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (!connected)
+                  OutlinedButton(
+                    onPressed: available && !_accountBusy
+                        ? _connectAccount : null,
+                    child: const Text('Connect YouTube'),
+                  ),
+                OutlinedButton(
+                  onPressed: !_accountBusy ? _loadConnection : null,
+                  child: const Text('Refresh connection'),
+                ),
+                if (connected)
+                  TextButton(
+                    onPressed: _accountBusy ? null : _disconnectAccount,
+                    child: const Text('Disconnect'),
+                  ),
+              ],
+            ),
+            if (_accountError != null) ...[
+              const SizedBox(height: 8),
+              Text(_accountError!,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.bzText2)),
+            ],
+            if (connected) ...[
+              const SizedBox(height: 16),
+              Text('Your YouTube playlists',
+                style: theme.textTheme.titleMedium),
+              if (_accountPlaylists.isEmpty)
+                const ListTile(
+                  title: Text('No playlists available'),
+                  subtitle: Text(
+                    'This view shows playlists returned by the official '
+                    'YouTube Data API, not all YouTube Music library items.',
+                  ),
+                ),
+              for (final playlist in _accountPlaylists)
+                _ytRow(playlist,
+                  subtitle: 'YouTube playlist • opens on YouTube',
+                  onTap: _ytPlaylistId(playlist['playlistId'])
+                      ? () => _openYoutubePlaylist(playlist) : null,
+                ),
+            ],
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _watch(Map<String, dynamic> item, String idKey) async {
@@ -227,6 +461,8 @@ class _YouTubeMusicClientScreenState
                               style: theme.textTheme.bodySmall
                                   ?.copyWith(color: theme.bzText2),
                             ),
+                            const SizedBox(height: 18),
+                            _accountSection(theme),
                             if (explore == null)
                               const ListTile(
                                 title: Text('Explore is temporarily unavailable'),
