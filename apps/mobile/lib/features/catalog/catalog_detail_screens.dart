@@ -331,7 +331,7 @@ class TrackDetailScreen extends ConsumerWidget {
                     final album = exact.first;
                     return _CatalogSection(
                       title: 'Verified album relationship',
-                      subtitle: 'Exact title and artist match from Deezer Deezer catalog metadata.',
+                      subtitle: 'Exact title and artist match from Deezer catalog metadata.',
                       available: true,
                       child: ListTile(
                         contentPadding: EdgeInsets.zero,

@@ -108,8 +108,8 @@ void main() {
 
     expect(find.text('Test Artist'), findsWidgets);
     expect(find.text('Saved Song'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Apple catalog discography'), 260);
-    expect(find.text('Apple catalog discography'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Deezer catalog discography'), 260);
+    expect(find.text('Deezer catalog discography'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Upcoming Concerts'), 260);
     expect(find.text('Upcoming Concerts'), findsOneWidget);
     expect(

@@ -64,9 +64,9 @@ class _BrowseChartApi extends BreezzeApi {
 
   @override
   Future<Map<String, dynamic>> discoveryDailyTop100({String country = 'us'}) async => {
-        'source': 'Apple Music RSS',
-        'title': 'Regional Most Played (RSS; not Daily Top 100)',
-        'territory': 'TZ',
+        'source': 'Deezer',
+        'title': 'Deezer Global Top Tracks (not a daily regional Top 100)',
+        'territory': 'GLOBAL',
         'fetchedAt': '2026-11-24T12:00:00Z',
         'dailyTop100Available': false,
         'items': [
@@ -185,7 +185,7 @@ void main() {
     );
   });
 
-  testWidgets('Browse labels regional RSS chart fallback, not Daily Top 100',
+  testWidgets('Browse labels the Deezer global chart fallback, not Daily Top 100',
       (tester) async {
     final source = _BrowseSource();
     await _mountBrowse(tester, source, api: _BrowseChartApi());
@@ -198,11 +198,11 @@ void main() {
 
     expect(find.text('Verified metadata result'), findsOneWidget);
     expect(
-      find.textContaining('Daily Top 100 is unavailable from this source'),
+      find.textContaining('Deezer global chart'),
       findsOneWidget,
     );
     expect(find.textContaining('Catalog metadata only'), findsOneWidget);
-    expect(find.textContaining('Apple Music RSS'), findsOneWidget);
+    expect(find.textContaining('Deezer'), findsWidgets);
   });
   testWidgets('Unavailable Browse sections do not invent charts',
       (tester) async {
