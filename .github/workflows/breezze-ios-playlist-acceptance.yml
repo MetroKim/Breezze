@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/breezze-ios-playlist-acceptance.yml
       - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
+      - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
       - apps/mobile/lib/app/playlist_store.dart
       - apps/mobile/pubspec.yaml
 
@@ -65,3 +66,4 @@ jobs:
           set -euo pipefail
           flutter devices
           flutter test integration_test/playlist_sync_on_emulator_test.dart -d "$SIMULATOR_ID" --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+          flutter test integration_test/artist_pin_on_emulator_test.dart -d "$SIMULATOR_ID" --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
