@@ -6,7 +6,7 @@ import { VideoAssetsService } from './video-assets.service';
 describe('VideoAssetsService', () => {
   const assetId = '123e4567-e89b-42d3-a456-426614174000';
   const prisma = {
-    videoAsset: { findUnique: jest.fn() },
+    videoAsset: { findUnique: jest.fn(), findMany: jest.fn() },
     videoDownloadRecord: {
       upsert: jest.fn(),
       findUnique: jest.fn(),
@@ -44,6 +44,44 @@ describe('VideoAssetsService', () => {
       rights as unknown as RightsDecisionService,
       signer as unknown as MediaSigner,
     );
+  });
+
+  it('catalog includes only territory-authorized videos and shows separate download eligibility', async () => {
+    prisma.videoAsset.findMany.mockResolvedValue([{
+      id: assetId,
+      track: { id: 'track-1', title: 'Licensed video', artist: { name: 'Artist' } },
+    }]);
+    rights.decide.mockImplementation(async (request) => ({
+      allowed: request.action === 'video.play', previewOnly: false,
+      reason: request.action === 'video.play' ? 'OK' : 'NO_EXPLICIT_AUTHORIZATION',
+      expiresAt: null,
+    }));
+    const catalog = await service.catalog('owner', 'TZ');
+    expect(catalog).toMatchObject({
+      territory: 'TZ',
+      items: [{
+        videoAssetId: assetId, title: 'Licensed video', artist: 'Artist',
+        downloadAvailable: false,
+      }],
+    });
+    expect(prisma.videoAsset.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'ready',
+          mimeType: 'video/mp4',
+          track: expect.objectContaining({
+            source: 'breezze_internal',
+            territories: { some: { territory: 'TZ' } },
+          }),
+        }),
+        take: 25,
+      }),
+    );
+    expect(rights.decide).toHaveBeenCalledWith({
+      userId: 'owner', trackId: 'track-1', territory: 'TZ', action: 'video.play',
+    });
+    rights.decide.mockResolvedValue({ allowed: false, previewOnly: false, reason: 'TAKEDOWN_ACTIVE' });
+    expect((await service.catalog('owner', 'TZ')).items).toEqual([]);
   });
 
   it('requires a trusted two-letter edge country before reading an asset', async () => {
