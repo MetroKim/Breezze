@@ -730,6 +730,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     }
                   }
                   if (_ownerStillActive(owner)) {
+                    ref.invalidate(isAlbumPinnedProvider(
+                      (ownerId: owner, albumId: album.id),
+                    ));
                     ref.read(savedAlbumRefreshProvider.notifier).state++;
                   }
                 } catch (_) {
@@ -742,6 +745,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 return;
               }
               if (action != 'remove') return;
+              final owner = _ownerId;
+              if (!_ownerStillActive(owner)) return;
               final shouldRemove = await showDialog<bool>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
@@ -759,10 +764,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ],
                 ),
               );
-              if (shouldRemove != true || !mounted) return;
+              if (shouldRemove != true || !mounted ||
+                  !_ownerStillActive(owner)) return;
               try {
                 final store = SavedAlbumStore();
-                final owner = _ownerId;
                 await store.remove(owner, album.id);
                 final auth = ref.read(authSessionProvider);
                 if (auth is AuthSignedIn && auth.userId == owner) {
@@ -786,9 +791,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     }
                   }
                 }
-                if (!mounted) return;
+                if (!_ownerStillActive(owner)) return;
                 ref.invalidate(isAlbumSavedProvider(
-                  (ownerId: _ownerId, albumId: album.id),
+                  (ownerId: owner, albumId: album.id),
+                ));
+                ref.invalidate(isAlbumPinnedProvider(
+                  (ownerId: owner, albumId: album.id),
                 ));
                 ref.read(savedAlbumRefreshProvider.notifier).state++;
               } catch (_) {
