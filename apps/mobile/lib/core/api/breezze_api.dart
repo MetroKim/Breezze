@@ -201,6 +201,9 @@ class BreezzeApi {
   Future<Map<String, dynamic>> youtubeAccountPlaylists() =>
       _get('/youtube-account/playlists');
 
+  Future<Map<String, dynamic>> youtubeAccountPlaylistItems(String playlistId) =>
+      _get('/youtube-account/playlists/${Uri.encodeComponent(playlistId)}/items');
+
   Future<Map<String, dynamic>> youtubeAccountDisconnect() =>
       _delete('/youtube-account/connection');
 
