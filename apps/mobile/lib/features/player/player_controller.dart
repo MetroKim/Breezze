@@ -485,7 +485,14 @@ class PlayerController extends Notifier<PlayerState> {
       try {
         await (_activeSessionClient ?? _sessionClient).resume(sessionId);
       } catch (_) {
+        // A server playback session can expire before its media URL (e.g.
+        // the server's two-hour authorization lease). A failed resume must
+        // never keep using the old source. Resolve a fresh grant while
+        // preserving the requested position and existing queue.
         await _closePlaybackSession();
+        if (currentTrack != null) {
+          await _resolveAndPlay(currentTrack, initialPosition: state.position);
+        }
         return;
       }
     }

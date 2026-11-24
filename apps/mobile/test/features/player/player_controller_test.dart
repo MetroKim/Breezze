@@ -358,6 +358,54 @@ void main() {
     expect(player.state.playbackState, PlaybackState.idle);
   });
 
+
+  test('expired backend session re-resolves on resume instead of reusing old media', () async {
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'bz:jamendo:session-expiry',
+          streamUrl: 'https://media.example/old.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 6)),
+          sessionId: 'expired-server-session',
+        ),
+        PlayableSource(
+          trackId: 'bz:jamendo:session-expiry',
+          streamUrl: 'https://media.example/new.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+          sessionId: 'fresh-server-session',
+        ),
+      ];
+    final client = _FakePlaybackSessionClient()..rejectNextResume = true;
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackSessionClientProvider.overrideWithValue(client),
+      playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(hours: 1)),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const track = TrackInfo(id: 'bz:jamendo:session-expiry', title: 'Session renewal QA');
+    await player.playTrack(trackId: track.id, queue: const [track]);
+    await player.seekTo(const Duration(seconds: 33));
+    await player.pause();
+    expect(player.state.playbackState, PlaybackState.paused);
+
+    await player.resume();
+
+    expect(resolver.calls, 2);
+    expect(engine.prepareCount, 2);
+    expect(engine.lastSeekPosition, const Duration(seconds: 33));
+    expect(player.state.playbackState, PlaybackState.playing);
+    expect(player.state.currentTrack?.id, track.id);
+    expect(client.stopped, contains('expired-server-session'));
+    await player.stop();
+    expect(client.stopped, contains('fresh-server-session'));
+  });
+
 }
 
 class _FakePlaybackSessionClient implements PlaybackSessionClient {
@@ -366,6 +414,7 @@ class _FakePlaybackSessionClient implements PlaybackSessionClient {
   final List<String> stopped = [];
   final List<Map<String, Object>> heartbeatCalls = [];
   bool failFirstHeartbeat = false;
+  bool rejectNextResume = false;
 
   @override
   Future<Map<String, dynamic>> heartbeat({
@@ -388,7 +437,13 @@ class _FakePlaybackSessionClient implements PlaybackSessionClient {
   Future<void> pause(String sessionId) async { paused.add(sessionId); }
 
   @override
-  Future<void> resume(String sessionId) async { resumed.add(sessionId); }
+  Future<void> resume(String sessionId) async {
+    if (rejectNextResume) {
+      rejectNextResume = false;
+      throw StateError('SERVER_SESSION_EXPIRED');
+    }
+    resumed.add(sessionId);
+  }
 
   @override
   Future<void> stop(String sessionId) async { stopped.add(sessionId); }
