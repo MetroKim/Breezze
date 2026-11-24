@@ -116,12 +116,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     if (latestAuth is! AuthSignedIn || latestAuth.userId != auth.userId) {
       setState(() {
         _tracks = [];
+        _videos = [];
         _loading = false;
       });
       return;
     }
     setState(() {
       _tracks = tracks;
+      _videos = videos;
       _storageBytes = storageBytes;
       _loading = false;
     });
