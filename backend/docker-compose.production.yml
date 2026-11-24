@@ -58,14 +58,17 @@ services:
       LOGIN_ACCOUNT_RATE_WINDOW_MS: ${LOGIN_ACCOUNT_RATE_WINDOW_MS:-900000}
       MFA_ATTEMPT_RATE_LIMIT: ${MFA_ATTEMPT_RATE_LIMIT:-5}
       MFA_ATTEMPT_RATE_WINDOW_MS: ${MFA_ATTEMPT_RATE_WINDOW_MS:-900000}
-      AUDIUS_ENABLED: ${AUDIUS_ENABLED:-true}
-      AUDIUS_API_URL: ${AUDIUS_API_URL:-https://api.audius.co/v1}
-      AUDIUS_API_KEY: ${AUDIUS_API_KEY:-}
+      # External music sources: YouTube Music metadata via the sidecar; Deezer catalog and previews.
+      YTMUSIC_ENABLED: ${YTMUSIC_ENABLED:-true}
       YTMUSIC_API_URL: http://ytmusicapi:8000
+      DEEZER_ENABLED: ${DEEZER_ENABLED:-true}
+      DEEZER_API_URL: ${DEEZER_API_URL:-https://api.deezer.com}
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+      ytmusicapi:
         condition: service_healthy
     ports: ["${API_BIND_ADDRESS:-0.0.0.0}:3000:3000"]
     healthcheck:
