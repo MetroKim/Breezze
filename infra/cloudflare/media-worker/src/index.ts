@@ -70,18 +70,28 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   }
   const parts = url.pathname.split('/').filter(Boolean);
   if (parts.length !== 3) return error(404, 'NOT_FOUND');
-  const [, trackId, variant] = parts;
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(trackId)
-    || !/^[a-zA-Z0-9_-]{1,32}$/.test(variant)) return error(400, 'INVALID_MEDIA_PATH');
+  const [resource, trackId, variant] = parts;
+  const video = resource === 'video';
+  if (!video && resource !== 'audio') return error(404, 'NOT_FOUND');
+  if (video) {
+    if (!/^[0-9a-fA-F-]{36}$/.test(trackId) || !['stream', 'download'].includes(variant)) {
+      return error(400, 'INVALID_VIDEO_PATH');
+    }
+  } else if (!/^[a-zA-Z0-9_-]{1,128}$/.test(trackId)
+    || !/^[a-zA-Z0-9_-]{1,32}$/.test(variant)) {
+    return error(400, 'INVALID_MEDIA_PATH');
+  }
 
   const expires = Number(url.searchParams.get('e'));
   const signature = url.searchParams.get('s');
-  const payload = `${trackId}:${variant}:${expires}`;
+  const payload = video
+    ? `video:${trackId}:${variant}:${expires}`
+    : `${trackId}:${variant}:${expires}`;
   if (!await validSignature(env.MEDIA_SIGNING_KEY, payload, signature, expires)) {
     return error(403, 'MEDIA_SIGNATURE_INVALID_OR_EXPIRED');
   }
 
-  const key = `audio/${trackId}/${variant}`;
+  const key = video ? `video/${trackId}/original.mp4` : `audio/${trackId}/${variant}`;
   const rangeHeader = request.headers.get('range');
   let object: R2ObjectBody | R2Object | null;
   let status = 200;
@@ -135,9 +145,12 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   }
   if (!object) return error(404, 'MEDIA_NOT_FOUND');
 
-  const contentType = object.httpMetadata?.contentType
-    || (variant.toUpperCase().includes('LOSSLESS') || variant.toUpperCase().includes('FLAC') || variant.toUpperCase().includes('HI_RES')
-      ? 'audio/flac' : 'audio/mp4');
+  // Video mode serves only MP4 originals already ingested to Breezze R2.
+  // Metadata must never cause a YouTube URL to become an R2 media grant.
+  const contentType = video ? 'video/mp4'
+    : (object.httpMetadata?.contentType
+      || (variant.toUpperCase().includes('LOSSLESS') || variant.toUpperCase().includes('FLAC') || variant.toUpperCase().includes('HI_RES')
+        ? 'audio/flac' : 'audio/mp4'));
   const headers = new Headers({
     'Accept-Ranges': 'bytes',
     // Signed URLs must not be retained by browsers or intermediary caches: a cached
@@ -148,6 +161,9 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
     'ETag': object.httpEtag,
     'X-Content-Type-Options': 'nosniff',
   });
+  if (video && variant === 'download') {
+    headers.set('Content-Disposition', 'attachment; filename="breezze-video.mp4"');
+  }
   if (rangeHeader && rangeStart !== null && rangeLength !== null && totalSize !== null) {
     headers.set('Content-Range', `bytes ${rangeStart}-${rangeStart + rangeLength - 1}/${totalSize}`);
     headers.set('Content-Length', String(rangeLength));
@@ -163,7 +179,9 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!env.MEDIA_SIGNING_KEY || !env.MEDIA_BUCKET) return error(503, 'MEDIA_STORAGE_NOT_CONFIGURED');
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/audio/')) return playback(request, url, env);
+    if (url.pathname.startsWith('/audio/') || url.pathname.startsWith('/video/')) {
+      return playback(request, url, env);
+    }
     return error(404, 'NOT_FOUND');
   },
 };
