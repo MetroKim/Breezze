@@ -116,6 +116,72 @@ void main() {
     expect(tracks.single.rightsExpiresAtUtc, expiry);
   });
 
+  test('licensed video transfer uses the existing byte-range downloader', () async {
+    const assetId = '123e4567-e89b-42d3-a456-426614174000';
+    final folder = Directory('${root.path}/videos/$assetId');
+    await folder.create(recursive: true);
+    await File('${folder.path}/video.part').writeAsBytes(utf8.encode('abc'));
+    var range = '';
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      range = request.headers.value('range') ?? '';
+      request.response.statusCode = HttpStatus.partialContent;
+      request.response.headers
+        ..set('content-type', 'video/mp4')
+        ..set('content-range', 'bytes 3-5/6')
+        ..contentLength = 3;
+      request.response.add(utf8.encode('def'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final expiry = DateTime.now().toUtc().add(const Duration(days: 1));
+    final ok = await library.downloadVideo(
+      videoAssetId: assetId,
+      title: 'Licensed music video',
+      ownerId: 'owner-a',
+      downloadUrl: 'http://${server.address.address}:${server.port}/video',
+      rightsExpiresAtUtc: expiry,
+    );
+    expect(ok, isTrue);
+    expect(range, 'bytes=3-');
+    expect(await File('${folder.path}/video.mp4').readAsString(), 'abcdef');
+    expect(await library.list(ownerId: 'owner-a'), isEmpty);
+    expect(await library.listVideos(ownerId: 'owner-b'), isEmpty);
+    final videos = await library.listVideos(ownerId: 'owner-a');
+    expect(videos, hasLength(1));
+    expect(videos.single.videoAssetId, assetId);
+    expect(videos.single.title, 'Licensed music video');
+    expect(videos.single.rightsExpiresAtUtc, expiry);
+    final renewed = expiry.add(const Duration(hours: 6));
+    await library.updateVideoOfflineLease(assetId, renewed);
+    expect((await library.listVideos(ownerId: 'owner-a')).single.rightsExpiresAtUtc, renewed);
+    await library.removeVideo(assetId);
+    expect(await library.listVideos(ownerId: 'owner-a'), isEmpty);
+  });
+
+  test('video download rejects unexpected media type and expired lease', () async {
+    const assetId = '123e4567-e89b-42d3-a456-426614174000';
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.text;
+      request.response.write('not a video');
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final url = 'http://${server.address.address}:${server.port}/video';
+    expect(await library.downloadVideo(
+      videoAssetId: assetId, title: 'Reject',
+      ownerId: 'owner-a', downloadUrl: url,
+      rightsExpiresAtUtc: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+    ), isFalse);
+    expect(await library.downloadVideo(
+      videoAssetId: assetId, title: 'Reject',
+      ownerId: 'owner-a', downloadUrl: url,
+      rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+    ), isFalse);
+    expect(await library.listVideos(ownerId: 'owner-a'), isEmpty);
+  });
+
   test('does not expose legacy metadata without an owner', () async {
     final legacy = Directory('${root.path}/legacy-track');
     await legacy.create();
