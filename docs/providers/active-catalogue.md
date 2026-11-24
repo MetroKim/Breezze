@@ -44,6 +44,20 @@ records; it is not an external music streaming provider.
 - Do not claim YouTube/Deezer catalog-wide full playback until permissions and
   actual playable sources for those recordings have been validated.
 
+## Full-song YouTube Music audio — authorization handoff
+
+**Do not self-grant.** Breezze can issue *its own* signed playback URLs only for media assets that it actually controls with valid rights; this is not authority to license tracks in YouTube Music's catalogue. The [YouTube API Developer Policies](https://developers.google.com/youtube/terms/developer-policies) prohibit using API services to split YouTube audiovisual components into independent audio or operate an undisplayed/background player. The [sigma67/ytmusicapi](https://github.com/sigma67/ytmusicapi) project is an unofficial metadata client, not a YouTube Music audio streaming SDK or distribution agreement.
+
+To activate the intended native-player role, obtain and validate **a signed agreement or provider-issued SDK/API entitlement** explicitly covering each requested use: third-party in-app audio-only delivery, background playback and lock screen, territories (including Tanzania where relevant), user authentication/subscription terms, stream URL/session lifetime, seek/skip/queue, caching and offline rights if any, catalog identifiers/ISRC mapping, reporting, takedowns and revocation.
+
+After an authorized integration is available, engineering must:
+1. Implement a separate server-side playback adapter with an explicit capability flag, the approved endpoint/SDK, and expiry/territory/attribution checks. Keep `YtMusicAdapter.playback=false` until the licensed integration is proven; do not use `get_song().streamingData`, player ciphers, browser cookies or hidden video playback as substitutes.
+2. Bind each track to a canonical ID and verified provider asset. Require an active `stream.full` permission and current territory grant, *as well as* the upstream provider's playback entitlement. A metadata-only permission or Deezer 30-second preview is not enough.
+3. Return media only via the existing `/playback/provider/resolve` service and Breezze's one global player. The generic `/playback/resolve` must never mint Breezze-hosted audio URLs for records with `source=youtube_music` or `source=deezer`; such tracks must be handled by the provider resolver.
+4. Validate expired grants, revocation, takedowns, territory denial, non-licensed account, wrong canonical asset, signed-URL expiration, seek/resume, background/lock-screen controls, and cross-account isolation. Run Android and iOS native acceptance and production smoke against a genuinely licensed recording.
+
+**Current status:** Metadata, artist and chart discovery may operate; full-song native YouTube Music audio is **externally blocked**. No source code commit, account sign-in or self-added database rights row can replace the upstream licence.
+
 ## Release checks
 1. Federated discovery returns only `breezze_internal`,
    `youtube_music`, and `deezer`, while isolating provider failures.
