@@ -50,7 +50,7 @@ describe('PlaylistsService tenant isolation and ordering', () => {
     await service.list('user-a');
     expect(prisma.playlist.findMany).toHaveBeenCalledWith({
       where: { userId: 'user-a' },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
       include: {
         items: {
           orderBy: { position: 'asc' },
@@ -60,6 +60,24 @@ describe('PlaylistsService tenant isolation and ordering', () => {
         },
       },
     });
+  });
+
+  it('pins only an owned playlist and rejects cross-account changes',
+      async () => {
+    prisma.playlist.updateMany.mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    prisma.playlist.findFirst.mockResolvedValue({
+      id: 'playlist-a', userId: 'user-a', isPinned: true,
+    });
+    await expect(service.setPinned('user-a', 'playlist-a', true))
+      .resolves.toMatchObject({ isPinned: true });
+    expect(prisma.playlist.updateMany).toHaveBeenCalledWith({
+      where: { id: 'playlist-a', userId: 'user-a' },
+      data: { isPinned: true },
+    });
+    await expect(service.setPinned('user-b', 'playlist-a', false))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.playlist.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it('creates with a client UUID for idempotent offline replay', async () => {

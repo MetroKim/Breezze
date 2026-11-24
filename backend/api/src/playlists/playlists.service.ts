@@ -29,7 +29,7 @@ export class PlaylistsService {
     // without an N+1 fetch for each playlist.
     return this.prisma.playlist.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
       include: {
         items: {
           orderBy: { position: 'asc' },
@@ -65,6 +65,17 @@ export class PlaylistsService {
     const updated = await this.prisma.playlist.updateMany({
       where: { id: playlistId, userId },
       data: { name },
+    });
+    if (updated.count !== 1) throw new NotFoundException('PLAYLIST_NOT_FOUND');
+    return this.prisma.playlist.findFirst({
+      where: { id: playlistId, userId },
+    });
+  }
+
+  async setPinned(userId: string, playlistId: string, pinned: boolean) {
+    const updated = await this.prisma.playlist.updateMany({
+      where: { id: playlistId, userId },
+      data: { isPinned: pinned },
     });
     if (updated.count !== 1) throw new NotFoundException('PLAYLIST_NOT_FOUND');
     return this.prisma.playlist.findFirst({

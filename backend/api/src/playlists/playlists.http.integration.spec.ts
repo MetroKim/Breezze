@@ -156,6 +156,28 @@ describePostgres('Authenticated playlist cross-device HTTP integration', () => {
     expect((await api('/playlists', 'POST', tokenOther, payload)).status).toBe(409);
     expect((await api('/playlists/' + playlistId, 'DELETE', tokenOther)).status).toBe(404);
 
+    // Pin is an owner-scoped, idempotent operation visible on device B.
+    expect((await api('/playlists/' + playlistId + '/pin',
+      'PATCH', tokenOther, { pinned: true })).status).toBe(404);
+    expect((await api('/playlists/' + playlistId + '/pin',
+      'PATCH', tokenA, { pinned: 'yes' })).status).toBe(400);
+    const pinned = await api<{ isPinned: boolean }>(
+      '/playlists/' + playlistId + '/pin',
+      'PATCH', tokenA, { pinned: true },
+    );
+    expect(pinned.status).toBe(200);
+    expect(pinned.data.isPinned).toBe(true);
+    const pinOnDeviceB = await api<Array<{ id: string; isPinned: boolean }>>(
+      '/playlists', 'GET', tokenB,
+    );
+    expect(pinOnDeviceB.data.find(p => p.id === playlistId)?.isPinned).toBe(true);
+    const unpinned = await api<{ isPinned: boolean }>(
+      '/playlists/' + playlistId + '/pin',
+      'PATCH', tokenB, { pinned: false },
+    );
+    expect(unpinned.status).toBe(200);
+    expect(unpinned.data.isPinned).toBe(false);
+
     // Persist canonical track metadata and ordered playlist items.
     const addFirst = await api('/playlists/' + playlistId + '/tracks',
       'POST', tokenA, { trackId: first.id });
