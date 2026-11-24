@@ -843,8 +843,9 @@ class _PlayingNextSheet extends ConsumerWidget {
                   : ReorderableListView.builder(
                       buildDefaultDragHandles: false,
                       itemCount: upcoming.length,
-                      onReorder: (oldIndex, newIndex) {
-                        if (oldIndex < newIndex) newIndex--;
+                      onReorderItem: (oldIndex, newIndex) {
+                        // Flutter now provides the post-removal target index.
+                        // Do not decrement it a second time.
                         queue.reorderUpNext(
                           upcoming[oldIndex].entryId,
                           newIndex,
