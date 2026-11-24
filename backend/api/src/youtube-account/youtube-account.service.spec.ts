@@ -241,6 +241,62 @@ describe('YoutubeAccountService owner-bound OAuth authorization', () => {
     });
   });
 
+  it('checks playlist channel ownership before serving video items', async () => {
+    const { state } = await beginConsent();
+    mockGoogleAuthorized();
+    expect(await service.callback(state, 'google-auth-code-123456')).toBe(true);
+    const saved = prisma.youtubeAccountConnection.upsert.mock.calls[0][0].create;
+    prisma.youtubeAccountConnection.findUnique.mockResolvedValue({
+      ...saved, userId, channelId,
+    });
+    global.fetch = jest.fn(async (url: URL | string, init?: RequestInit) => {
+      requests.push({ url: String(url), init });
+      const parsed = new URL(String(url));
+      if (parsed.pathname === '/youtube/v3/playlists') {
+        return response({ items: [{ snippet: { channelId } }] });
+      }
+      if (parsed.pathname === '/youtube/v3/playlistItems') {
+        return response({
+          items: [
+            { contentDetails: { videoId: 'abcdefghijk' },
+              snippet: {
+                title: 'Owned playlist song', videoOwnerChannelTitle: 'Artist',
+                thumbnails: {
+                  default: { url: 'https://i.ytimg.com/vi/abcdefghijk/default.jpg' },
+                },
+              } },
+            { contentDetails: { videoId: 'invalid/id' },
+              snippet: { title: 'Untrusted' } },
+          ],
+        });
+      }
+      throw new Error('unexpected URL');
+    }) as typeof global.fetch;
+    const result = await service.playlistItems(userId, 'OLAK5uy_abcdefghij');
+    expect(result).toMatchObject({
+      source: 'youtube_data_api',
+      playlistId: 'OLAK5uy_abcdefghij',
+      items: [{
+        videoId: 'abcdefghijk', title: 'Owned playlist song',
+        artist: 'Artist', playback: 'visible_youtube_only',
+      }],
+    });
+    expect(result.items).toHaveLength(1);
+    expect(requests.at(-1)?.url).toContain('/youtube/v3/playlistItems');
+
+    global.fetch = jest.fn(async () => response({
+      items: [{ snippet: { channelId: 'UC' + 'y'.repeat(22) } }],
+    })) as typeof global.fetch;
+    await expect(service.playlistItems(userId, 'OLAK5uy_abcdefghij'))
+      .rejects.toThrow('YOUTUBE_PLAYLIST_NOT_OWNED');
+  });
+
+  it('rejects malformed playlist IDs before looking up the owner connection', async () => {
+    await expect(service.playlistItems(userId, '../not-a-playlist'))
+      .rejects.toThrow('YOUTUBE_PLAYLIST_ID_INVALID');
+    expect(prisma.youtubeAccountConnection.findUnique).not.toHaveBeenCalled();
+  });
+
   it('disconnects the current owner and invalidates unfinished link flows', async () => {
     const { state } = await beginConsent();
     mockGoogleAuthorized();
