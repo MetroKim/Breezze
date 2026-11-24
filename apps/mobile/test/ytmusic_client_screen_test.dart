@@ -13,6 +13,37 @@ class _ClientApi extends BreezzeApi {
   int exploreCalls = 0;
   int moodCalls = 0;
   int playlistCalls = 0;
+  bool accountAvailable = true;
+  bool accountConnected = true;
+  int accountPlaylistCalls = 0;
+  int disconnectCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> youtubeAccountStatus() async => {
+    'available': accountAvailable,
+    'connected': accountConnected,
+    if (accountConnected) 'channelTitle': 'My YouTube Channel',
+  };
+
+  @override
+  Future<Map<String, dynamic>> youtubeAccountPlaylists() async {
+    accountPlaylistCalls++;
+    return {
+      'source': 'youtube_data_api',
+      'scope': 'read_only_youtube_playlists',
+      'items': [
+        {'playlistId': 'OLAK5uy_abcdefghij', 'title': 'My Saved Playlist'},
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> youtubeAccountDisconnect() async {
+    disconnectCalls++;
+    accountConnected = false;
+    return {'disconnected': true};
+  }
+
 
   Map<String, dynamic> _ok(Map<String, dynamic> value) =>
       {'kind': 'ok', 'value': {'source': 'youtube_music', ...value}};
@@ -108,7 +139,21 @@ class _ClientSession extends AuthSessionController {
   BreezzeApi get api => client;
 }
 
-Future<void> _mount(WidgetTester tester, _ClientApi api) async {
+class _LinkedClientSession extends AuthSessionController {
+  _LinkedClientSession(this.client);
+  final BreezzeApi client;
+
+  @override
+  AuthState build() => const AuthSignedIn(
+    userId: 'signed-in-breezze-user', email: 'test@example.test',
+  );
+
+  @override
+  BreezzeApi get api => client;
+}
+
+Future<void> _mount(WidgetTester tester, _ClientApi api,
+    {bool signedIn = false}) async {
   tester.view.physicalSize = const Size(900, 2200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -116,7 +161,8 @@ Future<void> _mount(WidgetTester tester, _ClientApi api) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authSessionProvider.overrideWith(() => _ClientSession(api)),
+        authSessionProvider.overrideWith(() => signedIn
+            ? _LinkedClientSession(api) : _ClientSession(api)),
       ],
       child: MaterialApp(
         theme: bzLightTheme(),
@@ -178,6 +224,45 @@ void main() {
     expect(find.text('Album Song'), findsOneWidget);
     expect(find.textContaining('offline downloads are not available'),
         findsOneWidget);
+  });
+
+  testWidgets('signed-in listener sees separately authorized YouTube playlist',
+      (tester) async {
+    final api = _ClientApi();
+    await _mount(tester, api, signedIn: true);
+
+    expect(find.text('Your YouTube account'), findsOneWidget);
+    expect(find.text('Connected: My YouTube Channel'), findsOneWidget);
+    expect(find.text('Your YouTube playlists'), findsOneWidget);
+    expect(find.text('My Saved Playlist'), findsOneWidget);
+    expect(find.text('Connect YouTube'), findsNothing);
+    expect(api.accountPlaylistCalls, 1);
+
+    await tester.tap(find.text('Disconnect'));
+    await tester.pumpAndSettle();
+    expect(find.text('Disconnect YouTube account?'), findsOneWidget);
+    await tester.tap(find.text('Disconnect').last);
+    await tester.pumpAndSettle();
+
+    expect(api.disconnectCalls, 1);
+    expect(find.text('My Saved Playlist'), findsNothing);
+    expect(find.text('Connect YouTube'), findsOneWidget);
+  });
+
+  testWidgets('does not enable Google consent button without configured credentials',
+      (tester) async {
+    final api = _ClientApi()
+      ..accountAvailable = false
+      ..accountConnected = false;
+    await _mount(tester, api, signedIn: true);
+
+    expect(find.text('Account connection is not configured yet.'),
+        findsOneWidget);
+    final connect = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Connect YouTube'),
+    );
+    expect(connect.onPressed, isNull);
+    expect(api.accountPlaylistCalls, 0);
   });
 
   testWidgets('full source outage displays honest retry rather than fake music',
