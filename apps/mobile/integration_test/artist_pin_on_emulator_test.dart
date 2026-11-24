@@ -1,4 +1,5 @@
 import 'package:breezze/app/followed_artist_store.dart';
+import 'package:breezze/app/saved_album_store.dart';
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/features/catalog/catalog_detail_screens.dart';
@@ -13,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 /// isolation is covered by the separate production playlist smoke workflow.
 class _ArtistCloud {
   final byOwner = <String, Map<String, Map<String, dynamic>>>{};
+  final albumsByOwner = <String, Map<String, Map<String, dynamic>>>{};
 }
 
 class _ArtistApi extends BreezzeApi {
@@ -27,6 +29,9 @@ class _ArtistApi extends BreezzeApi {
 
   Map<String, Map<String, dynamic>> get records =>
       cloud.byOwner.putIfAbsent(ownerId, () => {});
+
+  Map<String, Map<String, dynamic>> get albums =>
+      cloud.albumsByOwner.putIfAbsent(ownerId, () => {});
 
   void _checkOnline() {
     if (offline) throw StateError('Simulated offline connection');
@@ -67,6 +72,62 @@ class _ArtistApi extends BreezzeApi {
     final record = records[key];
     if (record == null) throw StateError('Artist is not followed');
     record['isPinned'] = pinned;
+  }
+
+  @override
+  Future<Map<String, dynamic>> discoveryAlbumTracks(String albumId) async => {
+        'album': {
+          'genres': <String>['Afrobeats'],
+          'isCompilation': false,
+        },
+        'items': <Map<String, dynamic>>[],
+      };
+
+  @override
+  Future<Map<String, dynamic>> getSavedAlbums({String? cursor}) async {
+    _checkOnline();
+    if (cursor != null) throw StateError('Unexpected album cursor');
+    return {
+      'items': [
+        for (final album in albums.values) Map<String, dynamic>.from(album),
+      ],
+      'nextCursor': null,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> upsertSavedAlbum({
+    required String externalAlbumId,
+    required String title,
+    required String artist,
+    String? artworkUrl,
+    String? catalogUrl,
+    List<String> genres = const [],
+    bool isCompilation = false,
+    bool? isPinned,
+  }) async {
+    _checkOnline();
+    final previous = albums[externalAlbumId];
+    albums[externalAlbumId] = {
+      'source': 'apple_itunes',
+      'externalAlbumId': externalAlbumId,
+      'title': title,
+      'artist': artist,
+      'artworkUrl': artworkUrl,
+      'catalogUrl': catalogUrl,
+      'genres': genres,
+      'isCompilation': isCompilation,
+      'isPinned': isPinned ?? previous?['isPinned'] ?? false,
+      'savedAt': previous?['savedAt'] ??
+          DateTime.now().toUtc().toIso8601String(),
+    };
+    return {'saved': true};
+  }
+
+  @override
+  Future<void> deleteSavedAlbum(String externalAlbumId) async {
+    _checkOnline();
+    albums.remove(externalAlbumId);
   }
 
   @override
@@ -230,4 +291,97 @@ void main() {
       }
     }
   });
+  testWidgets('native saved album UI syncs pins, restart and account isolation',
+      (tester) async {
+    final seed = DateTime.now().microsecondsSinceEpoch.toString();
+    final ownerA = 'album-ui-a-' + seed;
+    final ownerB = 'album-ui-b-' + seed;
+    final albumId = 'native_album_' + seed;
+    final cloud = _ArtistCloud();
+    final apiA = _ArtistApi(cloud, ownerA);
+    final apiB = _ArtistApi(cloud, ownerB);
+    final current = _CurrentApi(apiA);
+    final storage = const FlutterSecureStorage();
+
+    Future<void> waitForLabel(String label) async {
+      for (var attempt = 0; attempt < 80; attempt++) {
+        await tester.pump(const Duration(milliseconds: 200));
+        if (find.text(label).evaluate().isNotEmpty) return;
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+      }
+      fail('Album screen never displayed ' + label);
+    }
+
+    Future<void> mountAlbum(String ownerId) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWith(
+            () => _SignedInArtistSession(current, ownerId),
+          ),
+        ],
+        child: MaterialApp(
+          theme: bzLightTheme(),
+          home: AppleAlbumCatalogScreen(
+            albumId: albumId,
+            title: 'Breezze Native QA Album',
+            artist: 'Breezze QA Artist',
+          ),
+        ),
+      ));
+    }
+
+    try {
+      await mountAlbum(ownerA);
+      await waitForLabel('Add Album to Library');
+      await tester.ensureVisible(find.text('Add Album to Library'));
+      await tester.tap(find.text('Add Album to Library'));
+      await waitForLabel('Saved in Library');
+      expect(await SavedAlbumStore().contains(ownerA, albumId), isTrue);
+      expect(apiA.albums[albumId]?['genres'], ['Afrobeats']);
+      expect(apiA.albums[albumId]?['isPinned'], isFalse);
+
+      // Pin on the real iOS Keychain / Android Keystore while offline.
+      apiA.offline = true;
+      expect(await SavedAlbumStore().setPinned(ownerA, albumId, true), isTrue);
+      await mountAlbum(ownerA);
+      await waitForLabel('Saved in Library');
+      expect((await SavedAlbumStore().load(ownerA)).single.isPinned, isTrue);
+
+      // Reconnect and replay the durable pin journal into owner A's cloud.
+      apiA.offline = false;
+      await SavedAlbumStore().syncWithCloud(
+        ownerA, apiA, ownerStillActive: () => true,
+      );
+      expect(apiA.albums[albumId]?['isPinned'], isTrue);
+      expect((await apiB.getSavedAlbums())['items'], isEmpty);
+
+      // Another account cannot observe owner A's saved album or pin.
+      current.value = apiB;
+      await mountAlbum(ownerB);
+      await waitForLabel('Add Album to Library');
+      expect(await SavedAlbumStore().contains(ownerB, albumId), isFalse);
+
+      current.value = apiA;
+      await mountAlbum(ownerA);
+      await waitForLabel('Saved in Library');
+      await tester.ensureVisible(find.text('Saved in Library'));
+      await tester.tap(find.text('Saved in Library'));
+      await waitForLabel('Add Album to Library');
+      expect(apiA.albums.containsKey(albumId), isFalse);
+      expect(await SavedAlbumStore().contains(ownerA, albumId), isFalse);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      // The acceptance fixture removes only its own encrypted owner records.
+      for (final owner in [ownerA, ownerB]) {
+        final suffix = Uri.encodeComponent(owner);
+        await storage.delete(key: 'breezze:saved_albums:v1:' + suffix);
+        await storage.delete(key: 'breezze:saved_albums:pending:v1:' + suffix);
+        await storage.delete(key: 'breezze:saved_albums:cloud_ready:v1:' + suffix);
+      }
+    }
+  });
+
 }
