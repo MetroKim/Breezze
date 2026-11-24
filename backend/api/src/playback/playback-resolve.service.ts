@@ -156,6 +156,12 @@ export class PlaybackResolveService {
     ) {
       throw new ServiceUnavailableException('PROVIDER_RETURNED_INVALID_SOURCE');
     }
+    // A provider URL whose validity extends beyond this recording's
+    // explicit license window is not safe to hand out. Adapter metadata
+    // cannot silently widen our canonical authorization interval.
+    if (decision.expiresAt && result.value.expiresAt > decision.expiresAt) {
+      throw new NotAcceptableException('PROVIDER_GRANT_OUTLIVES_RIGHTS');
+    }
 
     return {
       providerId: dto.providerId,

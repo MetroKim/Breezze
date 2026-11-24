@@ -306,4 +306,18 @@ describe('PlaybackResolveService', () => {
     }));
   });
 
+  it('rejects provider URLs that outlive the explicit full-track license', async () => {
+    prepareCanonicalTrack();
+    rights.decide.mockResolvedValue({
+      allowed: true,
+      previewOnly: false,
+      reason: 'OK',
+      expiresAt: new Date(Date.now() + 30_000),
+      attribution: 'Short license',
+    });
+    providers.get.mockReturnValue(validAdapter());
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ'))
+      .rejects.toThrow('PROVIDER_GRANT_OUTLIVES_RIGHTS');
+  });
+
 });
