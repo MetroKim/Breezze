@@ -59,14 +59,17 @@ export class LibraryService {
     return { following: true, isPinned: pinned };
   }
 
-  private static readonly savedAlbumSource = 'apple_itunes';
+  // The active album catalog is Deezer. Historical apple_itunes bookmark rows
+  // are deliberately preserved in storage, but must not be re-labelled with
+  // unrelated Deezer album IDs: that would silently corrupt user libraries.
+  private static readonly savedAlbumSource = 'deezer';
 
   private trustedCatalogUrl(value: string | undefined): string | null {
     if (!value) return null;
     try {
       const url = new URL(value);
       if (url.protocol !== 'https:' || url.username || url.password ||
-          !['music.apple.com', 'itunes.apple.com'].includes(url.hostname)) {
+          !['deezer.com', 'www.deezer.com'].includes(url.hostname)) {
         throw new Error('Invalid catalog hostname');
       }
       return url.toString();
@@ -80,7 +83,7 @@ export class LibraryService {
     try {
       const url = new URL(value);
       if (url.protocol !== 'https:' || url.username || url.password ||
-          !(url.hostname === 'mzstatic.com' || url.hostname.endsWith('.mzstatic.com'))) {
+          !['cdn-images.dzcdn.net', 'e-cdns-images.dzcdn.net'].includes(url.hostname)) {
         throw new Error('Invalid artwork hostname');
       }
       return url.toString();
@@ -92,7 +95,7 @@ export class LibraryService {
   async listSavedAlbums(userId: string, cursor?: string) {
     if (cursor) {
       const previous = await this.prisma.userSavedCatalogAlbum.findFirst({
-        where: { userId, id: cursor },
+        where: { userId, id: cursor, source: LibraryService.savedAlbumSource },
         select: { id: true },
       });
       if (!previous) throw new BadRequestException('SAVED_ALBUM_CURSOR_INVALID');
