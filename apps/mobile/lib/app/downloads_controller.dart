@@ -109,6 +109,19 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     _persistJobs();
   }
 
+  void forgetVideo(String videoAssetId) {
+    final key = 'video:$videoAssetId';
+    _cancellations.remove(key)?.cancel();
+    _videoTitles.remove(videoAssetId);
+    if (mounted) {
+      final next = Map<String, String>.of(ref.read(downloadJobStatusProvider))
+        ..remove(key);
+      ref.read(downloadJobStatusProvider.notifier).state = next;
+      state = Map<String, double>.of(state)..remove(key);
+    }
+    _persistJobs();
+  }
+
   Future<void> pause(String trackId) async {
     _setStatus(trackId, 'paused');
     _cancellations[trackId]?.cancel();
