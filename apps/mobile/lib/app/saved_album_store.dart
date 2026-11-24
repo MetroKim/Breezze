@@ -62,7 +62,7 @@ class SavedAlbum {
             DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       );
 
-  /// The backend owns bookmark IDs; catalogAlbumId stays the Apple ID.
+  /// The backend owns bookmark IDs; externalAlbumId keeps its source identity.
   factory SavedAlbum.fromServerJson(Map<String, dynamic> json) =>
       SavedAlbum.fromJson({
         'id': json['externalAlbumId'],
@@ -368,7 +368,11 @@ class SavedAlbumStore {
             // non-destructive user-data migration; do not create new ones.
             // Unknown providers must never pollute account-owned Library.
             final source = album['source'];
-            if (source != 'deezer' && source != 'apple_itunes') {
+            // Deezer is the active catalog. Retain old Apple/iTunes
+            // bookmarks only as historical owner data; do not reinterpret
+            // their numeric IDs as Deezer IDs during cloud reconciliation.
+            if (source is! String ||
+                (source != 'deezer' && source != 'apple_itunes')) {
               continue;
             }
             remote.add(SavedAlbum.fromServerJson(album));
