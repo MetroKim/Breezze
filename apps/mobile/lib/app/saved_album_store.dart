@@ -363,7 +363,12 @@ class SavedAlbumStore {
           }
           for (final item in items.whereType<Map>()) {
             final album = Map<String, dynamic>.from(item);
-            if (album['source'] != 'apple_itunes') {
+            // Deezer is the active canonical album catalog. Keep reading
+            // previously saved Apple/iTunes album bookmarks for a safe,
+            // non-destructive user-data migration; do not create new ones.
+            // Unknown providers must never pollute account-owned Library.
+            final source = album['source'];
+            if (source != 'deezer' && source != 'apple_itunes') {
               continue;
             }
             remote.add(SavedAlbum.fromServerJson(album));
