@@ -142,6 +142,57 @@ describe('YtMusicAdapter capability contract', () => {
     }
   });
 
+  it('rejects the experimental audio endpoint unless explicitly opted in', async () => {
+    const prior = process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT;
+    delete process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT;
+    try {
+      await expect(adapter.getAudioCandidate('abcdefghijk')).resolves.toMatchObject({
+        kind: 'unsupported',
+      });
+    } finally {
+      if (prior === undefined) delete process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT;
+      else process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT = prior;
+    }
+  });
+
+  it('only accepts direct, unexpired googlevideo audio candidate URLs in development', async () => {
+    const priorFlag = process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT;
+    const priorEnv = process.env.RAILWAY_ENVIRONMENT_NAME;
+    process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT = 'true';
+    process.env.RAILWAY_ENVIRONMENT_NAME = 'staging';
+    const cache = { get: jest.fn(), set: jest.fn() };
+    const client = new YtMusicAdapter(cache as unknown as ProviderCacheService);
+    const expiry = Date.now() + 600_000;
+    const payload = (url: string) => ({
+      source: 'youtube_music',
+      providerTrackId: 'abcdefghijk',
+      experimental: true,
+      candidate: { streamUrl: url, mimeType: 'audio/mp4',
+        bitrateKbps: 128, expiresAt: new Date(expiry).toISOString() },
+    });
+    const upstream = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true, status: 200, json: async () => payload('https://evilgooglevideo.com/a'),
+    } as Response);
+    try {
+      await expect(client.getAudioCandidate('abcdefghijk')).resolves.toMatchObject({
+        kind: 'error', code: 'YTMUSIC_INVALID_AUDIO_RESPONSE',
+      });
+      upstream.mockResolvedValue({
+        ok: true, status: 200,
+        json: async () => payload('https://rr4.googlevideo.com/videoplayback?expire=9999999999'),
+      } as Response);
+      await expect(client.getAudioCandidate('abcdefghijk')).resolves.toMatchObject({
+        kind: 'ok', value: { candidate: { mimeType: 'audio/mp4' } },
+      });
+    } finally {
+      upstream.mockRestore();
+      if (priorFlag === undefined) delete process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT;
+      else process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT = priorFlag;
+      if (priorEnv === undefined) delete process.env.RAILWAY_ENVIRONMENT_NAME;
+      else process.env.RAILWAY_ENVIRONMENT_NAME = priorEnv;
+    }
+  });
+
   it('does not expose a song playback-launch method', () => {
     expect((adapter as unknown as { getPlaybackLaunch?: unknown }).getPlaybackLaunch)
       .toBeUndefined();
