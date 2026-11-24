@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { SupabaseExchangeService } from './supabase-exchange.service';
-import { PlaylistsService } from '../playlists/playlists.service';
+
 import { LibraryService } from '../library/library.service';
 import { PlaylistsService } from '../playlists/playlists.service';
 import * as argon2 from 'argon2';
