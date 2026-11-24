@@ -107,6 +107,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: P0 native PCM DSP feasibility (host synthetic benchmark)
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -O2 -std=c++17 -Wall -Wextra -Werror tool/audio_engine_feasibility/pcm_native_probe.cpp -o "$RUNNER_TEMP/breezze-pcm-probe"
+          "$RUNNER_TEMP/breezze-pcm-probe"
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -179,6 +186,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: P0 native PCM DSP feasibility (host synthetic benchmark)
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -O2 -std=c++17 -Wall -Wextra -Werror tool/audio_engine_feasibility/pcm_native_probe.cpp -o "$RUNNER_TEMP/breezze-pcm-probe"
+          "$RUNNER_TEMP/breezze-pcm-probe"
 
       - name: Select Xcode 26 for Swift video_player compatibility
         shell: bash
