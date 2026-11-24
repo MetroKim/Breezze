@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# Both values are public client configuration, not server secrets.
+# The publishable key is intentionally present in shipped app binaries.
+env:
+  BREEZZE_SUPABASE_URL: https://djwvyjtebmsavhcrmhxf.supabase.co
+  BREEZZE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ZloCmmQPo86OqHbH3Yqgsw_xZGPqSi3
+
 concurrency:
   group: breezze-quality-${{ github.ref }}
   cancel-in-progress: true
@@ -133,7 +139,7 @@ jobs:
 
       - name: Build Linux desktop
         working-directory: apps/mobile
-        run: flutter build linux --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build linux --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Package Linux desktop build
         working-directory: apps/mobile
@@ -141,10 +147,10 @@ jobs:
 
       - name: Build Android APK
         working-directory: apps/mobile
-        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
       - name: Build Android release APK
         working-directory: apps/mobile
-        run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Prepare Drift WebAssembly database assets
         working-directory: apps/mobile
@@ -152,7 +158,7 @@ jobs:
 
       - name: Build Web
         working-directory: apps/mobile
-        run: flutter build web --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+        run: flutter build web --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Publish installable test builds
         uses: actions/upload-artifact@v4
@@ -197,11 +203,11 @@ jobs:
 
       - name: Build macOS desktop
         working-directory: apps/mobile
-        run: flutter build macos --debug
+        run: flutter build macos --debug --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Build iOS
         working-directory: apps/mobile
-        run: flutter build ios --no-codesign
+        run: flutter build ios --no-codesign --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
   flutter_windows:
     name: Flutter Windows desktop build
@@ -239,7 +245,7 @@ jobs:
           # coroutine header; VS 2026 promotes its deprecation to an error.
           # Silence that upstream compatibility diagnostic for this build.
           CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
-        run: flutter build windows --debug
+        run: flutter build windows --debug --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
   backend:
     name: NestJS and Prisma validation
