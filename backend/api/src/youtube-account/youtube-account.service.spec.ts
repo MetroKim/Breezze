@@ -297,6 +297,19 @@ describe('YoutubeAccountService owner-bound OAuth authorization', () => {
     expect(prisma.youtubeAccountConnection.findUnique).not.toHaveBeenCalled();
   });
 
+  it('disconnects locally even if the provider configuration is removed', async () => {
+    delete process.env.YOUTUBE_ACCOUNT_LINK_ENABLED;
+    delete process.env.YOUTUBE_ACCOUNT_TOKEN_KEY;
+    prisma.youtubeAccountConnection.findUnique.mockResolvedValue({
+      refreshTokenCiphertext: 'old-key-unavailable',
+    });
+    const result = await service.disconnect(userId);
+    expect(result).toEqual({ disconnected: true });
+    expect(prisma.youtubeAccountConnection.deleteMany).toHaveBeenCalledWith({
+      where: { userId },
+    });
+  });
+
   it('disconnects the current owner and invalidates unfinished link flows', async () => {
     const { state } = await beginConsent();
     mockGoogleAuthorized();
