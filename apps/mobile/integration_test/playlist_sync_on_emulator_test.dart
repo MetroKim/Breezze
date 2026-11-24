@@ -88,7 +88,7 @@ void main() {
       final secondSession = await apiSecond.login(owner.email, owner.password);
       apiSecond.accessToken = secondSession.accessToken;
       expect(ownerAuth.accessToken, isNot(secondSession.accessToken));
-      expect(ownerAuth.userId, is(secondSession.userId));
+      expect(ownerAuth.userId, equals(secondSession.userId));
 
       final canonicalA = await apiA.resolveCatalogTrack(
         externalId: 'bz:youtube_music:wZaotY2V3gY',
