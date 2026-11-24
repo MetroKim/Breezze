@@ -17,6 +17,14 @@ permissions:
   contents: read
 
 jobs:
+  independent_identity:
+    name: Breezze independent identity and playback scaffold guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate canonical Flutter package and reject fake audio scaffold
+        run: python3 tools/check_independent_identity.py
+
   quality:
     name: Breezze quality gates
     uses: ./.github/workflows/breezze-quality.yml
