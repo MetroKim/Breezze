@@ -230,6 +230,71 @@ void main() {
     expect(await store.pendingCount('user-a'), 1);
   });
 
+  test('one multi-select commits only chosen memberships and journals edits',
+      () async {
+    final first = await store.create('user-a', 'Daily mix');
+    final second = await store.create('user-a', 'Road trip');
+    final third = await store.create('user-a', 'Workout');
+    final other = await store.create('user-b', 'Private playlist');
+
+    expect(await store.addTrackToMany(
+      'user-a', [first, second, first, 'unknown-playlist'], a,
+    ), 2);
+    expect(await store.addTrackToMany('user-a', [first, second], a), 0);
+    expect(await store.addTrackToMany('user-a', [second, third], b), 2);
+    expect(await store.addTrackToMany('user-a', [], a), 0);
+
+    final own = {for (final p in await store.load('user-a')) p.id: p};
+    expect(own[first]!.tracks.map((t) => t.id), [aId]);
+    expect(own[second]!.tracks.map((t) => t.id), [aId, bId]);
+    expect(own[third]!.tracks.map((t) => t.id), [bId]);
+    expect((await store.load('user-b')).single.id, other);
+    expect((await store.load('user-b')).single.tracks, isEmpty);
+    expect(await store.pendingCount('user-a'), 7); // 3 creates, 4 adds
+
+    final restarted = PlaylistStore(documentsDirectory: () async => root);
+    final restored = {for (final p in await restarted.load('user-a')) p.id: p};
+    expect(restored[second]!.tracks.map((t) => t.id), [aId, bId]);
+    expect(await restarted.pendingCount('user-a'), 7);
+
+    final api = FakePlaylistApi();
+    expect(await restarted.syncOwner('user-a', api,
+      ownerStillActive: () => true), isTrue);
+    expect(api.calls, [
+      'create:$first:Daily mix',
+      'create:$second:Road trip',
+      'create:$third:Workout',
+      'add:$first:$aId',
+      'add:$second:$aId',
+      'add:$second:$bId',
+      'add:$third:$bId',
+    ]);
+    expect(await restarted.pendingCount('user-a'), 0);
+    expect(await restarted.pendingCount('user-b'), 1);
+  });
+
+  test('multi-select offline journals survive stale remote hydration', () async {
+    final first = await store.create('user-a', 'First');
+    final second = await store.create('user-a', 'Second');
+    expect(await store.addTrackToMany('user-a', [first, second], a), 2);
+    await store.mergeRemote('user-a', [
+      {'id': first, 'name': 'Stale first', 'items': []},
+      {'id': second, 'name': 'Stale second', 'items': []},
+    ]);
+    final local = await store.load('user-a');
+    expect(local.every((playlist) => playlist.tracks.single.id == aId), isTrue);
+    expect(await store.pendingCount('user-a'), 4);
+  });
+
+  test('guest multi-select remains private without upload work', () async {
+    final first = await store.create('guest', 'Local one');
+    final second = await store.create('guest', 'Local two');
+    expect(await store.addTrackToMany('guest', [first, second], a), 2);
+    expect(await store.pendingCount('guest'), 0);
+    expect((await store.load('guest')).every((p) => p.tracks.length == 1),
+      isTrue);
+  });
+
   test('guest playlists remain device-only', () async {
     await store.create('guest', 'Local');
     expect(await store.pendingCount('guest'), 0);

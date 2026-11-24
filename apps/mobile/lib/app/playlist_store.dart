@@ -330,26 +330,50 @@ class PlaylistStore {
         await _save(ownerId, doc);
       });
 
+  /// Adds a song to several existing playlists in ONE account-scoped,
+  /// serialized file transaction. Each new membership gets its own durable
+  /// cloud operation, while already-added songs and missing IDs are ignored.
+  /// The returned count is the number of playlists actually changed.
+  Future<int> addTrackToMany(
+    String ownerId,
+    Iterable<String> playlistIds,
+    FavoriteTrack track,
+  ) => _serialize(() async {
+        if (track.id.trim().isEmpty) {
+          throw ArgumentError.value(track.id, 'track.id', 'must not be empty');
+        }
+        final selected = playlistIds.toSet();
+        if (selected.isEmpty) return 0;
+        final doc = await _read(ownerId);
+        var added = 0;
+        for (var i = 0; i < doc.playlists.length; i++) {
+          final current = doc.playlists[i];
+          if (!selected.contains(current.id) ||
+              current.tracks.any((item) => item.id == track.id)) {
+            continue;
+          }
+          doc.playlists[i] = UserPlaylist(
+            id: current.id,
+            name: current.name,
+            createdAt: current.createdAt,
+            tracks: [...current.tracks, track],
+          );
+          _queue(ownerId, doc, 'add', current.id, {
+            'track': track.toJson(),
+          });
+          added++;
+        }
+        if (added > 0) await _save(ownerId, doc);
+        return added;
+      });
+
   Future<void> addTrack(
     String ownerId,
     String playlistId,
     FavoriteTrack track,
-  ) => _serialize(() async {
-        final doc = await _read(ownerId);
-        final index =
-            doc.playlists.indexWhere((playlist) => playlist.id == playlistId);
-        if (index < 0) return;
-        final current = doc.playlists[index];
-        if (current.tracks.any((item) => item.id == track.id)) return;
-        doc.playlists[index] = UserPlaylist(
-          id: current.id,
-          name: current.name,
-          createdAt: current.createdAt,
-          tracks: [...current.tracks, track],
-        );
-        _queue(ownerId, doc, 'add', playlistId, {'track': track.toJson()});
-        await _save(ownerId, doc);
-      });
+  ) async {
+    await addTrackToMany(ownerId, [playlistId], track);
+  }
 
   Future<void> reorderTracks(
     String ownerId,
