@@ -20,14 +20,17 @@ import '../settings/account_screen.dart';
 /// Recently Played comes from the RecentStore; Favorites from the
 /// FavoritesStore. No placeholder data presented as real (§50.1).
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.loadRecent});
+
+  /// An account-scoped history reader. Defaults to the persistent RecentStore.
+  /// This seam also makes account-switch and storage-failure behavior testable.
+  final Future<List<RecentEntry>> Function(String ownerId)? loadRecent;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final _recent = RecentStore();
   List<RecentEntry> _recentlyPlayed = [];
   List<FavoriteTrack> _favorites = [];
   List<TrackInfo> _madeForYou = [];
@@ -45,9 +48,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final version = ++_refreshVersion;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final recent = await _recent.load(ownerId: ownerId);
+    // A broken local store must not leave Listen Now on skeletons forever.
+    // Continue to fetch any independent remote sections without claiming
+    // that missing local rows are real history or recommendations.
+    List<RecentEntry> recent;
+    try {
+      final load = widget.loadRecent;
+      recent = load != null
+          ? await load(ownerId)
+          : await RecentStore().load(ownerId: ownerId);
+    } catch (_) {
+      recent = [];
+    }
     if (!mounted || version != _refreshVersion) return;
-    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
+    List<FavoriteTrack> favorites;
+    try {
+      favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
+    } catch (_) {
+      favorites = [];
+    }
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
     if (!mounted || version != _refreshVersion) return;
