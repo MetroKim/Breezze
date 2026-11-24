@@ -32,6 +32,8 @@ describe('PlaybackResolveService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Native signed media paths can only be used by Breezze-owned assets.
+    prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source: 'breezze_internal' });
     rights.decide.mockResolvedValue({
       allowed: true,
       previewOnly: false,
@@ -52,6 +54,26 @@ describe('PlaybackResolveService', () => {
     await expect(service.resolve('user-1', request)).rejects.toThrow('PLAYBACK_TERRITORY_UNAVAILABLE');
     expect(rights.decide).not.toHaveBeenCalled();
   });
+
+  it('rejects unknown canonical track IDs before granting a signed media URL', async () => {
+    prisma.track.findUnique.mockResolvedValue(null);
+    await expect(service.resolve('user-1', request, 'TZ')).rejects.toThrow('TRACK_NOT_FOUND');
+    expect(rights.decide).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+  });
+
+  it.each(['youtube_music', 'deezer'])(
+    'does not self-grant native audio for metadata-only %s catalog assets',
+    async (source) => {
+      prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source });
+      // Deliberately simulate a mistaken database rights row: it must not
+      // turn third-party catalog metadata into a Breezze-hosted audio file.
+      await expect(service.resolve('user-1', request, 'TZ'))
+        .rejects.toThrow('USE_PROVIDER_PLAYBACK_RESOLVER');
+      expect(rights.decide).not.toHaveBeenCalled();
+      expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    },
+  );
 
   it('never signs a full playback URL for a preview-only grant', async () => {
     rights.decide.mockResolvedValue({
