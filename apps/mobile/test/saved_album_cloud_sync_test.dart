@@ -45,7 +45,7 @@ class _FakeCloud extends BreezzeApi {
       throw Exception('Offline');
     }
     albums[externalAlbumId] = {
-      'source': 'apple_itunes',
+      'source': 'deezer',
       'externalAlbumId': externalAlbumId,
       'title': title,
       'artist': artist,
@@ -109,6 +109,36 @@ void main() {
       jsonDecode(memory.values['breezze:saved_albums:pending:v1:$owner']!),
       isEmpty,
     );
+  });
+
+  test('Deezer cloud album is retained alongside pre-migration bookmarks', () async {
+    final memory = _MemoryStore();
+    final api = _FakeCloud();
+    final store = SavedAlbumStore(keyValueStore: memory);
+    await api.upsertSavedAlbum(
+      externalAlbumId: 'deezer-current',
+      title: 'New Deezer Release',
+      artist: 'Artist',
+    );
+    final current = api.albums['deezer-current']!;
+    api.albums['legacy-saved'] = {
+      ...current,
+      'externalAlbumId': 'legacy-saved',
+      'source': 'apple_itunes',
+    };
+    api.albums['retired-unsupported'] = {
+      ...current,
+      'externalAlbumId': 'retired-unsupported',
+      'source': 'audius',
+    };
+
+    await store.syncWithCloud(owner, api, ownerStillActive: () => true);
+    final hydrated = await store.load(owner);
+    expect(hydrated.map((album) => album.id), containsAll(
+      ['deezer-current', 'legacy-saved'],
+    ));
+    expect(hydrated, hasLength(2));
+    expect(await store.contains(owner, 'retired-unsupported'), isFalse);
   });
 
   test('offline upsert survives restart and replays exactly once', () async {
