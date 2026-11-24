@@ -191,6 +191,10 @@ jobs:
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
 
+      - name: Test playlist persistence on macOS host
+        working-directory: apps/mobile
+        run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
+
       - name: Build macOS desktop
         working-directory: apps/mobile
         run: flutter build macos --debug
@@ -223,6 +227,10 @@ jobs:
       - name: Generate Drift database code
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Test playlist persistence on Windows host
+        working-directory: apps/mobile
+        run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
 
       - name: Build Windows desktop
         working-directory: apps/mobile
