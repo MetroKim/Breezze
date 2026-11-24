@@ -200,18 +200,31 @@ class BreezzeApi {
   Future<Map<String, dynamic>> discoveryArtistSearch(String query) =>
       _get('/discovery/artists/search?q=${Uri.encodeQueryComponent(query)}');
 
+  Future<Map<String, dynamic>> getFollowedArtists() =>
+      _get('/library/artists');
+
   Future<bool> artistFollowing(String key) async {
     final data = await _get('/library/artists/${Uri.encodeComponent(key)}');
     return data['following'] as bool;
   }
 
-  Future<void> followArtist(String key, bool following) async {
+  Future<void> followArtist(
+    String key, bool following, {String? displayName}
+  ) async {
     final path = '/library/artists/${Uri.encodeComponent(key)}';
     if (following) {
-      await _post(path, {});
+      await _post(path, {
+        if (displayName != null) 'displayName': displayName,
+      });
     } else {
       await _delete(path);
     }
+  }
+
+  Future<void> pinArtist(String key, bool pinned) async {
+    await _patch('/library/artists/${Uri.encodeComponent(key)}/pin', {
+      'pinned': pinned,
+    });
   }
 
   Future<Map<String, dynamic>> discoveryArtistAlbums(String artistId) =>
