@@ -16,6 +16,12 @@ type AppleFeedResponse = {
 
 @Injectable()
 export class DiscoveryService {
+  private readonly appleFeedCache = new Map<string, {
+    expiresAt: number;
+    fetchedAt: string;
+    payload: AppleFeedResponse;
+  }>();
+
   private country(value?: string): string {
     const normalized = (value ?? 'us').trim().toLowerCase();
     return /^[a-z]{2}$/.test(normalized) && normalized !== 'ww' ? normalized : 'us';
@@ -24,11 +30,46 @@ export class DiscoveryService {
   private async appleFeed(kind: 'songs' | 'albums', country?: string) {
     const territory = this.country(country);
     const url = `https://rss.marketingtools.apple.com/api/v2/${territory}/music/most-played/100/${kind}.json`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) {
-      throw new Error(`APPLE_RSS_HTTP_${response.status}`);
+    const cached = this.appleFeedCache.get(url);
+    let payload: AppleFeedResponse;
+    let fetchedAt: string;
+    if (cached && cached.expiresAt > Date.now()) {
+      payload = cached.payload;
+      fetchedAt = cached.fetchedAt;
+    } else {
+      let response: Response | undefined;
+      // Only safe, idempotent reads may retry. Transient timeouts, 429 and
+      // upstream 5xx get one bounded retry; 4xx and invalid JSON fail closed.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        } catch (error) {
+          if (attempt === 1) throw error;
+          continue;
+        }
+        if (!response.ok) {
+          if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+            continue;
+          }
+          throw new Error(`APPLE_RSS_HTTP_${response.status}`);
+        }
+        break;
+      }
+      if (!response?.ok) throw new Error('APPLE_RSS_UNAVAILABLE');
+      payload = await response.json() as AppleFeedResponse;
+      if (!Array.isArray(payload.feed?.results)) {
+        throw new Error('APPLE_RSS_INVALID_RESPONSE');
+      }
+      const now = Date.now();
+      fetchedAt = new Date(now).toISOString();
+      // Charts update far less often than listener requests. Avoid repeated
+      // upstream pressure and preserve source fetch time for cached responses.
+      this.appleFeedCache.set(url, {
+        expiresAt: now + 10 * 60 * 1000,
+        fetchedAt,
+        payload,
+      });
     }
-    const payload = await response.json() as AppleFeedResponse;
     const results = payload.feed?.results;
     if (!Array.isArray(results)) throw new Error('APPLE_RSS_INVALID_RESPONSE');
     return {
@@ -36,7 +77,7 @@ export class DiscoveryService {
       sourceUrl: url,
       territory: territory.toUpperCase(),
       title: payload.feed?.title ?? 'Most Played',
-      fetchedAt: new Date().toISOString(),
+      fetchedAt,
       items: results.map((item, index) => ({
         id: item.id ?? null,
         title: item.name ?? 'Untitled',

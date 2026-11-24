@@ -114,7 +114,7 @@ describe('DiscoveryService album metadata', () => {
           { id: 'one', name: 'Song One', artistName: 'Artist One' },
         ] } }),
       } as unknown as Response);
-      const result = await service.dailyTop100('TZ');
+      const result = await new DiscoveryService().dailyTop100('TZ');
       expect(result).toMatchObject({
         source: 'Apple Music RSS',
         title: 'Regional Most Played (RSS; not Daily Top 100)',
@@ -130,6 +130,30 @@ describe('DiscoveryService album metadata', () => {
       if (previous === undefined) delete process.env.APPLE_MUSIC_DEVELOPER_TOKEN;
       else process.env.APPLE_MUSIC_DEVELOPER_TOKEN = previous;
     }
+  });
+
+  it('retries one transient Apple RSS 503 and caches successful chart bytes', async () => {
+    const freshService = new DiscoveryService();
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        feed: { title: 'Top Songs', results: [
+          { id: 'song-one', name: 'One', artistName: 'Artist One' },
+        ] },
+      }) });
+    const first = await freshService.songsChart('TZ');
+    const second = await freshService.songsChart('TZ');
+    expect(first).toMatchObject({ source: 'Apple Music RSS', territory: 'TZ' });
+    expect(first.items).toHaveLength(1);
+    expect(second).toEqual(first);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a permanent Apple RSS 400', async () => {
+    const freshService = new DiscoveryService();
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 400 });
+    await expect(freshService.songsChart('TZ')).rejects.toThrow('APPLE_RSS_HTTP_400');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
 });
