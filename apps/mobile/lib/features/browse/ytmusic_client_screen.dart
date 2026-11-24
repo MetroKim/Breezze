@@ -117,6 +117,7 @@ class _YouTubeMusicClientScreenState
   bool _accountBusy = false;
   String? _accountError;
   Map<String, dynamic>? _account;
+  String? _accountOwnerId;
   List<Map<String, dynamic>> _accountPlaylists = [];
 
 
@@ -154,12 +155,16 @@ class _YouTubeMusicClientScreenState
     if (current is! AuthSignedIn) {
       if (mounted) setState(() {
         _account = null;
+        _accountOwnerId = null;
         _accountLoading = false;
         _accountPlaylists = [];
       });
       return;
     }
     if (mounted) setState(() {
+      _accountOwnerId = current.userId;
+      _account = null;
+      _accountPlaylists = [];
       _accountLoading = true;
       _accountError = null;
     });
@@ -286,7 +291,11 @@ class _YouTubeMusicClientScreenState
   Widget _accountSection(ThemeData theme) {
     final auth = ref.watch(authSessionProvider);
     if (auth is! AuthSignedIn) return const SizedBox.shrink();
-    final account = _account;
+    // Never display a previous Breezze listener's linked YouTube account
+    // while an authentication/account switch is in progress.
+    final sameOwner = _accountOwnerId == auth.userId;
+    final account = sameOwner ? _account : null;
+    final playlists = sameOwner ? _accountPlaylists : const <Map<String, dynamic>>[];
     final connected = account?['connected'] == true;
     final available = account?['available'] == true;
     return Container(
@@ -307,7 +316,7 @@ class _YouTubeMusicClientScreenState
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.bzText2),
           ),
-          if (_accountLoading) ...[
+          if (_accountLoading && sameOwner) ...[
             const SizedBox(height: 10),
             const LinearProgressIndicator(),
           ] else ...[
@@ -353,7 +362,7 @@ class _YouTubeMusicClientScreenState
               const SizedBox(height: 16),
               Text('Your YouTube playlists',
                 style: theme.textTheme.titleMedium),
-              if (_accountPlaylists.isEmpty)
+              if (playlists.isEmpty)
                 const ListTile(
                   title: Text('No playlists available'),
                   subtitle: Text(
@@ -361,7 +370,7 @@ class _YouTubeMusicClientScreenState
                     'YouTube Data API, not all YouTube Music library items.',
                   ),
                 ),
-              for (final playlist in _accountPlaylists)
+              for (final playlist in playlists)
                 _ytRow(playlist,
                   subtitle: 'Your YouTube playlist • read-only',
                   onTap: _ytPlaylistId(playlist['playlistId'])
