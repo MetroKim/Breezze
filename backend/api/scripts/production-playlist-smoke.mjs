@@ -118,15 +118,90 @@ async function run() {
   assert.equal(refreshed.data.name, 'Breezze QA synced on second device');
   report('Playlist rename propagates between independent sessions');
 
+  // Use catalog tracks returned by Breezze's live metadata provider,
+  // not fake test tracks. Canonical resolver is idempotent and caches these
+  // legitimate catalog songs for normal listeners, while all QA playlists
+  // and accounts are removed in finally.
+  const discovered = await request('GET', '/api/v1/search?q=love',
+    owner.token);
+  status(discovered.status, 200, 'production song metadata search');
+  const hits = discovered.data.externalTracks ?? [];
+  assert.equal(Array.isArray(hits), true);
+  const firstTwo = [];
+  const seen = new Set();
+  for (const hit of hits) {
+    if (typeof hit.providerTrackId !== 'string' ||
+        typeof hit.providerId !== 'string' ||
+        typeof hit.title !== 'string' ||
+        typeof hit.artist !== 'string' ||
+        !(hit.durationSec > 0)) continue;
+    const externalId = 'bz:' + hit.providerId + ':' + hit.providerTrackId;
+    if (seen.has(externalId)) continue;
+    seen.add(externalId);
+    firstTwo.push({ ...hit, externalId });
+    if (firstTwo.length === 2) break;
+  }
+  assert.equal(firstTwo.length, 2,
+    'Two real provider songs required for playlist acceptance');
+
+  const canonicalIds = [];
+  for (const track of firstTwo) {
+    const canonical = await request('POST', '/api/v1/catalog/resolve',
+      owner.token, {
+        externalId: track.externalId,
+        source: track.providerId,
+        title: track.title,
+        artistName: track.artist,
+        durationSec: Math.round(track.durationSec),
+      });
+    status(canonical.status, 201, 'production canonical song resolve');
+    assert.match(canonical.data.id,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    canonicalIds.push(canonical.data.id);
+  }
+  assert.notEqual(canonicalIds[0], canonicalIds[1]);
+  report('Two real songs resolved to distinct canonical track IDs');
+
+  const tracksRoute = '/api/v1/playlists/' + id + '/tracks';
+  for (const canonicalId of canonicalIds) {
+    status((await request('POST', tracksRoute, secondToken,
+      { trackId: canonicalId })).status, 201, 'second-device track add');
+  }
+  status((await request('POST', tracksRoute, owner.token,
+    { trackId: canonicalIds[0] })).status, 201, 'idempotent track add');
+  status((await request('POST', tracksRoute, stranger.token,
+    { trackId: canonicalIds[0] })).status, 404,
+    'other-account track insertion');
+  const hydrated = await request('GET',
+    '/api/v1/playlists/' + id, owner.token);
+  status(hydrated.status, 200, 'cross-session catalog hydration');
+  assert.deepEqual(hydrated.data.items.map(item => item.trackId), canonicalIds);
+  assert.equal(hydrated.data.items[0].track.title, firstTwo[0].title);
+  assert.equal(hydrated.data.items[0].track.artist.name, firstTwo[0].artist);
+  report('Two-song addition, idempotency, metadata hydration and isolation');
+
+  const reverse = [...canonicalIds].reverse();
   const reorder = await request('PATCH',
     '/api/v1/playlists/' + id + '/tracks/order',
-    secondToken, { trackIds: [] });
-  status(reorder.status, 200, 'reorder empty playlist');
+    owner.token, { trackIds: reverse });
+  status(reorder.status, 200, 'reorder two real songs');
   assert.equal(reorder.data.reordered, true);
-  status((await request('POST', '/api/v1/playlists/' + id + '/tracks',
-    stranger.token, { trackId: randomUUID() })).status, 404,
-    'other-account track insertion');
-  report('Empty-order replay and track-ownership boundary verified');
+  const reorderedView = await request('GET',
+    '/api/v1/playlists/' + id, secondToken);
+  assert.deepEqual(reorderedView.data.items.map(item => item.trackId), reverse);
+  status((await request('PATCH',
+    '/api/v1/playlists/' + id + '/tracks/order',
+    secondToken, { trackIds: [canonicalIds[0]] })).status, 400,
+    'stale reorder membership should not override other device');
+  report('Reordering propagates and stale membership is rejected');
+
+  status((await request('DELETE', tracksRoute + '/' + canonicalIds[0],
+    secondToken)).status, 200, 'remove real song');
+  const removedView = await request('GET',
+    '/api/v1/playlists/' + id, owner.token);
+  assert.deepEqual(removedView.data.items.map(item => item.trackId),
+    [canonicalIds[1]]);
+  report('Removing a song propagates to the other session');
 
   const deleted = await request('DELETE', '/api/v1/playlists/' + id,
     owner.token);
