@@ -58,12 +58,12 @@ void main() {
     await expectVisibleAction('Add to Library');
     await tester.ensureVisible(find.text('Add to Library'));
     await tester.tap(find.text('Add to Library'));
-    expect(await store.isFavorite(song.id), isTrue);
     await expectVisibleAction('Remove from Library');
+    expect(await store.isFavorite(song.id), isTrue);
 
     await tester.tap(find.text('Remove from Library'));
-    expect(await store.isFavorite(song.id), isFalse);
     await expectVisibleAction('Add to Library');
+    expect(await store.isFavorite(song.id), isFalse);
   });
 
   testWidgets('YouTube song details enable the in-app player', (tester) async {
