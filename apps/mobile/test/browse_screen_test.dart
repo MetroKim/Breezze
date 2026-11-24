@@ -48,6 +48,21 @@ class _BrowseChartApi extends BreezzeApi {
   _BrowseChartApi() : super(baseUrl: 'https://breezze.example.test');
 
   @override
+  Future<Map<String, dynamic>> discoveryMusicVideos({
+    String query = 'official music video',
+  }) async => {
+        'source': 'YouTube Music via ytmusicapi',
+        'items': [
+          {
+            'id': 'invalid_video_id',
+            'title': 'Video with invalid ID',
+            'artist': 'Browse QA',
+            'playback': 'external_youtube_only',
+          },
+        ],
+      };
+
+  @override
   Future<Map<String, dynamic>> discoveryDailyTop100({String country = 'us'}) async => {
         'source': 'Apple Music RSS',
         'title': 'Regional Most Played (RSS; not Daily Top 100)',
@@ -178,4 +193,42 @@ void main() {
     expect(find.textContaining('Catalog metadata only'), findsOneWidget);
     expect(find.textContaining('Apple Music RSS'), findsOneWidget);
   });
+  testWidgets('Unavailable Browse sections do not invent charts',
+      (tester) async {
+    final source = _BrowseSource();
+    await tester.pumpWidget(_browseApp(source));
+    await tester.pump();
+    source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Trending Songs'));
+    await tester.tap(find.text('Trending Songs'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Not available yet'), findsOneWidget);
+    expect(find.textContaining('Search results cannot be used as rankings'),
+        findsOneWidget);
+    expect(find.text('Back to Browse'), findsOneWidget);
+  });
+
+  testWidgets('Browse does not launch malformed external music-video IDs',
+      (tester) async {
+    final source = _BrowseSource();
+    await tester.pumpWidget(_browseApp(source, api: _BrowseChartApi()));
+    await tester.pump();
+    source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Music Videos'));
+    await tester.tap(find.text('Music Videos'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Video with invalid ID'), findsOneWidget);
+    await tester.tap(find.byTooltip('Watch official video'));
+    await tester.pump();
+    expect(find.text('This video has no valid YouTube playback ID.'),
+        findsOneWidget);
+  });
+
+
 }
