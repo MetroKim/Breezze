@@ -13,8 +13,14 @@ This isolated service uses the MIT-licensed [sigma67/ytmusicapi](https://github.
 - `GET /artists/{artistId}` — public artist profile, songs and albums metadata
 - `GET /charts?country=ZZ` — YouTube Music artist charts and music-video chart playlists; `ZZ` means global
 - `GET /watch-queue/{videoId}?limit=20` — unofficial next-track suggestions from `get_watch_playlist`; IDs/metadata only, **not playable audio**
+- `GET /suggestions?q={query}&limit=10` — YouTube Music typeahead suggestions
+- `GET /albums/{MPRE...}` — album details, credited artists and up to 100 tracks
+- `GET /playlists/{playlistId}?limit=50` — public playlist details and up to 100 tracks
+- `GET /moods` — categories and safe category tokens from `get_mood_categories`
+- `GET /moods/playlists?params={token}&limit=20` — matching public mood playlists
+- `GET /explore` — YouTube Music new releases, trending, new official videos, and Top Songs only when actually present
 
-The service deliberately drops YouTube's `streamingData`, adaptive formats, and signed media URLs. The NestJS provider adapter reports search and metadata capabilities only; playback, downloads, and rights availability remain disabled.
+The service deliberately drops YouTube's `streamingData`, adaptive formats, and signed media URLs. Although upstream `YTMusic.get_song()` can return a `streamingData` object, this project does not turn that response into an audio-only playback proxy or a download feature. Unofficial metadata access does not establish redistribution or offline rights. The NestJS provider adapter reports search and metadata capabilities only; playback, downloads, and rights availability remain disabled.
 
 ## Run locally
 
