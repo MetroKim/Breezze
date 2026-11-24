@@ -366,11 +366,14 @@ class _YouTubeMusicClientScreenState
               Text('Your YouTube playlists',
                 style: theme.textTheme.titleMedium),
               if (playlists.isEmpty)
-                const ListTile(
-                  title: Text('No playlists available'),
-                  subtitle: Text(
-                    'This view shows playlists returned by the official '
-                    'YouTube Data API, not all YouTube Music library items.',
+                const Material(
+                  color: Colors.transparent,
+                  child: ListTile(
+                    title: Text('No playlists available'),
+                    subtitle: Text(
+                      'This view shows playlists returned by the official '
+                      'YouTube Data API, not all YouTube Music library items.',
+                    ),
                   ),
                 ),
               for (final playlist in playlists)
