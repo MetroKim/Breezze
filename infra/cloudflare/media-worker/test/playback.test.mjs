@@ -21,22 +21,24 @@ const bytes = new Uint8Array([82, 73, 70, 70, 87, 65, 86, 69, 7, 13, 19, 29, 31,
 
 function fakeR2(withObject = true) {
   const data = withObject ? bytes : null;
-  const metadata = () => data === null ? null : {
+  const audioKey = `audio/${mediaId}/${variant}`;
+  const videoKey = `video/${mediaId}/original.mp4`;
+  const metadata = (path) => data === null ? null : {
     size: data.length,
     httpEtag: '"synthetic-qa-fixture"',
-    httpMetadata: { contentType: 'audio/wav' },
+    httpMetadata: { contentType: path === videoKey ? 'video/mp4' : 'audio/wav' },
   };
   return {
     async head(path) {
-      return path === `audio/${mediaId}/${variant}` ? metadata() : null;
+      return path === audioKey || path === videoKey ? metadata(path) : null;
     },
     async get(path, options = {}) {
-      if (path !== `audio/${mediaId}/${variant}` || data === null) return null;
+      if ((path !== audioKey && path !== videoKey) || data === null) return null;
       const range = options.range;
       const selected = range
         ? data.slice(range.offset, range.offset + range.length)
         : data;
-      return { ...metadata(), body: new Blob([selected]).stream() };
+      return { ...metadata(path), body: new Blob([selected]).stream() };
     },
   };
 }
@@ -119,4 +121,65 @@ test('fails closed for missing storage, object or disallowed operations', async 
     new Request(url, { method: 'POST' }), env())).status, 405);
   assert.equal((await worker.fetch(
     new Request('https://media.breezze.test/audio/../private?e=1&s=x'), env())).status, 404);
+});
+
+
+async function videoUrlFor({
+  assetId = mediaId, mode = 'stream', expiry = Date.now() + 60_000,
+} = {}) {
+  const payload = `video:${assetId}:${mode}:${expiry}`;
+  const imported = await webcrypto.subtle.importKey(
+    'raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign'],
+  );
+  const signature = Buffer.from(
+    await webcrypto.subtle.sign('HMAC', imported, new TextEncoder().encode(payload)),
+  ).toString('base64url');
+  return `https://media.breezze.test/video/${assetId}/${mode}?e=${expiry}&s=${signature}`;
+}
+
+test('signed licensed video streams exact MP4 bytes with byte-range seeking', async () => {
+  const url = await videoUrlFor({ mode: 'stream' });
+  const response = await worker.fetch(new Request(url), env());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'video/mp4');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+
+  const seek = await worker.fetch(new Request(url, {
+    headers: { Range: 'bytes=3-7' },
+  }), env());
+  assert.equal(seek.status, 206);
+  assert.equal(seek.headers.get('Content-Range'), `bytes 3-7/${bytes.length}`);
+  assert.deepEqual(new Uint8Array(await seek.arrayBuffer()), bytes.slice(3, 8));
+});
+
+test('video offline link uses a separate purpose and Content-Disposition', async () => {
+  const download = await videoUrlFor({ mode: 'download' });
+  const response = await worker.fetch(new Request(download), env());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Disposition'),
+    'attachment; filename="breezze-video.mp4"');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+
+  for (const changed of [
+    download.replace('/download?', '/stream?'),
+    download.replace(mediaId, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    download.replace(/s=[^&]+/, 's=forged'),
+  ]) {
+    assert.equal((await worker.fetch(new Request(changed), env())).status, 403);
+  }
+  assert.equal((await worker.fetch(new Request(await videoUrlFor({
+    expiry: Date.now() - 1000,
+  })), env())).status, 403);
+});
+
+test('video signatures cannot be repurposed for signed audio delivery', async () => {
+  const signed = await videoUrlFor({ mode: 'stream' });
+  const changed = signed.replace('/video/', '/audio/');
+  const response = await worker.fetch(new Request(changed), env());
+  assert.notEqual(response.status, 200);
+  assert.equal((await worker.fetch(new Request(signed), {
+    MEDIA_BUCKET: fakeR2(false), MEDIA_SIGNING_KEY: key,
+  })).status, 404);
 });
