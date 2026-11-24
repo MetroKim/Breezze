@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -140,14 +142,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (name == null || name.trim().isEmpty) return;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    String? remoteId;
+    final store = PlaylistStore();
+    await store.create(ownerId, name);
     if (auth is AuthSignedIn) {
-      try {
-        final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name.trim());
-        remoteId = remote['id'] as String?;
-      } catch (_) {}
+      unawaited(store.syncOwner(
+        ownerId,
+        ref.read(authSessionProvider.notifier).api,
+        ownerStillActive: () {
+          if (!mounted) return false;
+          final current = ref.read(authSessionProvider);
+          return current is AuthSignedIn && current.userId == ownerId;
+        },
+      ));
     }
-    await PlaylistStore().create(ownerId, name, id: remoteId);
     if (!mounted) return;
     ref.read(homeTabHintProvider.notifier).state = MainTab.library.index;
     ref.read(playlistRefreshSignalProvider.notifier).state++;

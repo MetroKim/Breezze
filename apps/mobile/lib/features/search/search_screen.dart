@@ -288,17 +288,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     var playlists = await store.load(ownerId);
     String? selectedId;
 
-    Future<String?> create(String name) async {
-      String? remoteId;
-      if (auth is AuthSignedIn) {
-        try {
-          final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name);
-          remoteId = remote['id'] as String?;
-        } catch (_) {}
-      }
-      await store.create(ownerId, name, id: remoteId);
-      return remoteId;
-    }
+    Future<String?> create(String name) => store.create(ownerId, name);
 
     if (playlists.isEmpty) {
       final name = await _requestPlaylistName();
@@ -345,15 +335,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     if (selectedId == null) return;
-    final remotePlaylist = RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(selectedId);
-    if (auth is AuthSignedIn && remotePlaylist) {
-      try {
-        await ref.read(authSessionProvider.notifier).api.addPlaylistTrack(selectedId, track.id);
-      } catch (_) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not sync this song to your playlist.')));
-        return;
-      }
-    }
     await store.addTrack(ownerId, selectedId, FavoriteTrack(
       id: track.id,
       title: track.title,
@@ -361,6 +342,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       artworkUrl: track.artworkUrl,
       durationMs: track.duration.inMilliseconds,
     ));
+    if (auth is AuthSignedIn) {
+      unawaited(store.syncOwner(
+        ownerId,
+        ref.read(authSessionProvider.notifier).api,
+        ownerStillActive: () {
+          if (!mounted) return false;
+          final current = ref.read(authSessionProvider);
+          return current is AuthSignedIn && current.userId == ownerId;
+        },
+      ));
+    }
     if (!mounted) return;
     ref.read(playlistRefreshSignalProvider.notifier).state++;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to playlist')));

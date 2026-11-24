@@ -132,7 +132,23 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         // Keep owner-specific cached albums and pending operations offline.
       }
       try {
-        final remote = await ref.read(authSessionProvider.notifier).api.playlists();
+        final api = ref.read(authSessionProvider.notifier).api;
+        // Replay durable offline edits before accepting a remote snapshot.
+        // Failed edits remain journaled, and mergeRemote preserves their
+        // local state instead of replacing it with stale server data.
+        await _playlistStore.syncOwner(
+          ownerId,
+          api,
+          ownerStillActive: () =>
+              _ownerStillActive(ownerId) && generation == _refreshGeneration,
+        );
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        final remote = await api.playlists();
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
         await _playlistStore.mergeRemote(ownerId, remote);
         playlists = await _playlistStore.load(ownerId);
       } catch (_) {
@@ -185,20 +201,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     controller.dispose();
     if (name == null || name.trim().isEmpty) return;
     final auth = ref.read(authSessionProvider);
-    String? remoteId;
-    if (auth is AuthSignedIn) {
-      try {
-        final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name.trim());
-        remoteId = remote['id'] as String?;
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Playlist saved locally; account sync is unavailable.')),
-          );
-        }
-      }
-    }
-    await _playlistStore.create(_ownerId, name, id: remoteId);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    await _playlistStore.create(ownerId, name);
     if (!mounted) return;
     setState(() => _selected = 'Playlists');
     await _refresh();

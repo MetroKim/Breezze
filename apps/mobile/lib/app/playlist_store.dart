@@ -448,7 +448,7 @@ class PlaylistStore {
       title: title,
       artistName: artist,
       durationSec: ((durationMs is num ? durationMs.toInt() : 0) ~/ 1000)
-          .clamp(1, 86400),
+          .clamp(1, 86400).toInt(),
     );
     final canonical = resolved['id'];
     if (canonical is! String || !_uuidPattern.hasMatch(canonical)) {
