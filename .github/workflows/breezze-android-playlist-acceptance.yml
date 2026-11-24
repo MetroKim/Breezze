@@ -42,6 +42,37 @@ jobs:
       - name: Generate Drift database code
         working-directory: apps/mobile
         run: dart run build_runner build --delete-conflicting-outputs
+      # Flutter's generated Android Gradle project downloads Kotlin plugins
+      # from Maven Central. CI can receive transient HTTP 429 responses.
+      # Cache resolved artifacts and retry only the build preparation, never
+      # the production-writing integration test itself.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-breezze-android-gradle-${{ hashFiles('apps/mobile/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-breezze-android-gradle-
+      - name: Prebuild Android debug with dependency backoff
+        working-directory: apps/mobile
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Android dependency resolution failed after five attempts" >&2
+              exit 1
+            fi
+            delay=$((15 * attempt * attempt))
+            echo "Gradle dependency fetch failed; retrying after ${delay}s" >&2
+            sleep "$delay"
+          done
       - name: Enable KVM acceleration
         run: sudo chmod 666 /dev/kvm
       - name: Run real Android filesystem and production API acceptance
