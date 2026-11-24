@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:breezze/app/bootstrap.dart' show FavoriteTrack;
 import 'package:breezze/app/playlist_store.dart';
 import 'package:breezze/core/api/breezze_api.dart';
+import 'package:breezze/core/database/catalog_id_map_dao.dart';
+import 'package:breezze/core/database/db_instance.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -132,8 +134,23 @@ void main() {
       );
       final userId = owner.userId!;
       final playlistId = await phoneA.create(userId, 'Offline on phone A');
-      await phoneA.addTrack(userId, playlistId, tracks[0]);
-      await phoneA.addTrack(userId, playlistId, tracks[1]);
+
+      // Search/Browse results use provider IDs, not canonical UUIDs.
+      // Exercise the exact user-facing playlist-add path on the emulator.
+      const externalA = 'bz:youtube_music:wZaotY2V3gY';
+      const externalB = 'bz:youtube_music:qH1wbp-FASo';
+      await phoneA.addTrack(userId, playlistId, const FavoriteTrack(
+        id: externalA,
+        title: 'Love',
+        artist: 'Keyshia Cole',
+        durationMs: 256000,
+      ));
+      await phoneA.addTrack(userId, playlistId, const FavoriteTrack(
+        id: externalB,
+        title: 'Love in This Club (feat. Young Jeezy)',
+        artist: 'Usher',
+        durationMs: 260000,
+      ));
       await phoneA.rename(userId, playlistId, 'Recovered on phone B');
       expect(await phoneA.pendingCount(userId), 4);
 
@@ -157,6 +174,13 @@ void main() {
         userId, apiA, ownerStillActive: () => true,
       ), isTrue);
       expect(await phoneA.pendingCount(userId), 0);
+      final catalogMap = CatalogIdMapDao(breezzeDb);
+      expect(await catalogMap.lookup(externalA), tracks[0].id);
+      expect(await catalogMap.lookup(externalB), tracks[1].id);
+
+      // The local cache adopts the server's canonical IDs before future
+      // cross-device edits, while provider mapping remains available.
+      await phoneA.mergeRemote(userId, await apiA.playlists());
 
       // Device B downloads only this owner's cloud state, including songs.
       await phoneB.mergeRemote(userId, await apiSecond.playlists());
