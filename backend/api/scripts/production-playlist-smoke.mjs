@@ -90,6 +90,23 @@ async function run() {
     'production discovery returned no real tracks from any music provider');
   report('Real federated discovery returns usable song metadata without assuming streaming rights');
 
+  // D1 official video results must come from the deployed music-video
+  // discovery service, with external-only playback explicitly declared.
+  // Finding a YouTube ID is NOT permission to extract audio into Breezze.
+  const videos = await request('GET',
+    '/api/v1/discovery/videos?q=adele%20official%20music%20video');
+  status(videos.status, 200, 'official music-video discovery');
+  assert.ok(Array.isArray(videos.data.items), 'video search must return items');
+  assert.ok(videos.data.items.length > 0,
+    'deployed discovery returned no official music videos');
+  for (const video of videos.data.items) {
+    assert.match(video.id ?? '', /^[A-Za-z0-9_-]{11}$/,
+      'each video must have a valid YouTube video ID');
+    assert.equal(video.playback, 'external_youtube_only',
+      'video metadata must not grant native music-stream rights');
+  }
+  report('Official music videos resolve with valid IDs and external-only playback rights');
+
   const noToken = await request('GET', '/api/v1/playlists');
   status(noToken.status, 401, 'unsigned playlist access');
   report('Unauthenticated playlist access rejected');
