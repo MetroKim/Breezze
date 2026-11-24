@@ -215,3 +215,123 @@ def music_video_counterpart(video_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
     finally:
         PROVIDER_SLOTS.release()
+
+
+
+# Public YouTube Music discovery extensions. All data is metadata only:
+# these endpoints never return audio URLs, cookies, or playback entitlements.
+ARTIST_ID = re.compile(r"^[A-Za-z0-9_-]{10,64}$")
+
+
+def _safe_artwork(item: dict[str, Any]) -> str | None:
+    thumbnails = item.get("thumbnails") or []
+    if not isinstance(thumbnails, list):
+        return None
+    for thumb in reversed(thumbnails):
+        if isinstance(thumb, dict):
+            url = thumb.get("url")
+            if isinstance(url, str) and url.startswith("https://"):
+                return url
+    return None
+
+
+def _normal_artist(item: dict[str, Any]) -> dict[str, Any] | None:
+    artist_id = item.get("browseId")
+    title = item.get("artist") or item.get("title") or item.get("name")
+    if not isinstance(artist_id, str) or not ARTIST_ID.fullmatch(artist_id):
+        return None
+    if not isinstance(title, str) or not title.strip():
+        return None
+    rank = item.get("rank")
+    return {
+        "artistId": artist_id,
+        "name": title.strip(),
+        "artworkUrl": _safe_artwork(item),
+        "subscribers": item.get("subscribers") if isinstance(item.get("subscribers"), str) else None,
+        "rank": rank if isinstance(rank, (str, int)) and not isinstance(rank, bool) else None,
+    }
+
+
+@app.get("/artists/search")
+def search_artists(
+    q: str = Query(min_length=2, max_length=120),
+    limit: int = Query(default=20, ge=1, le=25),
+) -> dict[str, Any]:
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="YTMUSIC_CAPACITY_EXCEEDED", headers={"Retry-After": "2"})
+    try:
+        results = YTMusic().search(q.strip(), filter="artists", limit=limit)
+        artists = [artist for item in results if isinstance(item, dict) if (artist := _normal_artist(item))]
+        return {"source": "youtube_music", "artists": artists}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()
+
+
+@app.get("/artists/{artist_id}")
+def get_artist(artist_id: str) -> dict[str, Any]:
+    if not ARTIST_ID.fullmatch(artist_id):
+        raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_ARTIST_ID")
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="YTMUSIC_CAPACITY_EXCEEDED", headers={"Retry-After": "2"})
+    try:
+        raw = YTMusic().get_artist(artist_id)
+        if not isinstance(raw, dict) or not isinstance(raw.get("name"), str):
+            raise HTTPException(status_code=404, detail="ARTIST_METADATA_NOT_FOUND")
+        songs = ((raw.get("songs") or {}).get("results") or [])[:20]
+        albums = ((raw.get("albums") or {}).get("results") or [])[:20]
+        artist = {
+            "artistId": artist_id,
+            "name": raw["name"].strip(),
+            "description": (raw.get("description") or "")[:3000] if isinstance(raw.get("description"), str) else None,
+            "artworkUrl": _safe_artwork(raw),
+            "subscribers": raw.get("subscribers") if isinstance(raw.get("subscribers"), str) else None,
+            "topSongs": [
+                {"providerTrackId": row["videoId"], "title": row["title"], "artworkUrl": _safe_artwork(row)}
+                for row in songs if isinstance(row, dict) and isinstance(row.get("title"), str)
+                and isinstance(row.get("videoId"), str) and VIDEO_ID.fullmatch(row["videoId"])
+            ],
+            "albums": [
+                {"browseId": row["browseId"], "title": row["title"], "year": row.get("year"),
+                 "artworkUrl": _safe_artwork(row)}
+                for row in albums if isinstance(row, dict) and isinstance(row.get("title"), str)
+                and isinstance(row.get("browseId"), str) and ARTIST_ID.fullmatch(row["browseId"])
+            ],
+        }
+        return {"source": "youtube_music", "artist": artist}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()
+
+
+@app.get("/charts")
+def get_charts(country: str = Query(default="ZZ", pattern=r"^[A-Z]{2}$")) -> dict[str, Any]:
+    if not PROVIDER_SLOTS.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="YTMUSIC_CAPACITY_EXCEEDED", headers={"Retry-After": "2"})
+    try:
+        result = YTMusic().get_charts(country=country)
+        artists = [artist for row in (result.get("artists") or [])
+                   if isinstance(row, dict) if (artist := _normal_artist(row))]
+        playlists = []
+        for row in result.get("videos") or []:
+            if not isinstance(row, dict):
+                continue
+            playlist_id, title = row.get("playlistId"), row.get("title")
+            if isinstance(playlist_id, str) and ARTIST_ID.fullmatch(playlist_id) and isinstance(title, str):
+                playlists.append({"playlistId": playlist_id, "title": title, "artworkUrl": _safe_artwork(row)})
+        return {
+            "source": "youtube_music",
+            "country": country,
+            "artists": artists,
+            "musicVideoPlaylists": playlists,
+            # Unauthenticated get_charts does not promise Top Songs ranks.
+            "songRankingAvailable": False,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="YTMUSIC_CHARTS_UNAVAILABLE") from exc
+    finally:
+        PROVIDER_SLOTS.release()
