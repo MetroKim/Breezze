@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { SupabaseExchangeService } from './supabase-exchange.service';
+import { LibraryService } from '../library/library.service';
+import { PlaylistsService } from '../playlists/playlists.service';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma.service';
 
@@ -13,6 +15,8 @@ const prisma = new PrismaClient(
 
 describeIntegration('Auth session PostgreSQL integration', () => {
   const userIds: string[] = [];
+  const catalogTrackIds: string[] = [];
+  const catalogArtistIds: string[] = [];
   let service: AuthService;
 
   beforeAll(async () => {
@@ -26,6 +30,14 @@ describeIntegration('Auth session PostgreSQL integration', () => {
   afterAll(async () => {
     if (userIds.length) {
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+    // Keep fixtures isolated; remove catalog rows only after their user-owned
+    // favorites, playlist items, and play history have cascaded away.
+    if (catalogTrackIds.length) {
+      await prisma.track.deleteMany({ where: { id: { in: catalogTrackIds } } });
+    }
+    if (catalogArtistIds.length) {
+      await prisma.artist.deleteMany({ where: { id: { in: catalogArtistIds } } });
     }
     await prisma.$disconnect();
   });
@@ -138,6 +150,46 @@ describeIntegration('Auth session PostgreSQL integration', () => {
     });
     userIds.push(second.id);
 
+    // Existing listener data must continue to resolve to the SAME user ID
+    // after linking, while a different listener's API queries stay isolated.
+    const artist = await prisma.artist.create({
+      data: { name: `Migration Artist ${randomUUID()}` },
+      select: { id: true },
+    });
+    catalogArtistIds.push(artist.id);
+    const track = await prisma.track.create({
+      data: {
+        title: 'Original saved track',
+        duration: 196,
+        artistId: artist.id,
+      },
+      select: { id: true },
+    });
+    catalogTrackIds.push(track.id);
+    const playlist = await prisma.playlist.create({
+      data: {
+        userId: original.id,
+        name: 'Original playlist',
+        items: { create: [{ trackId: track.id, position: 0 }] },
+      },
+      select: { id: true },
+    });
+    await prisma.favorite.create({ data: {
+      userId: original.id, trackId: track.id,
+    } });
+    await prisma.recentlyPlayed.create({ data: {
+      userId: original.id, trackId: track.id,
+    } });
+    await prisma.downloadRecord.create({ data: {
+      userId: original.id, trackId: track.id,
+      status: 'active',
+    } });
+    await prisma.listeningEvent.create({ data: {
+      userId: original.id, trackId: track.id,
+      playedMs: 30_000,
+      isServerVerified: true,
+    } });
+
     const identityId = randomUUID();
     const oldUrl = process.env.SUPABASE_URL;
     const oldKey = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -175,8 +227,49 @@ describeIntegration('Auth session PostgreSQL integration', () => {
       expect(library.genres).toEqual(['jazz']);
       expect(library.favoriteArtists).toEqual(['Original Artist']);
 
+      const playlists = new PlaylistsService(prisma as unknown as PrismaService);
+      const favorites = new LibraryService(prisma as unknown as PrismaService);
+      const originalPlaylists = await playlists.list(original.id);
+      expect(originalPlaylists.map((row) => row.id)).toContain(playlist.id);
+
+      const originalPlaylist = await playlists.get(original.id, playlist.id);
+      expect(originalPlaylist.items.map((item) => item.trackId))
+        .toEqual([track.id]);
+      expect((await favorites.listFavorites(original.id))
+        .map((row) => row.trackId)).toContain(track.id);
+
+      expect(await playlists.list(second.id)).toEqual([]);
+      await expect(playlists.get(second.id, playlist.id))
+        .rejects.toThrow('PLAYLIST_NOT_FOUND');
+      expect(await favorites.listFavorites(second.id)).toEqual([]);
+
+      const recent = await prisma.recentlyPlayed.findFirstOrThrow({
+        where: { userId: original.id, trackId: track.id },
+      });
+      expect(recent.userId).toBe(original.id);
+      expect(await prisma.recentlyPlayed.count({
+        where: { userId: second.id },
+      })).toBe(0);
+
+      const download = await prisma.downloadRecord.findFirstOrThrow({
+        where: { userId: original.id, trackId: track.id },
+      });
+      expect(download.userId).toBe(original.id);
+      expect(await prisma.downloadRecord.count({
+        where: { userId: second.id },
+      })).toBe(0);
+
+      const replay = await prisma.listeningEvent.findFirstOrThrow({
+        where: { userId: original.id, trackId: track.id },
+      });
+      expect(replay.playedMs).toBe(30_000);
+      expect(await prisma.listeningEvent.count({
+        where: { userId: second.id },
+      })).toBe(0);
+
       const signedIn = await exchange.exchange(token);
       expect(signedIn.user.id).toBe(original.id);
+      expect((await playlists.list(signedIn.user.id))[0].id).toBe(playlist.id);
 
       await expect(exchange.linkLegacy(token, second.email, 'second-account-secret'))
         .rejects.toThrow('SUPABASE_IDENTITY_ALREADY_LINKED');
