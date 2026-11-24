@@ -205,6 +205,41 @@ class QueueManager {
     return true;
   }
 
+  /// Reorder an upcoming entry in the *visible* playback order, not its
+  /// physical storage index. The playing entry and already-played prefix are
+  /// never moved. This works identically with shuffle on or off.
+  bool reorderUpNext(String entryId, int newUpNextIndex) {
+    final playingIndex = _currentIndex;
+    final playingId = current?.entryId;
+    if (playingIndex == null || playingId == null ||
+        current?.entryId == entryId) return false;
+
+    if (shuffle) {
+      final playingPosition = _shuffledOrder.indexOf(playingId);
+      if (playingPosition < 0) return false;
+      final next = _shuffledOrder.skip(playingPosition + 1).toList();
+      if (!next.remove(entryId)) return false;
+      final target = math.max(0, math.min(newUpNextIndex, next.length));
+      next.insert(target, entryId);
+      _shuffledOrder = [
+        ..._shuffledOrder.take(playingPosition + 1),
+        ...next,
+      ];
+    } else {
+      final from = _entries.indexWhere((e) => e.entryId == entryId);
+      if (from <= playingIndex) return false;
+      final moving = _entries.removeAt(from);
+      final target = math.max(
+        playingIndex + 1,
+        math.min(playingIndex + 1 + newUpNextIndex, _entries.length),
+      );
+      _entries.insert(target, moving);
+      _currentIndex = _entries.indexWhere((e) => e.entryId == playingId);
+    }
+    onQueueChanged?.call();
+    return true;
+  }
+
   void clear({bool keepCurrent = true}) {
     if (keepCurrent && current != null) {
       final keep = current!;

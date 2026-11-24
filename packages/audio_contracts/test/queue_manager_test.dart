@@ -238,5 +238,37 @@ void main() {
       final last = q.shuffledOrder.last;
       expect(q.previous()!.entryId, last);
     });
+
+    test('drag reorder changes real upcoming sequence without moving current', () {
+      final queue = QueueManager();
+      queue.replaceWith([entry('a'), entry('b'), entry('c'), entry('d')]);
+      expect(queue.reorderUpNext('d', 0), isTrue);
+      expect(queue.current!.entryId, 'a');
+      expect(queue.upNext.map((e) => e.entryId), ['d', 'b', 'c']);
+      expect(queue.advance()!.entryId, 'd');
+      expect(queue.reorderUpNext('d', 1), isFalse);
+    });
+
+    test('shuffle drag reorder changes transport order and survives restore', () {
+      final queue = QueueManager();
+      queue.replaceWith([entry('a'), entry('b'), entry('c'), entry('d')]);
+      queue.toggleShuffle();
+      final last = queue.upNext.last.entryId;
+      final originalMiddle = queue.upNext.take(2).map((e) => e.entryId).toList();
+      expect(queue.reorderUpNext(last, 0), isTrue);
+      expect(queue.upNext.map((e) => e.entryId).toList(),
+          [last, ...originalMiddle]);
+      final snapshot = queue.shuffledOrder;
+      final restored = QueueManager();
+      restored.restore(queue.entries,
+        currentEntryId: queue.current!.entryId,
+        repeat: queue.repeatMode,
+        shuffleEnabled: true,
+        shuffledOrder: snapshot,
+      );
+      expect(restored.upNext.map((e) => e.entryId).toList(),
+          [last, ...originalMiddle]);
+      expect(restored.advance()!.entryId, last);
+    });
   });
 }

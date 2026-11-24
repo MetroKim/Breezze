@@ -840,8 +840,16 @@ class _PlayingNextSheet extends ConsumerWidget {
                             ?.copyWith(color: theme.bzText2),
                       ),
                     )
-                  : ListView.builder(
+                  : ReorderableListView.builder(
+                      buildDefaultDragHandles: false,
                       itemCount: upcoming.length,
+                      onReorder: (oldIndex, newIndex) {
+                        if (oldIndex < newIndex) newIndex--;
+                        queue.reorderUpNext(
+                          upcoming[oldIndex].entryId,
+                          newIndex,
+                        );
+                      },
                       itemBuilder: (context, index) {
                         final entry = upcoming[index];
                         final info = controller.trackInfoFor(entry.trackId);
@@ -871,14 +879,30 @@ class _PlayingNextSheet extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: IconButton(
-                              tooltip: 'Remove from queue',
-                              onPressed: () => queue.remove(entry.entryId),
-                              icon: BzSvgIcon(
-                                name: 'close',
-                                color: theme.bzText2,
-                                size: 18,
-                              ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Remove from queue',
+                                  onPressed: () => queue.remove(entry.entryId),
+                                  icon: BzSvgIcon(
+                                    name: 'close',
+                                    color: theme.bzText2,
+                                    size: 18,
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: 'Drag to reorder',
+                                  child: ReorderableDragStartListener(
+                                    index: index,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Icon(Icons.drag_handle,
+                                          color: theme.bzText2),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
