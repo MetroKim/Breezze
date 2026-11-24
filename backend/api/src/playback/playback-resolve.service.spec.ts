@@ -148,7 +148,7 @@ describe('PlaybackResolveService', () => {
       providerId: 'licensed_partner',
       providerTrackId: 'track123',
       streamUrl: 'https://media.licensed.example/audio/track123',
-      attribution: 'Approved label',
+      attribution: 'Licensed full-track grant',
     });
     expect(adapter.getAvailability).toHaveBeenCalledWith('track123', 'TZ');
     expect(adapter.resolvePlayback).toHaveBeenCalledWith(expect.objectContaining({
