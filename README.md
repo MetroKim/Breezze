@@ -4,7 +4,7 @@
 
 Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
 
-> **v6 mainline upgrade:** [Mainline integration contract](docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md) reconciles the new B-module plan with existing code. Advanced AI/DSP, Supabase Auth migration and collaborative features remain phased and unverified until their own tests pass. Do not replace the current player, local Drift data or authentication while migration gates remain open.
+> **Unified v6 master specification:** [One authoritative v5+v6 architecture and execution ledger](docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md) supersedes both draft versions. Reuse the existing Flutter player, Drift outbox, NestJS/Prisma backend and Cloudflare Workers. Advanced AI/DSP, Supabase identity cutover and collaborative features are explicitly gated; they are not considered complete merely because a module is listed.
 
 ## Active implementation
 

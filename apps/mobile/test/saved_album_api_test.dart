@@ -45,12 +45,14 @@ void main() {
       artist: 'Artist',
       genres: ['Jazz'],
       isCompilation: true,
+      isPinned: true,
     );
     final body = jsonDecode(captured.body) as Map<String, dynamic>;
     expect(captured.method, 'POST');
     expect(captured.url.path, '/api/v1/library/albums');
     expect(body, containsPair('externalAlbumId', '123'));
     expect(body, containsPair('isCompilation', true));
+    expect(body, containsPair('isPinned', true));
     expect(body.containsKey('streamUrl'), isFalse);
     expect(body.containsKey('playback'), isFalse);
   });

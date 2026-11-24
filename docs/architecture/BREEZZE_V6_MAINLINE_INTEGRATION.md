@@ -1,9 +1,53 @@
-# Breezze v6 — Mainline Integration Contract
+# Breezze — Unified Master Specification (v5 + v6 → one v6)
 
 **Status:** Incremental adoption, not a claim of production readiness.  
 **Target:** `MetroKim/Breezze`, default branch `main`.  
-**Supersedes:** v5/v6 pasted structural proposals where they conflict with working code.  
+**Canonical version:** **Breezze Unified v6**. This is the **single authoritative v5+v6 integration and release roadmap**; older v5/v4 structural sketches and root outlines are historical. Preserve existing operational details and deployed data until migration acceptance. All feature statuses are evidence-gated, not source-file-count claims.  
 **Product contract:** Free, no subscriptions/ads, four primary tabs: Home, Browse, Library, Search. One global player and mini-player.
+
+
+### Unified v5 + v6 decisions (applies to every phase)
+
+This specification merges the v5 module mapping and v6 feasibility roadmap into one execution contract. **No second scaffold is generated.** These decisions supersede conflicting examples in older drafts.
+
+| Concern | One supported integration path | Rejected duplicate / premature assumption |
+| --- | --- | --- |
+| Flutter client | Existing `apps/mobile` Riverpod app and one player; Home/Browse/Library/Search + shared mini-player | Second `app/router`, second audio engine or a fifth Radio tab |
+| Shared packages | Existing `breezze_api_client`, `breezze_audio_contracts`, `breezze_design_system` | Renaming packages to the unprefixed v5 examples; duplicating theme tokens in the app |
+| Local persistence | Drift/SQLite and existing transactional sync outbox; secure storage for sensitive account-scoped cache | Adding Hive and Isar alongside Drift, or a second competing sync journal |
+| Identity | Existing Supabase integration adapter plus legacy account mapping and safe fallback; complete Google/Apple signed-device setup before cutover | Deleting the live Prisma `User`/legacy auth tables or claiming Supabase Auth replaces all app-level authorization |
+| API and database | NestJS + Prisma in `backend/api` on a Node-compatible host; existing Prisma-managed app tables, migration history and user IDs | Deploying NestJS/Prisma directly as a generic Cloudflare Worker; replacing migration history with `0001`–`0011` sketches |
+| Edge and media | Existing Cloudflare `api-worker` proxy and `media-worker` for **app-owned or licensed assets**, authorized downloads, models and exports | Generic rehosting/caching of third-party music, public caching of account-bound stream grants |
+| Content and playback | YT Music for metadata only; provider-approved or Breezze-owned licensed playback resolved against listener, territory, expiry and rights | Using Deezer ARL/cookies to bypass access limits; claiming previews grant full-stream or offline rights |
+| B-Quality, B-Upscale, B-Spatial | Extend existing audio contracts; optional audited ONNX/FFI modules **after** sample-rate, license, thermal, CPU and listening tests | Shipping NovaSR on every lossy 44.1/48-kHz stream; claiming synthetic super-resolution is genuine lossless/Hi-Res |
+| B-Mix | Existing automix/crossfade contracts, then a verified native sample-accurate DSP scheduler | Parallel player and unchecked zero-latency Rust/Dart or SoLoud guarantees |
+| On-device AI | One optional runtime abstraction with validated model checksums, size and platform capabilities; benchmark a **single** compatible engine first | Installing every `flutter_edge_ai` engine or asserting one package handles arbitrary audio DSP models on all OS targets |
+| Edge inference | Evaluate supported Cloudflare Workers AI bindings and budgets for non-realtime tasks | Relying on unverified Constellation/ONNX custom deployment or promising sub-100-ms inference |
+| B-Lyric | Existing LRCLIB path; add pronunciation, translation, licensing and source attribution behind opt-in settings | Assuming arbitrary lyric text can be translated, cached and redistributed without rights checks |
+| B-Collect / B-Pin / B-Sync | Evolve existing playlist store, owner-scoped library APIs and outbox, with server-side ownership and offline replay tests | Second playlist codebase, blind device merge or unprotected public pin/realtime channels |
+| B-Replay | Existing NestJS replay metrics; verify yearly aggregation, offline-safe view and export/share | Generating invented music statistics, unapproved emails or export jobs without retention policies |
+| B-Concerts | Integrate into existing NestJS discovery/backend only after authorized event providers are available | Inventing tickets or substituting search snippets for an authoritative event catalogue |
+| B-Social | Opt-in future milestone using authenticated Supabase Realtime Broadcast/Presence; persist changes with backend authorization and a Dart-compatible CRDT bridge | Importing JavaScript Yjs provider into Flutter; interpreting ephemeral Broadcast as durable playlist storage |
+| API client | Evolve current typed transport and validate against OpenAPI before introducing automated generation | Blindly replacing the current client with a generated duplicate |
+| Release | CI for exact `main`, web preview, Android/iOS simulator acceptance, approved media rights and real-device qualification | Calling builds, simulations or architecture diagrams proof of production audio quality |
+
+### Unified execution ledger
+
+The original v5 Phase 1–20 sequence and v6 Phase 7.5–7.11 **are folded into these stages**, not separate versions:
+
+| Stage | Integrated requirements | Gate / current evidence |
+| --- | --- | --- |
+| U0 — Foundation | Monorepo cleanup, token ownership, auth ownership, CI, four tabs, canonical IDs and signed media contracts | Scaffold consolidated. CI builds verified on earlier commits; each new commit requires a fresh pass |
+| U1 — Accounts | Native Google/Apple Supabase integration, safe legacy linking, token rotation, signed-identity migration, account/profile/settings | Source adapters exist; provider production signing and cross-device identity qualification **open** |
+| U2 — Playback and downloads | One playback authority, authorized full-track streams, queue and interruption correctness, media session, expiry/renewal, licensed downloads and predictive prefetch | Code and automated tests exist; rights-certified, real-device playback and low-network performance **open** |
+| U3 — Library and B-Collect | Favorites, playlist edits, bulk multi-playlist addition, saved albums and cross-device/outbox reconciliation | Multi-playlist CI, emulator and production smoke passed on previous main; any later changes must rerun |
+| U4 — B-Pin | Pinned saved albums, pinned followed artists and playlist ordering; owner scope, offline journal, reliable UI | Album pin implementation in progress; artist/playlist pin ordering **open** |
+| U5 — Playback quality and on-device AI | Optional runtime/model registry, checksum/download, NovaSR/FlashSR sample-rate experiments, Rust FFI, B-Mix/Demucs/HRTF | Design contracts only or partial primitives; **not implemented/benchmarked** as end-to-end DSP |
+| U6 — Lyrics, Replay and concerts | Translation/pronunciation, replay annual rollups and exports, licensed event discovery, notification preferences | Replay and lyrics backend primitives exist; full feature acceptance **open** |
+| U7 — Social and personalization | Safe local embeddings, recommendation feedback, authenticated Jam, collaborative playlist persistence and moderation | **Not implemented**; rights/access/cross-client tests required |
+| U8 — Release certification | Accessibility/goldens, low-end thermal/soak, production alerts, backing up/restoring DB, signed binary, device and rights certification | **Open**; no blanket production-ready claim |
+
+**Release rule:** No stage is complete until its individual implementation, automated tests, device/production acceptance where applicable, security/rights evidence and exact-commit CI pass. No empty folders, unused dependencies, unlicensed media proxies or fake performance claims are deliverables.
 
 ## 1. Inventory-based merge decisions
 

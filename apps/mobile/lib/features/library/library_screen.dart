@@ -607,7 +607,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ),
           ),
           title: Text(album.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(album.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            album.artist + (album.isPinned ? ' · Pinned' : ''),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+          ),
           onTap: () => Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => AppleAlbumCatalogScreen(
               albumId: album.id,
@@ -617,10 +620,67 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               appleUrl: album.catalogUrl,
             ),
           )),
-          trailing: IconButton(
-            tooltip: 'Remove saved album',
+          trailing: PopupMenuButton<String>(
+            tooltip: 'Album actions',
             icon: const BzSvgIcon(name: 'more-vertical'),
-            onPressed: () async {
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                value: 'pin',
+                child: Row(
+                  children: [
+                    BzSvgIcon(name: album.isPinned ? 'star-filled' : 'star'),
+                    const SizedBox(width: 12),
+                    Text(album.isPinned ? 'Unpin album' : 'Pin to top'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'remove',
+                child: Text('Remove from Library'),
+              ),
+            ],
+            onSelected: (action) async {
+              if (action == 'pin') {
+                final owner = _ownerId;
+                if (!_ownerStillActive(owner)) return;
+                try {
+                  final store = SavedAlbumStore();
+                  final changed = await store.setPinned(
+                    owner, album.id, !album.isPinned,
+                  );
+                  if (!changed || !_ownerStillActive(owner)) return;
+                  final auth = ref.read(authSessionProvider);
+                  if (auth is AuthSignedIn && auth.userId == owner) {
+                    try {
+                      await store.syncWithCloud(
+                        owner,
+                        ref.read(authSessionProvider.notifier).api,
+                        ownerStillActive: () => _ownerStillActive(owner) &&
+                            ref.read(authSessionProvider) is AuthSignedIn,
+                      );
+                    } catch (_) {
+                      if (mounted && _ownerStillActive(owner)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text(
+                            'Pin saved on this device. Cloud sync will retry.',
+                          )),
+                        );
+                      }
+                    }
+                  }
+                  if (_ownerStillActive(owner)) {
+                    ref.read(savedAlbumRefreshProvider.notifier).state++;
+                  }
+                } catch (_) {
+                  if (_ownerStillActive(owner)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not update album pin.')),
+                    );
+                  }
+                }
+                return;
+              }
+              if (action != 'remove') return;
               final shouldRemove = await showDialog<bool>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
