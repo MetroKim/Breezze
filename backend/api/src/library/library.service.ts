@@ -26,11 +26,20 @@ export class LibraryService {
   ) {
     if (following) {
       const name = displayName?.trim() || null;
-      await this.prisma.userFollowedArtist.upsert({
-        where: { userId_artistKey: { userId, artistKey } },
-        create: { userId, artistKey, displayName: name },
-        update: name === null ? {} : { displayName: name },
+      // Concurrent follow taps must never race on the composite primary key.
+      // PostgreSQL INSERT ... ON CONFLICT DO NOTHING is atomic, unlike a
+      // client-side read-then-insert upsert fallback.
+      await this.prisma.userFollowedArtist.createMany({
+        data: [{ userId, artistKey, displayName: name }],
+        skipDuplicates: true,
       });
+      // Metadata-only updates never reset an existing user-selected pin.
+      if (name !== null) {
+        await this.prisma.userFollowedArtist.updateMany({
+          where: { userId, artistKey },
+          data: { displayName: name },
+        });
+      }
     } else {
       await this.prisma.userFollowedArtist.deleteMany({
         where: { userId, artistKey },
