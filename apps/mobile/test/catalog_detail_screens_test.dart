@@ -44,18 +44,26 @@ void main() {
         ),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('Add to Library'), findsOneWidget);
+    Future<void> expectVisibleAction(String label) async {
+      // Riverpod family invalidation resolves asynchronously after the
+      // persistence future. Wait for its next frame without depending on
+      // unrelated catalog discovery requests to settle.
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.text(label).evaluate().isNotEmpty) return;
+      }
+      expect(find.text(label), findsOneWidget);
+    }
+
+    await expectVisibleAction('Add to Library');
     await tester.ensureVisible(find.text('Add to Library'));
     await tester.tap(find.text('Add to Library'));
-    await tester.pump(const Duration(milliseconds: 200));
     expect(await store.isFavorite(song.id), isTrue);
-    expect(find.text('Remove from Library'), findsOneWidget);
+    await expectVisibleAction('Remove from Library');
 
     await tester.tap(find.text('Remove from Library'));
-    await tester.pump(const Duration(milliseconds: 200));
     expect(await store.isFavorite(song.id), isFalse);
-    expect(find.text('Add to Library'), findsOneWidget);
+    await expectVisibleAction('Add to Library');
   });
 
   testWidgets('YouTube song details enable the in-app player', (tester) async {
