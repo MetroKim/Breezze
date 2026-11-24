@@ -15,6 +15,7 @@ import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../app/search_history_store.dart';
 import '../../app/playlist_store.dart';
+import '../library/add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -282,80 +283,46 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _showAddToPlaylist(BzTrack track) async {
-    final auth = ref.read(authSessionProvider);
-    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final store = PlaylistStore();
-    var playlists = await store.load(ownerId);
-    String? selectedId;
-
-    Future<String?> create(String name) => store.create(ownerId, name);
-
-    if (playlists.isEmpty) {
-      final name = await _requestPlaylistName();
-      if (name == null || name.isEmpty) return;
-      await create(name);
-      playlists = await store.load(ownerId);
-      if (playlists.isNotEmpty) selectedId = playlists.first.id;
-    } else {
-      selectedId = await showModalBottomSheet<String>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                child: Text('Add to Playlist', style: Theme.of(context).textTheme.titleLarge),
-              ),
-              for (final playlist in playlists)
-                ListTile(
-                  leading: BzBnoteMark(size: 40, color: Theme.of(context).bzText2),
-                  title: Text(playlist.name),
-                  subtitle: Text('${playlist.tracks.length} songs'),
-                  onTap: () => Navigator.of(context).pop(playlist.id),
-                ),
-              ListTile(
-                leading: BzSvgIcon(name: 'plus', color: Theme.of(context).bzAccent),
-                title: const Text('New Playlist'),
-                onTap: () => Navigator.of(context).pop('__new__'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (selectedId == '__new__') {
-        final name = await _requestPlaylistName();
-        if (name == null || name.isEmpty) return;
-        await create(name);
-        playlists = await store.load(ownerId);
-        selectedId = playlists.isEmpty ? null : playlists.first.id;
-      }
+    final initialAuth = ref.read(authSessionProvider);
+    final ownerId =
+        initialAuth is AuthSignedIn ? initialAuth.userId : 'guest';
+    bool stillOwner() {
+      if (!mounted) return false;
+      final current = ref.read(authSessionProvider);
+      return initialAuth is AuthSignedIn
+          ? current is AuthSignedIn && current.userId == ownerId
+          : initialAuth is AuthSignedOut && current is AuthSignedOut;
     }
 
-    if (selectedId == null) return;
-    await store.addTrack(ownerId, selectedId, FavoriteTrack(
-      id: track.id,
-      title: track.title,
-      artist: track.artist,
-      artworkUrl: track.artworkUrl,
-      durationMs: track.duration.inMilliseconds,
-    ));
-    if (auth is AuthSignedIn) {
+    final store = PlaylistStore();
+    final count = await addSongToMultiplePlaylists(
+      context: context,
+      store: store,
+      ownerId: ownerId,
+      track: FavoriteTrack(
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        durationMs: track.duration.inMilliseconds,
+      ),
+      ownerStillActive: stillOwner,
+      requestPlaylistName: _requestPlaylistName,
+    );
+    if (count == null || count == 0 || !stillOwner()) return;
+    if (initialAuth is AuthSignedIn) {
       unawaited(store.syncOwner(
         ownerId,
         ref.read(authSessionProvider.notifier).api,
-        ownerStillActive: () {
-          if (!mounted) return false;
-          final current = ref.read(authSessionProvider);
-          return current is AuthSignedIn && current.userId == ownerId;
-        },
+        ownerStillActive: stillOwner,
       ));
     }
-    if (!mounted) return;
     ref.read(playlistRefreshSignalProvider.notifier).state++;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to playlist')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(count == 1
+          ? 'Added to 1 playlist'
+          : 'Added to $count playlists'),
+    ));
   }
 
   Future<void> _addFavorite(BzTrack track) async {
@@ -782,7 +749,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               ],
                                               const PopupMenuItem(
                                                 value: 'playlist',
-                                                child: Text('Add to Playlist'),
+                                                child: Text('Add to Playlists'),
                                               ),
                                               const PopupMenuItem(
                                                 value: 'favorite',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
@@ -13,6 +15,7 @@ import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
+import 'add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
 
@@ -179,7 +182,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     });
   }
 
-  Future<void> _createPlaylist() async {
+  Future<String?> _requestPlaylistName() async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -205,13 +208,55 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
     );
     controller.dispose();
-    if (name == null || name.trim().isEmpty) return;
+    final normalized = name?.trim();
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  Future<void> _createPlaylist() async {
+    final name = await _requestPlaylistName();
+    if (name == null || !mounted) return;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     await _playlistStore.create(ownerId, name);
     if (!mounted) return;
     setState(() => _selected = 'Playlists');
     await _refresh();
+  }
+
+  Future<void> _addFavoriteToPlaylists(FavoriteTrack track) async {
+    final initialAuth = ref.read(authSessionProvider);
+    final ownerId =
+        initialAuth is AuthSignedIn ? initialAuth.userId : 'guest';
+    bool stillOwner() {
+      if (!mounted || _ownerId != ownerId) return false;
+      final current = ref.read(authSessionProvider);
+      return initialAuth is AuthSignedIn
+          ? current is AuthSignedIn && current.userId == ownerId
+          : initialAuth is AuthSignedOut && current is AuthSignedOut;
+    }
+
+    final count = await addSongToMultiplePlaylists(
+      context: context,
+      store: _playlistStore,
+      ownerId: ownerId,
+      track: track,
+      ownerStillActive: stillOwner,
+      requestPlaylistName: _requestPlaylistName,
+    );
+    if (count == null || count == 0 || !stillOwner()) return;
+    if (initialAuth is AuthSignedIn) {
+      unawaited(_playlistStore.syncOwner(
+        ownerId,
+        ref.read(authSessionProvider.notifier).api,
+        ownerStillActive: stillOwner,
+      ));
+    }
+    ref.read(playlistRefreshSignalProvider.notifier).state++;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(count == 1
+          ? 'Added to 1 playlist'
+          : 'Added to $count playlists'),
+    ));
   }
 
   void _openPlaylist(UserPlaylist playlist) {
@@ -802,22 +847,29 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 subtitle: Text(fav.artist,
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 onTap: () => _playOne(i),
-                trailing: IconButton(
-                  tooltip: 'Remove from favorites',
-                  icon: SvgPicture.asset(
-                    'assets/icons/star-filled.svg',
-                    width: 20,
-                    height: 20,
-                    colorFilter: ColorFilter.mode(
-                      theme.bzWarning,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  onPressed: () async {
-                    await ref.read(favoritesStoreProvider).toggle(fav, ownerId: _ownerId);
-                    await ref.read(outboxSyncProvider).drainIfSignedIn();
-                    _refresh();
+                trailing: PopupMenuButton<String>(
+                  tooltip: 'Song actions',
+                  icon: const BzSvgIcon(name: 'more-vertical', size: 20),
+                  onSelected: (action) async {
+                    if (action == 'playlists') {
+                      await _addFavoriteToPlaylists(fav);
+                    } else if (action == 'remove') {
+                      await ref.read(favoritesStoreProvider)
+                          .toggle(fav, ownerId: _ownerId);
+                      await ref.read(outboxSyncProvider).drainIfSignedIn();
+                      _refresh();
+                    }
                   },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'playlists',
+                      child: Text('Add to Playlists'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: Text('Remove from Library'),
+                    ),
+                  ],
                 ),
               );
             },
