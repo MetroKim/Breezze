@@ -37,12 +37,17 @@ jobs:
           git cat-file -t "$SOURCE_SHA" | grep -qx commit
           echo "Verified source snapshot: $SOURCE_SHA"
 
-      - name: Preserve original fork branch history on independent repository
+      - name: Export original fork history for recovery
         shell: bash
         run: |
           set -euo pipefail
-          git push origin "$SOURCE_SHA:refs/heads/$ARCHIVE"
-          echo "Source history archived at $ARCHIVE"
+          git bundle create /tmp/breezze-fork-history.bundle refs/remotes/breezze-source/main
+          git bundle verify /tmp/breezze-fork-history.bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: breezze-fork-history-20261125
+          path: /tmp/breezze-fork-history.bundle
+          retention-days: 90
 
       - name: Stage Breezze source and remove stale MetroMusic-only scaffold
         shell: bash
@@ -50,7 +55,7 @@ jobs:
           set -euo pipefail
           git switch -c "$STAGING"
           git worktree add --detach "$RUNNER_TEMP/breezze-export" "$SOURCE_SHA"
-          rsync -a --delete --exclude='/.git' \
+          rsync -a --delete --exclude='/.git' --exclude='/.github/workflows/' \
             "$RUNNER_TEMP/breezze-export/" "$GITHUB_WORKSPACE/"
           mkdir -p docs/audit
           cat > docs/audit/INDEPENDENT_REPOSITORY_IMPORT.md <<EOF
@@ -83,5 +88,5 @@ jobs:
         shell: bash
         run: |
           echo "Migration branch: $STAGING"
-          echo "Archive branch: $ARCHIVE"
+          echo "Complete original history is in the workflow artifact: breezze-fork-history-20261125"
           echo "Merge to main only after CI verification."
