@@ -401,3 +401,15 @@ typedef SavedAlbumKey = ({String ownerId, String albumId});
 final isAlbumSavedProvider = FutureProvider.family<bool, SavedAlbumKey>(
   (ref, key) => SavedAlbumStore().contains(key.ownerId, key.albumId),
 );
+
+/// Owner-scoped pin state for the existing album-detail action. No new
+/// persistence path: the same encrypted SavedAlbumStore owns all pin edits.
+final isAlbumPinnedProvider = FutureProvider.family<bool, SavedAlbumKey>(
+  (ref, key) async {
+    final albums = await SavedAlbumStore().load(key.ownerId);
+    for (final album in albums) {
+      if (album.id == key.albumId) return album.isPinned;
+    }
+    return false;
+  },
+);
