@@ -197,6 +197,58 @@ void main() {
         throwsA(isA<BreezzeApiException>()),
       );
 
+      // Multi-select must preserve all chosen memberships in a single
+      // device-local write and replay the same two songs on a second login
+      // session after an offline app restart. Provider IDs are user-facing;
+      // the already-synced original playlist has the canonical UUID.
+      final multiOne = await phoneA.create(userId, 'Selected mix one');
+      final multiTwo = await phoneA.create(userId, 'Selected mix two');
+      const selectedSong = FavoriteTrack(
+        id: externalA, title: 'Love', artist: 'Keyshia Cole',
+        durationMs: 256000,
+      );
+      expect(await phoneA.addTrackToMany(
+        userId, [playlistId, multiOne, multiTwo, multiTwo], selectedSong,
+      ), 2);
+      expect(await phoneA.addTrackToMany(
+        userId, [multiOne, multiTwo], selectedSong,
+      ), 0);
+      expect(await phoneA.pendingCount(userId), 4);
+      expect(await phoneA.syncOwner(
+        userId, offlineApi, ownerStillActive: () => true,
+      ), isFalse);
+      phoneA = PlaylistStore(documentsDirectory: () async => dirA);
+      expect((await phoneA.load(userId))
+          .where((playlist) => playlist.id == multiOne ||
+              playlist.id == multiTwo)
+          .every((playlist) => playlist.tracks.single.id == externalA), isTrue);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      expect(await phoneA.pendingCount(userId), 0);
+
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      final allOnB = {
+        for (final playlist in await phoneB.load(userId))
+          playlist.id: playlist,
+      };
+      expect(allOnB.keys.toSet(), {playlistId, multiOne, multiTwo});
+      expect(allOnB[playlistId]!.tracks, hasLength(2));
+      expect(allOnB[multiOne]!.tracks.map((item) => item.id), [tracks[0].id]);
+      expect(allOnB[multiTwo]!.tracks.map((item) => item.id), [tracks[0].id]);
+      expect((await apiOther.playlists())
+          .any((row) => row['id'] == multiOne || row['id'] == multiTwo), isFalse);
+
+      // Restore the original single-playlist fixture for subsequent reorder
+      // and deletion checks. Each helper playlist is removed from the cloud.
+      await phoneA.delete(userId, multiOne);
+      await phoneA.delete(userId, multiTwo);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect((await phoneB.load(userId)).single.id, playlistId);
+
       // Device A changes the order OFFLINE while device B adds a real
       // third song. A's first replay gets a membership mismatch, then
       // preserves B's newly added song when rebasing its order.

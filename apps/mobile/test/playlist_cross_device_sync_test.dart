@@ -273,6 +273,23 @@ void main() {
     expect(await restarted.pendingCount('user-b'), 1);
   });
 
+  test('multi-add recognizes canonical IDs of previously resolved songs',
+      () async {
+    const providerId = 'bz:youtube_music:original';
+    final mapped = PlaylistStore(
+      documentsDirectory: () async => root,
+      cachedCanonicalId: (external) async =>
+          external == providerId ? aId : null,
+    );
+    final list = await mapped.create('user-a', 'Mapped songs');
+    await mapped.addTrack('user-a', list, a);
+    expect(await mapped.addTrackToMany('user-a', [list],
+      const FavoriteTrack(id: providerId, title: 'Song A',
+        artist: 'Artist A')), 0);
+    expect((await mapped.load('user-a')).single.tracks, hasLength(1));
+    expect(await mapped.pendingCount('user-a'), 2);
+  });
+
   test('multi-select offline journals survive stale remote hydration', () async {
     final first = await store.create('user-a', 'First');
     final second = await store.create('user-a', 'Second');

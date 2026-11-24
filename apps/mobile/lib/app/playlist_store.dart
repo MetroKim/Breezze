@@ -66,11 +66,16 @@ class _PlaylistDocument {
 /// No second playlist database: playlist data and its pending edit are
 /// committed together by temp-file rename, and replayed in operation order.
 class PlaylistStore {
-  PlaylistStore({Future<Directory> Function()? documentsDirectory})
-      : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+  PlaylistStore({
+    Future<Directory> Function()? documentsDirectory,
+    Future<String?> Function(String)? cachedCanonicalId,
+  }) : _documentsDirectory =
+           documentsDirectory ?? getApplicationDocumentsDirectory,
+       _cachedCanonicalId = cachedCanonicalId ??
+           ((externalId) => CatalogIdMapDao(breezzeDb).lookup(externalId));
 
   final Future<Directory> Function() _documentsDirectory;
+  final Future<String?> Function(String) _cachedCanonicalId;
   static Future<void> _pending = Future<void>.value();
   static final Set<String> _syncingOwners = <String>{};
   static final _uuidPattern = RegExp(
@@ -344,12 +349,25 @@ class PlaylistStore {
         }
         final selected = playlistIds.toSet();
         if (selected.isEmpty) return 0;
+        // Synced cloud playlists use canonical UUIDs; Search still supplies
+        // provider IDs. Avoid creating a duplicate local membership when a
+        // previously resolved provider track is already present.
+        String? canonicalId;
+        if (track.id.startsWith('bz:') || track.id.startsWith('bzv:')) {
+          try {
+            canonicalId = await _cachedCanonicalId(track.id);
+          } catch (_) {
+            // An unavailable mapping cache must not block offline edits.
+          }
+        }
         final doc = await _read(ownerId);
         var added = 0;
         for (var i = 0; i < doc.playlists.length; i++) {
           final current = doc.playlists[i];
           if (!selected.contains(current.id) ||
-              current.tracks.any((item) => item.id == track.id)) {
+              current.tracks.any((item) =>
+                  item.id == track.id ||
+                  (canonicalId != null && item.id == canonicalId))) {
             continue;
           }
           doc.playlists[i] = UserPlaylist(
