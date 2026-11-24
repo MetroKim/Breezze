@@ -9,13 +9,17 @@ on:
       - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
       - apps/mobile/pubspec.yaml
       - apps/mobile/lib/app/playlist_store.dart
+      - apps/mobile/lib/app/saved_album_store.dart
+      - apps/mobile/lib/app/bootstrap.dart
+      - apps/mobile/lib/features/catalog/catalog_detail_screens.dart
+      - apps/mobile/lib/features/library/library_screen.dart
 
 permissions:
   contents: read
 
 concurrency:
   group: breezze-android-playlist-acceptance
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   emulator-acceptance:
