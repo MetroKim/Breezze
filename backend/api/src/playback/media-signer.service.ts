@@ -51,7 +51,7 @@ export class MediaSigner {
     }
     const now = Date.now();
     const expires = Math.min(
-      now + 15 * 60 * 1000,
+      now + (mode === 'stream' ? 2 * 60 * 60 * 1000 : 15 * 60 * 1000),
       rightsExpiresAt?.getTime() ?? Number.POSITIVE_INFINITY,
     );
     if (!Number.isFinite(expires) || expires <= now) {
