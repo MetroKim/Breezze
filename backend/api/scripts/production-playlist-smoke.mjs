@@ -70,6 +70,16 @@ async function run() {
   status(noToken.status, 401, 'unsigned playlist access');
   report('Unauthenticated playlist access rejected');
 
+  // The production Supabase bridge must be configured, reachable and
+  // reject counterfeit identity tokens rather than issuing a Breezze JWT.
+  const counterfeit = await request(
+    'POST', '/api/v1/auth/supabase/exchange', null,
+    { accessToken: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJxYSJ9.invalidsignature' },
+  );
+  status(counterfeit.status, 401, 'counterfeit Supabase session rejection');
+  assert.equal(counterfeit.data.message, 'SUPABASE_TOKEN_REJECTED');
+  report('Production Supabase bridge rejects a forged access token');
+
   const owner = await register('owner');
   const stranger = await register('other');
 
