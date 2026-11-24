@@ -92,6 +92,58 @@ async function run() {
   assert.notEqual(secondToken, owner.token);
   report('Two independently issued sessions for the same account');
 
+  // Synthetic artist library acceptance: no artist media is retrieved,
+  // and both test identities are automatically deleted during cleanup.
+  const artistKey = 'apple:' +
+    BigInt('0x' + randomBytes(6).toString('hex')).toString(10);
+  const artistPath = '/api/v1/library/artists/' +
+    encodeURIComponent(artistKey);
+  const artistsPath = '/api/v1/library/artists';
+  status((await request('GET', artistsPath)).status, 401,
+    'artist list requires authentication');
+  const follow = await request('POST', artistPath, owner.token, {
+    displayName: 'Breezze synthetic artist',
+  });
+  status(follow.status, 201, 'follow artist');
+  status((await request('POST', artistPath, secondToken, {
+    displayName: 'Breezze synthetic artist',
+  })).status, 201, 'repeat follow is idempotent');
+  const artistList = await request('GET', artistsPath, secondToken);
+  status(artistList.status, 200, 'second device followed artists');
+  assert.equal(artistList.data.items.length, 1);
+  assert.equal(artistList.data.items[0].artistKey, artistKey);
+  assert.equal(artistList.data.items[0].isPinned, false);
+  assert.equal((await request('GET', artistsPath, stranger.token))
+    .data.items.length, 0);
+  report('Artist follows are owner-isolated and cross-session');
+
+  status((await request('PATCH', artistPath + '/pin', owner.token,
+    { pinned: 'true' })).status, 400, 'invalid artist pin input');
+  status((await request('PATCH', artistPath + '/pin', stranger.token,
+    { pinned: true })).status, 404, 'foreign artist cannot be pinned');
+  const pinnedArtist = await request('PATCH', artistPath + '/pin',
+    owner.token, { pinned: true });
+  status(pinnedArtist.status, 200, 'pin followed artist');
+  assert.equal(pinnedArtist.data.isPinned, true);
+  const artistOnSecond = await request('GET', artistsPath, secondToken);
+  assert.equal(artistOnSecond.data.items[0].isPinned, true);
+  status((await request('POST', artistPath, secondToken, {
+    displayName: 'Breezze synthetic artist updated',
+  })).status, 201, 'update metadata');
+  assert.equal((await request('GET', artistPath, owner.token))
+    .data.isPinned, true);
+  status((await request('PATCH', artistPath + '/pin', secondToken,
+    { pinned: false })).status, 200, 'unpin from second session');
+  assert.equal((await request('GET', artistPath, owner.token))
+    .data.isPinned, false);
+  report('Artist pin/unpin reaches second device and survives metadata edits');
+
+  status((await request('DELETE', artistPath, owner.token)).status, 200,
+    'synthetic followed artist cleanup');
+  assert.equal((await request('GET', artistsPath, secondToken))
+    .data.items.length, 0);
+  report('Synthetic artist removed with no listener data retained');
+
   // Owner-scoped B-Pin album acceptance uses only synthetic catalog bookmarks.
   // No playback grants or music downloads are requested.
   const pinAlbumId = BigInt('0x' + randomBytes(6).toString('hex')).toString(10);
