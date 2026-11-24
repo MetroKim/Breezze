@@ -9,6 +9,9 @@ This isolated service uses the MIT-licensed [sigma67/ytmusicapi](https://github.
 - `GET /videos?q={query}&limit=20` — only YouTube Music `MUSIC_VIDEO_TYPE_OMV` results
 - `GET /tracks/{videoId}` — track metadata
 - `GET /tracks/{videoId}/music-video` — official music-video counterpart when available
+- `GET /artists/search?q={query}&limit=20` — YouTube Music artist discovery
+- `GET /artists/{artistId}` — public artist profile, songs and albums metadata
+- `GET /charts?country=ZZ` — YouTube Music artist charts and music-video chart playlists; `ZZ` means global
 
 The service deliberately drops YouTube's `streamingData`, adaptive formats, and signed media URLs. The NestJS provider adapter reports search and metadata capabilities only; playback, downloads, and rights availability remain disabled.
 
@@ -26,6 +29,8 @@ The backend Compose stack starts this service at `http://ytmusicapi:8000`. The A
 ## Operational and legal constraints
 
 `ytmusicapi` is an unofficial client that emulates YouTube Music web requests; it is not an official Google API or a guarantee of service availability. Review YouTube's applicable terms, regional requirements, and usage rights before public production use. The sidecar admits at most eight concurrent upstream requests per container replica and returns HTTP 503 with `Retry-After: 2` when full. The NestJS adapter coalesces identical in-flight searches and metadata lookups per API process, and opens a 30-second circuit after five consecutive retryable upstream failures (with a single half-open recovery probe). Redis caches successful results across API replicas. Set replica counts and provider request budgets conservatively, and add provider-specific monitoring before increasing traffic. Never put browser cookies or account credentials in this service unless separately approved and secured.
+
+The supplemental artist and chart routes only expose sanitized metadata. Unauthenticated `get_charts` results can contain artists without numeric ranks and video chart playlists without song rankings; `songRankingAvailable=false` states that limitation instead of inventing a Top Songs chart. The API caches chart results briefly and shares the same upstream concurrency/circuit protections. Deezer remains the primary source for normal song charts, artist pages and release metadata, while YouTube Music adds its own chart and artist context. Neither metadata service grants full-track audio rights.
 
 The video endpoint filters to YouTube Music's `OMV` classification (Original Music Video), which the upstream project describes as video content uploaded by the original artist. It excludes UGC and audio tracks with static artwork from the Music Videos surface. This classification is useful provenance, not a legal licence verification.
 
