@@ -173,25 +173,60 @@ void main() {
         throwsA(isA<BreezzeApiException>()),
       );
 
-      // Reorder on B; A gets B's order after a new cloud reconciliation.
-      await phoneB.reorderTracks(userId, playlistId, 0, 1);
+      // Device A changes the order OFFLINE while device B adds a real
+      // third song. A's first replay gets a membership mismatch, then
+      // preserves B's newly added song when rebasing its order.
+      final canonicalC = await apiA.resolveCatalogTrack(
+        externalId: 'bz:youtube_music:UZWmtxLiiFE',
+        source: 'youtube_music',
+        title: 'L-O-V-E',
+        artistName: 'Nat King Cole',
+        durationSec: 155,
+      );
+      final third = FavoriteTrack(
+        id: canonicalC['id'] as String,
+        title: 'L-O-V-E',
+        artist: 'Nat King Cole',
+        durationMs: 155000,
+      );
+      await phoneA.reorderTracks(userId, playlistId, 0, 1);
+      expect(await phoneA.pendingCount(userId), 1);
+      await phoneB.addTrack(userId, playlistId, third);
+      expect(await phoneB.syncOwner(
+        userId, apiSecond, ownerStillActive: () => true,
+      ), isTrue);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      expect(await phoneA.pendingCount(userId), 0);
+      await phoneA.mergeRemote(userId, await apiA.playlists());
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect((await phoneB.load(userId)).single.tracks
+          .map((track) => track.id).toList(), [
+        tracks[1].id, tracks[0].id, third.id,
+      ]);
+
+      // B reorders again, A sees that order after cloud reconciliation.
+      await phoneB.reorderTracks(userId, playlistId, 0, 2);
       expect(await phoneB.syncOwner(
         userId, apiSecond, ownerStillActive: () => true,
       ), isTrue);
       await phoneA.mergeRemote(userId, await apiA.playlists());
       expect((await phoneA.load(userId)).single.tracks
           .map((track) => track.id).toList(), [
-        tracks[1].id, tracks[0].id,
+        tracks[0].id, third.id, tracks[1].id,
       ]);
 
-      // Remove the first track on A; B's next cloud read loses that item.
-      await phoneA.removeTrack(userId, playlistId, tracks[1].id);
+      // A removes a real song; B must see its removal across sessions.
+      await phoneA.removeTrack(userId, playlistId, third.id);
       expect(await phoneA.syncOwner(
         userId, apiA, ownerStillActive: () => true,
       ), isTrue);
       await phoneB.mergeRemote(userId, await apiSecond.playlists());
       expect((await phoneB.load(userId)).single.tracks
-          .map((track) => track.id).toList(), [tracks[0].id]);
+          .map((track) => track.id).toList(), [
+        tracks[0].id, tracks[1].id,
+      ]);
 
       await phoneA.delete(userId, playlistId);
       expect(await phoneA.syncOwner(
@@ -200,10 +235,27 @@ void main() {
       await phoneB.mergeRemote(userId, await apiSecond.playlists());
       expect(await phoneB.load(userId), isEmpty);
     } finally {
+      // One failed cleanup must not prevent removal of the OTHER account.
+      // Never print temporary credentials in CI output.
+      final cleanupFailures = <String>[];
       for (final account in accounts.reversed) {
-        await account.cleanup();
+        try {
+          await account.cleanup();
+        } catch (error) {
+          cleanupFailures.add('Account cleanup: ' +
+              error.runtimeType.toString());
+        }
       }
-      await root.delete(recursive: true);
+      try {
+        await root.delete(recursive: true);
+      } catch (error) {
+        cleanupFailures.add('Device fixture cleanup: ' +
+            error.runtimeType.toString());
+      }
+      if (cleanupFailures.isNotEmpty) {
+        fail('Breezze acceptance cleanup incomplete: ' +
+            cleanupFailures.join(', '));
+      }
     }
   });
 }

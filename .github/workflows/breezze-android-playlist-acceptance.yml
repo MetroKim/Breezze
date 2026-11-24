@@ -7,6 +7,7 @@ on:
       - .github/workflows/breezze-android-playlist-acceptance.yml
       - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
       - apps/mobile/pubspec.yaml
+      - apps/mobile/lib/app/playlist_store.dart
 
 permissions:
   contents: read
