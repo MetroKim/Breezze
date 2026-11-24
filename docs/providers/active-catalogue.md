@@ -1,5 +1,9 @@
 # Breezze music providers — YouTube Music and Deezer
 
+**App data roles (24 November 2026):** YouTube Music powers broad song discovery, metadata and official music-video search. Deezer powers artist/album metadata, global charts, source-dated releases, and 30-second audio previews. Home trending, Browse charts, the discovery catalog, artist discographies and album track lists now draw from these backend sources. Deezer `chart/0` is global, never represented as an official country or daily ranking.
+
+
+
 The only external music catalogue providers are **YouTube Music** and **Deezer**. 
 The internal `breezze_internal` adapter reads the app's own canonical track
 records; it is not an external music streaming provider.

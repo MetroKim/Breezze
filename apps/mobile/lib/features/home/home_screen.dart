@@ -34,6 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<RecentEntry> _recentlyPlayed = [];
   List<FavoriteTrack> _favorites = [];
   List<TrackInfo> _madeForYou = [];
+  List<TrackInfo> _deezerTrending = [];
   Map<String, dynamic>? _replay;
   bool _loading = true;
   bool _localDataUnavailable = false;
@@ -73,6 +74,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
+    var deezerTrending = <TrackInfo>[];
     if (!mounted || version != _refreshVersion) return;
     if (auth is AuthSignedIn) {
       final api = ref.read(authSessionProvider.notifier).api;
@@ -121,6 +123,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       } catch (_) {
         // Replay is an independent home section.
       }
+      try {
+        final chart = await api.discoverySongsChart();
+        final rows = chart['items'];
+        if (rows is List && chart['source'] == 'Deezer') {
+          // Do not queue raw full-track Deezer metadata identifiers.
+          deezerTrending = rows.whereType<Map>().where((row) {
+            final id = row['id']?.toString() ?? '';
+            return RegExp(r'^[0-9]{1,20}$').hasMatch(id) &&
+                row['previewUrl'] is String &&
+                (row['title'] as String?)?.isNotEmpty == true &&
+                (row['artist'] as String?)?.isNotEmpty == true;
+          }).take(12).map((row) => TrackInfo(
+            id: 'bz:deezer_preview:${row['id']}',
+            title: row['title'] as String,
+            artist: row['artist'] as String,
+            artworkUrl: row['artworkUrl'] as String?,
+            duration: const Duration(seconds: 30),
+          )).toList(growable: false);
+        }
+      } catch (_) {
+        // A Deezer outage must not hide saved Home content.
+      }
     }
     if (!mounted || version != _refreshVersion) return;
     final currentAuth = ref.read(authSessionProvider);
@@ -131,6 +155,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _recentlyPlayed = recent;
       _favorites = favorites;
       _madeForYou = madeForYou;
+      _deezerTrending = deezerTrending;
       _replay = replay;
       _loading = false;
       _localDataUnavailable = localDataUnavailable;
@@ -214,6 +239,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _recentlyPlayed = [];
         _favorites = [];
         _madeForYou = [];
+        _deezerTrending = [];
         _replay = null;
         _loading = true;
         _localDataUnavailable = false;
@@ -354,7 +380,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
-          if (!_loading && _recentlyPlayed.isNotEmpty) ...[
+          if (!_loading && _deezerTrending.isNotEmpty) ...[
+             _Rail(
+               title: 'Trending on Deezer · 30-second previews',
+               tracks: _deezerTrending,
+               onPlay: _play,
+             ),
+             const SizedBox(height: 24),
+           ],
+           if (!_loading && _recentlyPlayed.isNotEmpty) ...[
             _Rail(
               title: 'Recently Played',
               tracks: [
