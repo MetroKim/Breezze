@@ -57,6 +57,39 @@ void main() {
     expect(body.containsKey('playback'), isFalse);
   });
 
+  test('followed artists list, follow metadata and pin use owner JWT',
+      () async {
+    final calls = <http.Request>[];
+    final api = BreezzeApi(
+      baseUrl: 'https://breezze.example.test',
+      client: MockClient((request) async {
+        calls.add(request);
+        final data = request.method == 'GET'
+            ? {'items': <dynamic>[]}
+            : {'isPinned': true};
+        return http.Response(
+          jsonEncode({'data': data}),
+          request.method == 'POST' ? 201 : 200,
+        );
+      }),
+    )..accessToken = 'owner-token';
+
+    await api.getFollowedArtists();
+    await api.followArtist('apple:123', true, displayName: 'Verified Name');
+    await api.pinArtist('apple:123', true);
+    await api.followArtist('apple:123', false);
+    expect(calls.map((c) => c.method).toList(),
+      ['GET', 'POST', 'PATCH', 'DELETE']);
+    expect(calls.first.url.path, '/api/v1/library/artists');
+    expect(calls[1].url.path, '/api/v1/library/artists/apple:123');
+    expect(jsonDecode(calls[1].body), {'displayName': 'Verified Name'});
+    expect(calls[2].url.path, '/api/v1/library/artists/apple:123/pin');
+    expect(jsonDecode(calls[2].body), {'pinned': true});
+    expect(calls.last.url.path, '/api/v1/library/artists/apple:123');
+    expect(calls.every((c) =>
+        c.headers['Authorization'] == 'Bearer owner-token'), isTrue);
+  });
+
   test('removing a saved album uses an authenticated owner-bound request', () async {
     late http.Request captured;
     final api = BreezzeApi(
