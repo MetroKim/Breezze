@@ -209,7 +209,9 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete playlist?'),
-        content: Text('“${playlist.name}” will be removed from this device.'),
+        content: Text(widget.ownerId == 'guest'
+          ? '“${playlist.name}” will be removed from this device.'
+          : '“${playlist.name}” will be removed here and deleted from your other devices when synchronization completes.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -300,7 +302,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         ),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text('Delete from this device'),
+                          child: Text('Delete playlist'),
                         ),
                       ],
                     ),
