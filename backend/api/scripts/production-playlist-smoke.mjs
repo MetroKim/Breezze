@@ -410,14 +410,30 @@ async function run() {
   // M1 D5 negative real-production authorization: these tracks were
   // discovered in a metadata API and have no explicit full-stream right.
   // Never fabricate a grant just to turn this smoke green.
+  // Catalog-only external records must not be treated as Breezze-owned
+  // recordings. The generic endpoint must fail with a provider handoff,
+  // while the actual provider-aware path must *still* fail at the canonical
+  // territory/rights gate. These are separate security invariants.
   const denied = await request('POST', '/api/v1/playback/sessions',
     owner.token, { trackId: favoriteId });
-  status(denied.status, 406, 'unlicensed catalog full-stream rejection');
+  status(denied.status, 406, 'catalog metadata cannot use native full-stream resolver');
   assert.match(JSON.stringify(denied.data),
-    /(NOT_AVAILABLE_IN_TERRITORY|NO_EXPLICIT_AUTHORIZATION|TAKEDOWN_ACTIVE|RIGHTS_EXPIRED)/,
-    'unlicensed catalog track must fail at the canonical rights gate');
+    /USE_PROVIDER_PLAYBACK_RESOLVER/,
+    'catalog metadata must not be signed as an internal Breezze recording');
   assert.equal(denied.data.playback?.streamUrl, undefined);
-  report('Catalog metadata cannot issue a signed or provider full-stream session');
+
+  const providerDenied = await request('POST', '/api/v1/playback/sessions',
+    owner.token, {
+      providerId: firstTwo[0].providerId,
+      providerTrackId: firstTwo[0].providerTrackId,
+      canonicalTrackId: favoriteId,
+    });
+  status(providerDenied.status, 406, 'provider-specific track without full-stream rights');
+  assert.match(JSON.stringify(providerDenied.data),
+    /(NOT_AVAILABLE_IN_TERRITORY|NO_EXPLICIT_AUTHORIZATION|TAKEDOWN_ACTIVE|RIGHTS_EXPIRED|RIGHTS_WINDOW_NOT_OPEN|PREVIEW_ONLY)/,
+    'provider playback must fail closed without explicit full-stream permission');
+  assert.equal(providerDenied.data.playback?.streamUrl, undefined);
+  report('Catalog metadata and provider grant paths both reject unlicensed full-stream playback');
 
   // Only YouTube Music + Deezer are external providers. The Breezze
   // canonical catalog is internal. Old third-party provider IDs must stay
