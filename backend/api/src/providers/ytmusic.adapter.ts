@@ -38,6 +38,18 @@ export interface YtMusicArtistDetail {
     albums: Array<{ browseId: string; title: string; year?: string | null; artworkUrl?: string | null }> };
 }
 
+export interface YtMusicAudioCandidate {
+  source: 'youtube_music';
+  providerTrackId: string;
+  experimental: true;
+  candidate: {
+    streamUrl: string;
+    mimeType: string;
+    bitrateKbps: number;
+    expiresAt: string;
+  };
+}
+
 export interface YtMusicWatchQueue {
   source: 'youtube_music';
   seedVideoId: string;
@@ -389,6 +401,60 @@ export class YtMusicAdapter implements ProviderAdapter {
         Array.isArray((payload as { trending?: unknown }).trending) &&
         Array.isArray((payload as { newVideos?: unknown }).newVideos), 300,
     );
+  }
+
+  /**
+   * Opt-in development feasibility only. Returns an already-direct provider URL;
+   * it does not decipher protected formats, proxy bytes, grant downloads or
+   * claim licensed playback. Intentionally unavailable in production.
+   */
+  async getAudioCandidate(videoId: string): Promise<ProviderResult<YtMusicAudioCandidate>> {
+    if (process.env.BREEZZE_YTMUSIC_AUDIO_EXPERIMENT !== 'true' ||
+        process.env.NODE_ENV === 'production' ||
+        process.env.RAILWAY_ENVIRONMENT_NAME?.toLowerCase() === 'production') {
+      return providerUnsupported('YTMUSIC_AUDIO_EXPERIMENT_DISABLED');
+    }
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      return providerError('INVALID_YTMUSIC_ID', 'Invalid YouTube Music track identifier', false);
+    }
+    try {
+      const url = new URL(`/tracks/${encodeURIComponent(videoId)}/audio-candidate`, this.baseUrl);
+      const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (response.status === 404) {
+        return providerUnsupported('DIRECT_YTMUSIC_AUDIO_NOT_AVAILABLE');
+      }
+      if (!response.ok) {
+        return providerError('YTMUSIC_AUDIO_PROBE_UNAVAILABLE', 'Upstream audio probe unavailable', response.status >= 500);
+      }
+      const payload: unknown = await response.json();
+      if (!payload || typeof payload !== 'object') {
+        return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Invalid audio response', false);
+      }
+      const data = payload as Partial<YtMusicAudioCandidate>;
+      const candidate = data.candidate;
+      if (data.source !== 'youtube_music' || data.providerTrackId !== videoId ||
+          data.experimental !== true || !candidate ||
+          typeof candidate.streamUrl !== 'string' ||
+          typeof candidate.mimeType !== 'string' || !candidate.mimeType.startsWith('audio/') ||
+          typeof candidate.bitrateKbps !== 'number' || !Number.isFinite(candidate.bitrateKbps) ||
+          typeof candidate.expiresAt !== 'string') {
+        return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Invalid audio response', false);
+      }
+      let streamUrl: URL;
+      try { streamUrl = new URL(candidate.streamUrl); }
+      catch { return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Invalid audio URL', false); }
+      const hostname = streamUrl.hostname.toLowerCase();
+      const expiresAtMs = Date.parse(candidate.expiresAt);
+      if (streamUrl.protocol !== 'https:' ||
+          (hostname !== 'googlevideo.com' && !hostname.endsWith('.googlevideo.com')) ||
+          streamUrl.username || streamUrl.password ||
+          !Number.isFinite(expiresAtMs) || expiresAtMs < Date.now() + 60_000) {
+        return providerError('YTMUSIC_INVALID_AUDIO_RESPONSE', 'Untrusted or expired media URL', false);
+      }
+      return providerOk(data as YtMusicAudioCandidate, 'Unlicensed experimental direct-stream feasibility only');
+    } catch {
+      return providerError('YTMUSIC_AUDIO_PROBE_UNAVAILABLE', 'Audio probe request failed', true);
+    }
   }
 
   async getAvailability(): Promise<ProviderResult<{ available: boolean }>> {
