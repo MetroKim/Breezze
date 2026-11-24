@@ -9,7 +9,12 @@ bool isMetadataOnlyTrackId(String id) =>
     id.startsWith('bzv:') ||
     (id.startsWith('bz:') && !isYouTubeSongId(id) && !isDeezerPreview(id));
 
-bool canQueueTrackId(String id) => id.trim().isNotEmpty && !isMetadataOnlyTrackId(id);
+/// YouTube Music IDs can open the visible official video surface, but must
+/// never enter the native Deezer-preview/full-rights audio queue.
+bool canQueueTrackId(String id) =>
+    id.trim().isNotEmpty &&
+    !isYouTubeSongId(id) &&
+    !isMetadataOnlyTrackId(id);
 
 /// Offline media requires an explicit download grant. Discovery metadata and
 /// provider previews are not full-track downloading rights.
