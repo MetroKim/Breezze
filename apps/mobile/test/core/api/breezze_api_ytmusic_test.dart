@@ -20,6 +20,7 @@ void main() {
       await api.ytMusicArtist('UCabcdefghij');
       await api.ytMusicCharts(country: 'TZ');
       await api.ytMusicWatchQueue('abcdefghijk', limit: 12);
+      await api.ytMusicAudioCandidate('abcdefghijk');
       await api.ytMusicSuggestions('music & jazz', limit: 5);
       await api.ytMusicAlbum('MPREabcdefghij');
       await api.ytMusicPlaylist('OLAK5uy_abcdefghij', limit: 30);
@@ -27,7 +28,7 @@ void main() {
       await api.ytMusicMoodPlaylists('example_params', limit: 15);
       await api.ytMusicExplore();
 
-      expect(requests.length, 10);
+      expect(requests.length, 11);
       expect(requests.every((r) => r.method == 'GET'), isTrue);
       expect(requests.every((r) =>
           r.headers['Authorization'] == 'Bearer session-token'), isTrue);
@@ -45,18 +46,20 @@ void main() {
       expect(requests[3].url.path,
           '/api/v1/providers/youtube_music/watch-queue/abcdefghijk');
       expect(requests[3].url.queryParameters['limit'], '12');
-      expect(requests[4].url.queryParameters['q'], 'music & jazz');
-      expect(requests[4].url.queryParameters['limit'], '5');
-      expect(requests[5].url.path,
-          '/api/v1/providers/youtube_music/albums/MPREabcdefghij');
+      expect(requests[4].url.path,
+          '/api/v1/providers/youtube_music/audio-candidate/abcdefghijk');
+      expect(requests[5].url.queryParameters['q'], 'music & jazz');
+      expect(requests[5].url.queryParameters['limit'], '5');
       expect(requests[6].url.path,
-          '/api/v1/providers/youtube_music/playlists/OLAK5uy_abcdefghij');
-      expect(requests[6].url.queryParameters['limit'], '30');
+          '/api/v1/providers/youtube_music/albums/MPREabcdefghij');
       expect(requests[7].url.path,
+          '/api/v1/providers/youtube_music/playlists/OLAK5uy_abcdefghij');
+      expect(requests[7].url.queryParameters['limit'], '30');
+      expect(requests[8].url.path,
           '/api/v1/providers/youtube_music/moods');
-      expect(requests[8].url.queryParameters['params'], 'example_params');
-      expect(requests[8].url.queryParameters['limit'], '15');
-      expect(requests[9].url.path,
+      expect(requests[9].url.queryParameters['params'], 'example_params');
+      expect(requests[9].url.queryParameters['limit'], '15');
+      expect(requests[10].url.path,
           '/api/v1/providers/youtube_music/explore');
     });
 
