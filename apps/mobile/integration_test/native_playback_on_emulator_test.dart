@@ -69,12 +69,12 @@ class _NativeQaEngine implements AudioEngineAdapter {
 }
 
 const _one = TrackInfo(
-  id: 'bz:jamendo:native-qa-one',
+  id: 'catalog-qa:native-qa-one',
   title: 'Native QA One',
   artist: 'Breezze QA',
 );
 const _two = TrackInfo(
-  id: 'bz:jamendo:native-qa-two',
+  id: 'catalog-qa:native-qa-two',
   title: 'Native QA Two',
   artist: 'Breezze QA',
 );
@@ -114,21 +114,6 @@ Uint8List _testStereoWav() {
   return data.buffer.asUint8List();
 }
 
-
-class _NativeQaPublicAudiusResolver implements PlaybackResolver {
-  int calls = 0;
-
-  @override
-  Future<PlayableSource?> resolve(TrackInfo track) async {
-    if (track.id != 'bz:audius:mWB22') return null;
-    calls++;
-    return PlayableSource(
-      trackId: track.id,
-      streamUrl: 'https://api.audius.co/v1/tracks/mWB22/stream',
-      expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 30)),
-    );
-  }
-}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -287,45 +272,5 @@ void main() {
   });
 
 
-  testWidgets('native platform decodes eligible public Audius OML audio', (tester) async {
-    // Production grant, attribution and ownership are checked by the
-    // credentialed API smoke. This test verifies actual native streaming
-    // decoding rather than replacing ExoPlayer/AVFoundation with a fake.
-    const id = 'bz:audius:mWB22';
-    final resolver = _NativeQaPublicAudiusResolver();
-    final engine = JustAudioEngineAdapter();
-    final container = ProviderContainer(overrides: [
-      playbackResolverProvider.overrideWithValue(resolver),
-    ]);
-    final player = container.read(playerControllerProvider.notifier);
-    player.attachEngine(engine);
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(body: Text('Breezze Audius native decoder QA')),
-    ));
-    try {
-      await player.playTrack(
-        trackId: id,
-        queue: const [
-          TrackInfo(id: id, title: 'Ambient Snow', artist: 'Blop',
-              duration: Duration(seconds: 509)),
-        ],
-        sourceContext: 'Audius public OML acceptance',
-      );
-      expect(resolver.calls, 1);
-      expect(player.state.playbackState, PlaybackState.playing);
-      expect(engine.duration, greaterThan(Duration.zero),
-          reason: 'Native audio backend must decode the real remote source');
-      await player.seekTo(const Duration(seconds: 5));
-      expect(engine.position.inSeconds, greaterThanOrEqualTo(5));
-      await player.pause();
-      expect(player.state.playbackState, PlaybackState.paused);
-      await player.resume();
-      expect(player.state.playbackState, PlaybackState.playing);
-    } finally {
-      await player.stop();
-      container.dispose();
-      await engine.dispose();
-    }
-  });
 
 }

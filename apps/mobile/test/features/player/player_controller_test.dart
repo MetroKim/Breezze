@@ -95,13 +95,13 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:jamendo:session-one',
+          trackId: 'catalog-qa:session-one',
           streamUrl: 'https://media.example/one.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'session-one',
         ),
         PlayableSource(
-          trackId: 'bz:jamendo:session-two',
+          trackId: 'catalog-qa:session-two',
           streamUrl: 'https://media.example/two.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'session-two',
@@ -121,8 +121,8 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const first = TrackInfo(id: 'bz:jamendo:session-one', title: 'One');
-    const second = TrackInfo(id: 'bz:jamendo:session-two', title: 'Two');
+    const first = TrackInfo(id: 'catalog-qa:session-one', title: 'One');
+    const second = TrackInfo(id: 'catalog-qa:session-two', title: 'Two');
 
     await player.playTrack(trackId: first.id, queue: const [first]);
     await player.pause();
@@ -140,7 +140,7 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:jamendo:heartbeat',
+          trackId: 'catalog-qa:heartbeat',
           streamUrl: 'https://media.example/heartbeat.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'heartbeat-session',
@@ -160,7 +160,7 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const track = TrackInfo(id: 'bz:jamendo:heartbeat', title: 'Heartbeat');
+    const track = TrackInfo(id: 'catalog-qa:heartbeat', title: 'Heartbeat');
     await player.playTrack(trackId: track.id, queue: const [track]);
     await Future<void>.delayed(const Duration(milliseconds: 35));
     await player.pause();
@@ -175,7 +175,7 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:jamendo:play-failure',
+          trackId: 'catalog-qa:play-failure',
           streamUrl: 'https://media.example/failure.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'play-failure-session',
@@ -194,7 +194,7 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const track = TrackInfo(id: 'bz:jamendo:play-failure', title: 'Failure');
+    const track = TrackInfo(id: 'catalog-qa:play-failure', title: 'Failure');
     await player.playTrack(trackId: track.id, queue: const [track]);
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
@@ -217,7 +217,7 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const track = TrackInfo(
-      id: 'bz:jamendo:interrupt-test',
+      id: 'catalog-qa:interrupt-test',
       title: 'Interruption test',
       artist: 'Example Artist',
     );
@@ -250,12 +250,12 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const first = TrackInfo(
-      id: 'bz:jamendo:queue-first',
+      id: 'catalog-qa:queue-first',
       title: 'First track',
       artist: 'Example Artist',
     );
     const second = TrackInfo(
-      id: 'bz:jamendo:queue-second',
+      id: 'catalog-qa:queue-second',
       title: 'Second track',
       artist: 'Example Artist',
     );
@@ -296,9 +296,9 @@ void main() {
     });
     final player = original.read(playerControllerProvider.notifier);
     player.attachEngine(originalEngine);
-    const first = TrackInfo(id: 'bz:jamendo:restore-1',
+    const first = TrackInfo(id: 'catalog-qa:restore-1',
         title: 'Resume this track', artist: 'Breezze QA');
-    const second = TrackInfo(id: 'bz:jamendo:restore-2',
+    const second = TrackInfo(id: 'catalog-qa:restore-2',
         title: 'Upcoming', artist: 'Breezze QA');
     await player.playTrack(trackId: first.id, queue: const [first, second]);
     await player.seekTo(const Duration(seconds: 36));
@@ -363,13 +363,13 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:jamendo:session-expiry',
+          trackId: 'catalog-qa:session-expiry',
           streamUrl: 'https://media.example/old.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 6)),
           sessionId: 'expired-server-session',
         ),
         PlayableSource(
-          trackId: 'bz:jamendo:session-expiry',
+          trackId: 'catalog-qa:session-expiry',
           streamUrl: 'https://media.example/new.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
           sessionId: 'fresh-server-session',
@@ -388,7 +388,7 @@ void main() {
     });
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const track = TrackInfo(id: 'bz:jamendo:session-expiry', title: 'Session renewal QA');
+    const track = TrackInfo(id: 'catalog-qa:session-expiry', title: 'Session renewal QA');
     await player.playTrack(trackId: track.id, queue: const [track]);
     await player.seekTo(const Duration(seconds: 33));
     await player.pause();

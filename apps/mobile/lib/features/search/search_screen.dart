@@ -754,10 +754,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             track.id.startsWith('bz:deezer:')
                                                 ? '${track.artist} · ${track.hasPreview ? 'Deezer preview' : 'Deezer catalog'}'
                                                 : track.id.startsWith('bz:youtube_music:')
-                                                        ? '${track.artist} · YouTube Music'
-                                                        : track.id.startsWith('bz:jamendo:')
-                                                            ? '${track.artist} · Jamendo'
-                                                            : track.artist,
+                                                    ? '${track.artist} · YouTube Music'
+                                                    : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),

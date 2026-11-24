@@ -2,22 +2,17 @@ final _deezerPreview = RegExp(r'^bz:deezer_preview:[0-9]{1,20}$');
 bool isDeezerPreview(String id) => _deezerPreview.hasMatch(id);
 
 final _youtubeSongId = RegExp(r'^bz:youtube_music:[A-Za-z0-9_-]{11}$');
-final _audiusSongId = RegExp(r'^bz:audius:[A-Za-z0-9]{4,32}$');
-
-bool isAudiusSongId(String id) => _audiusSongId.hasMatch(id);
-
 bool isYouTubeSongId(String id) => _youtubeSongId.hasMatch(id);
 
 /// A queued song still needs a source from the session resolver.
 bool isMetadataOnlyTrackId(String id) =>
     id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:') &&
-     !isAudiusSongId(id) && !isYouTubeSongId(id) && !isDeezerPreview(id));
+    (id.startsWith('bz:') && !isYouTubeSongId(id) && !isDeezerPreview(id));
 
 bool canQueueTrackId(String id) => id.trim().isNotEmpty && !isMetadataOnlyTrackId(id);
 
-/// Offline media requires an explicit download grant. Generic catalogue
-/// metadata (including Jamendo) cannot be downloaded by a discovery URL.
+/// Offline media requires an explicit download grant. Discovery metadata and
+/// provider previews are not full-track downloading rights.
 bool canRequestOfflineDownload(String id) =>
     id.trim().isNotEmpty &&
     !id.startsWith('bz:') &&

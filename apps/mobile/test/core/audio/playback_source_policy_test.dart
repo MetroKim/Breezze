@@ -3,12 +3,13 @@ import 'package:breezze/core/audio/playback_source_policy.dart';
 
 void main() {
   group('Breezze provider action policy', () {
-    test('discovery-only IDs never enter the native audio queue', () {
+    test('removed providers and discovery-only IDs never enter the native audio queue', () {
       for (final id in [
         'bz:youtube_music:abc',
         'bz:deezer:123',
         'bz:soundcloud:456',
-        'bz:audius:../../invalid',
+        'bz:audius:V66vyPP',
+        'bz:jamendo:track-123',
         'bz:apple_catalog:789',
         'bzv:dQw4w9WgXcQ',
         '',
@@ -17,13 +18,11 @@ void main() {
       }
     });
 
-    test('local or backend tracks and approved Jamendo can request playback', () {
+    test('canonical songs and eligible Deezer previews can queue', () {
       expect(canQueueTrackId('catalog-uuid'), isTrue);
       expect(canQueueTrackId('bz:deezer_preview:42'), isTrue);
       expect(canQueueTrackId('bz:deezer_preview:nope'), isFalse);
       expect(canRequestOfflineDownload('bz:deezer_preview:42'), isFalse);
-      expect(canQueueTrackId('bz:jamendo:track-123'), isTrue);
-      expect(isMetadataOnlyTrackId('bz:jamendo:track-123'), isFalse);
     });
 
     test('fallback requires an unambiguous preview of the selected recording', () {
@@ -36,14 +35,15 @@ void main() {
       expect(matchingDeezerPreview([row], 'Song', 'Artist', const Duration(seconds: 120)), isNull);
     });
 
-    test('metadata and embedded videos never request offline downloads', () {
+    test('removed providers, metadata and video IDs never request offline downloads', () {
+      expect(canRequestOfflineDownload('bz:audius:V66vyPP'), isFalse);
       expect(canRequestOfflineDownload('bz:jamendo:123'), isFalse);
       expect(canRequestOfflineDownload('bz:deezer:123'), isFalse);
       expect(canRequestOfflineDownload('bzv:dQw4w9WgXcQ'), isFalse);
       expect(canRequestOfflineDownload('catalog-uuid'), isTrue);
     });
 
-    test('YouTube song IDs can request native playback', () {
+    test('YouTube song IDs queue only via the separately rights-gated resolver', () {
       const id = 'bz:youtube_music:dQw4w9WgXcQ';
       expect(isYouTubeSongId(id), isTrue);
       expect(canQueueTrackId(id), isTrue);
@@ -52,12 +52,4 @@ void main() {
       expect(isYouTubeSongId('bz:deezer:dQw4w9WgXcQ'), isFalse);
     });
   });
-  test('Audius OML provider IDs can queue but never inherit download rights', () {
-    expect(isAudiusSongId('bz:audius:V66vyPP'), isTrue);
-    expect(canQueueTrackId('bz:audius:V66vyPP'), isTrue);
-    expect(canRequestOfflineDownload('bz:audius:V66vyPP'), isFalse);
-    expect(isMetadataOnlyTrackId('bz:audius:../../unsafe'), isTrue);
-  });
-
 }
-
