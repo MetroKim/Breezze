@@ -105,12 +105,26 @@ Widget _browseApp(_BrowseSource source, {BreezzeApi? api}) => ProviderScope(
       ),
     );
 
+Future<void> _mountBrowse(
+  WidgetTester tester,
+  _BrowseSource source, {
+  BreezzeApi? api,
+}) async {
+  // Browse uses a long CustomScrollView with lazy slivers. The default
+  // 800x600 viewport does not build the genre results below the grid.
+  tester.view.physicalSize = const Size(1400, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(_browseApp(source, api: api));
+  await tester.pump();
+}
+
 void main() {
   testWidgets('Browse genre switching ignores older provider responses',
       (tester) async {
     final source = _BrowseSource();
-    await tester.pumpWidget(_browseApp(source));
-    await tester.pump();
+    await _mountBrowse(tester, source);
     expect(source.calls, ['Afrobeats music']);
 
     await tester.tap(find.text('Bongo Flava'));
@@ -130,8 +144,7 @@ void main() {
   testWidgets('Browse error state retries the selected genre successfully',
       (tester) async {
     final source = _BrowseSource();
-    await tester.pumpWidget(_browseApp(source));
-    await tester.pump();
+    await _mountBrowse(tester, source);
 
     source.requests[0].complete(ProviderError('Temporary provider error'));
     await tester.pump();
@@ -149,8 +162,7 @@ void main() {
   testWidgets('Browse refuses native playback or downloads for catalog-only tracks',
       (tester) async {
     final source = _BrowseSource();
-    await tester.pumpWidget(_browseApp(source));
-    await tester.pump();
+    await _mountBrowse(tester, source);
 
     source.requests[0].complete(
       _tracks('Metadata only', id: 'bz:apple_catalog:123456'),
@@ -176,8 +188,7 @@ void main() {
   testWidgets('Browse labels regional RSS chart fallback, not Daily Top 100',
       (tester) async {
     final source = _BrowseSource();
-    await tester.pumpWidget(_browseApp(source, api: _BrowseChartApi()));
-    await tester.pump();
+    await _mountBrowse(tester, source, api: _BrowseChartApi());
     source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
 
@@ -196,8 +207,7 @@ void main() {
   testWidgets('Unavailable Browse sections do not invent charts',
       (tester) async {
     final source = _BrowseSource();
-    await tester.pumpWidget(_browseApp(source));
-    await tester.pump();
+    await _mountBrowse(tester, source);
     source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
 
@@ -214,8 +224,7 @@ void main() {
   testWidgets('Browse does not launch malformed external music-video IDs',
       (tester) async {
     final source = _BrowseSource();
-    await tester.pumpWidget(_browseApp(source, api: _BrowseChartApi()));
-    await tester.pump();
+    await _mountBrowse(tester, source, api: _BrowseChartApi());
     source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
 
