@@ -122,6 +122,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
+        // This is a catalog-metadata test, not a device SQLite test.
+        overrides: [favoritesStoreProvider.overrideWithValue(_InMemoryFavorites())],
         child: MaterialApp(
           theme: bzLightTheme(),
           home: TrackDetailScreen(
@@ -151,6 +153,13 @@ void main() {
 
     expect(find.text('Search Result Song'), findsOneWidget);
     expect(find.text('Search Result Artist'), findsWidgets);
+    // The action now correctly shows "Checking Library..." until its
+    // owner-scoped saved-state lookup resolves. Await the enabled label.
+    for (var i = 0;
+        i < 25 && find.text('Add to Library').evaluate().isEmpty;
+        i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(find.text('Add to Library'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Album'), 240);
     expect(find.text('Album'), findsOneWidget);
