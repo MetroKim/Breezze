@@ -216,7 +216,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       await openYouTubePlayer(
         context: context,
         ref: ref,
-        enableExperimentalNativeAudio: true,
         videoId: track.id.substring('bz:youtube_music:'.length),
         title: track.title ?? 'YouTube Music',
         artist: track.artist ?? 'Unknown artist',
