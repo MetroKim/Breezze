@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderRegistry } from './provider-registry.service';
 import { YtMusicAdapter } from './ytmusic.adapter';
 
@@ -18,6 +19,15 @@ export class ProvidersController {
   }
 
   // YouTube Music is a supplementary artist/chart metadata source, not an audio stream proxy.
+  // Restricted to authenticated users and an explicit non-production feature flag.
+  // This is a feasibility POC, not an approved streaming or download grant.
+  @Get('youtube_music/audio-candidate/:videoId')
+  @UseGuards(JwtAuthGuard)
+  getYoutubeMusicAudioCandidate(@Param('videoId') videoId: string) {
+    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
+    return this.youtubeMusic.getAudioCandidate(videoId);
+  }
+
   @Get('youtube_music/artists/search')
   searchYoutubeMusicArtists(@Query('q') q: string) {
     if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
