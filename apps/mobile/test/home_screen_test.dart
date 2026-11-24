@@ -13,7 +13,7 @@ import 'package:material_ui/material_ui.dart';
 class _HomeFavorites extends FavoritesStore {
   _HomeFavorites({this.fail = false});
 
-  final bool fail;
+  bool fail;
 
   @override
   Future<List<FavoriteTrack>> load({String ownerId = 'guest'}) async {
@@ -124,18 +124,31 @@ void main() {
     expect(find.text('Only user B song'), findsWidgets);
   });
 
-  testWidgets('Home recovers to an honest empty state if local storage fails',
+  testWidgets('Home shows a recoverable error instead of inventing an empty library',
       (tester) async {
+    var historyUnavailable = true;
+    final favorites = _HomeFavorites(fail: true);
     await _renderHome(
       tester,
       guest: true,
-      loadRecent: (_) => Future.error(StateError('disk unavailable')),
-      favorites: _HomeFavorites(fail: true),
+      loadRecent: (_) => historyUnavailable
+          ? Future.error(StateError('disk unavailable'))
+          : Future.value(<RecentEntry>[]),
+      favorites: favorites,
     );
     await tester.pump();
 
+    expect(find.text('Could not load your saved music'), findsOneWidget);
+    expect(find.textContaining('Your library has not been erased'), findsOneWidget);
+    expect(find.text('Find your first song'), findsNothing);
+
+    historyUnavailable = false;
+    favorites.fail = false;
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Could not load your saved music'), findsNothing);
     expect(find.text('Find your first song'), findsOneWidget);
-    expect(find.text('Search music'), findsOneWidget);
     expect(find.byType(BzSkeletonTrackRow), findsNothing);
   });
 }
