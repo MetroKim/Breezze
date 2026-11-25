@@ -2,11 +2,16 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderRegistry } from './provider-registry.service';
 import { YtMusicAdapter } from './ytmusic.adapter';
+import { OfficialYouTubeDataService } from './official-youtube-data.service';
 
 // Read-only provider discovery and metadata endpoints.
 @Controller('providers')
 export class ProvidersController {
-  constructor(private readonly registry: ProviderRegistry, private readonly youtubeMusic: YtMusicAdapter) {}
+  constructor(
+    private readonly registry: ProviderRegistry,
+    private readonly youtubeMusic: YtMusicAdapter,
+    private readonly officialYouTube: OfficialYouTubeDataService,
+  ) {}
 
   @Get()
   list() {
@@ -21,6 +26,21 @@ export class ProvidersController {
   // YouTube Music is a supplementary artist/chart metadata source, not an audio stream proxy.
   // Restricted to authenticated users and an explicit non-production feature flag.
   // This is a feasibility POC, not an approved streaming or download grant.
+  // Official YouTube Data API: public music-video discovery only.
+  // Auth-gated to limit scraping and prevent exhausting the project's quota.
+  // Never returns separable audio bytes or streaming/download capabilities.
+  @Get('youtube/videos/search')
+  @UseGuards(JwtAuthGuard)
+  searchOfficialYouTubeVideos(@Query('q') q: string, @Query('limit') limit?: string) {
+    return this.officialYouTube.searchMusicVideos(q ?? '', limit === undefined ? 20 : Number(limit));
+  }
+
+  @Get('youtube/videos/:videoId')
+  @UseGuards(JwtAuthGuard)
+  officialYouTubeVideoDetails(@Param('videoId') videoId: string) {
+    return this.officialYouTube.getVideo(videoId);
+  }
+
   @Get('youtube_music/audio-candidate/:videoId')
   @UseGuards(JwtAuthGuard)
   getYoutubeMusicAudioCandidate(@Param('videoId') videoId: string) {
