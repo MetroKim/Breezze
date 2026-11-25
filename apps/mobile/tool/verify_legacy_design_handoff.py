@@ -22,7 +22,19 @@ EXPECTED = {
 }
 
 
+SPEC_HASHES = {
+    "PNG-EXPORT-SPEC.md": "929503b0aeebf95a12af121c7a192d606a206fc95d13e53413bc08e11dec2314",
+    "breezze-concept-c-export-spec.md": "fe8d213a9d5c83d4bfd53abaebc2f5135aa59dc3ebc243e2468797acd9a00aee",
+}
+
+
 def verify() -> None:
+    for name, expected in SPEC_HASHES.items():
+        path = ARCHIVE.parent / name
+        assert path.is_file(), f"Missing historical spec: {path}"
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert actual == expected, f"SHA-256 mismatch for {name}: {actual}"
+        print(f"PASS {name}: original spec SHA-256")
     for name, expected in EXPECTED.items():
         path = ARCHIVE / name
         assert path.is_file(), f"Missing historical source: {path}"
