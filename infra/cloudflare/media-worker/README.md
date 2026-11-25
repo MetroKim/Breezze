@@ -80,3 +80,11 @@ and MP4 videos, **not** YouTube Music audio extracted from provider videos.
   during that interval; shorten lease windows and add revocation mechanisms
   for stronger takedown SLAs.
 - Provisioning does not create rights, licenses or a populated R2 catalog.
+
+### Flutter Web protected playback
+
+Set `MEDIA_CORS_ORIGINS` to a comma-separated set of exact HTTPS app
+origins before testing web audio/video streaming. Default is **no browser
+origin permitted**. Browser media GET/HEAD can use byte ranges; CORS
+preflight accepts Range only for allowlisted origins. This does not grant
+access without a valid signed URL. Ingest is deliberately never CORS enabled.

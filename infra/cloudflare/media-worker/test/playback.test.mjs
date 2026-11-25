@@ -360,3 +360,37 @@ test('video ingest rejects malformed bytes without leaving any R2 object', async
   assert.equal(result.status, 422);
   assert.equal(bucket.stored.size, 0);
 });
+
+test('allowlisted Flutter Web range access never bypasses signed media grants', async () => {
+  const url = await urlFor();
+  const configured = { ...env(), MEDIA_CORS_ORIGINS: 'https://app.breezze.example,https://preview.breezze.example' };
+  const allowed = await worker.fetch(new Request(url, {
+    headers: { Origin: 'https://app.breezze.example', Range: 'bytes=2-6' },
+  }), configured);
+  assert.equal(allowed.status, 206);
+  assert.equal(allowed.headers.get('Access-Control-Allow-Origin'), 'https://app.breezze.example');
+  assert.match(allowed.headers.get('Access-Control-Expose-Headers'), /Content-Range/);
+  assert.deepEqual(new Uint8Array(await allowed.arrayBuffer()), bytes.slice(2, 7));
+
+  const preflight = await worker.fetch(new Request(url, {
+    method: 'OPTIONS', headers: { Origin: 'https://app.breezze.example' },
+  }), configured);
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('Access-Control-Allow-Headers'), 'Range');
+
+  const denied = await worker.fetch(new Request(url, {
+    method: 'OPTIONS', headers: { Origin: 'https://untrusted.example' },
+  }), configured);
+  assert.equal(denied.status, 403);
+
+  const forged = await worker.fetch(new Request(url.replace(/s=[^&]+/, 's=forged'), {
+    headers: { Origin: 'https://app.breezze.example' },
+  }), configured);
+  assert.equal(forged.status, 403);
+  assert.equal(forged.headers.get('Cache-Control'), 'no-store');
+
+  const ingest = await videoIngestUrlFor(mediaId, 100);
+  assert.equal((await worker.fetch(new Request(ingest, {
+    method: 'OPTIONS', headers: { Origin: 'https://app.breezze.example' },
+  }), configured)).status, 405);
+});
