@@ -184,6 +184,15 @@ class BreezzeApi {
   Future<Map<String, dynamic>> searchAllProviders(String query) =>
       _get('/providers/search?q=${Uri.encodeQueryComponent(query)}');
 
+  /// Official YouTube Data API music-video metadata. The server alone owns
+  /// the restricted API key; this never supplies audio or download grants.
+  Future<Map<String, dynamic>> searchOfficialYouTubeVideos(String query, {
+    int limit = 20,
+  }) => _get('/providers/youtube/videos/search?q=${Uri.encodeQueryComponent(query)}&limit=$limit');
+
+  Future<Map<String, dynamic>> officialYouTubeVideoDetails(String videoId) =>
+      _get('/providers/youtube/videos/${Uri.encodeComponent(videoId)}');
+
   Future<Map<String, dynamic>> searchDeezer(String query) =>
       _get('/providers/deezer/search?q=${Uri.encodeQueryComponent(query)}');
 
