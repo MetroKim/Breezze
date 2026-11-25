@@ -393,6 +393,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify previous Breezze design handoff integrity
+        run: python ../../apps/mobile/tool/verify_legacy_design_handoff.py
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
