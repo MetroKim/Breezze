@@ -197,3 +197,7 @@ for entitlement_name in ("DebugProfile.entitlements", "Release.entitlements"):
 print("Configured Android release networking, media service, iOS background audio and macOS outbound networking.")
 
 PY
+
+# Generate and verify genuine platform launcher resources from the pinned Breezze SVG.
+python3 "${SCRIPT_DIR}/native_icon_gen.py" --app-dir "${APP_DIR}"
+python3 "${SCRIPT_DIR}/native_icon_gen.py" --app-dir "${APP_DIR}" --verify

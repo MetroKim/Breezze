@@ -24,6 +24,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate canonical Flutter package and reject fake audio scaffold
         run: python3 tools/check_independent_identity.py
+      - name: Verify official Breezze launcher geometry and native PNGs
+        run: python3 -m unittest discover -s apps/mobile/tool -p 'test_native_icons.py' -v
 
   quality:
     name: Breezze quality gates
