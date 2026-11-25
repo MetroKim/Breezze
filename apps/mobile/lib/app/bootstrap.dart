@@ -167,19 +167,10 @@ class LiveResolver implements PlaybackResolver {
 
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
-    if (isDeezerPreview(track.id)) {
-      try {
-        final result = await _ref.read(authSessionProvider.notifier).api
-            .getProviderTrack('deezer', track.id.split(':').last);
-        final value = result['value'];
-        final uri = value is Map && value['previewUrl'] is String
-            ? Uri.tryParse(value['previewUrl'] as String) : null;
-        if (uri == null || uri.scheme != 'https' || !uri.host.endsWith('.dzcdn.net')) return null;
-        return PlayableSource(trackId: track.id, streamUrl: uri.toString(),
-            expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 1)));
-      } catch (_) {
-        return null;
-      }
+    // Historical Deezer preview IDs remain readable in saved libraries, but
+    // do not constitute Spotify playback or a Breezze full-track grant.
+    if (isDeezerPreview(track.id) || track.id.startsWith('bz:deezer:')) {
+      return null;
     }
     final auth = _ref.read(authSessionProvider);
     if (auth is! AuthSignedIn) return null;
