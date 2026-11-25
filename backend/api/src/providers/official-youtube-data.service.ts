@@ -41,6 +41,11 @@ interface YoutubeVideoEnvelope {
 export class OfficialYouTubeDataService {
   constructor(@Optional() private readonly cache?: ProviderCacheService) {}
   get configured(): boolean {
+    // A key pasted into a conversation must be rotated/restricted before use.
+    // Do not accidentally activate it when a staged Railway variable is
+    // promoted with a backend deployment. Production is opt-in explicitly.
+    if (process.env.NODE_ENV === 'production' &&
+        process.env.YOUTUBE_DATA_API_ENABLED !== 'true') return false;
     return Boolean((process.env.YOUTUBE_DATA_API_KEY ?? '').trim());
   }
 
