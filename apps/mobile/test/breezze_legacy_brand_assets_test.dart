@@ -2,6 +2,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('recovered Breezze monochrome vector lockups are bundled', () async {
     final white = await rootBundle.loadString(
       'assets/icons/breezze-logo-white.svg',
