@@ -2,7 +2,37 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
+double _contrast(Color foreground, Color background) {
+  final a = foreground.computeLuminance();
+  final b = background.computeLuminance();
+  return a >= b ? (a + 0.05) / (b + 0.05) : (b + 0.05) / (a + 0.05);
+}
+
 void main() {
+  test('semantic secondary and tertiary small text meets WCAG AA contrast', () {
+    const threshold = 4.5;
+    final schemes = <String, (List<Color>, List<Color>)>{
+      'light': (
+        [BzColorsLight.textSecondary, BzColorsLight.textTertiary],
+        [BzColorsLight.background, BzColorsLight.surfacePrimary,
+         BzColorsLight.surfaceSecondary],
+      ),
+      'dark': (
+        [BzColorsDark.textSecondary, BzColorsDark.textTertiary],
+        [BzColorsDark.background, BzColorsDark.surfacePrimary,
+         BzColorsDark.surfaceSecondary],
+      ),
+    };
+    for (final entry in schemes.entries) {
+      for (final foreground in entry.value.$1) {
+        for (final surface in entry.value.$2) {
+          expect(_contrast(foreground, surface), greaterThanOrEqualTo(threshold),
+              reason: '${entry.key}: text ${foreground.value} on surface ${surface.value}');
+        }
+      }
+    }
+  });
+
   test('light and dark Breezze themes share consistent component geometry', () {
     for (final theme in [bzLightTheme(), bzDarkTheme()]) {
       final colors = theme.bz;
