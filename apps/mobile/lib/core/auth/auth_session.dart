@@ -86,6 +86,20 @@ class AuthSessionController extends Notifier<AuthState> {
   bool _preferLegacyLink = false;
   static const _secureStorage = FlutterSecureStorage();
 
+  /// Legacy credentials are retained only for local debug/migration testing.
+  /// A shipping Breezze client MUST use Supabase, never silently downgrade
+  /// to the old backend identity endpoint if runtime configuration is absent.
+  static bool legacyAuthAllowedForBuild({
+    required bool releaseMode,
+    required bool supabaseConfigured,
+  }) => !releaseMode && !supabaseConfigured;
+
+  bool get _legacyAuthAllowed => legacyAuthAllowedForBuild(
+    releaseMode: kReleaseMode,
+    supabaseConfigured: SupabaseAuthBridge.enabled,
+  );
+
+
   static const _configuredApiUrl = String.fromEnvironment('BREEZZE_API_URL');
   static const _productionApiUrl =
       'https://breezze-api-edge.ykw8vmq7ph.workers.dev';
@@ -141,6 +155,9 @@ class AuthSessionController extends Notifier<AuthState> {
   /// has been signed out or its session has expired.
   Future<bool> _performRefresh() async {
     try {
+      if (!SupabaseAuthBridge.enabled && !_legacyAuthAllowed) {
+        throw StateError('SUPABASE_AUTH_NOT_CONFIGURED');
+      }
       if (SupabaseAuthBridge.enabled) {
         final session = await SupabaseAuthBridge.client.auth.refreshSession();
         final token = session.session?.accessToken;
@@ -168,6 +185,12 @@ class AuthSessionController extends Notifier<AuthState> {
 
   Future<void> restoreSession() async {
     try {
+      if (!SupabaseAuthBridge.enabled && !_legacyAuthAllowed) {
+        _api.accessToken = null;
+        await _secureStorage.delete(key: _refreshTokenKey);
+        state = const AuthError('SUPABASE_AUTH_NOT_CONFIGURED');
+        return;
+      }
       if (SupabaseAuthBridge.enabled) {
         _preferLegacyLink =
             await _secureStorage.read(key: _pendingLegacyLinkKey) == '1';
@@ -293,6 +316,10 @@ class AuthSessionController extends Notifier<AuthState> {
     String password, {
     String? displayName,
   }) async {
+    if (!SupabaseAuthBridge.enabled && !_legacyAuthAllowed) {
+      state = const AuthError('SUPABASE_AUTH_NOT_CONFIGURED');
+      return;
+    }
     state = const AuthSigningIn();
     try {
       if (SupabaseAuthBridge.enabled) {
@@ -335,6 +362,10 @@ class AuthSessionController extends Notifier<AuthState> {
   }
 
   Future<void> login(String email, String password) async {
+    if (!SupabaseAuthBridge.enabled && !_legacyAuthAllowed) {
+      state = const AuthError('SUPABASE_AUTH_NOT_CONFIGURED');
+      return;
+    }
     state = const AuthSigningIn();
     try {
       if (SupabaseAuthBridge.enabled) {
@@ -371,6 +402,10 @@ class AuthSessionController extends Notifier<AuthState> {
     String provider, {
     Map<String, dynamic>? preparedFlow,
   }) async {
+    if (!SupabaseAuthBridge.enabled && !_legacyAuthAllowed) {
+      state = const AuthError('SUPABASE_AUTH_NOT_CONFIGURED');
+      return;
+    }
     if (SupabaseAuthBridge.enabled) {
       await _signInWithNativeSupabase(provider);
       return;
