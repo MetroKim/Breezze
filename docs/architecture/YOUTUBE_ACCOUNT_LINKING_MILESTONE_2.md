@@ -17,6 +17,13 @@ This milestone adds a **user-approved read-only YouTube Data API connection** in
 - Flutter connects/disconnects through its existing BreezzeApi transport and a user-initiated external Google consent browser. Connected YouTube playlists are browsed in-app without a fifth tab.
 - Tests cover consent URL, configuration fail-closed behavior, replay protection, owner isolation, encrypted tokens, playlist validation, invalid video IDs, disconnect and Flutter UI/transport.
 
+## Corrected callback security checkpoint — 25 November 2026
+
+- The old public Railway origin callback `https://breezze-api-production.up.railway.app/api/v1/youtube-account/callback` is **not usable**: a live GET returned HTTP 403 `EDGE_ACCESS_DENIED`, confirming that direct requests correctly bypass neither the API's edge secret nor Cloudflare protection.
+- The private Railway service `YOUTUBE_ACCOUNT_REDIRECT_URI` is now set to the actual Cloudflare Worker entrypoint: `https://breezze-api-edge.ykw8vmq7ph.workers.dev/api/v1/youtube-account/callback`. `YOUTUBE_ACCOUNT_LINK_ENABLED=false` remains explicit. No deployment triggered, secrets unchanged.
+- The Cloudflare callback returned HTTP 404 in production because the API still runs deployed source commit `7239b1a`, which predates the new route. New main and Railway live source have diverged; review migrations and differences before deploying. Do not call this URL Google-verified until the actual Google Cloud OAuth Web client authorizes the exact redirect and any Google domain-verification requirements are met. Prefer a first-party verified Breezze domain for public production.
+- Public Supabase GoTrue settings independently confirmed **Google enabled**, **email enabled**, **Apple disabled**. This is stronger evidence than build constants but not a real end-user OAuth sign-in test.
+
 ## Operational configuration checkpoint — 25 November 2026
 
 - **Google Cloud project to reuse:** `breezze-515712` from prior setup records; live Google Console could not be accessed at this checkpoint.
