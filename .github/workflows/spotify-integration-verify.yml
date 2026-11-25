@@ -57,7 +57,7 @@ concurrency:
 
 jobs:
   spotify-api:
-    name: Spotify and Deezer catalog authorization acceptance
+    name: Keyless Deezer plus optional Spotify and MusicBrainz catalog acceptance
     runs-on: ubuntu-latest
     timeout-minutes: 12
     defaults:
@@ -73,7 +73,7 @@ jobs:
       - name: Verify backend TypeScript
         run: npm run typecheck
       - name: Verify Spotify and Deezer metadata contracts and provider isolation
-        run: npx jest --runInBand src/providers/spotify.adapter.spec.ts src/providers/deezer.adapter.spec.ts src/providers/provider-registry.service.spec.ts
+        run: npx jest --runInBand src/providers/spotify.adapter.spec.ts src/providers/deezer.adapter.spec.ts src/providers/musicbrainz.adapter.spec.ts src/providers/provider-registry.service.spec.ts
 
   mobile:
     name: Flutter in-app-only playback and no-native-YouTube guards
