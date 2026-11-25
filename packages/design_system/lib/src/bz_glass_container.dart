@@ -55,7 +55,8 @@ class BzGlassContainer extends StatelessWidget {
     final border = borderColor ?? colors.separator;
 
     final useSolidSurface = reduceTransparency ||
-        MediaQuery.highContrastOf(context);
+        MediaQuery.highContrastOf(context) ||
+        MediaQuery.disableAnimationsOf(context);
 
     if (useSolidSurface) {
       return Container(
