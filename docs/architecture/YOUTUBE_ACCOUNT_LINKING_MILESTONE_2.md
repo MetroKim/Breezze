@@ -17,6 +17,14 @@ This milestone adds a **user-approved read-only YouTube Data API connection** in
 - Flutter connects/disconnects through its existing BreezzeApi transport and a user-initiated external Google consent browser. Connected YouTube playlists are browsed in-app without a fifth tab.
 - Tests cover consent URL, configuration fail-closed behavior, replay protection, owner isolation, encrypted tokens, playlist validation, invalid video IDs, disconnect and Flutter UI/transport.
 
+## Operational configuration checkpoint — 25 November 2026
+
+- **Google Cloud project to reuse:** `breezze-515712` from prior setup records; live Google Console could not be accessed at this checkpoint.
+- **Breezze API Railway service:** `YOUTUBE_ACCOUNT_REDIRECT_URI=https://breezze-api-production.up.railway.app/api/v1/youtube-account/callback` has been saved, and a distinct 32-byte encryption key has been provisioned in the service's private environment. `YOUTUBE_ACCOUNT_LINK_ENABLED=false` remains explicit. **No redeployment** was made.
+- **Missing external permissions:** dedicated Google OAuth *Web application* client ID/secret for YouTube, verified authorized redirect URI and YouTube Data API v3 consent/scope/test-user setup. Never reuse Supabase's sign-in token as this consent, and never treat it as YouTube audio/download permission.
+- **Primary Google sign-in:** uses Supabase Auth rather than the separate NestJS `GOOGLE_OAUTH_*` compatibility route. See [current Google/Apple OAuth operations guide](../operations/SOCIAL_OAUTH_GOOGLE_APPLE.md).
+- **Verification state:** configuration prepared; no real user grant, authorized callback, channel/playlist read, disconnect or emulator acceptance observed. Keep M1 **In progress** and feature disabled.
+
 ## Deployment prerequisites (not configured automatically)
 
 Set these only on the private **NestJS API** environment, never in Flutter, client repo files or Cloudflare public bindings:

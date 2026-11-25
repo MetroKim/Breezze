@@ -1,35 +1,49 @@
-# Breezze Google / Apple OAuth
+# Breezze — Google and Apple sign-in: authoritative Supabase configuration
 
-## Security model
+> Current architecture: **Supabase Auth is the sign-in identity authority.**
+> The existing NestJS `social-auth.service.ts` and `GOOGLE_OAUTH_*` variables describe an older, separately implemented compatibility flow. **Do not configure or enable that duplicate flow as Breezze's primary Google login.** The signed-in Flutter client uses `SupabaseAuthBridge`, and its access token is independently verified by `SupabaseExchangeService` before a transitional Breezze API session is issued.
 
-The Flutter UI uses the same Breezze sessions as email sign-in, with system-browser OAuth. The backend owns the Google/Apple client credentials and validates authorization codes and provider-signed identity tokens. Browser callbacks contain no Breezze access or refresh token. A single-use app-only pairing secret is SHA-256-hashed in PostgreSQL; a completed session is AES-256-GCM encrypted at rest with a key derived from the production JWT_SECRET. Expiring flow state, OIDC nonce, Google's S256 PKCE, and immutable issuer/subject checks prevent several common account and OAuth substitution attacks.
+## Current service identities
 
-Existing email/password accounts are never silently linked to a social identity by matching an email. Matching existing email results in SOCIAL_ACCOUNT_LINK_REQUIRED. Admin MFA remains required.
+- Existing Google Cloud project from prior setup: **Breezze / `breezze-515712`** (previously recorded; live Console access was not available for re-verification on 25 November 2026). Reuse this project; do not create another.
+- Supabase project: **`djwvyjtebmsavhcrmhxf`**. The project itself is active; previous setup notes record the Google provider enabled in *Testing* with basic `openid`, email and profile scopes. Those Google dashboard settings need live re-verification before production acceptance.
+- Supabase Google OAuth **web** redirect URI (Google Auth Platform client used for Supabase):
+  `https://djwvyjtebmsavhcrmhxf.supabase.co/auth/v1/callback`
+- The `BREEZZE_SUPABASE_URL` and `BREEZZE_SUPABASE_PUBLISHABLE_KEY` are passed to Flutter at build/run time. The publishable key is public, but **never** put a Supabase service-role/secret key or a Google OAuth client secret in Flutter.
+- For native Google sign-in, Flutter additionally needs the *public* `BREEZZE_GOOGLE_WEB_CLIENT_ID` and (on iOS) `BREEZZE_GOOGLE_IOS_CLIENT_ID`, passed via `--dart-define`. The current CI Android/iOS build definitions do **not** provide these, so native Google sign-in remains disabled in those artifacts until configured.
 
-## API endpoints
+## Android native Google login — required before enabling
 
-- GET /api/v1/auth/social/providers: whether either provider is configured
-- POST /api/v1/auth/social/google/start and /apple/start: returns id, app-only secret, authorizationUrl and expiry
-- GET /api/v1/auth/social/callback/google: provider browser callback, status page only
-- POST /api/v1/auth/social/callback/apple: Apple form_post callback, status page only
-- POST /api/v1/auth/social/poll: id and secret -> pending, failed, or single-use completed first-party session
+1. Inspect the actual generated Android application ID and stable signing certificate fingerprints (debug/emulator signing and later release/Play signing must be registered separately). `apps/mobile/tool/generate_platform_targets.sh` runs `flutter create --project-name=breezze --org=com.breezze`, so **`com.breezze.breezze` is the expected generated ID**, not a substitute for checking the final Android runner.
+2. In the **existing** Google Cloud project, create or verify an Android OAuth client matching the final package ID and SHA-1 fingerprint(s). Do not fabricate SHA-1 values or rely on an ephemeral CI debug keystore as a stable production identity.
+3. Keep the Web OAuth client used as `BREEZZE_GOOGLE_WEB_CLIENT_ID` registered with Supabase. Google sign-in 7.x uses this as `serverClientId` on Android. Test real account selection, returned Google ID token, `supabase.auth.signInWithIdToken` and subsequent Breezze JWT exchange on a signed emulator/device.
 
-## Railway provider configuration
+## iOS native Google login — required before enabling
 
-On the EXISTING Breezze API Railway service, configure only through encrypted variables:
+1. Confirm the generated Xcode bundle identifier; `com.breezze.breezze` is expected unless the target has been overridden. Create/verify a matching iOS OAuth client in the existing Google Cloud project.
+2. Set `BREEZZE_GOOGLE_IOS_CLIENT_ID` in the environment **when generating** the iOS runner. The existing `generate_platform_targets.sh` writes the correct reversed client-ID `CFBundleURLTypes` scheme and `GIDClientID` into the generated Info.plist. Pass the same iOS client ID to Flutter at build time.
+3. Verify real iOS consent/account picker, redirect, ID-token validation by Supabase, Breezze session exchange, cancellation, account switching and sign-out. Apple Sign-In remains independently disabled until its credentials and native capability are validated.
 
-Google: GOOGLE_OAUTH_CLIENT_ID; GOOGLE_OAUTH_CLIENT_SECRET; GOOGLE_OAUTH_REDIRECT_URI.
+## Separate YouTube account playlist permission — NOT Google login
 
-Apple: APPLE_SERVICE_ID; APPLE_TEAM_ID; APPLE_KEY_ID; APPLE_PRIVATE_KEY; APPLE_OAUTH_REDIRECT_URI.
+- An authenticated Breezze user may **separately opt in** to read-only YouTube Data API playlist access. This never reuses Supabase Google sign-in's token and does not authorize YouTube Music song audio or downloads.
+- Backend: `YoutubeAccountService`; required private Railway environment variables: `YOUTUBE_ACCOUNT_CLIENT_ID` (dedicated Google Web OAuth client), `YOUTUBE_ACCOUNT_CLIENT_SECRET`, `YOUTUBE_ACCOUNT_REDIRECT_URI`, `YOUTUBE_ACCOUNT_TOKEN_KEY` (32-byte base64 AES-GCM key), and finally `YOUTUBE_ACCOUNT_LINK_ENABLED=true` **only after** real consent/security/production verification.
+- On **25 November 2026**, the existing Railway production API was confirmed to contain the non-secret callback URI
+  `https://breezze-api-production.up.railway.app/api/v1/youtube-account/callback`,
+  a unique server-side encryption key and `YOUTUBE_ACCOUNT_LINK_ENABLED=false`. Variables were saved **without redeploying**; they do not prove live callback routing or account consent. The dedicated YouTube OAuth client ID/secret remain absent.
+- In Google Cloud project `breezze-515712`, enable/verify **YouTube Data API v3**, configure Google Auth Platform branding/audience/privacy, add the narrow `https://www.googleapis.com/auth/youtube.readonly` scope, create a **separate Web OAuth client** with that exact Railway HTTPS callback URI, and save its secret only to Railway.
+- If Google Cloud requires verification for the YouTube scope, keep the app restricted to authorized test users until approved. Never enable a public unverified grant or silently expand permissions.
+- The callback can later move to a **verified Breezze-owned HTTPS domain** after that hostname is actually configured, tested and added to Google Cloud. Do not claim that `breezze.app` is routed in Cloudflare until its zone/domain is observed.
 
-Each HTTPS redirect must be registered verbatim with its provider and end with /api/v1/auth/social/callback/google or /apple. A first-party verified domain routed through the Cloudflare API edge is recommended. Google requires registered OAuth client credentials and consent configuration. Apple requires an Apple developer account, Services ID, Sign in with Apple enabled, and verified domain/return URL. The app does NOT obtain these automatically. An example.com callback or a random unverified domain will not work.
+## Acceptance gates (not yet fully passed)
 
-With none of these values configured, both sign-in buttons are intentionally disabled rather than pretending to succeed. Existing email/password and MFA continue working. Do not embed secrets in source or Flutter defines.
+- [ ] Google Cloud existing project, clients, authorized redirect(s), consent and test-user configuration read back from live Console
+- [ ] Android package/SHA-1 and iOS bundle/client ID verified against build signing identities
+- [ ] Supabase Google provider live configuration verified, with real native login → Supabase identity → Breezze API session exchange on both platforms
+- [ ] Dedicated YouTube Web OAuth client and read-only scope configured; test consent → channel → owned playlists → disconnect/revocation and cross-account isolation
+- [ ] Privacy, verified-domain and any required Google OAuth/sensitive-scope checks approved before public enabling
+- [ ] Deployment source SHA, callback reachability, emulator and production behavior verified
 
-## OS support and validation
+**No OAuth client secrets, token encryption keys, end-user tokens or private keys may be committed to this repository.**
 
-The shared Flutter UI and url_launcher system-browser pairing approach supports Android, iOS, macOS, Windows, Linux and the web in architecture. Real browser sessions and provider callbacks must be verified per platform. Web browsers may block popup launch following an asynchronous API request; a same-tab return-state fallback will be required for any browser that does. Platform sign-in and native OS media controls are separate concerns.
-
-Still required for a production PASS: provider credentials, real Google/Apple code exchange on each target, Apple private relay flows, consent-denied/cancel handling, account-linking design, administrative MFA checks, one-time token and account-switch tests, popup-blocker handling, expired-flow cleanup, accessibility, signing and store privacy review.
-
-Editable Figma: https://www.figma.com/design/50wWGo2FObDEtnMY60cz60
+References: [Supabase Google sign-in](https://supabase.com/docs/guides/auth/social-login/auth-google), [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [YouTube authorization](https://developers.google.com/youtube/v3/guides/authentication), [YouTube API policies](https://developers.google.com/youtube/terms/developer-policies).
