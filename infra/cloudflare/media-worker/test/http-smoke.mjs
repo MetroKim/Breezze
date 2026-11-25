@@ -139,7 +139,23 @@ try {
   assert.equal((await fetch(signed.replace(/s=[^&]+/, 's=forged'))).status, 403);
   assert.equal((await fetch(base + '/audio/' + randomUUID() + '/' + quality)).status, 403);
 
-  console.log('PASS: local workerd + R2 AAC ingest, HEAD, full playback, byte-range seek, download purpose and denial paths');
+  // Two simultaneous valid upload grants must never replace each other's R2 bytes.
+  const raceId = randomUUID();
+  const raceExpiry = Date.now() + 120_000;
+  const racePayload = ['ingest', raceId, quality, mime, media.length, raceExpiry].join(':');
+  const raceUrl = base + '/ingest/audio/' + raceId + '/' + quality +
+    '?b=' + media.length + '&m=' + encodeURIComponent(mime) +
+    '&e=' + raceExpiry + '&s=' + signature(racePayload);
+  const raceUpload = () => fetch(raceUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mime, 'Content-Length': String(media.length) },
+    body: media,
+  });
+  const race = await Promise.all([raceUpload(), raceUpload()]);
+  assert.deepEqual(race.map(r => r.status).sort(), [201, 409],
+    'Concurrent ingest must have exactly one immutable winner');
+
+  console.log('PASS: real local workerd/R2 AAC HTTP ingest, HEAD, seek, purpose-bound grants and atomic uploads');
 } catch (error) {
   console.error(String(error));
   console.error(processLog.replaceAll(secret, '[redacted]').slice(-2800));
