@@ -1,7 +1,9 @@
 # Breezze Cloudflare Edge, Caching and Traffic Architecture
 
-**Status:** Target architecture — not yet deployed or load-tested  
-**Decision:** Cloudflare is Breezze's edge security, API acceleration and static-delivery layer. Audio is resolved from approved external providers and delivered directly from provider to the Flutter audio engine. Breezze does not operate a cloud music-file store.
+**Status:** Existing API and media Workers and private R2 bucket are provisioned; current production code/credentials and real recording playback still require release-gated verification.  
+**Decision:** Cloudflare handles API acceleration and signed private R2 delivery for Breezze-owned or separately licensed media. Approved external providers may still stream directly to Flutter. R2 is never a source of copied YouTube or other unauthorized catalogue media.
+
+**Release gate:** GitHub `main` may be ahead of the live Railway/NestJS and Cloudflare deployments. Run `infra/cloudflare/media-worker`'s `npm test` and `npm run test:http` before staged rollout. The HTTP smoke test exercises an original synthetic AAC tone with local workerd/R2; it is not evidence that any copyrighted catalogue audio is available. See `docs/architecture/MEDIA_DELIVERY_RELEASE_GATES.md`.
 
 ## 1. Architecture boundaries
 
@@ -29,7 +31,7 @@ NestJS API ---- Provider Resolver ------------+
 
 **Audio path:** the API returns a provider-approved, short-lived playable source to the client. The Flutter audio engine connects to that provider directly. Do not route full audio streams through Workers or the NestJS origin unless a provider contract, rights requirement, and measured use case explicitly require it.
 
-**R2 is optional:** keep the existing private media Worker only for Breezze-owned, artist-delivered, or separately rights-cleared uploads. Do not use R2 as a generic proxy or re-hosting layer for third-party catalog recordings. Artwork may be fetched from its source and cached by the client; public artwork proxying is an optional later decision, not a prerequisite.
+**Private media delivery:** the existing `infra/cloudflare/media-worker` serves separately rights-cleared internal AAC/FLAC and MP4 assets from the private `breezze-media` R2 bucket. NestJS authorizes per-track rights, territory and verified asset readiness before signing short-lived delivery grants. Do not use R2 as a generic proxy or re-hosting layer for YouTube or third-party catalog recordings. Artwork may be fetched from its source and cached by the client; public artwork proxying is an optional later decision, not a prerequisite.
 
 ## 2. Cloudflare service allocation
 
@@ -225,7 +227,7 @@ Use trace/request IDs across Flutter, Cloudflare and NestJS. Redact credentials 
 
 ## 10. Explicit non-goals
 
-- No R2, cloud audio storage, upload pipeline or Breezze-hosted music CDN in the current product architecture.
+- No unlicensed R2 ingestion, generic YouTube audio extraction/re-hosting, or public R2 bucket delivery. Private R2 media delivery is supported only for recordings with explicit distribution rights, verified objects and protected grant paths.
 - No default audio proxying through Workers or NestJS.
 - No wholesale NestJS-to-Workers rewrite.
 - No D1/PostgreSQL dual-write architecture.
@@ -243,7 +245,7 @@ Use trace/request IDs across Flutter, Cloudflare and NestJS. Redact credentials 
 - [ ] Cache keys include all public response-varying dimensions.
 - [ ] Metadata cache has TTL jitter, single-flight and invalidation.
 - [ ] No signed stream URL or rights grant is shared-cached.
-- [ ] Audio streams directly from approved providers by default.
+- [ ] Approved provider-hosted audio streams directly where permitted; separately rights-cleared internal audio uses private R2 with signed grants and `no-store` delivery.
 - [ ] Provider adapters have timeouts, circuit breakers and concurrency budgets.
 - [ ] PostgreSQL pool/query budgets and Redis limits are measured.
 - [ ] Queue consumers are idempotent and have bounded retry/DLQ behavior.
