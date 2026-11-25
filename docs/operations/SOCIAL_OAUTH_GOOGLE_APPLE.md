@@ -24,6 +24,23 @@
 2. Set `BREEZZE_GOOGLE_IOS_CLIENT_ID` in the environment **when generating** the iOS runner. The existing `generate_platform_targets.sh` writes the correct reversed client-ID `CFBundleURLTypes` scheme and `GIDClientID` into the generated Info.plist. Pass the same iOS client ID to Flutter at build time.
 3. Verify real iOS consent/account picker, redirect, ID-token validation by Supabase, Breezze session exchange, cancellation, account switching and sign-out. Apple Sign-In remains independently disabled until its credentials and native capability are validated.
 
+## CI builds with verified native Google credentials
+
+The existing GitHub Actions [Breezze Quality](../../.github/workflows/breezze-quality.yml) workflow previously omitted the native Google OAuth `--dart-define` values. It now integrates **public** Google OAuth client IDs from GitHub **Actions repository variables**. An explicit per-platform approval flag defaults off, so no unverified production/demo build suddenly exposes broken Google login.
+
+| GitHub Actions repository variable | Meaning |
+| --- | --- |
+| `BREEZZE_GOOGLE_WEB_CLIENT_ID` | Existing registered Google **Web application** OAuth client ID, enabled in Supabase Google provider |
+| `BREEZZE_GOOGLE_IOS_CLIENT_ID` | Separate iOS OAuth client ID matching the generated iOS bundle identifier |
+| `BREEZZE_GOOGLE_ANDROID_VERIFIED` | Set to `true` **only after** the Android package and the actual signed APK's SHA-1 are registered and verified in Google Cloud |
+| `BREEZZE_GOOGLE_IOS_VERIFIED` | Set to `true` **only after** iOS bundle ID, OAuth client, and URL callback registration are verified |
+
+- Android debug/release artifact builds include the Web OAuth client ID only when Android verification is explicitly approved; otherwise the build-time value is empty and Flutter hides the native Google button.
+- iOS generated runner only receives the iOS client ID when iOS verification is approved. The runner script writes `GIDClientID` and reversed client-ID callback scheme to Info.plist; CI verifies both before compiling the app. The iOS build also receives both public Google client IDs.
+- GitHub variables are **not** OAuth client secrets. Keep all Web client secrets exclusively in Google Cloud/Supabase encrypted provider configuration; do not add them to Actions or Flutter.
+- Set `BREEZZE_GOOGLE_ANDROID_VERIFIED` and `BREEZZE_GOOGLE_IOS_VERIFIED` independently. A successful build **does not** prove the Google account picker, native signed-app SHA-1, Supabase identity exchange, consent, or emulator sign-in. Run those live tests separately, including the actual release signing identity.
+- The separate YouTube read-only account connection still requires its own dedicated Web OAuth client, secret, callback, Google consent and production rights/privacy review. It is **not** enabled by these Google sign-in flags.
+
 ## Separate YouTube account playlist permission — NOT Google login
 
 - An authenticated Breezze user may **separately opt in** to read-only YouTube Data API playlist access. This never reuses Supabase Google sign-in's token and does not authorize YouTube Music song audio or downloads.

@@ -103,6 +103,11 @@ jobs:
   flutter_linux:
     name: Flutter Linux, Android and Web builds
     runs-on: ubuntu-latest
+    # These are PUBLIC OAuth client IDs. Keep the native login disabled until
+    # the Google Console Android package + SHA-1 registration is verified.
+    env:
+      BREEZZE_GOOGLE_ANDROID_VERIFIED: ${{ vars.BREEZZE_GOOGLE_ANDROID_VERIFIED }}
+      BREEZZE_GOOGLE_WEB_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_ANDROID_VERIFIED == 'true' && vars.BREEZZE_GOOGLE_WEB_CLIENT_ID || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -128,6 +133,19 @@ jobs:
       - name: Generate platform runners
         working-directory: apps/mobile
         run: bash tool/generate_platform_targets.sh
+      - name: Gate native Android Google sign-in on verified registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BREEZZE_GOOGLE_ANDROID_VERIFIED" == "true" ]]; then
+            if [[ ! "$BREEZZE_GOOGLE_WEB_CLIENT_ID" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
+              echo "Registered Google Web client ID required for approved Android native sign-in" >&2
+              exit 1
+            fi
+            echo "Android Google native build gate configured; emulator login verification still required"
+          else
+            echo "Android Google native sign-in intentionally disabled until package and SHA-1 are registered"
+          fi
       - name: Verify generated release-network permissions
         working-directory: apps/mobile
         run: python3 tool/verify_platform_network_permissions.py --android --macos
@@ -154,10 +172,10 @@ jobs:
 
       - name: Build Android APK
         working-directory: apps/mobile
-        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
+        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }} --dart-define=BREEZZE_GOOGLE_WEB_CLIENT_ID="$BREEZZE_GOOGLE_WEB_CLIENT_ID"
       - name: Build Android release APK
         working-directory: apps/mobile
-        run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
+        run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }} --dart-define=BREEZZE_GOOGLE_WEB_CLIENT_ID="$BREEZZE_GOOGLE_WEB_CLIENT_ID"
 
       - name: Prepare Drift WebAssembly database assets
         working-directory: apps/mobile
@@ -183,6 +201,12 @@ jobs:
     name: Flutter macOS and iOS builds
     # macos-latest currently selects ARM64 runners with acquisition failures.
     runs-on: macos-15-intel
+    # Native iOS Google needs BOTH the registered Web OAuth client and an
+    # iOS OAuth client matching the app bundle ID; values are public IDs.
+    env:
+      BREEZZE_GOOGLE_IOS_VERIFIED: ${{ vars.BREEZZE_GOOGLE_IOS_VERIFIED }}
+      BREEZZE_GOOGLE_WEB_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_IOS_VERIFIED == 'true' && vars.BREEZZE_GOOGLE_WEB_CLIENT_ID || '' }}
+      BREEZZE_GOOGLE_IOS_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_IOS_VERIFIED == 'true' && vars.BREEZZE_GOOGLE_IOS_CLIENT_ID || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -218,6 +242,35 @@ jobs:
         working-directory: apps/mobile
         run: bash tool/generate_platform_targets.sh
 
+      - name: Gate native iOS Google sign-in and verify generated callback
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BREEZZE_GOOGLE_IOS_VERIFIED" == "true" ]]; then
+            for client_id in "$BREEZZE_GOOGLE_WEB_CLIENT_ID" "$BREEZZE_GOOGLE_IOS_CLIENT_ID"; do
+              if [[ ! "$client_id" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
+                echo "Registered Google Web and iOS OAuth client IDs required" >&2
+                exit 1
+              fi
+            done
+            python3 - <<'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+          with Path("apps/mobile/ios/Runner/Info.plist").open("rb") as f:
+              plist = plistlib.load(f)
+          client_id = os.environ["BREEZZE_GOOGLE_IOS_CLIENT_ID"]
+          expected_scheme = "com.googleusercontent.apps." + client_id.split(".")[0]
+          schemes = [scheme
+                     for item in plist.get("CFBundleURLTypes", [])
+                     for scheme in item.get("CFBundleURLSchemes", [])]
+          assert plist.get("GIDClientID") == client_id, "iOS Google client ID not registered in Info.plist"
+          assert expected_scheme in schemes, "iOS Google callback URL scheme is missing"
+          print("Native iOS Google client ID and callback scheme registered in generated app")
+          PY
+          else
+            echo "iOS Google native sign-in intentionally disabled pending registered iOS client"
+          fi
       - name: Resolve mobile dependencies
         working-directory: apps/mobile
         run: flutter pub get
@@ -236,7 +289,7 @@ jobs:
 
       - name: Build iOS
         working-directory: apps/mobile
-        run: flutter build ios --no-codesign --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
+        run: flutter build ios --no-codesign --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }} --dart-define=BREEZZE_GOOGLE_WEB_CLIENT_ID="$BREEZZE_GOOGLE_WEB_CLIENT_ID" --dart-define=BREEZZE_GOOGLE_IOS_CLIENT_ID="$BREEZZE_GOOGLE_IOS_CLIENT_ID"
 
   flutter_windows:
     name: Flutter Windows desktop build
