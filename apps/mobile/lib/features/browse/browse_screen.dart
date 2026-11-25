@@ -9,7 +9,8 @@ import '../../core/audio/playback_source_policy.dart';
 import '../video/official_music_video_screen.dart';
 import '../video/device_video.dart';
 import '../video/open_youtube_player.dart';
-import 'ytmusic_client_screen.dart';
+import '../search/search_screen.dart';
+import '../../core/audio/spotify_playback_handoff.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -17,6 +18,26 @@ import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
 import '../../features/player/now_playing_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
+
+/// Spotify owns its audio session. Never feed Spotify tracks into Breezze's
+/// native queue or mix Spotify playback with a YouTube video.
+Future<void> _openSpotifyFromBrowse(BuildContext context, WidgetRef ref, String id) async {
+  try {
+    await ref.read(playerControllerProvider.notifier).stop();
+    final opened = await SpotifyPlaybackHandoff.openTrack(id);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Install Spotify to listen to this track.')),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open official Spotify playback.')),
+      );
+    }
+  }
+}
 
 /// Browse uses live source search for genre discovery. It does not label
 /// provider search results as official charts or editorial recommendations.
@@ -97,8 +118,8 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   void _openCollection(_BrowseDestination destination) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => destination.title == 'YouTube Music'
-            ? const YouTubeMusicClientScreen()
+        builder: (_) => destination.title == 'Spotify Music'
+            ? const SearchScreen()
             : _BrowseCollectionScreen(destination: destination),
       ),
     );
@@ -107,6 +128,11 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
+    final spotifyId = SpotifyPlaybackHandoff.spotifyIdFromBreezze(selected.id);
+    if (spotifyId != null) {
+      await _openSpotifyFromBrowse(context, ref, spotifyId);
+      return;
+    }
     if (isYouTubeSongId(selected.id)) {
       await openYouTubePlayer(
         context: context,
@@ -437,13 +463,13 @@ class _BrowseDestination {
 }
 
 const _browseDestinations = <_BrowseDestination>[
-  _BrowseDestination('YouTube Music', 'Explore public releases, trending songs, moods and playlists in Breezze.', 'music-note'),
+  _BrowseDestination('Spotify Music', 'Discover tracks from Spotify and listen using the official Spotify app.', 'music-note'),
   _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
   _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
   _BrowseDestination('Daily Top 100', 'Daily chart where available; otherwise labeled regional most-played results.', 'star'),
   _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
-  _BrowseDestination('Music Videos', 'Official music video discovery from YouTube Music; opens video playback separately.', 'video'),
+  _BrowseDestination('Music Videos', 'Discover official YouTube music videos in a visible player.', 'video'),
   _BrowseDestination('Breezze Videos', 'Rights-cleared videos available for native playback and eligible offline downloads.', 'video'),
   _BrowseDestination('Charts', 'Global, regional and genre charts with source attribution.', 'grid'),
   _BrowseDestination('Browse by Genre', 'Explore catalog music by genre and subgenre.', 'compass'),
@@ -741,6 +767,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
+    final spotifyId = SpotifyPlaybackHandoff.spotifyIdFromBreezze(selected.id);
+    if (spotifyId != null) {
+      await _openSpotifyFromBrowse(context, ref, spotifyId);
+      return;
+    }
     if (isYouTubeSongId(selected.id)) {
       await openYouTubePlayer(
         context: context,
