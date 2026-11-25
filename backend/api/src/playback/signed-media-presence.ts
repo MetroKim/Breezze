@@ -77,12 +77,19 @@ export async function inspectSignedMediaObject(
 
   const length = Number(response.headers.get('content-length'));
   const mime = (response.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase();
+  // R2 assets are *owned, ingested* encodings. A valid signed URL to
+  // AAC_256 must not be accepted when the object was replaced with FLAC,
+  // arbitrary MPEG, or an HTML error page. Download aliases map to AAC_256.
+  // Provider HLS/DASH streams use resolveProvider and are never probed here.
+  const quality = target.pathname.split('/')[3];
+  const audioMimes = quality === 'LOSSLESS' || quality === 'HI_RES'
+    ? ['audio/flac', 'audio/x-flac']
+    : quality === 'AAC_128' || quality === 'AAC_256' || quality === 'download'
+      ? ['audio/mp4', 'audio/aac']
+      : [];
   const mediaMatches = options.mediaKind === 'video'
     ? mime === 'video/mp4'
-    : mime.startsWith('audio/') ||
-      mime === 'application/vnd.apple.mpegurl' ||
-      mime === 'application/x-mpegurl' ||
-      mime === 'application/dash+xml';
+    : audioMimes.includes(mime);
   if (!Number.isSafeInteger(length) || length < 1 || !mediaMatches) {
     throw new ServiceUnavailableException('MEDIA_CDN_INVALID_AUDIO_OBJECT');
   }
