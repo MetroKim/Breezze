@@ -203,3 +203,74 @@ test('signed audio download reuses ingested AAC_256 bytes, not a missing downloa
   assert.equal(head.status, 200);
   assert.equal(head.headers.get('Content-Length'), String(bytes.length));
 });
+
+
+async function ingestUrlFor(trackId, quality, mime, size, expiry = Date.now() + 60_000) {
+  const payload = `ingest:${trackId}:${quality}:${mime}:${size}:${expiry}`;
+  const imported = await webcrypto.subtle.importKey(
+    'raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign'],
+  );
+  const sig = Buffer.from(await webcrypto.subtle.sign(
+    'HMAC', imported, new TextEncoder().encode(payload),
+  )).toString('base64url');
+  return `https://media.breezze.test/ingest/audio/${trackId}/${quality}?m=${encodeURIComponent(mime)}&b=${size}&e=${expiry}&s=${sig}`;
+}
+
+test('signed ingest accepts real audio magic, never changes an existing asset', async () => {
+  const uploaded = new Map();
+  const bucket = {
+    head: async path => uploaded.has(path) ? { size: uploaded.get(path).length } : null,
+    async put(path, body, options) {
+      const contents = new Uint8Array(await new Response(body).arrayBuffer());
+      uploaded.set(path, contents);
+      return { size: contents.length, httpMetadata: options.httpMetadata };
+    },
+    async get(path, options) {
+      const contents = uploaded.get(path);
+      if (!contents) return null;
+      return { body: new Blob([contents.slice(options?.range?.offset ?? 0,
+        options?.range ? options.range.offset + options.range.length : contents.length)]).stream() };
+    },
+    async delete(path) { uploaded.delete(path); },
+  };
+  const environment = { MEDIA_BUCKET: bucket, MEDIA_SIGNING_KEY: key };
+  const data = new Uint8Array([0,0,0,16,102,116,121,112,109,52,97,32,9,5,1,2]);
+  const url = await ingestUrlFor(mediaId, 'AAC_256', 'audio/mp4', data.length);
+  const request = () => new Request(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'audio/mp4', 'Content-Length': String(data.length) },
+    body: data,
+  });
+  assert.equal((await worker.fetch(request(), environment)).status, 201);
+  assert.deepEqual(uploaded.get(`audio/${mediaId}/AAC_256`), data);
+  assert.equal((await worker.fetch(request(), environment)).status, 409);
+  assert.equal((await worker.fetch(new Request(url.replace(/s=[^&]+/, 's=bad'), {
+    method: 'PUT', headers: { 'Content-Type': 'audio/mp4', 'Content-Length': String(data.length) }, body: data,
+  }), environment)).status, 403);
+});
+
+test('invalid audio signature cannot be saved as a playable variant', async () => {
+  const uploaded = new Map();
+  const environment = { MEDIA_SIGNING_KEY: key, MEDIA_BUCKET: {
+    head: async () => null,
+    put: async (path, body) => {
+      const bytes = new Uint8Array(await new Response(body).arrayBuffer());
+      uploaded.set(path, bytes);
+      return { size: bytes.length };
+    },
+    get: async path => ({
+      body: new Blob([uploaded.get(path).slice(0, 12)]).stream(),
+    }),
+    delete: async path => { uploaded.delete(path); },
+  } };
+  const bogus = new Uint8Array(24).fill(7);
+  const url = await ingestUrlFor(mediaId, 'AAC_256', 'audio/mp4', bogus.length);
+  const response = await worker.fetch(new Request(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'audio/mp4', 'Content-Length': String(bogus.length) },
+    body: bogus,
+  }), environment);
+  assert.equal(response.status, 422);
+  assert.equal(uploaded.size, 0);
+});

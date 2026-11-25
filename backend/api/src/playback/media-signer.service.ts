@@ -71,6 +71,29 @@ export class MediaSigner {
     return actual.length === expected.length && timingSafeEqual(expected, actual);
   }
 
+  /**
+   * A short-lived, upload-only capability for a verified internal catalog
+   * recording. A public music provider URL is never accepted as an input.
+   */
+  createAudioIngestUrl(
+    trackId: string, variant: string, mimeType: string, sizeBytes: number,
+  ): { url: string; expiresAt: Date } {
+    if (!/^[0-9a-fA-F-]{36}$/.test(trackId) ||
+        !['AAC_128','AAC_256','LOSSLESS','HI_RES'].includes(variant) ||
+        !Number.isSafeInteger(sizeBytes) || sizeBytes < 12 || sizeBytes > 500 * 1024 * 1024 ||
+        !((variant === 'LOSSLESS' || variant === 'HI_RES')
+          ? ['audio/flac', 'audio/x-flac'].includes(mimeType)
+          : ['audio/mp4','audio/aac'].includes(mimeType))) {
+      throw new Error('MEDIA_INGEST_METADATA_INVALID');
+    }
+    const expires = Date.now() + 10 * 60 * 1000;
+    const signature = this.sign(`ingest:${trackId}:${variant}:${mimeType}:${sizeBytes}:${expires}`);
+    return {
+      url: `${this.edgeUrl(`/ingest/audio/${encodeURIComponent(trackId)}/${variant}`)}?b=${sizeBytes}&m=${encodeURIComponent(mimeType)}&e=${expires}&s=${signature}`,
+      expiresAt: new Date(expires),
+    };
+  }
+
   createUploadUrl(
     userId: string,
     jobId: string,

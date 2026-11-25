@@ -181,10 +181,85 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   return new Response(object.body, { status, headers });
 }
 
+async function ingestAudio(request: Request, url: URL, env: Env): Promise<Response> {
+  if (request.method !== 'PUT') return error(405, 'METHOD_NOT_ALLOWED');
+  const parts = url.pathname.split('/').filter(Boolean);
+  if (parts.length !== 4 || parts[0] !== 'ingest' || parts[1] !== 'audio') {
+    return error(404, 'NOT_FOUND');
+  }
+  const [, , trackId, variant] = parts;
+  if (!/^[0-9a-fA-F-]{36}$/.test(trackId) ||
+      !['AAC_128','AAC_256','LOSSLESS','HI_RES'].includes(variant)) {
+    return error(400, 'INVALID_INGEST_PATH');
+  }
+  const mime = url.searchParams.get('m') ?? '';
+  const expectedSize = Number(url.searchParams.get('b'));
+  const expires = Number(url.searchParams.get('e'));
+  if (!Number.isSafeInteger(expectedSize) || expectedSize < 12 ||
+      expectedSize > 500 * 1024 * 1024 ||
+      !((variant === 'LOSSLESS' || variant === 'HI_RES')
+        ? ['audio/flac', 'audio/x-flac'].includes(mime)
+        : ['audio/mp4', 'audio/aac'].includes(mime))) {
+    return error(400, 'INVALID_INGEST_METADATA');
+  }
+  if (!await validSignature(
+    env.MEDIA_SIGNING_KEY,
+    `ingest:${trackId}:${variant}:${mime}:${expectedSize}:${expires}`,
+    url.searchParams.get('s'), expires,
+  )) return error(403, 'INGEST_SIGNATURE_INVALID_OR_EXPIRED');
+
+  // Content length and type are part of the signed capability, not trusted
+  // arbitrary client metadata. Require exact byte length; no chunked unknowns.
+  if (request.headers.get('content-type') !== mime ||
+      Number(request.headers.get('content-length')) !== expectedSize ||
+      request.body === null) return error(400, 'INGEST_REQUEST_MISMATCH');
+
+  const key = `audio/${trackId}/${variant}`;
+  if (await env.MEDIA_BUCKET.head(key)) return error(409, 'MEDIA_VARIANT_ALREADY_EXISTS');
+  let created: R2Object | null = null;
+  try {
+    created = await env.MEDIA_BUCKET.put(key, request.body, {
+      httpMetadata: { contentType: mime },
+    });
+    if (!created || created.size !== expectedSize) {
+      await env.MEDIA_BUCKET.delete(key);
+      return error(422, 'MEDIA_UPLOAD_SIZE_INVALID');
+    }
+    // Inspect format magic before marking the uploaded object provisioned.
+    // Full codec/transcode validation is still a separate ingestion gate.
+    const prefix = await env.MEDIA_BUCKET.get(key, {
+      range: { offset: 0, length: 12 },
+    });
+    if (!prefix || !('body' in prefix)) {
+      await env.MEDIA_BUCKET.delete(key);
+      return error(422, 'MEDIA_FORMAT_UNREADABLE');
+    }
+    const leading = new Uint8Array(await new Response(prefix.body).arrayBuffer());
+    const isFlac = leading.length >= 4 && String.fromCharCode(...leading.slice(0, 4)) === 'fLaC';
+    const isMp4 = leading.length >= 8 && String.fromCharCode(...leading.slice(4, 8)) === 'ftyp';
+    const isAdts = leading.length >= 2 && leading[0] === 0xff && (leading[1] & 0xf6) === 0xf0;
+    const valid = mime.includes('flac') ? isFlac : (mime === 'audio/mp4' ? isMp4 : isAdts);
+    if (!valid) {
+      await env.MEDIA_BUCKET.delete(key);
+      return error(422, 'MEDIA_FORMAT_SIGNATURE_INVALID');
+    }
+  } catch {
+    // Do not reveal internal object keys, signed URLs or cloud errors.
+    return error(503, 'MEDIA_INGEST_UNAVAILABLE');
+  }
+  return new Response(null, {
+    status: 201,
+    headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain' },
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!env.MEDIA_SIGNING_KEY || !env.MEDIA_BUCKET) return error(503, 'MEDIA_STORAGE_NOT_CONFIGURED');
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/ingest/audio/')) {
+      return ingestAudio(request, url, env);
+    }
     if (url.pathname.startsWith('/audio/') || url.pathname.startsWith('/video/')) {
       return playback(request, url, env);
     }

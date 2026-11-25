@@ -17,7 +17,10 @@ describe('privileged audio catalogue provisioning', () => {
     contentTakedownCase: { findFirst: jest.fn() },
     $transaction: jest.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
   };
-  const signer = { createPlaybackUrl: jest.fn().mockReturnValue({
+  const signer = { createAudioIngestUrl: jest.fn().mockReturnValue({
+    url: 'https://media.breezze.example/ingest/audio/track/AAC_256?e=1&s=signature',
+    expiresAt: new Date(Date.now() + 600000),
+  }), createPlaybackUrl: jest.fn().mockReturnValue({
     url: 'https://media.breezze.example/audio/recording/AAC_256?e=1&s=signature',
     expiresAt: new Date(Date.now() + 600000),
   }) };
@@ -35,6 +38,23 @@ describe('privileged audio catalogue provisioning', () => {
       startAt: null, endAt: null,
     });
     prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
+  });
+
+  it('requires separate rights and internal recording before issuing upload', async () => {
+    prisma.rightsUsagePermission.findUnique.mockResolvedValue(null);
+    await expect(service.issueIngestGrant('admin','recording','AAC_256','audio/mp4',100))
+      .rejects.toThrow('AUDIO_INGEST_RIGHTS_UNAVAILABLE');
+    expect(signer.createAudioIngestUrl).not.toHaveBeenCalled();
+  });
+
+  it('issues upload-only grant without database activation or leaking a URL to audit', async () => {
+    const result = await service.issueIngestGrant(
+      'admin','recording','AAC_256','audio/mp4',100,
+    );
+    expect(result.method).toBe('PUT');
+    expect(result.url).toContain('/ingest/audio/');
+    expect(tx.audioAssetVariant.upsert).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('never verifies external metadata as internal audio', async () => {

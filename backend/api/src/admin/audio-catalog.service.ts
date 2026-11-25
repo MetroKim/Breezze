@@ -11,6 +11,45 @@ export class AudioCatalogAdminService {
     private readonly signer: MediaSigner,
   ) {}
 
+  /** Issues a bounded admin-only R2 upload token after checking source,
+   * track rights, and takedowns. It cannot activate an asset by itself. */
+  async issueIngestGrant(actorId: string, trackId: string,
+    quality: string, mimeType: string, sizeBytes: number) {
+    const track = await this.prisma.track.findUnique({
+      where: { id: trackId }, select: { source: true, externalId: true },
+    });
+    if (!track || track.source !== 'breezze_internal' || track.externalId !== null) {
+      throw new NotAcceptableException('AUDIO_INGEST_REQUIRES_INTERNAL_RECORDING');
+    }
+    const [permission, takedown] = await Promise.all([
+      this.prisma.rightsUsagePermission.findUnique({
+        where: { trackId_action: { trackId, action: 'stream.full' } },
+      }),
+      this.prisma.contentTakedownCase.findFirst({
+        where: { trackId, status: 'active' }, select: { id: true },
+      }),
+    ]);
+    const now = new Date();
+    if (!permission || takedown ||
+        (permission.startAt && permission.startAt > now) ||
+        (permission.endAt && permission.endAt <= now)) {
+      throw new NotAcceptableException('AUDIO_INGEST_RIGHTS_UNAVAILABLE');
+    }
+    let grant;
+    try {
+      grant = this.signer.createAudioIngestUrl(trackId, quality, mimeType, sizeBytes);
+    } catch {
+      throw new NotAcceptableException('INVALID_AUDIO_INGEST_METADATA');
+    }
+    await this.prisma.adminAuditEvent.create({
+      data: {
+        actorId, action: 'audio.ingest_grant.issued', targetType: 'track',
+        targetId: trackId, metadata: { quality, mimeType, sizeBytes },
+      },
+    });
+    return { ...grant, trackId, quality, mimeType, sizeBytes, method: 'PUT' };
+  }
+
   /**
    * Promotes only an existing R2 audio object to "ready"; never accepts a
    * client-supplied media URL, checksum, content type or claimed file size.
