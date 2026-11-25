@@ -24,6 +24,14 @@ export class ProvidersController {
     return this.registry.searchAll(q ?? '');
   }
 
+  // Spotify and Deezer music discovery in parallel. Each provider gets its
+  // own attributed shelf in the client; YouTube is a separate video search.
+  @Get('music/search')
+  @UseGuards(JwtAuthGuard)
+  searchMusic(@Query('q') q: string) {
+    return this.registry.searchMusic(q ?? '');
+  }
+
   // Google official video discovery. No YouTube audio extraction endpoint.
   @Get('youtube/videos/search')
   @UseGuards(JwtAuthGuard)
