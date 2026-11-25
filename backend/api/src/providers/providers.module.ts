@@ -4,6 +4,7 @@ import { ProviderRegistry } from './provider-registry.service';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
+import { SpotifyAdapter } from './spotify.adapter';
 import { ProviderCacheService } from './provider-cache.service';
 import { OfficialYouTubeDataService } from './official-youtube-data.service';
 
@@ -14,6 +15,7 @@ import { OfficialYouTubeDataService } from './official-youtube-data.service';
     InternalCatalogAdapter,
     YtMusicAdapter,
     DeezerAdapter,
+    SpotifyAdapter,
     ProviderCacheService,
     OfficialYouTubeDataService,
   ],
