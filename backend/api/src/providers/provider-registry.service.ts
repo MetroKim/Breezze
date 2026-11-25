@@ -64,7 +64,7 @@ export class ProviderRegistry {
    * than being blended into Deezer rows; neither source authorizes playback.
    */
   searchMusic(query: string) {
-    const normalized = (query ?? '').trim().replace(/\\s+/g, ' ');
+    const normalized = (query ?? '').trim().replace(/\s+/g, ' ');
     if (normalized.length < 2 || normalized.length > 120) {
       return Promise.resolve({ query: normalized, providers: [], partial: false });
     }
