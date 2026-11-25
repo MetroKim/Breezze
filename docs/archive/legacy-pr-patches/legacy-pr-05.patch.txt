@@ -1,0 +1,1566 @@
+BREEZZE LEGACY REVIEW-ONLY PATCH ARCHIVE
+Source PR: https://github.com/MetroKim/Breezze-legacy-fork/pull/5
+Source: historical old-fork feature branch, not merged into current Flutter main.
+Preserved source patch hunks are for review/porting only; they are NOT a buildable or complete Git bundle.
+Binary files and Git metadata are not supplied by the GitHub patch API. Do not run old workflow files.
+Files listed: 27; patch hunks available: 27; missing binary/too-large hunks: 0
+Unrepresented paths: (none)
+
+FILE .github/workflows/breezze-quality.yml
+@@ -168,7 +168,9 @@ jobs:
+ 
+   flutter_macos:
+     name: Flutter macOS and iOS builds
+-    runs-on: macos-latest
++    # video_player_avfoundation needs the Xcode 26 AVFoundation SDK.
++    # Use Intel to avoid macos-latest Apple Silicon runner allocation failures.
++    runs-on: macos-26-intel
+     steps:
+       - name: Checkout
+         uses: actions/checkout@v4
+@@ -177,7 +179,9 @@ jobs:
+         uses: subosito/flutter-action@v2
+         with:
+           channel: stable
+-          cache: true
++          # Native builds passed but the hosted runner cancelled during the
++          # large Flutter SDK cache-upload post action. Caching is optional.
++          cache: false
+ 
+       - name: Generate platform runners
+         working-directory: apps/mobile
+@@ -313,6 +317,8 @@ jobs:
+         run: npm install --cache "$RUNNER_TEMP/npm-cache-api-worker" --no-audit --no-fund
+       - name: Typecheck API Worker
+         run: npm run check
++      - name: Test exact-origin browser CORS
++        run: npm test
+ 
+   cloudflare_media:
+     name: Cloudflare Worker typecheck
+
+FILE .github/workflows/deploy-api-edge.yml
+@@ -33,6 +33,7 @@ jobs:
+           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+           BREEZZE_API_ORIGIN: ${{ secrets.BREEZZE_API_ORIGIN }}
+           EDGE_SHARED_SECRET: ${{ secrets.EDGE_SHARED_SECRET }}
++          BREEZZE_WEB_ALLOWED_ORIGINS: ${{ vars.BREEZZE_WEB_ALLOWED_ORIGINS }}
+         run: |
+           set -euo pipefail
+           test -n "$CLOUDFLARE_API_TOKEN"
+@@ -49,10 +50,15 @@ jobs:
+           BREEZZE_API_ORIGIN: ${{ secrets.BREEZZE_API_ORIGIN }}
+           EDGE_SHARED_SECRET: ${{ secrets.EDGE_SHARED_SECRET }}
+           BREEZZE_API_PUBLIC_URL: ${{ secrets.BREEZZE_API_PUBLIC_URL }}
++          BREEZZE_WEB_ALLOWED_ORIGINS: ${{ vars.BREEZZE_WEB_ALLOWED_ORIGINS }}
+         run: |
+           set -euo pipefail
+           printf '%s' "$EDGE_SHARED_SECRET" | npx wrangler secret put EDGE_SHARED_SECRET
+-          deploy_output="$(npx wrangler deploy --var "API_ORIGIN:$BREEZZE_API_ORIGIN" 2>&1)"
++          deploy_args=(--var "API_ORIGIN:$BREEZZE_API_ORIGIN")
++          if [[ -n "${BREEZZE_WEB_ALLOWED_ORIGINS:-}" ]]; then
++            deploy_args+=(--var "WEB_ALLOWED_ORIGINS:$BREEZZE_WEB_ALLOWED_ORIGINS")
++          fi
++          deploy_output="$(npx wrangler deploy "${deploy_args[@]}" 2>&1)"
+           printf '%s\n' "$deploy_output"
+           worker_url="${BREEZZE_API_PUBLIC_URL:-$(printf '%s\n' "$deploy_output" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | tail -n 1 || true)}"
+           if [ -z "$worker_url" ]; then
+@@ -72,10 +78,22 @@ jobs:
+         env:
+           BREEZZE_API_PUBLIC_URL: ${{ secrets.BREEZZE_API_PUBLIC_URL }}
+           WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
++          BREEZZE_WEB_ALLOWED_ORIGINS: ${{ vars.BREEZZE_WEB_ALLOWED_ORIGINS }}
+         run: |
+           set -euo pipefail
+           public_url="${BREEZZE_API_PUBLIC_URL:-$WORKER_URL}"
+           response="$(curl --fail --silent --show-error --max-time 20 -D /tmp/breezze-headers "$public_url/health")"
+           printf '%s' "$response" | grep -q '"status":"ok"'
+           grep -qi '^x-breezze-edge-cache: BYPASS' /tmp/breezze-headers
++          if [[ -n "${BREEZZE_WEB_ALLOWED_ORIGINS:-}" ]]; then
++            origin="${BREEZZE_WEB_ALLOWED_ORIGINS%%,*}"
++            origin="${origin//[[:space:]]/}"
++            curl --fail --silent --show-error --max-time 20 -D /tmp/breezze-cors-headers -o /dev/null \
++              -X OPTIONS "$public_url/api/v1/auth/social/providers" \
++              -H "Origin: $origin" \
++              -H "Access-Control-Request-Method: GET" \
++              -H "Access-Control-Request-Headers: content-type"
++            grep -Fqi "access-control-allow-origin: $origin" /tmp/breezze-cors-headers
++            echo "Trusted-origin browser preflight passed."
++          fi
+           echo "Breezze API edge health check passed."
+
+FILE .github/workflows/web-preview-smoke.yml
+@@ -68,6 +68,25 @@ jobs:
+           echo "Verified Breezze Flutter web-server is running and serving bootstrap assets"
+           tail -n 30 "$RUNNER_TEMP/breezze-web.log"
+ 
++      - name: Verify actual mobile UI rendering in Chromium
++        run: |
++          set -euo pipefail
++          BREEZZE_BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
++          if [[ -z "$BREEZZE_BROWSER" ]]; then
++            echo "Chromium/Chrome not installed on GitHub runner" >&2
++            exit 1
++          fi
++          npm install --prefix "$RUNNER_TEMP/breezze-browser" playwright-core --no-audit --no-fund
++          BREEZZE_BROWSER="$BREEZZE_BROWSER" node apps/mobile/tool/smoke_web_ui.cjs
++
++      - name: Publish rendered mobile screenshot
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: breezze-mobile-ui-${{ github.run_id }}
++          path: ${{ runner.temp }}/breezze-mobile-preview.png
++          if-no-files-found: warn
++
+       - name: Publish startup logs on failure
+         if: failure()
+         uses: actions/upload-artifact@v4
+
+FILE README.md
+@@ -8,6 +8,9 @@ Breezze is an independent product. It is not affiliated with or endorsed by YouT
+ 
+ The Flutter app in `apps/mobile`, NestJS API in `backend/api`, and Python discovery service in `backend/ytmusicapi` are the production project. The previous Kotlin client, its license and its notices are preserved in `legacy/kotlin-client/`. Run Flutter builds from `apps/mobile`.
+ 
++For the current verification matrix, audio-first scope, remaining blockers,
++and launch evidence, see [Release execution status](docs/audit/RELEASE_EXECUTION_STATUS.md).
++
+ ## Product boundaries
+ 
+ - Four primary destinations: Home, Browse, Library and Search.
+
+FILE apps/mobile/README.md
+@@ -1,6 +1,6 @@
+ # Breezze
+ 
+-Breezze is a free, listener-first music app built with one Flutter/Dart application codebase. It has five primary destinations: Home, Browse, Radio, Library and Search. Downloads live inside Library. There is no artist portal, artist upload workflow, subscription, membership, billing or paywall.
++Breezze is a free, listener-first music app built with one Flutter/Dart application codebase. It has four primary destinations: Home, Browse, Library and Search. Downloads live inside Library. There is no artist portal, artist upload workflow, subscription, membership, billing or paywall.
+ 
+ ## Current client capabilities
+ 
+@@ -13,7 +13,7 @@ Breezze is a free, listener-first music app built with one Flutter/Dart applicat
+ - Local playlists with account-scoped storage and optional backend synchronization.
+ - Offline downloads through backend authorization and signed media URLs.
+ - LRCLIB lyrics lookup with track-change-safe loading.
+-- Radio station and schedule information; live station playback remains disabled until station streams are connected to the shared audio engine.
++- Radio is outside the current audio-first release scope; metadata or background modules do not imply a playable radio feature.
+ - Responsive layouts for compact phones through expanded desktop windows.
+ - Original Breezze SVG interface icons, light/dark themes and reduced-motion-aware loading states.
+ 
+
+FILE apps/mobile/lib/app/downloads_controller.dart
+@@ -1,6 +1,8 @@
+ import 'dart:convert';
+ import 'dart:io';
+ 
++import 'package:flutter/foundation.dart' show kIsWeb;
++
+ import 'package:breezze_api_client/breezze_api_client.dart';
+ import 'package:connectivity_plus/connectivity_plus.dart';
+ import '../core/api/breezze_api.dart';
+@@ -63,6 +65,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
+   }
+ 
+   Future<void> _restoreJobs() async {
++    if (kIsWeb) return;
+     try {
+       final file = await _jobsFile();
+       if (!await file.exists()) return;
+@@ -132,6 +135,11 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
+   }
+ 
+   Future<void> download(BzTrack track) async {
++    if (kIsWeb) {
++      // An API grant does not provide a browser-safe offline storage backend.
++      _setStatus(track.id, 'unsupported_web');
++      return;
++    }
+     if (state.containsKey(track.id) || ['downloading', 'downloaded'].contains(ref.read(downloadJobStatusProvider)[track.id])) return;
+     _tracks[track.id] = track;
+     final cancellation = DownloadCancellation();
+
+FILE apps/mobile/lib/app/search_history_store.dart
+@@ -2,6 +2,9 @@ import 'dart:async';
+ import 'dart:convert';
+ import 'dart:io';
+ 
++import 'package:flutter/foundation.dart' show kIsWeb;
++import 'package:flutter_secure_storage/flutter_secure_storage.dart';
++
+ import 'package:path_provider/path_provider.dart';
+ 
+ /// Local, device-scoped search history. Search terms are personal UI state,
+@@ -10,14 +13,31 @@ class SearchHistoryStore {
+   SearchHistoryStore({
+     String ownerId = 'guest',
+     Future<File> Function()? fileProvider,
+-  }) : _fileProvider = fileProvider ?? (() => _defaultFile(ownerId));
++    Future<String?> Function(String key)? readBrowserValue,
++    Future<void> Function(String key, String value)? writeBrowserValue,
++  })  : _ownerId = ownerId,
++        _useBrowserStorage = fileProvider == null &&
++            (kIsWeb || (readBrowserValue != null && writeBrowserValue != null)),
++        _readBrowserValue = readBrowserValue ??
++            ((key) => _secureStorage.read(key: key)),
++        _writeBrowserValue = writeBrowserValue ??
++            ((key, value) => _secureStorage.write(key: key, value: value)),
++        _fileProvider = fileProvider ?? (() => _defaultFile(ownerId));
+ 
+   static const int maxEntries = 10;
+   static const String _fileName = 'breezze_search_history.json';
+ 
++  static const _secureStorage = FlutterSecureStorage();
++  final String _ownerId;
++  final bool _useBrowserStorage;
++  final Future<String?> Function(String key) _readBrowserValue;
++  final Future<void> Function(String key, String value) _writeBrowserValue;
+   final Future<File> Function() _fileProvider;
+   Future<void> _mutationQueue = Future<void>.value();
+ 
++  String get _browserKey =>
++      'breezze:search_history:v1:${Uri.encodeComponent(_ownerId)}';
++
+   static Future<File> _defaultFile(String ownerId) async {
+     final directory = await getApplicationDocumentsDirectory();
+     if (ownerId == 'guest') {
+@@ -36,9 +56,18 @@ class SearchHistoryStore {
+ 
+   Future<List<String>> _load() async {
+     try {
+-      final file = await _fileProvider();
+-      if (!await file.exists()) return const [];
+-      final decoded = jsonDecode(await file.readAsString());
++      String? source;
++      if (_useBrowserStorage) {
++        // dart:io files are unsupported by the browser. Flutter secure storage
++        // uses the browser's secure persisted storage on a trusted origin.
++        source = await _readBrowserValue(_browserKey);
++      } else {
++        final file = await _fileProvider();
++        if (!await file.exists()) return const [];
++        source = await file.readAsString();
++      }
++      if (source == null) return const [];
++      final decoded = jsonDecode(source);
+       if (decoded is! List) return const [];
+ 
+       final seen = <String>{};
+@@ -55,6 +84,9 @@ class SearchHistoryStore {
+       return const [];
+     } on FileSystemException {
+       return const [];
++    } catch (_) {
++      // A browser that blocks storage must never block the actual search.
++      return const [];
+     }
+   }
+ 
+@@ -98,8 +130,13 @@ class SearchHistoryStore {
+   Future<void> clear() => _serialize(() => _write(const []));
+ 
+   Future<void> _write(List<String> entries) async {
++    final encoded = jsonEncode(entries);
++    if (_useBrowserStorage) {
++      await _writeBrowserValue(_browserKey, encoded);
++      return;
++    }
+     final file = await _fileProvider();
+     await file.parent.create(recursive: true);
+-    await file.writeAsString(jsonEncode(entries), flush: true);
++    await file.writeAsString(encoded, flush: true);
+   }
+ }
+
+FILE apps/mobile/lib/core/audio/playback_source_policy.dart
+@@ -1,3 +1,5 @@
++import 'package:flutter/foundation.dart' show kIsWeb;
++
+ final _deezerPreview = RegExp(r'^bz:deezer_preview:[0-9]{1,20}$');
+ bool isDeezerPreview(String id) => _deezerPreview.hasMatch(id);
+ 
+@@ -15,6 +17,7 @@ bool canQueueTrackId(String id) => id.trim().isNotEmpty && !isMetadataOnlyTrackI
+ /// Offline media requires an explicit download grant. Generic catalogue
+ /// metadata (including Jamendo) cannot be downloaded by a discovery URL.
+ bool canRequestOfflineDownload(String id) =>
++    !kIsWeb &&
+     id.trim().isNotEmpty &&
+     !id.startsWith('bz:') &&
+     !id.startsWith('bzv:');
+
+FILE apps/mobile/lib/features/browse/browse_screen.dart
+@@ -421,7 +421,7 @@ const _browseDestinations = <_BrowseDestination>[
+   _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
+   _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
+   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
+-  _BrowseDestination('Daily Top 100', 'Apple Music Daily Global Top 100 for the selected territory.', 'star'),
++  _BrowseDestination('Daily Top 100', 'Daily top tracks from a verified chart source for your region.', 'star'),
+   _BrowseDestination('Coming Soon', 'Upcoming releases with confirmed release metadata.', 'calendar'),
+   _BrowseDestination('Music Videos', 'Music videos from channel owners verified by Breezze.', 'video'),
+   _BrowseDestination('Charts', 'Global, regional and genre charts with source attribution.', 'grid'),
+
+FILE apps/mobile/lib/features/downloads/downloads_screen.dart
+@@ -1,5 +1,7 @@
+ import 'dart:io';
+ 
++import 'package:flutter/foundation.dart' show kIsWeb;
++
+ import 'package:breezze_api_client/breezze_api_client.dart';
+ import 'package:breezze_design_system/breezze_design_system.dart';
+ import 'package:material_ui/material_ui.dart';
+@@ -29,10 +31,15 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
+   @override
+   void initState() {
+     super.initState();
+-    _refresh();
++    if (kIsWeb) {
++      _loading = false;
++    } else {
++      _refresh();
++    }
+   }
+ 
+   Future<void> _refresh() async {
++    if (kIsWeb) return;
+     final auth = ref.read(authSessionProvider);
+     if (auth is! AuthSignedIn) {
+       if (!mounted) return;
+@@ -183,6 +190,37 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
+       _refresh();
+     });
+     final theme = Theme.of(context);
++    if (kIsWeb) {
++      // Native files and path_provider are unavailable in Flutter Web.
++      // Do not leave the browser on a spinner or attempt filesystem I/O.
++      return SafeArea(
++        child: Center(
++          child: Padding(
++            padding: const EdgeInsets.all(28),
++            child: Column(
++              mainAxisSize: MainAxisSize.min,
++              children: [
++                BzBnoteMark(size: 60, color: theme.bzText2),
++                const SizedBox(height: 18),
++                Text(
++                  'Offline listening is not available in the browser',
++                  style: theme.textTheme.titleLarge,
++                  textAlign: TextAlign.center,
++                ),
++                const SizedBox(height: 12),
++                Text(
++                  'Stream supported music online here. Use Breezze on a '
++                  'supported mobile or desktop device for authorized offline downloads.',
++                  style: theme.textTheme.bodyMedium
++                      ?.copyWith(color: theme.bzText2),
++                  textAlign: TextAlign.center,
++                ),
++              ],
++            ),
++          ),
++        ),
++      );
++    }
+     final progress = ref.watch(downloadProgressProvider);
+     final jobStatuses = ref.watch(downloadJobStatusProvider);
+     final downloadController = ref.read(downloadProgressProvider.notifier);
+
+FILE apps/mobile/lib/features/home/home_screen.dart
+@@ -31,6 +31,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
+   List<TrackInfo> _madeForYou = [];
+   Map<String, dynamic>? _replay;
+   bool _loading = true;
++  bool _storageUnavailable = false;
+   int _refreshVersion = 0;
+ 
+   @override
+@@ -43,9 +44,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
+     final version = ++_refreshVersion;
+     final auth = ref.read(authSessionProvider);
+     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+-    final recent = await _recent.load(ownerId: ownerId);
++    // Storage failures must not leave Home showing an endless skeleton.
++    var storageUnavailable = false;
++    List<RecentEntry> recent;
++    try {
++      recent = await _recent.load(ownerId: ownerId);
++    } catch (_) {
++      recent = <RecentEntry>[];
++      storageUnavailable = true;
++    }
+     if (!mounted || version != _refreshVersion) return;
+-    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
++    List<FavoriteTrack> favorites;
++    try {
++      favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
++    } catch (_) {
++      favorites = <FavoriteTrack>[];
++      storageUnavailable = true;
++    }
+     Map<String, dynamic>? replay;
+     var madeForYou = <TrackInfo>[];
+     if (!mounted || version != _refreshVersion) return;
+@@ -107,6 +122,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
+       _favorites = favorites;
+       _madeForYou = madeForYou;
+       _replay = replay;
++      _storageUnavailable = storageUnavailable;
+       _loading = false;
+     });
+   }
+@@ -184,6 +200,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
+         _favorites = [];
+         _madeForYou = [];
+         _replay = null;
++        _storageUnavailable = false;
+         _loading = true;
+       });
+       _refresh();
+@@ -274,6 +291,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
+           // Hero greeting (§4.1): time-based, local only.
+           Text(_greeting, style: theme.textTheme.displayMedium),
+           const SizedBox(height: 24),
++          if (!_loading && _storageUnavailable) ...[
++            Semantics(
++              liveRegion: true,
++              child: Padding(
++                padding: const EdgeInsets.only(bottom: 16),
++                child: Row(
++                  children: [
++                    Expanded(
++                      child: Text(
++                        'Saved music could not be fully loaded on this device.',
++                        style: theme.textTheme.bodyMedium
++                            ?.copyWith(color: theme.bzText2),
++                      ),
++                    ),
++                    TextButton(
++                      onPressed: _refresh,
++                      child: const Text('Retry'),
++                    ),
++                  ],
++                ),
++              ),
++            ),
++          ],
+           if (_loading) ...[
+             const BzSkeleton(width: 172, height: 16, radius: 5),
+             const SizedBox(height: 16),
+
+FILE apps/mobile/lib/features/library/library_screen.dart
+@@ -45,6 +45,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+   List<FavoriteTrack> _favorites = [];
+   List<SavedAlbum> _albums = [];
+   var _loading = true;
++  bool _storageUnavailable = false;
++  int _loadGeneration = 0;
+ 
+   @override
+   void initState() {
+@@ -53,13 +55,45 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+   }
+ 
+   Future<void> _refresh() async {
++    final generation = ++_loadGeneration;
+     final auth = ref.read(authSessionProvider);
+     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+-    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
+-    var playlists = await _playlistStore.load(ownerId);
++    var storageUnavailable = false;
++    List<FavoriteTrack> favorites;
++    try {
++      favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
++    } catch (_) {
++      favorites = <FavoriteTrack>[];
++      storageUnavailable = true;
++    }
++    List<UserPlaylist> playlists;
++    try {
++      playlists = await _playlistStore.load(ownerId);
++    } catch (_) {
++      playlists = <UserPlaylist>[];
++      storageUnavailable = true;
++    }
+     final albumStore = SavedAlbumStore();
+-    var savedAlbums = await albumStore.load(ownerId);
+-    final visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
++    List<SavedAlbum> savedAlbums;
++    try {
++      savedAlbums = await albumStore.load(ownerId);
++    } catch (_) {
++      savedAlbums = <SavedAlbum>[];
++      storageUnavailable = true;
++    }
++    Set<String> visibleSections;
++    try {
++      visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
++    } catch (_) {
++      visibleSections = <String>{'Playlists', 'Artists', 'Albums', 'Songs'};
++      storageUnavailable = true;
++    }
++    // A corrupted or obsolete preference set must not make firstWhere throw.
++    visibleSections = visibleSections.intersection(_allSections.toSet());
++    if (visibleSections.isEmpty) {
++      visibleSections = <String>{'Playlists', 'Artists', 'Albums', 'Songs'};
++    }
++    if (!mounted || generation != _loadGeneration) return;
+     if (auth is AuthSignedIn) {
+       try {
+         await albumStore.syncWithCloud(
+@@ -86,7 +120,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+     final currentAuth = ref.read(authSessionProvider);
+     final currentOwnerId =
+         currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
+-    if (!mounted || currentOwnerId != ownerId) return;
++    if (!mounted || generation != _loadGeneration || currentOwnerId != ownerId) return;
+     setState(() {
+       _ownerId = ownerId;
+       _favorites = favorites;
+@@ -96,6 +130,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+       if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
+         _selected = _allSections.firstWhere(_visibleSections.contains);
+       }
++      _storageUnavailable = storageUnavailable;
+       _loading = false;
+     });
+   }
+@@ -275,7 +310,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+ 
+   @override
+   Widget build(BuildContext context) {
+-    ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
++    ref.listen<AuthState>(authSessionProvider, (previous, next) {
++      final oldOwner = previous is AuthSignedIn ? previous.userId : 'guest';
++      final newOwner = next is AuthSignedIn ? next.userId : 'guest';
++      if (oldOwner != newOwner) {
++        // Clear in-memory account data synchronously to prevent other
++        // listeners from briefly seeing the previous owner's library.
++        setState(() {
++          _ownerId = newOwner;
++          _playlists = [];
++          _favorites = [];
++          _albums = [];
++          _selected = 'Playlists';
++          _visibleSections = {'Playlists', 'Artists', 'Albums', 'Songs'};
++          _storageUnavailable = false;
++          _loading = true;
++        });
++      }
++      _refresh();
++    });
+     ref.listen<int>(playlistRefreshSignalProvider, (previous, next) => _refresh());
+     ref.listen<int>(savedAlbumRefreshProvider, (previous, next) => _refresh());
+     final theme = Theme.of(context);
+@@ -305,6 +358,28 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+               ],
+             ),
+           ),
++          if (!_loading && _storageUnavailable)
++            Padding(
++              padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
++              child: Semantics(
++                liveRegion: true,
++                child: Row(
++                  children: [
++                    Expanded(
++                      child: Text(
++                        'Some saved music could not be loaded.',
++                        style: theme.textTheme.bodyMedium
++                            ?.copyWith(color: theme.bzText2),
++                      ),
++                    ),
++                    TextButton(
++                      onPressed: _refresh,
++                      child: const Text('Retry'),
++                    ),
++                  ],
++                ),
++              ),
++            ),
+           // Capsule pill section selector — spec §2.3 tab indicators use
+           // --radius-pill. Solid active fill, no outline chips: the Apple
+           // Music Library filter treatment (quiet chrome, artwork forward).
+
+FILE apps/mobile/lib/features/onboarding/onboarding_flow.dart
+@@ -23,7 +23,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
+   int _step = 0;
+ 
+   void _next() => setState(() => _step++);
+-  void _back() => setState(() => _step = _step.clamp(0, 2) - 1);
++  void _back() {
++    if (_step > 0) setState(() => _step--);
++  }
+ 
+   Future<void> _finish() async {
+     final controller = ref.read(onboardingProvider.notifier);
+
+FILE apps/mobile/lib/features/player/now_playing_screen.dart
+@@ -24,6 +24,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+   // Artwork-first playback and a dedicated lyric-reading mode share the
+   // same player and synced lyric state, without duplicate audio sessions.
+   bool _lyricsFocus = false;
++  // Preview a dragged seek without flooding the audio engine with requests.
++  double? _seekPreviewMs;
++  int _seekRequestGeneration = 0;
+ 
+   @override
+   void initState() {
+@@ -138,6 +141,19 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+     );
+   }
+ 
++  Future<void> _commitSeek(PlayerController controller, double targetMs) async {
++    final request = ++_seekRequestGeneration;
++    try {
++      await controller.seekTo(Duration(milliseconds: targetMs.round()));
++    } catch (_) {
++      // The controller owns the playback error state and recovery UI.
++    } finally {
++      if (mounted && request == _seekRequestGeneration) {
++        setState(() => _seekPreviewMs = null);
++      }
++    }
++  }
++
+   String _format(Duration d) {
+     final m = d.inMinutes;
+     final s = (d - Duration(minutes: m)).inSeconds;
+@@ -149,7 +165,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+     ref.listen<String?>(
+       playerControllerProvider.select((state) => state.currentTrack?.id),
+       (previous, next) {
+-        if (previous != next) _loadLyrics();
++        if (previous != next) {
++          _seekRequestGeneration++;
++          _seekPreviewMs = null;
++          _loadLyrics();
++        }
+       },
+     );
+     final player = ref.watch(playerControllerProvider);
+@@ -161,13 +181,48 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+     if (track == null) {
+       return Scaffold(
+         backgroundColor: theme.bzBackground,
+-        body: Center(
++        body: SafeArea(
+           child: Column(
+-            mainAxisAlignment: MainAxisAlignment.center,
+             children: [
+-              BzBnoteMark(size: 72, color: theme.bzText2),
+-              const SizedBox(height: 16),
+-              Text('Nothing playing', style: theme.textTheme.titleMedium),
++              Align(
++                alignment: Alignment.centerLeft,
++                child: Padding(
++                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
++                  child: IconButton(
++                    tooltip: 'Close',
++                    icon: const BzSvgIcon(name: 'chevron-down'),
++                    onPressed: () => Navigator.of(context).maybePop(),
++                  ),
++                ),
++              ),
++              Expanded(
++                child: Center(
++                  child: Padding(
++                    padding: const EdgeInsets.symmetric(horizontal: 32),
++                    child: Column(
++                      mainAxisSize: MainAxisSize.min,
++                      children: [
++                        BzBnoteMark(size: 72, color: theme.bzText2),
++                        const SizedBox(height: 20),
++                        Text('Nothing playing',
++                            style: theme.textTheme.headlineSmall),
++                        const SizedBox(height: 8),
++                        Text(
++                          'Choose a song from Home, Browse, Library or Search.',
++                          textAlign: TextAlign.center,
++                          style: theme.textTheme.bodyMedium
++                              ?.copyWith(color: theme.bzText2),
++                        ),
++                        const SizedBox(height: 24),
++                        FilledButton(
++                          onPressed: () => Navigator.of(context).maybePop(),
++                          child: const Text('Back to music'),
++                        ),
++                      ],
++                    ),
++                  ),
++                ),
++              ),
+             ],
+           ),
+         ),
+@@ -290,19 +345,25 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+                                 ),
+                                 child: Slider(
+                                   value: player.duration > Duration.zero
+-                                      ? player.position.inMilliseconds
++                                      ? (_seekPreviewMs ??
++                                              player.position.inMilliseconds
++                                                  .toDouble())
+                                           .clamp(
+-                                              0, player.duration.inMilliseconds)
++                                            0.0,
++                                            player.duration.inMilliseconds
++                                                .toDouble(),
++                                          )
+                                           .toDouble()
+-                                      : 0,
+-                                  max: player.duration.inMilliseconds > 0
++                                      : 0.0,
++                                  max: player.duration > Duration.zero
+                                       ? player.duration.inMilliseconds.toDouble()
+-                                      : 1,
+-                                  onChanged: (v) {
+-
+-                                    controller.seekTo(
+-                                        Duration(milliseconds: v.toInt()));
+-                                  },
++                                      : 1.0,
++                                  onChanged: player.duration > Duration.zero
++                                      ? (v) => setState(() => _seekPreviewMs = v)
++                                      : null,
++                                  onChangeEnd: player.duration > Duration.zero
++                                      ? (v) => _commitSeek(controller, v)
++                                      : null,
+                                 ),
+                               ),
+                               Row(
+
+FILE apps/mobile/lib/features/search/search_screen.dart
+@@ -57,6 +57,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+   int _searchGeneration = 0;
+   Timer? _typeaheadTimer;
+ 
++  String get _currentOwnerId {
++    final auth = ref.read(authSessionProvider);
++    return auth is AuthSignedIn ? auth.userId : 'guest';
++  }
++
++  bool _isCurrentOwner(String ownerId) =>
++      mounted && _currentOwnerId == ownerId;
++
+   SearchHistoryStore get _history {
+     final auth = ref.read(authSessionProvider);
+     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+@@ -229,15 +237,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+   }
+ 
+   Future<void> _removeHistory(String query) async {
+-    final history = await _history.remove(query);
+-    if (!mounted) return;
+-    setState(() => _recentSearches = history);
++    final ownerId = _currentOwnerId;
++    final generation = _searchGeneration;
++    try {
++      final history = await _history.remove(query);
++      if (!_isCurrentOwner(ownerId) || generation != _searchGeneration) return;
++      setState(() => _recentSearches = history);
++    } catch (_) {
++      // A storage failure must not break the Search screen.
++    }
+   }
+ 
+   Future<void> _clearHistory() async {
+-    await _history.clear();
+-    if (!mounted) return;
+-    setState(() => _recentSearches = []);
++    final ownerId = _currentOwnerId;
++    final generation = _searchGeneration;
++    try {
++      await _history.clear();
++      if (!_isCurrentOwner(ownerId) || generation != _searchGeneration) return;
++      setState(() => _recentSearches = []);
++    } catch (_) {
++      // Keep Search interactive when local persistence is unavailable.
++    }
+   }
+ 
+   void _reuseSearch(String query) {
+@@ -286,18 +306,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+     final store = PlaylistStore();
+     var playlists = await store.load(ownerId);
++    if (!_isCurrentOwner(ownerId)) return;
+     String? selectedId;
+ 
+     Future<String?> create(String name) async {
++      if (!_isCurrentOwner(ownerId)) return null;
+       String? remoteId;
+       if (auth is AuthSignedIn) {
+         try {
+           final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name);
+           remoteId = remote['id'] as String?;
+         } catch (_) {}
+       }
++      if (!_isCurrentOwner(ownerId)) return null;
+       await store.create(ownerId, name, id: remoteId);
+-      return remoteId;
++      return _isCurrentOwner(ownerId) ? remoteId : null;
+     }
+ 
+     if (playlists.isEmpty) {
+@@ -344,7 +367,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+       }
+     }
+ 
+-    if (selectedId == null) return;
++    if (selectedId == null || !_isCurrentOwner(ownerId)) return;
+     final remotePlaylist = RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(selectedId);
+     if (auth is AuthSignedIn && remotePlaylist) {
+       try {
+@@ -354,14 +377,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+         return;
+       }
+     }
++    if (!_isCurrentOwner(ownerId)) return;
+     await store.addTrack(ownerId, selectedId, FavoriteTrack(
+       id: track.id,
+       title: track.title,
+       artist: track.artist,
+       artworkUrl: track.artworkUrl,
+       durationMs: track.duration.inMilliseconds,
+     ));
+-    if (!mounted) return;
++    if (!_isCurrentOwner(ownerId)) return;
+     ref.read(playlistRefreshSignalProvider.notifier).state++;
+     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to playlist')));
+   }
+@@ -371,6 +395,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+     final favorites = ref.read(favoritesStoreProvider);
+     if (!await favorites.isFavorite(track.id, ownerId: ownerId)) {
++      if (!_isCurrentOwner(ownerId)) return;
+       await favorites.toggle(
+         FavoriteTrack(
+           id: track.id,
+@@ -381,9 +406,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+         ),
+         ownerId: ownerId,
+       );
++      if (!_isCurrentOwner(ownerId)) return;
+       await ref.read(outboxSyncProvider).drainIfSignedIn();
+     }
+-    if (!mounted) return;
++    if (!_isCurrentOwner(ownerId)) return;
+     ScaffoldMessenger.of(context).showSnackBar(
+       const SnackBar(content: Text('Library updated')),
+     );
+@@ -518,7 +544,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+       if (previousOwner != nextOwner) {
+         _typeaheadTimer?.cancel();
+         _searchGeneration++;
++        // A typed query is private account state too: never show it to the
++        // next listener just because the Search tab remains mounted.
++        _controller.clear();
+         setState(() {
++          _searchLibrary = false;
++          _searchVideos = false;
+           _recentSearches = [];
+           _results = [];
+           _loading = false;
+@@ -653,22 +684,68 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+                     ? _buildRecentSearches(theme)
+                     : _error != null
+                         ? Center(
+-                            child: Padding(
++                            child: SingleChildScrollView(
+                               padding: const EdgeInsets.all(24),
+-                              child: Text(
+-                                _error!,
+-                                textAlign: TextAlign.center,
+-                                style: theme.textTheme.bodyMedium,
++                              child: Column(
++                                mainAxisSize: MainAxisSize.min,
++                                children: [
++                                  BzBnoteMark(size: 48, color: theme.bzText2),
++                                  const SizedBox(height: 16),
++                                  Text(
++                                    'Search unavailable',
++                                    style: theme.textTheme.titleLarge,
++                                    textAlign: TextAlign.center,
++                                  ),
++                                  const SizedBox(height: 8),
++                                  Text(
++                                    _error!,
++                                    style: theme.textTheme.bodyMedium
++                                        ?.copyWith(color: theme.bzText2),
++                                    textAlign: TextAlign.center,
++                                  ),
++                                  const SizedBox(height: 20),
++                                  OutlinedButton(
++                                    onPressed: () => _search(
++                                      _controller.text,
++                                      recordHistory: false,
++                                    ),
++                                    child: const Text('Try again'),
++                                  ),
++                                ],
+                               ),
+                             ),
+                           )
+                         : _results.isEmpty
+                             ? Center(
+-                                child: Text(
+-                                  (_searchVideos && !_searchLibrary
+-                                      ? 'No official videos found for "${_controller.text.trim()}"'
+-                                      : 'No results for "${_controller.text.trim()}"'),
+-                                  style: theme.textTheme.titleMedium,
++                                child: SingleChildScrollView(
++                                  padding: const EdgeInsets.all(24),
++                                  child: Column(
++                                    mainAxisSize: MainAxisSize.min,
++                                    children: [
++                                      Text(
++                                        (_searchVideos && !_searchLibrary
++                                            ? 'No official videos found for "${_controller.text.trim()}"'
++                                            : 'No results for "${_controller.text.trim()}"'),
++                                        style: theme.textTheme.titleMedium,
++                                        textAlign: TextAlign.center,
++                                      ),
++                                      const SizedBox(height: 8),
++                                      Text(
++                                        'Try a different artist, song or keyword.',
++                                        style: theme.textTheme.bodyMedium
++                                            ?.copyWith(color: theme.bzText2),
++                                        textAlign: TextAlign.center,
++                                      ),
++                                      const SizedBox(height: 16),
++                                      TextButton(
++                                        onPressed: () {
++                                          _controller.clear();
++                                          _onQueryChanged('');
++                                        },
++                                        child: const Text('Clear search'),
++                                      ),
++                                    ],
++                                  ),
+                                 ),
+                               )
+                             : ListView.builder(
+
+FILE apps/mobile/lib/widgets/bz_shell.dart
+@@ -625,7 +625,9 @@ class _TabButton extends StatelessWidget {
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                   AnimatedContainer(
+-                    duration: const Duration(milliseconds: BzMotion.fastMs),
++                    duration: MediaQuery.disableAnimationsOf(context)
++                        ? Duration.zero
++                        : const Duration(milliseconds: BzMotion.fastMs),
+                     curve: const Cubic(0.22, 1, 0.36, 1),
+                     width: 42,
+                     height: 42,
+
+FILE apps/mobile/test/features/player/now_playing_screen_test.dart
+@@ -0,0 +1,50 @@
++import 'package:breezze_design_system/breezze_design_system.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:material_ui/material_ui.dart';
++
++import 'package:breezze/features/player/now_playing_screen.dart';
++
++class _PlayerLauncher extends StatelessWidget {
++  const _PlayerLauncher();
++
++  @override
++  Widget build(BuildContext context) => Scaffold(
++        body: Center(
++          child: FilledButton(
++            onPressed: () => Navigator.of(context).push(
++              MaterialPageRoute<void>(
++                builder: (_) => const NowPlayingScreen(),
++              ),
++            ),
++            child: const Text('Open player'),
++          ),
++        ),
++      );
++}
++
++void main() {
++  testWidgets('empty Now Playing offers an accessible way back', (tester) async {
++    await tester.pumpWidget(
++      ProviderScope(
++        child: MaterialApp(
++          theme: bzLightTheme(),
++          home: const _PlayerLauncher(),
++        ),
++      ),
++    );
++
++    await tester.tap(find.text('Open player'));
++    await tester.pumpAndSettle();
++
++    expect(find.text('Nothing playing'), findsOneWidget);
++    expect(find.byTooltip('Close'), findsOneWidget);
++    expect(find.text('Back to music'), findsOneWidget);
++
++    await tester.tap(find.text('Back to music'));
++    await tester.pumpAndSettle();
++
++    expect(find.text('Open player'), findsOneWidget);
++    expect(find.text('Nothing playing'), findsNothing);
++  });
++}
+
+FILE apps/mobile/test/features/search/search_account_switch_test.dart
+@@ -0,0 +1,50 @@
++import 'package:breezze/core/auth/auth_session.dart';
++import 'package:breezze/features/search/search_screen.dart';
++import 'package:breezze_design_system/breezze_design_system.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:material_ui/material_ui.dart';
++
++class _SwitchableAuthSession extends AuthSessionController {
++  @override
++  AuthState build() =>
++      const AuthSignedIn(userId: 'alice', email: 'alice@example.test');
++
++  void switchTo(String userId) {
++    state = AuthSignedIn(userId: userId, email: '$userId@example.test');
++  }
++}
++
++void main() {
++  testWidgets('Search clears the prior listener query on account switch',
++      (tester) async {
++    final container = ProviderContainer(
++      overrides: [
++        authSessionProvider.overrideWith(_SwitchableAuthSession.new),
++      ],
++    );
++    addTearDown(container.dispose);
++
++    await tester.pumpWidget(
++      UncontrolledProviderScope(
++        container: container,
++        child: MaterialApp(
++          theme: bzLightTheme(),
++          home: const Scaffold(body: SearchScreen()),
++        ),
++      ),
++    );
++
++    final inputFinder = find.byType(TextField).first;
++    await tester.enterText(inputFinder, 'A');
++    await tester.pump();
++    expect(tester.widget<TextField>(inputFinder).controller!.text, 'A');
++
++    (container.read(authSessionProvider.notifier) as _SwitchableAuthSession)
++        .switchTo('bob');
++    await tester.pump();
++
++    expect(tester.widget<TextField>(inputFinder).controller!.text, isEmpty);
++    expect(find.text('No results for "A"'), findsNothing);
++  });
++}
+
+FILE apps/mobile/test/search_history_store_test.dart
+@@ -73,4 +73,37 @@ void main() {
+ 
+     expect(await store.load(), isEmpty);
+   });
++  test('browser search history is isolated by account and survives re-open',
++      () async {
++    final values = <String, String>{};
++    Future<String?> read(String key) async => values[key];
++    Future<void> write(String key, String value) async {
++      values[key] = value;
++    }
++
++    SearchHistoryStore forOwner(String ownerId) => SearchHistoryStore(
++          ownerId: ownerId,
++          readBrowserValue: read,
++          writeBrowserValue: write,
++        );
++
++    await forOwner('alice').add('Bongo Flava');
++    expect(await forOwner('bob').load(), isEmpty);
++    await forOwner('bob').add('Amapiano');
++    expect(await forOwner('alice').load(), ['Bongo Flava']);
++    expect(await forOwner('bob').load(), ['Amapiano']);
++    await forOwner('alice').clear();
++    expect(await forOwner('alice').load(), isEmpty);
++    expect(await forOwner('bob').load(), ['Amapiano']);
++  });
++
++  test('corrupt browser history does not block Search', () async {
++    final store = SearchHistoryStore(
++      ownerId: 'test',
++      readBrowserValue: (_) async => '{invalid',
++      writeBrowserValue: (_, __) async {},
++    );
++    expect(await store.load(), isEmpty);
++  });
++
+ }
+
+FILE apps/mobile/tool/smoke_web_ui.cjs
+@@ -0,0 +1,107 @@
++// Browser-level smoke: verify the Flutter engine actually renders a view,
++// not only that the development server returns its bootstrap HTML.
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const { chromium } = require(path.join(
++  process.env.RUNNER_TEMP,
++  'breezze-browser',
++  'node_modules',
++  'playwright-core',
++));
++
++async function main() {
++  const browser = await chromium.launch({
++    executablePath: process.env.BREEZZE_BROWSER,
++    headless: true,
++    args: [
++      '--no-sandbox',
++      '--disable-dev-shm-usage',
++      '--use-angle=swiftshader',
++      '--enable-unsafe-swiftshader',
++    ],
++  });
++  try {
++    const page = await browser.newPage({
++      viewport: { width: 390, height: 844 },
++      deviceScaleFactor: 1,
++      reducedMotion: 'reduce',
++    });
++    const errors = [];
++    const consoleErrors = [];
++    const failedRequests = [];
++    page.on('pageerror', error => errors.push(error.message));
++    page.on('console', message => {
++      if (message.type() === 'error') consoleErrors.push(message.text());
++    });
++    page.on('requestfailed', request => {
++      failedRequests.push({
++        url: request.url(),
++        failure: request.failure()?.errorText,
++      });
++    });
++    const shot = path.join(process.env.RUNNER_TEMP, 'breezze-mobile-preview.png');
++    await page.goto('http://127.0.0.1:8080/', {
++      waitUntil: 'domcontentloaded',
++      timeout: 90000,
++    });
++
++    try {
++      await page.waitForFunction(
++        () => {
++          // Flutter paints inside the <flt-glass-pane> shadow root. A
++          // document.querySelector('canvas') misses that render surface.
++          const host = document.querySelector('flutter-view');
++          if (!host) return false;
++          function hasRenderedSurface(node) {
++            if (!node) return false;
++            if (node.nodeType === Node.ELEMENT_NODE &&
++                node.matches('canvas, flt-scene-host, flt-picture')) {
++              return true;
++            }
++            if (node.shadowRoot && hasRenderedSurface(node.shadowRoot)) {
++              return true;
++            }
++            return Array.from(node.children ?? []).some(hasRenderedSurface);
++          }
++          return hasRenderedSurface(host);
++        },
++        null,
++        { timeout: 60000 },
++      );
++    } catch (error) {
++      const details = await page.evaluate(() => ({
++        title: document.title,
++        readyState: document.readyState,
++        body: document.body.innerHTML.slice(0, 4000),
++        canvasCount: document.querySelectorAll('canvas').length,
++        flutterHostCount: document.querySelectorAll('flutter-view, flt-glass-pane').length,
++        glassPaneShadow: document.querySelector('flt-glass-pane')?.shadowRoot?.innerHTML.slice(0, 1600) ?? null,
++        scriptCount: document.querySelectorAll('script').length,
++        scriptUrls: [...document.querySelectorAll('script')].slice(0, 10).map(s => s.src),
++      }));
++      console.error('Breezze browser DOM diagnostics:', JSON.stringify(details));
++      console.error('Breezze browser JS errors:', JSON.stringify(errors));
++      console.error('Breezze browser console errors:', JSON.stringify(consoleErrors));
++      console.error('Breezze browser failed requests:', JSON.stringify(failedRequests));
++      await page.screenshot({ path: shot, fullPage: true });
++      throw error;
++    }
++    await page.waitForTimeout(2500);
++    await page.screenshot({ path: shot, fullPage: true });
++    const size = fs.statSync(shot).size;
++    assert.ok(size > 5000, 'Browser screenshot is unexpectedly small');
++    assert.ok((await page.title()).includes('Breezze'), 'Incorrect page title');
++    assert.deepEqual(errors, [], 'Browser emitted uncaught JavaScript errors');
++
++    console.log('Flutter rendered in headless Chromium; mobile screenshot:', shot);
++    console.log('Screenshot size:', size, 'bytes');
++  } finally {
++    await browser.close();
++  }
++}
++
++main().catch(error => {
++  console.error(error);
++  process.exitCode = 1;
++});
+
+FILE docs/PRODUCT_EXPERIENCE.md
+@@ -1,5 +1,13 @@
+ # Breezze Product Experience Plan
+ 
++> **Current release scope:** The audio-first execution plan supersedes older
++> aspirational sections below. The live client has **four** destinations:
++> **Home, Browse, Library, Search**. Radio, an artist portal, billing,
++> subscriptions and social features are not release requirements.
++> Catalog metadata is not a music license. See
++> [the verification register](audit/RELEASE_EXECUTION_STATUS.md) for
++> independently verified functionality and outstanding blockers.
++
+ This specification applies the supplied music-app feature inventory to Breezze's independent product identity and the existing Flutter-first architecture. It describes target behavior; a listed capability is not considered shipped until its real data source, persistence, permissions, and tests exist.
+ 
+ ## Product principles
+
+FILE docs/audit/RELEASE_EXECUTION_STATUS.md
+@@ -0,0 +1,128 @@
++# Breezze — Fullstack Release Execution Status
++
++This is the **current evidence-based acceptance board**, replacing assumptions
++from older plans and archived MetroMusic documentation.
++
++## Source of truth
++
++- Canonical product repository: `MetroKim/Breezze`, not `MetroKim/MetroMusic`.
++- Current release: free, listener-first, **audio-first**, with Home, Browse,
++  Library and Search as the four destinations; settings and Now Playing are
++  secondary destinations.
++- One `PlayerController` and shared queue. No second catalog player per tab.
++- Radio, artist portal, subscriptions, paywalls, billing, and social features
++  are explicitly deferred; related legacy modules do not imply shipping UI.
++- YouTube Music metadata is not a playback entitlement. Deezer API previews
++  are limited previews, not full commercial-catalog grants. Only user-owned
++  local media or rights-authorized provider/catalog assets may play or download.
++
++## Verified in source and automated checks
++
++| Workstream | Evidence | Release status |
++| --- | --- | --- |
++| Flutter application structure | `apps/mobile/pubspec.yaml`, `lib/`, Linux runner, `run.sh` | Present; end-to-end UI journeys still need testing |
++| Four-tab UI and global mini-player | `apps/mobile/lib/widgets/bz_shell.dart` | Implemented; device accessibility audit remains |
++| Search, Browse and Library | Feature screens + backend catalog adapters | Implemented for supported sources; provider/data completeness not certified |
++| Accessible filters and player seek | `bz_filter_pill.dart`, `bz_playback_scrubber.dart` and widget tests | Changed; acceptance requires green CI at exact commit |
++| Authentication/account isolation | Auth guards, scoped local data tests, backend integration specs | Automated foundations present; cross-tenant release audit incomplete |
++| Shared playback & OS focus | PlayerController, engine adapter, background audio bridge | Automated tests; device/route and lock-screen hardware gates open |
++| Authenticated backend | `backend/api` NestJS + Prisma, unit/integration tests | CI testable; live production environment not certified |
++| Storage and CDN signing | `infra/cloudflare` workers and licensed-media fixture | CI testable; external licensing/deployment required |
++| Offline download lease/version rules | PR #4, `feat/audio-first-video-handoff` | Draft; must merge and pass tests before declaring shipped |
++| Linux/Android/Web/Windows/macOS/iOS | `.github/workflows/breezze-quality.yml` | Compilation jobs exist; physical-device acceptance open |
++| Browser launch | `.github/workflows/web-preview-smoke.yml` | HTTP server/bootstrap smoke passed; full interactive browser coverage open |
++
++## Audit results and active remediation
++
++1. Mainline playback UI: tapping the mini-player progress strip previously
++   updated only a transient drag state without seeking. The shared scrubber
++   now commits taps and drags and exposes screen-reader increment/decrement
++   actions.
++2. Filter controls: Browse, Library and Search each duplicated a 36dp
++   gesture-only pill. They now share `BzFilterPill` with a minimum 48dp
++   touch target, keyboard interaction via `InkWell`, proper selection
++   semantics, and reduced-motion behavior.
++3. Tab long-press navigation: selection previously used the entire screen's
++   width and hardcoded horizontal offsets. It now computes the hit location
++   in the actual tab-bar render box.
++4. Search: provider failures now expose a visible in-app retry action;
++   empty results show a clear-search recovery action.
++5. PR #4 API client failure: unnecessary Dart null assertion in
++   `packages/api_client/lib/src/downloads_library.dart` corrected.
++6. Android CodeQL build failure: Maven Central returned HTTP 429 while
++   downloading a Kotlin Gradle plugin. This was an infrastructure dependency
++   error, not evidence of passing or failing security analysis. Re-run
++   required before certifying the job.
++
++## Evidence links
++
++- Base mobile launch: [web startup test](https://github.com/MetroKim/Breezze/actions/runs/45160901451).
++- Mainline UX changes: [UI patch](https://github.com/MetroKim/Breezze/commit/1f0610c303613f62d96e86aa2403f1b20e2aaab3).
++- Flutter accessibility correction: [follow-up patch](https://github.com/MetroKim/Breezze/commit/fc4481fa2855bfd5037e5ae7f7084f8763e5ade3).
++- Audio-first changes awaiting integration: [PR #4](https://github.com/MetroKim/Breezze/pull/4).
++
++## Release blockers — do not silently mark complete
++
++- **P0:** Green Flutter analyzer, unit/widget, backend, edge worker and platform
++  build workflows on the same final commit; emulator playback and interruption
++  journeys; recoverable auth/search/playback flows.
++- **P0:** Legally approved full-track playback and offline download rights for
++  each provider, territory and recording; rights enforcement in the backend.
++  A free Deezer API does not grant whole-catalog streaming licenses.
++- **P1:** Account-isolation E2E tests for library/favorites/playlists/downloads,
++  logout/revocation, offline lease expiry, network recovery and background audio.
++- **P1:** Verify loading, empty, offline, error and success states for every
++  screen; screen-reader labels, dynamic type, 48dp touch targets, and
++  reduced-motion behavior on supported platforms.
++- **P1:** Resolve draft audio-first PR #4 and CI issues before declaring its
++  gapless, video handoff, dynamic theme or download changes shipped.
++- **P2:** Live production API/edge health, secrets, backups, operational alerts,
++  physical-device lock-screen and Bluetooth validation, capacity testing,
++  app-store signing/distribution and incident rollback.
++
++## Interface direction
++
++Breezze is a **restrained, premium, functional music application**—not a
++futuristic mockup. Retain the existing black/white Breezze identity, original
++SVG interface icons, semantic light/dark tokens, real album artwork,
++readable typography, consistent 8dp spacing, native input feedback and
++focused primary controls. Artwork-derived color may enrich Now Playing
++subtly, but must not reduce foreground contrast or replace opaque fallbacks.
++No decorative emoji, fake tracks, fabricated charts or broken CTA actions.
++
++**Completion policy:** A screen or endpoint is not finished merely because its
++widget, route, API stub or architecture file exists. Production-ready claims
++require verified action, authorized backend data, explicit failure/empty
++states, and automated/device evidence at the final commit.
++
++## Current UX and rendered-browser acceptance extension
++
++- Empty Now Playing state includes an accessible Close and Back to music
++  action, instead of leaving a listener in an undismissable full-screen shell.
++- The full-screen progress slider stages drag values locally and commits one
++  seek when released; unavailable duration disables seeking.
++- The navigation selection transition honors the OS reduce-motion preference,
++  and onboarding back navigation clamps to the first step.
++- The Flutter web preview workflow launches actual headless Chromium at a
++  390px mobile viewport, checks for a rendered Flutter scene, records uncaught
++  JavaScript exceptions, and publishes a screenshot artifact. This extends
++  but does not replace manual screen-reader/physical-device verification.
++
++## Additional runtime audit
++
++- Home and Library now finish initial loads even when local persistence fails,
++  displaying in-app retry actions instead of indefinite skeleton screens.
++- Concurrent Library refreshes reject stale account/generation results, and
++  switching users clears in-memory library content before asynchronous reload.
++- Malformed/empty stored section preferences fall back to known valid filters.
++- The API Worker handles preflight requests and adds CORS headers only for
++  explicitly configured trusted browser origins. The deployed origin/Worker
++  still require matching environment configuration and authorized deployment.
++- Browser UI verification checks the Flutter painter inside shadow DOM, not
++  only top-level canvas elements. The edge CORS failure in CI is tracked
++  separately and must be tested against the deployed allowed origin.
++
++- Added Node-based edge CORS regression coverage (exact origin, denied origin,
++  unsafe method, error responses), executed in the API Worker CI job.
++- The guarded API deployment workflow now passes the configured browser
++  allowlist to Cloudflare and verifies the preflight on the deployed endpoint.
+
+FILE docs/audit/gap-register.md
+@@ -1,5 +1,10 @@
+ # Breezze Current Implementation Gap Register
+ 
++> **Release status has moved to** [RELEASE_EXECUTION_STATUS.md](RELEASE_EXECUTION_STATUS.md).
++> The historical CI snapshots and five-tab/radio references below describe
++> earlier baselines, not the current audio-first four-tab release.
++> Use the new register for acceptance decisions.
++
+ **Last reconciled:** 2026-11-22  
+ **Main baseline:** `bd031a24616d7257e2b04ef76b469332d4a49658` (PR #45 merged 2026-11-22)  
+ **PR #44 CI:** [45017890994 — all 7 jobs passed](https://github.com/MetroKim/MetroMusic/actions/runs/45017890994)  
+
+FILE infra/cloudflare/api-worker/README.md
+@@ -45,3 +45,28 @@ Set `API_ORIGIN` as a Wrangler variable through the Cloudflare dashboard or depl
+ The NestJS API requires the same `EDGE_SHARED_SECRET` in production, so direct requests to the origin are rejected. The Worker overwrites any client-supplied `x-breezze-edge-secret` header before forwarding and removes the header from responses.
+ 
+ The deployment workflow deploys the Worker only. The NestJS origin must already be deployed and reachable over HTTPS, and DNS/custom-domain routing plus WAF/rate-limit rules still require Cloudflare account configuration. This does not prove one-million-user capacity; staged load tests are required.
++
++## Browser/Codespaces CORS policy
++
++Configure `WEB_ALLOWED_ORIGINS` in the **Cloudflare Worker** as a
++comma-separated list of **exact** trusted frontend origins, for example a
++specific deployed web host and the specific Codespaces forwarded URL. Set the
++same origins in NestJS `CORS_ALLOWED_ORIGINS`, since the API has an independent
++origin allowlist. A development browser running at `http://127.0.0.1:8080`
++requires that exact origin in each allowlist; `http://localhost:8080` is a
++different origin. Never use a wildcard or reflect arbitrary origins with
++credentials enabled. Production defaults to no browser origins until explicitly
++configured. Both layers must be deployed for their configuration to take effect.
++
++The Worker now answers allowed preflight requests with narrowly limited
++methods and headers before the origin-secret check, and decorates successful
++**and error** API responses with CORS headers for allowed origins, so upstream
++outages do not masquerade as missing browser CORS. The backend remains the
++authority for authentication and resource authorization.
++
++The deploy workflow now accepts the repository Actions variable
++`BREEZZE_WEB_ALLOWED_ORIGINS`, maps it to the Worker variable
++`WEB_ALLOWED_ORIGINS`, and verifies a successful browser preflight after
++deployment. The protected NestJS origin must independently set
++`CORS_ALLOWED_ORIGINS` to the corresponding trusted origins. Configure exact
++hostnames only; a Codespace forwarding URL may change between instances.
+
+FILE infra/cloudflare/api-worker/package.json
+@@ -4,6 +4,7 @@
+   "version": "0.1.0",
+   "scripts": {
+     "check": "tsc --noEmit",
++    "test": "node --experimental-strip-types --test test/*.test.mjs",
+     "dev": "wrangler dev",
+     "deploy": "wrangler deploy"
+   },
+
+FILE infra/cloudflare/api-worker/src/index.ts
+@@ -1,6 +1,8 @@
+ export interface Env {
+   API_ORIGIN?: string;
+   EDGE_SHARED_SECRET: string;
++  // Exact HTTPS/loopback browser origins, configured per deployment.
++  WEB_ALLOWED_ORIGINS?: string;
+ }
+ 
+ const PUBLIC_CATALOG_PATH =
+@@ -16,6 +18,60 @@ function jsonError(status: number, code: string): Response {
+   );
+ }
+ 
++
++// Browser origin allowlisting is distinct from server-to-server edge auth.
++// Never use '*' with credentialed requests or trust a client-supplied origin.
++function browserOrigin(request: Request, env: Env): string | null {
++  const origin = request.headers.get('Origin');
++  if (!origin) return null;
++  const allowed = (env.WEB_ALLOWED_ORIGINS ?? '')
++    .split(',').map((entry) => entry.trim()).filter(Boolean);
++  return allowed.includes(origin) ? origin : null;
++}
++
++function withBrowserCors(response: Response, request: Request, env: Env): Response {
++  const headers = new Headers(response.headers);
++  const vary = headers.get('Vary');
++  if (request.headers.has('Origin')) {
++    const varyParts = (vary ?? '').split(',').map((item) => item.trim()).filter(Boolean);
++    if (!varyParts.some((item) => item.toLowerCase() === 'origin')) {
++      headers.set('Vary', [...varyParts, 'Origin'].join(', '));
++    }
++  }
++  const origin = browserOrigin(request, env);
++  if (origin) {
++    headers.set('Access-Control-Allow-Origin', origin);
++    headers.set('Access-Control-Allow-Credentials', 'true');
++    headers.set('Access-Control-Expose-Headers', 'x-request-id, x-breezze-edge-cache, etag, content-range');
++  } else {
++    headers.delete('Access-Control-Allow-Origin');
++    headers.delete('Access-Control-Allow-Credentials');
++    headers.delete('Access-Control-Expose-Headers');
++  }
++  return new Response(response.body, {
++    status: response.status,
++    statusText: response.statusText,
++    headers,
++  });
++}
++
++function corsPreflight(request: Request, env: Env): Response | null {
++  if (request.method !== 'OPTIONS' || !request.headers.has('Access-Control-Request-Method')) {
++    return null;
++  }
++  const origin = browserOrigin(request, env);
++  const method = request.headers.get('Access-Control-Request-Method')?.toUpperCase();
++  if (!origin || !method || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
++    return jsonError(403, 'CORS_ORIGIN_OR_METHOD_DENIED');
++  }
++  const response = withBrowserCors(new Response(null, { status: 204 }), request, env);
++  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
++  response.headers.set('Access-Control-Allow-Headers', 'authorization, content-type');
++  response.headers.set('Access-Control-Max-Age', '600');
++  response.headers.set('Cache-Control', 'private, no-store');
++  return response;
++}
++
+ function isPublicCatalogRequest(request: Request, url: URL): boolean {
+   return request.method === 'GET'
+     && PUBLIC_CATALOG_PATH.test(url.pathname)
+@@ -157,7 +213,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
+ }
+ 
+ export default {
+-  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+-    return handle(request, env, ctx);
++  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
++    const preflight = corsPreflight(request, env);
++    if (preflight) return preflight;
++    return withBrowserCors(await handle(request, env, ctx), request, env);
+   },
+ };
+
+FILE infra/cloudflare/api-worker/test/edge-cors.test.mjs
+@@ -0,0 +1,69 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import worker from '../src/index.ts';
++
++const knownOrigin = 'https://breezze.example';
++const env = {
++  EDGE_SHARED_SECRET: 'test-only-secret-not-deployed-0123456789',
++  WEB_ALLOWED_ORIGINS: knownOrigin + ',http://127.0.0.1:8080',
++};
++const ctx = { waitUntil() {} };
++
++function preflight(origin, method = 'GET') {
++  return new Request('https://edge.example/api/v1/auth/social/providers', {
++    method: 'OPTIONS',
++    headers: {
++      Origin: origin,
++      'Access-Control-Request-Method': method,
++      'Access-Control-Request-Headers': 'content-type',
++    },
++  });
++}
++
++test('trusted web origin receives credentialed 204 preflight', async () => {
++  const response = await worker.fetch(preflight(knownOrigin, 'POST'), env, ctx);
++  assert.equal(response.status, 204);
++  assert.equal(response.headers.get('access-control-allow-origin'), knownOrigin);
++  assert.equal(response.headers.get('access-control-allow-credentials'), 'true');
++  assert.match(response.headers.get('access-control-allow-headers'), /content-type/);
++  assert.match(response.headers.get('vary'), /Origin/i);
++  assert.equal(response.headers.get('cache-control'), 'private, no-store');
++});
++
++test('unlisted origin is never reflected', async () => {
++  const response = await worker.fetch(preflight('https://attacker.example'), env, ctx);
++  assert.equal(response.status, 403);
++  assert.equal(response.headers.get('access-control-allow-origin'), null);
++});
++
++test('unsafe method is denied even for a listed origin', async () => {
++  const response = await worker.fetch(preflight(knownOrigin, 'TRACE'), env, ctx);
++  assert.equal(response.status, 403);
++});
++
++test('allowed origin receives CORS headers even on missing backend configuration', async () => {
++  const request = new Request('https://edge.example/api/v1/auth/social/providers', {
++    headers: { Origin: knownOrigin },
++  });
++  const response = await worker.fetch(request, env, ctx);
++  assert.equal(response.status, 503);
++  assert.equal(response.headers.get('access-control-allow-origin'), knownOrigin);
++  assert.equal(response.headers.get('cache-control'), 'no-store');
++});
++
++test('unspecified browser origin does not accidentally enable CORS', async () => {
++  const response = await worker.fetch(
++    new Request('https://edge.example/api/v1/auth/social/providers'),
++    env,
++    ctx,
++  );
++  assert.equal(response.status, 503);
++  assert.equal(response.headers.get('access-control-allow-origin'), null);
++});
++
++test('development loopback origin requires exact spelling', async () => {
++  const good = await worker.fetch(preflight('http://127.0.0.1:8080'), env, ctx);
++  const different = await worker.fetch(preflight('http://localhost:8080'), env, ctx);
++  assert.equal(good.status, 204);
++  assert.equal(different.status, 403);
++});

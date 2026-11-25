@@ -1,0 +1,2739 @@
+BREEZZE LEGACY REVIEW-ONLY PATCH ARCHIVE
+Source PR: https://github.com/MetroKim/Breezze-legacy-fork/pull/4
+Source: historical old-fork feature branch, not merged into current Flutter main.
+Preserved source patch hunks are for review/porting only; they are NOT a buildable or complete Git bundle.
+Binary files and Git metadata are not supplied by the GitHub patch API. Do not run old workflow files.
+Files listed: 40; patch hunks available: 38; missing binary/too-large hunks: 2
+Unrepresented paths: apps/mobile/integration_test/fixtures/clip.mp4, apps/mobile/integration_test/fixtures/tone.m4a
+
+FILE .github/workflows/breezze-quality.yml
+@@ -168,7 +168,8 @@ jobs:
+ 
+   flutter_macos:
+     name: Flutter macOS and iOS builds
+-    runs-on: macos-latest
++    # Use the SDK required by AVFoundation's current video player plugin.
++    runs-on: macos-26-intel
+     steps:
+       - name: Checkout
+         uses: actions/checkout@v4
+
+FILE .github/workflows/listener-runtime.yml
+@@ -0,0 +1,103 @@
++name: Listener runtime
++on:
++  pull_request:
++    paths:
++      - 'apps/mobile/**'
++      - 'packages/audio_contracts/**'
++      - 'packages/api_client/**'
++      - '.github/workflows/listener-runtime.yml'
++  workflow_dispatch:
++permissions:
++  contents: read
++env:
++  QA_PREVIEW_API_ORIGIN: https://breezze-api-edge.ykw8vmq7ph.workers.dev
++jobs:
++  android:
++    runs-on: ubuntu-latest
++    timeout-minutes: 45
++    steps:
++      - uses: actions/checkout@v4
++      - uses: subosito/flutter-action@v2
++        with:
++          channel: stable
++          cache: true
++      - run: bash apps/mobile/tool/generate_platform_targets.sh
++      - name: Enable hosted Android acceleration
++        run: |
++          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
++          sudo udevadm control --reload-rules
++          sudo udevadm trigger --name-match=kvm
++      - uses: reactivecircus/android-emulator-runner@v2
++        with:
++          api-level: 35
++          arch: x86_64
++          target: google_apis
++          profile: pixel_6
++          script: bash apps/mobile/tool/test_listener_runtime.sh emulator-5554
++  ios:
++    # Latest native video plugin needs Xcode 26; Intel runner avoids ARM64 queue stalls.
++    runs-on: macos-26-intel
++    timeout-minutes: 45
++    steps:
++      - uses: actions/checkout@v4
++      - uses: subosito/flutter-action@v2
++        with:
++          channel: stable
++          cache: true
++      - run: bash apps/mobile/tool/generate_platform_targets.sh
++      - name: Boot iPhone and exercise listener flow
++        run: |
++          device=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(p["udid"] for k in reversed(list(d)) if ".iOS-" in k for p in d[k] if p["name"].startswith("iPhone")))')
++          xcrun simctl boot "$device"
++          xcrun simctl bootstatus "$device" -b
++          bash apps/mobile/tool/test_listener_runtime.sh "$device"
++  licensed-media:
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    services:
++      postgres:
++        image: postgres:16-alpine
++        env:
++          POSTGRES_USER: ci
++          POSTGRES_PASSWORD: ci
++          POSTGRES_DB: listener_test
++        ports:
++          - 5432:5432
++        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
++    env:
++      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/listener_test
++      MEDIA_SIGNING_KEY: isolated-local-worker-test-only-key
++      CDN_BASE_URL: http://127.0.0.1:8787
++      JWT_SECRET: isolated-local-listener-test-only-key
++      WRANGLER_SEND_METRICS: 'false'
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with:
++          node-version: 22
++      - name: Start test API
++        working-directory: backend/api
++        run: |
++          npm install --no-audit --no-fund
++          npx prisma generate
++          npx prisma migrate deploy
++          npm run build
++          node dist/main > "$RUNNER_TEMP/api.log" 2>&1 &
++          curl -fsS --retry 15 --retry-all-errors --retry-delay 1 http://127.0.0.1:3000/health || { cat "$RUNNER_TEMP/api.log"; exit 1; }
++      - name: Load generated recording into local R2
++        working-directory: infra/cloudflare/media-worker
++        run: |
++          npm install --no-audit --no-fund
++          for variant in AAC_256 download; do
++            npx wrangler r2 object put "breezze-media/audio/24ead000-7bce-498c-806c-d6084a0ed108/$variant" --local --file="../../../apps/mobile/integration_test/fixtures/tone.m4a"
++          done
++          npx wrangler dev --local --ip 127.0.0.1 --port 8787 --var MEDIA_SIGNING_KEY:"$MEDIA_SIGNING_KEY" > "$RUNNER_TEMP/worker.log" 2>&1 &
++          for i in {1..30}; do
++            if curl -sS http://127.0.0.1:8787/ -o /dev/null; then exit 0; fi
++            sleep 1
++          done
++          cat "$RUNNER_TEMP/worker.log"
++          exit 1
++      - name: Verify stream and download grants through the media worker
++        working-directory: backend/api
++        run: node test/licensed-listener.mjs
+
+FILE README.md
+@@ -80,6 +80,7 @@ The Flutter codebase targets Android, iOS, Web, Linux, macOS and Windows. Build
+ - [Product experience](docs/PRODUCT_EXPERIENCE.md)
+ - [Interface contract](docs/design/BREEZZE_INTERFACE_CONTRACT.md)
+ - [Integrated design and engineering architecture](docs/architecture/BREEZZE_INTEGRATED_DESIGN_ENGINEERING_ARCHITECTURE.md)
++- [Audio-first execution and acceptance](docs/architecture/BREEZZE_AUDIO_FIRST_EXECUTION_AND_ACCEPTANCE.md)
+ - [Multi-source provider architecture](docs/architecture/BREEZZE_MULTISOURCE_PROVIDER_ARCHITECTURE.md)
+ - [Provider integration decision](docs/architecture/BREEZZE_PROVIDER_INTEGRATION_DECISION.md)
+ - [Discovery provider setup](docs/architecture/DISCOVERY_PROVIDER_SETUP.md)
+@@ -90,12 +91,13 @@ The Flutter codebase targets Android, iOS, Web, Linux, macOS and Windows. Build
+ - [Engineering backlog](docs/ROADMAP_AND_BUG_BACKLOG.md)
+ - [Third-party code and provider policy](docs/legal/BREEZZE_THIRD_PARTY_CODE_POLICY.md)
+ 
+-## Current verification
++## Current verification and canonical development
+ 
+-The current main baseline includes the merged provider, playback and backend-hardening work through commit `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`. Its post-merge quality workflow [45008430816](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816) passed all 7 jobs. The in-app experience contract is proposed in [PR #33](https://github.com/MetroKim/MetroMusic/pull/33); remaining product implementation and acceptance evidence are tracked in [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27).
++The **only active application target** is [MetroKim/Breezze](https://github.com/MetroKim/Breezze). [MetroKim/MetroMusic](https://github.com/MetroKim/MetroMusic) remains a legacy history/reference repository with a README redirect; do not push new product changes there. Breezze already contains the shared MetroMusic application history.
+ 
+-Breezze's one-million-active-listener goal is an engineering target, not a measured capacity claim. Production deployment, provider rights approval, load testing and physical-device certification remain release gates.
++The latest verified **draft** change set is [Breezze PR #3](https://github.com/MetroKim/Breezze/pull/3), commit `391dcd296fe995c3f3499337947747485294b317`. Its [CI](https://github.com/MetroKim/Breezze/actions/runs/45144191636), [Android/iOS listener-runtime tests](https://github.com/MetroKim/Breezze/actions/runs/45144191610), and [CodeQL checks](https://github.com/MetroKim/Breezze/actions/runs/45144191623) passed on that exact commit. This evidence does not automatically apply to new commits, production deployments, or real-device Bluetooth/lock-screen tests.
+ 
++The ten-phase [audio-first acceptance contract](docs/architecture/BREEZZE_AUDIO_FIRST_EXECUTION_AND_ACCEPTANCE.md) defines the remaining implementation and release gates. Do not mark full-track catalog licensing, native DSP, true gapless playback, physical-device certification or production deployment complete based on mock fixtures or preview streams.
+ 
+ ### Production connectivity and deployment
+ 
+
+FILE apps/mobile/integration_test/fixtures/clip.mp4
+[No textual patch available; recover from old fork if needed]
+
+FILE apps/mobile/integration_test/fixtures/tone.m4a
+[No textual patch available; recover from old fork if needed]
+
+FILE apps/mobile/integration_test/listener_runtime_test.dart
+@@ -0,0 +1,139 @@
++import 'dart:io';
++
++import 'package:breezze/core/audio/audio_service_bridge.dart';
++import 'package:breezze/core/audio/background_audio.dart';
++import 'package:breezze/features/player/player_controller.dart';
++import 'package:breezze/features/video/device_video.dart';
++import 'package:breezze/main.dart' as app;
++import 'package:breezze_api_client/breezze_api_client.dart';
++import 'package:breezze_audio_contracts/audio_contracts.dart' show PlaybackState;
++import 'package:file_selector/file_selector.dart';
++import 'package:material_ui/material_ui.dart';
++import 'package:flutter/services.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:integration_test/integration_test.dart';
++import 'package:video_player/video_player.dart';
++
++class _FixtureLyrics implements LyricsHttp {
++  @override
++  Future<String> getText(String url) async => '[]';
++}
++
++void main() {
++  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
++  testWidgets('download, offline decode, media controls and video handoff', (tester) async {
++    Future<void> until(String description, bool Function() ready, {int seconds = 25}) async {
++      final deadline = DateTime.now().add(Duration(seconds: seconds));
++      while (!ready()) {
++        if (DateTime.now().isAfter(deadline)) fail('Timed out waiting for $description');
++        await Future<void>.delayed(const Duration(milliseconds: 120));
++        await tester.pump();
++      }
++    }
++
++    app.main();
++    await until('app navigator', () => find.byType(Navigator).evaluate().isNotEmpty);
++    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
++    final context = navigator.overlay!.context;
++    final container = ProviderScope.containerOf(context, listen: false);
++    final player = container.read(playerControllerProvider.notifier);
++    PlayerState current() => container.read(playerControllerProvider);
++    await until('native media session', () => container.read(backgroundBridgeProvider) is AudioServiceBridge);
++
++    final root = await Directory.systemTemp.createTemp('breezze-runtime-');
++    addTearDown(() async { await player.stop(); await root.delete(recursive: true); });
++    final library = DownloadsLibrary(root: root, lyrics: LyricsProvider(_FixtureLyrics()));
++    final tone = await rootBundle.load('integration_test/fixtures/tone.m4a');
++    final bytes = tone.buffer.asUint8List(tone.offsetInBytes, tone.lengthInBytes);
++    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      request.response.contentLength = bytes.length;
++      request.response.add(bytes);
++      await request.response.close();
++    });
++    const track = BzTrack(id: 'fixture', title: 'Runtime tone', artist: 'Breezze QA', duration: Duration(seconds: 40));
++    try {
++      expect(await library.download(track, downloadUrl: 'http://127.0.0.1:${server.port}/tone',
++        catalogTrackId: track.id, ownerId: 'listener', rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1))), isTrue);
++    } finally {
++      await server.close(force: true);
++    }
++    expect(await library.list(ownerId: 'another-listener'), isEmpty);
++    final saved = (await library.list(ownerId: 'listener')).single;
++    expect(saved.trackId, track.id);
++    expect(await File(saved.audioPath).readAsBytes(), orderedEquals(bytes));
++    await player.playTrack(trackId: saved.catalogTrackId, title: saved.title, localFilePath: saved.audioPath);
++    await until('offline audio position', () => current().position > const Duration(milliseconds: 600));
++    expect(current().playbackState, PlaybackState.playing);
++    expect(current().duration.inSeconds, closeTo(40, 1));
++
++    final bridge = container.read(backgroundBridgeProvider) as AudioServiceBridge;
++    await bridge.pause();
++    await until('paused', () => current().playbackState == PlaybackState.paused);
++    await bridge.seek(const Duration(seconds: 4));
++    await bridge.play();
++    await until('resumed after seek', () => current().position > const Duration(milliseconds: 4600));
++
++    final videoBytes = await rootBundle.load('integration_test/fixtures/clip.mp4');
++    final videoFile = File('${root.path}/clip.mp4');
++    await videoFile.writeAsBytes(videoBytes.buffer.asUint8List(videoBytes.offsetInBytes, videoBytes.lengthInBytes));
++    final route = openDeviceVideo(context, XFile(videoFile.path));
++    await until('native video ready', () => find.byTooltip('Play video').evaluate().isNotEmpty);
++    expect(current().playbackState, PlaybackState.paused);
++    final video = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
++    await until('video route fully visible', () =>
++        ModalRoute.of(tester.element(find.byType(VideoPlayer)))?.animation?.isCompleted == true);
++    await tester.tap(find.byTooltip('Play video'));
++    await until('video decoder advancing', () => video.value.position.inMilliseconds > 100);
++    await until('video route removed', () => find.byType(VideoPlayer).evaluate().isEmpty);
++    debugPrint('After video pop: audio=${current().playbackState}, lifecycle=${WidgetsBinding.instance.lifecycleState}');
++    await until('video finished and audio resumed', () => find.byTooltip('Play video').evaluate().isEmpty &&
++        current().playbackState == PlaybackState.playing);
++    await route.timeout(const Duration(seconds: 5));
++    final resumedAt = current().position;
++    await until('audio advancing after video', () => current().position > resumedAt + const Duration(milliseconds: 400));
++
++    debugPrint('Verified local download, offline decode, seek and video handoff');
++    if (Platform.isAndroid && const bool.fromEnvironment('QA_ANDROID_MEDIA_KEYS')) {
++      debugPrint('QA_ANDROID_MEDIA_KEYS_READY');
++      await until('OS pause command', () => current().playbackState == PlaybackState.paused, seconds: 45);
++      debugPrint('QA_ANDROID_OS_PAUSED');
++      await until('OS play command', () => current().playbackState == PlaybackState.playing, seconds: 45);
++    }
++    if (const bool.fromEnvironment('QA_LIVE_PREVIEW')) {
++      await player.playTrack(trackId: 'bz:deezer_preview:3135556', title: 'Deezer preview');
++      await until('live preview decode', () => current().playbackState == PlaybackState.playing &&
++          current().position > const Duration(milliseconds: 500) &&
++          current().duration.inSeconds >= 25 && current().duration.inSeconds <= 35);
++      debugPrint('Verified live preview on native decoder');
++    }
++
++    // One native playlist must transition locally without creating a new
++    // decoder or requesting a separate remote playback authorization.
++    final nextFile = File('${root.path}/gapless-next.m4a');
++    await nextFile.writeAsBytes(bytes);
++    await player.playTrack(
++      trackId: 'device:qa-gapless-a',
++      queue: [
++        TrackInfo(
++          id: 'device:qa-gapless-a', title: 'First local',
++          localFilePath: saved.audioPath, duration: const Duration(seconds: 40),
++        ),
++        TrackInfo(
++          id: 'device:qa-gapless-b', title: 'Second local',
++          localFilePath: nextFile.path, duration: const Duration(seconds: 40),
++        ),
++      ],
++    );
++    await until('first gapless track playing',
++      () => current().currentTrack?.id == 'device:qa-gapless-a' &&
++          current().playbackState == PlaybackState.playing);
++    await player.seekTo(const Duration(seconds: 38));
++    await until('native gapless next track',
++      () => current().currentTrack?.id == 'device:qa-gapless-b' &&
++          current().playbackState == PlaybackState.playing,
++      seconds: 15);
++    debugPrint('Verified native local gapless queue transition');
++  }, timeout: const Timeout(Duration(minutes: 4)));
++}
+
+FILE apps/mobile/lib/app/bootstrap.dart
+@@ -204,12 +204,12 @@ class LiveResolver implements PlaybackResolver {
+     if (api.accessToken == null) return null;
+ 
+     try {
+-      final youtubeSong = isYouTubeSongId(track.id);
+-      final catalogId = youtubeSong ? null : await _resolveCatalogId(api, track);
+-      if (!youtubeSong && catalogId == null) return null;
++      final externalRecording = isExternalRecordingId(track.id);
++      final catalogId = externalRecording ? null : await _resolveCatalogId(api, track);
++      if (!externalRecording && catalogId == null) return null;
+ 
+       final providerIdentity = _providerIdentity(track.id);
+-      if (!youtubeSong && providerIdentity != null) {
++      if (!externalRecording && providerIdentity != null) {
+         final session = await api.startPlaybackSession(
+           providerId: providerIdentity.$1,
+           providerTrackId: providerIdentity.$2,
+@@ -239,7 +239,7 @@ class LiveResolver implements PlaybackResolver {
+       final preferences = await DownloadPreferencesStore().load();
+       final session = await api.startPlaybackSession(
+         trackId: catalogId,
+-        externalTrackId: youtubeSong ? track.id : null,
++        externalTrackId: externalRecording ? track.id : null,
+         requestedQuality: preferences.streamingQuality,
+       );
+       final sessionId = session['id'] as String?;
+
+FILE apps/mobile/lib/app/downloads_controller.dart
+@@ -7,6 +7,8 @@ import '../core/api/breezze_api.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:path_provider/path_provider.dart';
+ 
++import '../core/audio/authorized_download_grant.dart';
++import '../core/audio/playback_source_policy.dart';
+ import '../core/auth/auth_session.dart';
+ import '../core/database/database_providers.dart';
+ import '../core/database/outbox_sync_service.dart';
+@@ -132,6 +134,10 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
+   }
+ 
+   Future<void> download(BzTrack track) async {
++    if (!canRequestOfflineDownload(track.id)) {
++      _setStatus(track.id, 'failed');
++      return;
++    }
+     if (state.containsKey(track.id) || ['downloading', 'downloaded'].contains(ref.read(downloadJobStatusProvider)[track.id])) return;
+     _tracks[track.id] = track;
+     final cancellation = DownloadCancellation();
+@@ -173,18 +179,15 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
+         return;
+       }
+ 
+-      final downloadUrl = authorization['url'] as String?;
+-      if (downloadUrl == null || downloadUrl.isEmpty) { _setStatus(track.id, 'failed'); return; }
+-      // The server issues a bounded offline lease, capped by the actual rights end.
+-      // Keep the effective expiry in the local metadata so a device offline for
+-      // longer than the lease cannot continue playing indefinitely.
+-      final rightsExpiryRaw = (authorization['offlineLeaseExpiresAt']
+-          ?? authorization['rightsExpiresAt']) as String?;
+-      final rightsExpiry = rightsExpiryRaw == null
+-          ? null
+-          : DateTime.tryParse(rightsExpiryRaw)?.toUtc();
+-      if (rightsExpiryRaw != null && rightsExpiry == null) return;
+-      if (rightsExpiry != null && !rightsExpiry.isAfter(DateTime.now().toUtc())) {
++      final grant = AuthorizedDownloadGrant.fromResponse(authorization);
++      if (grant == null) {
++        _setStatus(track.id, 'failed');
++        return;
++      }
++      // The user may have signed out while the server was authorizing.
++      final currentAuth = ref.read(authSessionProvider);
++      if (currentAuth is! AuthSignedIn || currentAuth.userId != auth.userId) {
++        _setStatus(track.id, 'cancelled');
+         return;
+       }
+ 
+@@ -196,16 +199,26 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
+       );
+       final ok = await library.download(
+         track,
+-        downloadUrl: downloadUrl,
++        downloadUrl: grant.downloadUrl.toString(),
+         ownerId: auth.userId,
+         catalogTrackId: catalogId,
+-        rightsExpiresAtUtc: rightsExpiry,
++        rightsExpiresAtUtc: grant.offlineLeaseExpiresAtUtc,
++        assetVersion: grant.assetVersion,
+         cancellation: cancellation,
+         onProgress: (progress) {
+           if (mounted) state = {...state, track.id: progress};
+         },
+       );
+ 
++      final latestAuth = ref.read(authSessionProvider);
++      if (latestAuth is! AuthSignedIn || latestAuth.userId != auth.userId ||
++          cancellation.isCancelled) {
++        // Never promote an old-account transfer into a downloaded job.
++        // The old account's private file must not survive a race to logout.
++        await library.remove(track.id);
++        _setStatus(track.id, 'cancelled');
++        return;
++      }
+       if (ok) {
+         _setStatus(track.id, 'downloaded');
+       } else if (!cancellation.isCancelled) {
+
+FILE apps/mobile/lib/core/audio/authorized_download_grant.dart
+@@ -0,0 +1,77 @@
++/// Validates backend-issued download grants before the client starts I/O.
++///
++/// Discovery metadata, preview URLs and missing/expired offline leases are
++/// never sufficient to authorize a persistent audio file.
++class AuthorizedDownloadGrant {
++  const AuthorizedDownloadGrant({
++    required this.downloadUrl,
++    required this.offlineLeaseExpiresAtUtc,
++    this.assetVersion,
++  });
++
++  final Uri downloadUrl;
++  final DateTime offlineLeaseExpiresAtUtc;
++
++  /// Stable, server-issued version of the *exact encoded media asset*.
++  /// Null means a partial download cannot be safely resumed.
++  final String? assetVersion;
++
++  static AuthorizedDownloadGrant? fromResponse(
++    Map<String, dynamic> response, {
++    DateTime? nowUtc,
++  }) {
++    if (response['allowed'] != true || response['previewOnly'] == true) {
++      return null;
++    }
++
++    final urlText = response['url'];
++    if (urlText is! String) return null;
++    final url = Uri.tryParse(urlText);
++    if (url == null || url.scheme != 'https' || url.host.isEmpty ||
++        url.userInfo.isNotEmpty || url.fragment.isNotEmpty) {
++      return null;
++    }
++
++    final now = (nowUtc ?? DateTime.now().toUtc()).toUtc();
++    DateTime? parseExpiry(Object? value) =>
++        value is String ? DateTime.tryParse(value)?.toUtc() : null;
++
++    final lease = parseExpiry(response['offlineLeaseExpiresAt']);
++    if (lease == null || !lease.isAfter(now)) return null;
++
++    // The API intentionally issues at most a 72h offline lease. A longer
++    // client-side lease is not proof of authority and must fail closed.
++    if (lease.isAfter(now.add(const Duration(hours: 72, seconds: 30)))) {
++      return null;
++    }
++
++    final signedUrlExpiryValue = response['expiresAt'];
++    if (signedUrlExpiryValue != null) {
++      final signedUrlExpiry = parseExpiry(signedUrlExpiryValue);
++      if (signedUrlExpiry == null || !signedUrlExpiry.isAfter(now)) return null;
++    }
++
++    final rightsExpiryValue = response['rightsExpiresAt'];
++    if (rightsExpiryValue != null) {
++      final rightsExpiry = parseExpiry(rightsExpiryValue);
++      if (rightsExpiry == null ||
++          !rightsExpiry.isAfter(now) ||
++          lease.isAfter(rightsExpiry)) {
++        return null;
++      }
++    }
++
++    final version = response['assetVersion'];
++    // Version identifiers are metadata, never raw URLs, tokens, or cookies.
++    final assetVersion = version is String &&
++            RegExp(r'^[A-Za-z0-9._:-]{1,128}$').hasMatch(version)
++        ? version
++        : null;
++
++    return AuthorizedDownloadGrant(
++      downloadUrl: url,
++      offlineLeaseExpiresAtUtc: lease,
++      assetVersion: assetVersion,
++    );
++  }
++}
+
+FILE apps/mobile/lib/core/audio/just_audio_engine_adapter.dart
+@@ -7,15 +7,16 @@ import 'package:just_audio/just_audio.dart' as ja;
+ 
+ /// Native audio engine — implements the Breezze engine contract over
+ /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
+-class JustAudioEngineAdapter implements AudioEngineAdapter {
+-  final ja.AudioPlayer _player = ja.AudioPlayer();
++class JustAudioEngineAdapter implements AudioEngineAdapter, GaplessLocalQueueEngine {
++  final ja.AudioPlayer _player = ja.AudioPlayer(handleInterruptions: false);
+   final StreamController<PlaybackState> _states =
+       StreamController<PlaybackState>.broadcast();
+   late final StreamSubscription<ja.PlaybackEvent> _errorSubscription;
+   late final StreamSubscription<ja.PlayerState> _stateSubscription;
+   StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
+   StreamSubscription<void>? _becomingNoisySubscription;
+   bool _disposed = false;
++  bool _pausedByInterruption = false;
+ 
+   JustAudioEngineAdapter() {
+     _errorSubscription = _player.playbackEventStream.listen(
+@@ -59,12 +60,17 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
+       if (_disposed) return;
+       _interruptionSubscription = session.interruptionEventStream.listen((event) {
+         if (event.begin) {
++          // A paused audio player has already yielded to an in-app video.
++          // Only an interruption of active playback changes its state.
++          if (!_player.playing) return;
++          _pausedByInterruption = true;
+           // Pause rather than duck for calls, navigation prompts and other
+           // exclusive audio interruptions. Never auto-resume after a call.
+           unawaited(_player.pause().catchError((_) {}));
+           _states.add(PlaybackState.interrupted);
+-        } else {
+-          _states.add(PlaybackState.paused);
++        } else if (_pausedByInterruption) {
++          _pausedByInterruption = false;
++          if (!_player.playing) _states.add(PlaybackState.paused);
+         }
+       });
+       _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
+@@ -85,6 +91,43 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
+     }
+   }
+ 
++  @override
++  bool get supportsGaplessLocalFiles => !kIsWeb &&
++      [TargetPlatform.android, TargetPlatform.iOS, TargetPlatform.macOS]
++          .contains(defaultTargetPlatform);
++
++  /// A native playlist is safe only for local sources. Licensed streams
++  /// have per-track rights, grant expiries and heartbeat sessions.
++  @override
++  Future<void> prepareLocalPlaylist(
++    List<PlayableSource> sources, {
++    required int initialIndex,
++  }) async {
++    if (!supportsGaplessLocalFiles || sources.length < 2 || initialIndex < 0 ||
++        initialIndex >= sources.length ||
++        sources.any((source) => !source.isLocal ||
++            source.streamUrl.isEmpty ||
++            source.streamUrl.startsWith('content://'))) {
++      throw ArgumentError('Gapless playlist requires local files only');
++    }
++    await _player.setAudioSource(
++      ja.ConcatenatingAudioSource(
++        children: [
++          for (final source in sources) ja.AudioSource.file(source.streamUrl),
++        ],
++        useLazyPreparation: true, // prebuffer upcoming files, not the entire library
++      ),
++      initialIndex: initialIndex,
++    );
++  }
++
++  @override
++  Stream<int?> get currentIndexStream => _player.currentIndexStream;
++
++  @override
++  Future<void> skipToIndex(int index) =>
++      _player.seek(Duration.zero, index: index);
++
+   @override
+   Future<void> play() => _player.play();
+ 
+@@ -95,7 +138,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
+   Future<void> seek(Duration position) => _player.seek(position);
+ 
+   @override
+-  Future<void> stop() => _player.stop();
++  Future<void> stop() => _disposed ? Future<void>.value() : _player.stop();
+ 
+   @override
+   Duration get position => _player.position;
+@@ -116,12 +159,19 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
+   Stream<PlaybackState> get engineStateStream => _states.stream;
+ 
+   Future<void> dispose() async {
++    if (_disposed) return;
+     _disposed = true;
+     await _errorSubscription.cancel();
+     await _stateSubscription.cancel();
+     await _interruptionSubscription?.cancel();
+     await _becomingNoisySubscription?.cancel();
+     await _states.close();
+-    await _player.dispose();
++    // just_audio switches from its native player to an idle player on stop.
++    // Finish that switch before disposing the platform during app shutdown.
++    try {
++      await _player.stop();
++    } finally {
++      await _player.dispose();
++    }
+   }
+ }
+
+FILE apps/mobile/lib/core/audio/offline_lease_policy.dart
+@@ -0,0 +1,7 @@
++/// Local offline files are playable only while the backend-issued lease
++/// remains valid. A legacy metadata row without an expiry has no grant.
++bool hasValidOfflineLease(DateTime? expiresAtUtc, {DateTime? nowUtc}) {
++  if (expiresAtUtc == null) return false;
++  final now = (nowUtc ?? DateTime.now().toUtc()).toUtc();
++  return expiresAtUtc.toUtc().isAfter(now);
++}
+
+FILE apps/mobile/lib/core/audio/playback_source_policy.dart
+@@ -5,10 +5,15 @@ final _youtubeSongId = RegExp(r'^bz:youtube_music:[A-Za-z0-9_-]{11}$');
+ 
+ bool isYouTubeSongId(String id) => _youtubeSongId.hasMatch(id);
+ 
++final _deezerTrack = RegExp(r'^bz:deezer:[0-9]{1,20}$');
++bool isDeezerTrackId(String id) => _deezerTrack.hasMatch(id);
++
++bool isExternalRecordingId(String id) => isYouTubeSongId(id) || isDeezerTrackId(id);
++
+ /// A queued song still needs a source from the session resolver.
+ bool isMetadataOnlyTrackId(String id) =>
+     id.startsWith('bzv:') ||
+-    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:') && !isYouTubeSongId(id) && !isDeezerPreview(id));
++    (id.startsWith('bz:') && !id.startsWith('bz:jamendo:') && !isExternalRecordingId(id) && !isDeezerPreview(id));
+ 
+ bool canQueueTrackId(String id) => id.trim().isNotEmpty && !isMetadataOnlyTrackId(id);
+ 
+
+FILE apps/mobile/lib/features/downloads/downloads_screen.dart
+@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ 
+ import '../../app/bootstrap.dart';
+ import '../../app/downloads_controller.dart';
++import '../../core/audio/offline_lease_policy.dart';
+ import '../../core/auth/auth_session.dart';
+ import '../../core/database/outbox_sync_service.dart';
+ import '../../widgets/bz_brand_icons.dart';
+@@ -65,7 +66,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
+           }
+           final rawExpiry = lease['offlineLeaseExpiresAt'] as String?;
+           final expiry = rawExpiry == null ? null : DateTime.tryParse(rawExpiry);
+-          if (rawExpiry != null && expiry == null) continue;
++          if (!hasValidOfflineLease(expiry)) continue;
+           await library.updateOfflineLease(track.trackId, expiry);
+         } catch (_) {
+           // A transient network failure does not erase a still-valid offline lease.
+@@ -105,10 +106,10 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
+     final auth = ref.read(authSessionProvider);
+     if (auth is! AuthSignedIn || auth.userId != track.ownerId) return;
+     final expiry = track.rightsExpiresAtUtc;
+-    if (expiry != null && !expiry.isAfter(DateTime.now().toUtc())) {
++    if (!hasValidOfflineLease(expiry)) {
+       ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(
+-          content: Text('This download has expired. Connect to the internet and download it again.'),
++          content: Text('This download has no valid offline licence. Reconnect to renew it.'),
+         ),
+       );
+       return;
+
+FILE apps/mobile/lib/features/player/now_playing_screen.dart
+@@ -2,6 +2,7 @@ import 'package:breezze_api_client/breezze_api_client.dart';
+ import 'package:breezze_audio_contracts/audio_contracts.dart';
+ import 'package:breezze_design_system/breezze_design_system.dart';
+ import 'package:material_ui/material_ui.dart' hide RepeatMode;
++import 'package:palette_generator/palette_generator.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ 
+ import '../../app/bootstrap.dart';
+@@ -24,11 +25,34 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+   // Artwork-first playback and a dedicated lyric-reading mode share the
+   // same player and synced lyric state, without duplicate audio sessions.
+   bool _lyricsFocus = false;
++  Color? _artworkAccent;
++  int _artworkPaletteGeneration = 0;
+ 
+   @override
+   void initState() {
+     super.initState();
+     _loadLyrics();
++    _loadArtworkAccent(ref.read(playerControllerProvider).currentTrack?.artworkUrl);
++  }
++
++  void _loadArtworkAccent(String? rawUrl) {
++    final request = ++_artworkPaletteGeneration;
++    _artworkAccent = null;
++    final uri = Uri.tryParse(rawUrl ?? '');
++    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return;
++    // Share Flutter's image cache for artwork; stale palette responses must
++    // never tint a different song after a rapid Next/Previous gesture.
++    PaletteGenerator.fromImageProvider(
++      NetworkImage(uri.toString()), maximumColorCount: 12,
++    ).then((palette) {
++      if (!mounted || request != _artworkPaletteGeneration) return;
++      setState(() {
++        _artworkAccent = palette.vibrantColor?.color ??
++            palette.dominantColor?.color;
++      });
++    }).catchError((Object _) {
++      // Keep the neutral brand treatment when artwork is unavailable.
++    });
+   }
+ 
+   Future<void> _loadLyrics() async {
+@@ -146,6 +170,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+ 
+   @override
+   Widget build(BuildContext context) {
++    ref.listen<String?>(
++      playerControllerProvider.select((state) => state.currentTrack?.artworkUrl),
++      (previous, next) {
++        if (previous != next) _loadArtworkAccent(next);
++      },
++    );
+     ref.listen<String?>(
+       playerControllerProvider.select((state) => state.currentTrack?.id),
+       (previous, next) {
+@@ -177,6 +207,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+     return Scaffold(
+       body: BzAmbientBackdrop(
+         artworkUrl: track.artworkUrl,
++        artworkAccent: _artworkAccent,
+         child: SafeArea(
+           child: Center(
+             child: ConstrainedBox(
+
+FILE apps/mobile/lib/features/player/player_controller.dart
+@@ -39,6 +39,10 @@ class PlayerController extends Notifier<PlayerState> {
+   int _requestGeneration = 0;
+   String? _autoAdvancedTrackId;
+   Future<void> _engineOperations = Future<void>.value();
++  GaplessLocalQueueEngine? _gaplessEngine;
++  List<QueueEntry>? _gaplessEntries;
++  int? _gaplessIndex;
++  StreamSubscription<int?>? _gaplessIndexSub;
+ 
+   String? _playbackSessionId;
+   PlaybackSessionClient? _activeSessionClient;
+@@ -261,6 +265,8 @@ class PlayerController extends Notifier<PlayerState> {
+       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+       _positionSub?.cancel();
+       _engineStateSub?.cancel();
++      _gaplessIndexSub?.cancel();
++      _disarmNativeGapless();
+       _engine = null;
+       _activeSource = null;
+     });
+@@ -273,7 +279,17 @@ class PlayerController extends Notifier<PlayerState> {
+     _requestGeneration++;
+     _positionSub?.cancel();
+     _engineStateSub?.cancel();
++    _gaplessIndexSub?.cancel();
++    _disarmNativeGapless();
+     _engine = engine;
++    if (engine is GaplessLocalQueueEngine) {
++      _gaplessIndexSub = engine.currentIndexStream.listen((index) {
++        if (index != null && identical(_engine, engine) &&
++            identical(_gaplessEngine, engine)) {
++          _syncNativeGaplessIndex(index);
++        }
++      });
++    }
+ 
+     _positionSub = engine.positionStream.listen((pos) {
+       if (!identical(_engine, engine)) return;
+@@ -344,13 +360,129 @@ class PlayerController extends Notifier<PlayerState> {
+     _requestGeneration++;
+     _positionSub?.cancel();
+     _engineStateSub?.cancel();
++    _gaplessIndexSub?.cancel();
+     _positionSub = null;
+     _engineStateSub = null;
++    _gaplessIndexSub = null;
++    _disarmNativeGapless();
+     _engine = null;
+     _activeSource = null;
+   }
+ 
+ 
++  void _disarmNativeGapless() {
++    _gaplessEngine = null;
++    _gaplessEntries = null;
++    _gaplessIndex = null;
++  }
++
++  void _syncNativeGaplessIndex(int index) {
++    final entries = _gaplessEntries;
++    if (entries == null || index < 0 || index >= entries.length ||
++        _gaplessIndex == index) {
++      return;
++    }
++    _gaplessIndex = index;
++    final entry = entries[index];
++    final previousId = state.currentTrack?.id;
++    if (previousId != null) _scrobbles.onStop(previousId);
++    if (!_queue.selectEntry(entry.entryId)) return;
++    final next = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
++    state = state.copyWith(
++      currentTrack: next,
++      position: Duration.zero,
++      duration: next.duration,
++    );
++    if (state.playbackState == PlaybackState.playing) {
++      _scrobbles.onPlay(entry.trackId, DateTime.now().toUtc());
++    }
++  }
++
++  /// Editing a playing native playlist needs a fresh single-item source.
++  /// Never let a stale decoder queue disagree with the global queue.
++  void _invalidateNativeGapless() {
++    if (_gaplessEngine == null) return;
++    final track = state.currentTrack;
++    final position = state.position;
++    _disarmNativeGapless();
++    if (track != null) {
++      unawaited(_resolveAndPlay(track, initialPosition: position));
++    }
++  }
++
++  Future<void> _resolveAndPlayLocalPlaylist(
++    List<TrackInfo> tracks,
++    List<QueueEntry> entries,
++    int index,
++    GaplessLocalQueueEngine native,
++  ) async {
++    final requestId = ++_requestGeneration;
++    _disarmNativeGapless();
++    final selected = tracks[index];
++    final oldId = state.currentTrack?.id;
++    if (oldId != null) _scrobbles.onStop(oldId);
++    unawaited(_closePlaybackSession());
++    _autoAdvancedTrackId = null;
++    final source = PlayableSource(
++      trackId: selected.id,
++      streamUrl: selected.localFilePath!,
++      expiresAtUtc: DateTime.utc(9999),
++      isLocal: true,
++    );
++    _activeSource = source;
++    state = state.copyWith(
++      currentTrack: selected,
++      position: Duration.zero,
++      duration: selected.duration,
++    );
++    _machine.dispatch(StartRequested(selected.id, requestId: requestId));
++    _machine.dispatch(SourceResolved(
++      selected.id, source.streamUrl, requestId: requestId,
++    ));
++    if (_machine.state != PlaybackState.loading) return;
++    _gaplessEngine = native;
++    _gaplessEntries = List.of(entries);
++    _gaplessIndex = index;
++
++    try {
++      await _serializeEngineOperation(() async {
++        if (!_isCurrentRequest(requestId) || !identical(_engine, native)) return;
++        await native.prepareLocalPlaylist([
++          for (final track in tracks)
++            PlayableSource(
++              trackId: track.id,
++              streamUrl: track.localFilePath!,
++              expiresAtUtc: DateTime.utc(9999),
++              isLocal: true,
++            ),
++        ], initialIndex: index);
++        if (!_isCurrentRequest(requestId) || !identical(_engine, native)) return;
++        _machine.dispatch(MediaReady(requestId: requestId));
++        if (_machine.state != PlaybackState.buffering) return;
++        _machine.dispatch(PlayPressed());
++        if (_machine.state != PlaybackState.playing) return;
++        unawaited(native.play().catchError((Object error, StackTrace stack) {
++          if (!_isCurrentRequest(requestId)) return;
++          _disarmNativeGapless();
++          _machine.dispatch(SourceResolutionFailed(
++            'LOCAL_GAPLESS_PLAYBACK_FAILED', requestId: requestId,
++          ));
++        }));
++      });
++      if (_isCurrentRequest(requestId) &&
++          _machine.state == PlaybackState.playing) {
++        _scrobbles.onPlay(selected.id, DateTime.now().toUtc());
++      }
++    } catch (_) {
++      if (_isCurrentRequest(requestId)) {
++        _disarmNativeGapless();
++        _machine.dispatch(SourceResolutionFailed(
++          'LOCAL_GAPLESS_SETUP_FAILED', requestId: requestId,
++        ));
++      }
++    }
++  }
++
+   // ----------------------------------------------------------------
+   // Commands
+   // ----------------------------------------------------------------
+@@ -387,6 +519,19 @@ class PlayerController extends Notifier<PlayerState> {
+       for (final item in queue) {
+         _trackInfos[item.id] = item;
+       }
++      final engine = _engine;
++      if (queue.length >= 2 && engine is GaplessLocalQueueEngine &&
++          engine.supportsGaplessLocalFiles && !_queue.shuffle &&
++          _queue.repeatMode == RepeatMode.off &&
++          queue.every((item) => item.id.startsWith('device:') &&
++              item.localFilePath != null &&
++              item.localFilePath!.isNotEmpty &&
++              !item.localFilePath!.startsWith('content://'))) {
++        await _resolveAndPlayLocalPlaylist(
++          queue, entries, startIndex.clamp(0, queue.length - 1), engine,
++        );
++        return;
++      }
+     } else {
+       final entry = QueueEntry(
+         entryId: 'qe-${DateTime.now().microsecondsSinceEpoch}',
+@@ -417,6 +562,7 @@ class PlayerController extends Notifier<PlayerState> {
+   /// and account sign-out so one user's media cannot continue into another
+   /// account session.
+   Future<void> stop() async {
++    _disarmNativeGapless();
+     final requestId = ++_requestGeneration;
+     final engine = _engine;
+     final currentTrackId = state.currentTrack?.id;
+@@ -458,6 +604,9 @@ class PlayerController extends Notifier<PlayerState> {
+   Future<void> resume() async {
+     final engine = _engine;
+     if (engine == null || state.playbackState != PlaybackState.paused) return;
++    final requestId = _requestGeneration;
++    bool isCurrentResume() =>
++        _isCurrentRequest(requestId) && identical(_engine, engine);
+     final activeSource = _activeSource;
+     final currentTrack = state.currentTrack;
+     if (activeSource != null && activeSource.isExpired && currentTrack != null) {
+@@ -477,35 +626,40 @@ class PlayerController extends Notifier<PlayerState> {
+       try {
+         await (_activeSessionClient ?? _sessionClient).resume(sessionId);
+       } catch (_) {
+-        await _closePlaybackSession();
++        if (isCurrentResume()) await _closePlaybackSession();
+         return;
+       }
+     }
++    if (!isCurrentResume()) return;
+     _machine.dispatch(PlayPressed());
+     try {
+       await _serializeEngineOperation(() async {
++        if (!isCurrentResume()) return;
+         unawaited(engine.play().catchError(
+           (Object error, StackTrace stackTrace) {
++            if (!isCurrentResume()) return;
+             final currentTrackId = state.currentTrack?.id;
+             if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+             unawaited(_closePlaybackSession());
+             _machine.dispatch(SourceResolutionFailed(
+               'RESUME_FAILED',
+-              requestId: _machine.activeRequestId,
++              requestId: requestId,
+             ));
+           },
+         ));
+       });
+-      if (sessionId != null && state.playbackState == PlaybackState.playing) {
++      if (isCurrentResume() && sessionId != null &&
++          state.playbackState == PlaybackState.playing) {
+         _startHeartbeatTimer();
+       }
+     } catch (_) {
++      if (!isCurrentResume()) return;
+       await _closePlaybackSession();
+       final currentTrackId = state.currentTrack?.id;
+       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+       _machine.dispatch(SourceResolutionFailed(
+         'RESUME_FAILED',
+-        requestId: _machine.activeRequestId,
++        requestId: requestId,
+       ));
+     }
+   }
+@@ -543,22 +697,55 @@ class PlayerController extends Notifier<PlayerState> {
+     }
+   }
+ 
++  Future<bool> _seekNativeGaplessEntry(QueueEntry entry) async {
++    final engine = _gaplessEngine;
++    final entries = _gaplessEntries;
++    if (engine == null || entries == null) return false;
++    final index = entries.indexWhere((item) => item.entryId == entry.entryId);
++    if (index < 0) return false;
++    final generation = _requestGeneration;
++    try {
++      await _serializeEngineOperation(() async {
++        if (_isCurrentRequest(generation) && identical(_gaplessEngine, engine)) {
++          await engine.skipToIndex(index);
++        }
++      });
++      if (_isCurrentRequest(generation) && identical(_gaplessEngine, engine)) {
++        _syncNativeGaplessIndex(index);
++      }
++      return true;
++    } catch (_) {
++      _disarmNativeGapless();
++      return false;
++    }
++  }
++
+   Future<void> next() async {
+     final entry = _queue.advance();
+     if (entry == null) return;
++    if (await _seekNativeGaplessEntry(entry)) return;
+     final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
+     await _resolveAndPlay(info);
+   }
+ 
+   Future<void> previous() async {
+     final entry = _queue.previous();
+     if (entry == null) return;
++    if (await _seekNativeGaplessEntry(entry)) return;
+     final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
+     await _resolveAndPlay(info);
+   }
+ 
+   Future<bool> _tryDeezerPreview(TrackInfo track, int requestId) async {
+-    if (!isYouTubeSongId(track.id) || !_isCurrentRequest(requestId)) return false;
++    if (!_isCurrentRequest(requestId)) return false;
++    if (isDeezerTrackId(track.id)) {
++      await _playDeezerPreview(TrackInfo(
++        id: 'bz:deezer_preview:${track.id.split(':').last}',
++        title: track.title, artist: track.artist, artworkUrl: track.artworkUrl,
++      ));
++      return true;
++    }
++    if (!isYouTubeSongId(track.id)) return false;
+     final title = track.title;
+     final artist = track.artist;
+     if (title == null || artist == null || title.isEmpty || artist.isEmpty) return false;
+@@ -613,6 +800,7 @@ class PlayerController extends Notifier<PlayerState> {
+       insertedAtMs: DateTime.now().millisecondsSinceEpoch,
+       trackVersion: 'v1',
+     ));
++    _invalidateNativeGapless();
+   }
+ 
+   /// Appends a track to the end of the current queue.
+@@ -642,15 +830,23 @@ class PlayerController extends Notifier<PlayerState> {
+       insertedAtMs: DateTime.now().millisecondsSinceEpoch,
+       trackVersion: 'v1',
+     ));
++    _invalidateNativeGapless();
+   }
+ 
+   /// Register a Last.fm/ListenBrainz-compatible scrobbling destination.
+   void registerScrobbler(Scrobbler scrobbler) {
+     _scrobbles.register(scrobbler);
+   }
+ 
+-  void toggleShuffle() => _queue.toggleShuffle();
+-  void cycleRepeat() => _queue.cycleRepeat();
++  void toggleShuffle() {
++    _queue.toggleShuffle();
++    _invalidateNativeGapless();
++  }
++
++  void cycleRepeat() {
++    _queue.cycleRepeat();
++    _invalidateNativeGapless();
++  }
+ 
+   TrackInfo? _trackInfoFor(String trackId) => _trackInfos[trackId];
+ 
+@@ -674,6 +870,7 @@ class PlayerController extends Notifier<PlayerState> {
+     TrackInfo info, {
+     Duration initialPosition = Duration.zero,
+   }) async {
++    _disarmNativeGapless();
+     if (isMetadataOnlyTrackId(info.id) && info.localFilePath == null) return;
+     final requestId = ++_requestGeneration;
+     final previousTrackId = state.currentTrack?.id;
+@@ -809,7 +1006,7 @@ class PlayerController extends Notifier<PlayerState> {
+       // Keep the legacy reporter only for local/offline media, which has no
+       // server playback session.
+       if (source.sessionId == null && !info.id.startsWith('device:') &&
+-          !isDeezerPreview(info.id) && !isYouTubeSongId(info.id)) {
++          !isDeezerPreview(info.id) && !isExternalRecordingId(info.id)) {
+         unawaited(
+           ref.read(playHistoryReporterProvider)(info).catchError((_) {}),
+         );
+
+FILE apps/mobile/lib/features/search/search_screen.dart
+@@ -465,17 +465,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+       );
+       return;
+     }
+-    if (track.id.startsWith('bz:deezer:')) {
+-      final id = track.id.replaceFirst('bz:deezer:', 'bz:deezer_preview:');
+-      final preview = TrackInfo(id: id, title: track.title, artist: track.artist,
+-          artworkUrl: track.artworkUrl);
+-      ref.read(playerControllerProvider.notifier).playTrack(
+-        trackId: id, queue: [preview], startIndex: 0, origin: 'search',
+-        sourceContext: 'Deezer preview',
+-      );
+-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()));
+-      return;
+-    }
+     if (isMetadataOnlyTrackId(track.id)) {
+       if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+@@ -717,7 +706,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+                                           )
+                                         : Text(
+                                             track.id.startsWith('bz:deezer:')
+-                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer preview' : 'Deezer catalog'}'
++                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer · preview available' : 'Deezer catalog'}'
+                                                 : track.id.startsWith('bz:youtube_music:')
+                                                         ? '${track.artist} · YouTube Music'
+                                                         : track.id.startsWith('bz:jamendo:')
+@@ -736,7 +725,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
+                                           IconButton(
+                                             tooltip: track.id.startsWith('bzv:')
+                                                 ? 'Watch music video'
+-                                                : track.hasPreview ? 'Play preview' : 'Play',
++                                                : 'Play',
+                                             icon: const BzSvgIcon(name: 'play', size: 20),
+                                             onPressed: () => _play(track),
+                                           ),
+
+FILE apps/mobile/lib/features/video/device_video.dart
+@@ -17,13 +17,16 @@ Future<void> pickDeviceVideo(BuildContext context) async {
+           mimeTypes: ['video/mp4'], uniformTypeIdentifiers: ['public.mpeg-4', 'com.apple.m4v-video']),
+     ]);
+     if (file == null || !context.mounted) return;
+-    await openVideoSurface(context, (_) => _DeviceVideo(file: file));
++    await openDeviceVideo(context, file);
+   } catch (_) {
+     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text('Could not open this video.')));
+   }
+ }
+ 
++Future<void> openDeviceVideo(BuildContext context, XFile file) =>
++    openVideoSurface(context, (_) => _DeviceVideo(file: file));
++
+ class _DeviceVideo extends StatefulWidget {
+   final XFile file;
+   const _DeviceVideo({required this.file});
+
+FILE apps/mobile/lib/features/video/open_youtube_player.dart
+@@ -19,6 +19,26 @@ Future<void> openYouTubePlayer({
+   ));
+ }
+ 
++/// Audio may be restored only if the video still belongs to the exact
++/// queue entry and recording that were playing at handoff time.
++/// Never resurrect a superseded track or override a user/OS pause.
++bool shouldResumeAudioAfterVideo({
++  required bool wasPlaying,
++  required String? openedEntryId,
++  required String? openedTrackId,
++  required String? currentEntryId,
++  required String? currentTrackId,
++  required PlaybackState currentState,
++  required AppLifecycleState? lifecycleState,
++}) =>
++    wasPlaying &&
++    openedEntryId != null &&
++    openedEntryId == currentEntryId &&
++    openedTrackId != null &&
++    openedTrackId == currentTrackId &&
++    currentState == PlaybackState.paused &&
++    lifecycleState == AppLifecycleState.resumed;
++
+ Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async {
+   final container = ProviderScope.containerOf(context, listen: false);
+   final controller = container.read(playerControllerProvider.notifier);
+@@ -33,16 +53,43 @@ Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async
+     return;
+   }
+   final entry = controller.queue.current?.entryId;
++  final trackId = previous.currentTrack?.id;
+   final resumeAudio = previous.playbackState == PlaybackState.playing;
+-  if (resumeAudio) await controller.pause();
++  if (resumeAudio) {
++    await controller.pause();
++    // Pausing can await a server session. A new selection made during that
++    // await must not be covered by a video started for the previous track.
++    if (!context.mounted ||
++        !shouldResumeAudioAfterVideo(
++          wasPlaying: resumeAudio,
++          openedEntryId: entry,
++          openedTrackId: trackId,
++          currentEntryId: controller.queue.current?.entryId,
++          currentTrackId: container.read(playerControllerProvider).currentTrack?.id,
++          currentState: container.read(playerControllerProvider).playbackState,
++          lifecycleState: WidgetsBinding.instance.lifecycleState,
++        )) {
++      return;
++    }
++  }
+   try {
+     if (!context.mounted) return;
+-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
++    final route = MaterialPageRoute<void>(builder: builder);
++    await Navigator.of(context).push(route);
++    // The pop result arrives while the video widget still owns its decoder.
++    // Wait for the reverse transition and disposal before resuming audio.
++    await route.completed;
+   } finally {
+-    if (context.mounted && resumeAudio && entry != null &&
+-        controller.queue.current?.entryId == entry &&
+-        container.read(playerControllerProvider).playbackState == PlaybackState.paused &&
+-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
++    if (context.mounted &&
++        shouldResumeAudioAfterVideo(
++          wasPlaying: resumeAudio,
++          openedEntryId: entry,
++          openedTrackId: trackId,
++          currentEntryId: controller.queue.current?.entryId,
++          currentTrackId: container.read(playerControllerProvider).currentTrack?.id,
++          currentState: container.read(playerControllerProvider).playbackState,
++          lifecycleState: WidgetsBinding.instance.lifecycleState,
++        )) {
+       await controller.resume();
+     }
+   }
+
+FILE apps/mobile/lib/widgets/breezze_app_root.dart
+@@ -2,6 +2,7 @@ import 'dart:async';
+ import '../../app/appearance_controller.dart';
+ 
+ import 'package:material_ui/material_ui.dart';
++import 'package:palette_generator/palette_generator.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:breezze_design_system/breezze_design_system.dart';
+ import '../../core/api/breezze_api.dart';
+@@ -37,10 +38,12 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
+   ProviderContainer? _container;
+   JustAudioEngineAdapter? _audioEngine;
+   BackgroundAudioBridge? _backgroundBridge;
++  late final Future<Color?> _brandSeedFuture;
+ 
+   @override
+   void initState() {
+     super.initState();
++    _brandSeedFuture = _readBrandIconPalette();
+     WidgetsBinding.instance.addObserver(this);
+     _container = ProviderScope.containerOf(context, listen: false);
+     _audioEngine = JustAudioEngineAdapter();
+@@ -121,6 +124,20 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
+     }
+   }
+ 
++  Future<Color?> _readBrandIconPalette() async {
++    try {
++      final palette = await PaletteGenerator.fromImageProvider(
++        const AssetImage('assets/icons/launcher.png'),
++        maximumColorCount: 16,
++      );
++      // The approved Breezze launcher is monochrome; the theme's contrast
++      // policy will keep the neutral fallback for an achromatic palette.
++      return palette.vibrantColor?.color ?? palette.dominantColor?.color;
++    } catch (_) {
++      return null;
++    }
++  }
++
+   @override
+   Widget build(BuildContext context) {
+     final auth = ref.watch(authSessionProvider);
+@@ -129,12 +146,14 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
+     // signed-out gate rendered AuthScreen before the shell's nested
+     // MaterialApp existed, leaving login/register without app navigation,
+     // theme and inherited Material widgets.
+-    return MaterialApp(
++    return FutureBuilder<Color?>(
++      future: _brandSeedFuture,
++      builder: (context, palette) => MaterialApp(
+       title: 'Breezze',
+       debugShowCheckedModeBanner: false,
+       themeMode: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.system,
+-      theme: bzLightTheme(),
+-      darkTheme: bzDarkTheme(),
++      theme: bzLightTheme(brandSeed: palette.data),
++      darkTheme: bzDarkTheme(brandSeed: palette.data),
+       home: Builder(
+         builder: (context) {
+           if (auth is AuthUninitialized) {
+@@ -182,6 +201,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
+           return const AuthScreen();
+         },
+       ),
++      ),
+     );
+   }
+ 
+
+FILE apps/mobile/pubspec.yaml
+@@ -12,6 +12,7 @@ dependencies:
+   material_ui: ^1.6.0
+   file_selector: ^1.0.3
+   flutter_svg: ^2.0.10
++  palette_generator: ^0.3.3+7
+ 
+   breezze_design_system:
+     path: ../../packages/design_system
+@@ -56,6 +57,8 @@ dependencies:
+   path: ^1.9.0
+ 
+ dev_dependencies:
++  integration_test:
++    sdk: flutter
+   flutter_test:
+     sdk: flutter
+   flutter_lints: ^4.0.0
+
+FILE apps/mobile/test/core/audio/authorized_download_grant_test.dart
+@@ -0,0 +1,71 @@
++import 'package:breezze/core/audio/authorized_download_grant.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  final now = DateTime.utc(2026, 11, 23, 10);
++  final signedExpiry = now.add(const Duration(minutes: 5));
++  final leaseExpiry = now.add(const Duration(hours: 6));
++  final rightsExpiry = now.add(const Duration(hours: 8));
++
++  Map<String, dynamic> grant() => {
++    'allowed': true,
++    'url': 'https://media.example.org/download?sig=redacted',
++    'expiresAt': signedExpiry.toIso8601String(),
++    'offlineLeaseExpiresAt': leaseExpiry.toIso8601String(),
++    'rightsExpiresAt': rightsExpiry.toIso8601String(),
++    'assetVersion': 'master-42:aac256',
++  };
++
++  test('accepts short lived URL with bounded offline lease', () {
++    final result = AuthorizedDownloadGrant.fromResponse(
++      grant(), nowUtc: now,
++    );
++    expect(result, isNotNull);
++    expect(result!.offlineLeaseExpiresAtUtc, leaseExpiry);
++    expect(result.assetVersion, 'master-42:aac256');
++  });
++
++  test('rejects missing, expired or overly long offline lease', () {
++    final missing = grant()..remove('offlineLeaseExpiresAt');
++    expect(AuthorizedDownloadGrant.fromResponse(missing, nowUtc: now), isNull);
++    final expired = grant()..['offlineLeaseExpiresAt'] =
++        now.subtract(const Duration(seconds: 1)).toIso8601String();
++    expect(AuthorizedDownloadGrant.fromResponse(expired, nowUtc: now), isNull);
++    final excessive = grant()..['offlineLeaseExpiresAt'] =
++        now.add(const Duration(days: 4)).toIso8601String();
++    expect(AuthorizedDownloadGrant.fromResponse(excessive, nowUtc: now), isNull);
++  });
++
++  test('rejects expired signed URL or lease beyond rights end', () {
++    final stale = grant()..['expiresAt'] =
++        now.subtract(const Duration(seconds: 1)).toIso8601String();
++    expect(AuthorizedDownloadGrant.fromResponse(stale, nowUtc: now), isNull);
++    final overRights = grant()..['rightsExpiresAt'] =
++        now.add(const Duration(minutes: 20)).toIso8601String();
++    expect(AuthorizedDownloadGrant.fromResponse(overRights, nowUtc: now), isNull);
++  });
++
++  test('rejects untrusted or preview-only sources', () {
++    final preview = grant()..['previewOnly'] = true;
++    expect(AuthorizedDownloadGrant.fromResponse(preview, nowUtc: now), isNull);
++    final denied = grant()..['allowed'] = false;
++    expect(AuthorizedDownloadGrant.fromResponse(denied, nowUtc: now), isNull);
++    for (final url in [
++      'http://media.example.org/download',
++      'https://user:pass@media.example.org/download',
++      'https://media.example.org/download#fragment',
++      'file:///tmp/download',
++    ]) {
++      expect(AuthorizedDownloadGrant.fromResponse(
++        grant()..['url'] = url, nowUtc: now,
++      ), isNull, reason: url);
++    }
++  });
++
++  test('untrusted asset version does not enable partial resume', () {
++    final data = grant()..['assetVersion'] = 'https://other.invalid/media?token=secret';
++    final result = AuthorizedDownloadGrant.fromResponse(data, nowUtc: now);
++    expect(result, isNotNull);
++    expect(result!.assetVersion, isNull);
++  });
++}
+
+FILE apps/mobile/test/core/audio/offline_lease_policy_test.dart
+@@ -0,0 +1,30 @@
++import 'package:breezze/core/audio/offline_lease_policy.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  final now = DateTime.utc(2026, 11, 23, 12);
++
++  test('missing offline lease is never a perpetual entitlement', () {
++    expect(hasValidOfflineLease(null, nowUtc: now), isFalse);
++  });
++
++  test('expired or exact-boundary lease cannot play', () {
++    expect(
++      hasValidOfflineLease(now.subtract(const Duration(milliseconds: 1)),
++          nowUtc: now), isFalse,
++    );
++    expect(hasValidOfflineLease(now, nowUtc: now), isFalse);
++  });
++
++  test('future server-issued lease permits local playback', () {
++    expect(
++      hasValidOfflineLease(now.add(const Duration(hours: 4)), nowUtc: now),
++      isTrue,
++    );
++  });
++
++  test('offset-aware lease comparison always uses UTC', () {
++    final withOffset = DateTime.parse('2026-11-23T15:00:01+03:00');
++    expect(hasValidOfflineLease(withOffset, nowUtc: now), isTrue);
++  });
++}
+
+FILE apps/mobile/test/core/audio/playback_source_policy_test.dart
+@@ -6,7 +6,7 @@ void main() {
+     test('discovery-only IDs never enter the native audio queue', () {
+       for (final id in [
+         'bz:youtube_music:abc',
+-        'bz:deezer:123',
++        'bz:deezer:invalid',
+         'bz:soundcloud:456',
+         'bz:audius:retired',
+         'bz:apple_catalog:789',
+@@ -19,6 +19,7 @@ void main() {
+ 
+     test('local or backend tracks and approved Jamendo can request playback', () {
+       expect(canQueueTrackId('catalog-uuid'), isTrue);
++      expect(canQueueTrackId('bz:deezer:123'), isTrue);
+       expect(canQueueTrackId('bz:deezer_preview:42'), isTrue);
+       expect(canQueueTrackId('bz:deezer_preview:nope'), isFalse);
+       expect(canRequestOfflineDownload('bz:deezer_preview:42'), isFalse);
+
+FILE apps/mobile/test/features/video/video_handoff_policy_test.dart
+@@ -0,0 +1,58 @@
++import 'package:breezze/features/video/open_youtube_player.dart';
++import 'package:breezze_audio_contracts/audio_contracts.dart' show PlaybackState;
++import 'package:flutter/widgets.dart' show AppLifecycleState;
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  bool canRestore({
++    bool wasPlaying = true,
++    String? openedEntryId = 'queue-entry-1',
++    String? currentEntryId = 'queue-entry-1',
++    String? openedTrackId = 'track-a',
++    String? currentTrackId = 'track-a',
++    PlaybackState state = PlaybackState.paused,
++    AppLifecycleState? lifecycle = AppLifecycleState.resumed,
++  }) =>
++      shouldResumeAudioAfterVideo(
++        wasPlaying: wasPlaying,
++        openedEntryId: openedEntryId,
++        openedTrackId: openedTrackId,
++        currentEntryId: currentEntryId,
++        currentTrackId: currentTrackId,
++        currentState: state,
++        lifecycleState: lifecycle,
++      );
++
++  test('resumes the exact paused queue entry after video closes', () {
++    expect(canRestore(), isTrue);
++  });
++
++  test('does not resume audio that was paused before video opened', () {
++    expect(canRestore(wasPlaying: false), isFalse);
++  });
++
++  test('does not resume a different queue entry selected during video', () {
++    expect(canRestore(currentEntryId: 'queue-entry-2'), isFalse);
++  });
++
++  test('does not resume a replacement recording in the same queue entry', () {
++    expect(canRestore(currentTrackId: 'track-b'), isFalse);
++  });
++
++  test('does not resume when the old queue or recording disappeared', () {
++    expect(canRestore(currentEntryId: null), isFalse);
++    expect(canRestore(openedTrackId: null), isFalse);
++  });
++
++  test('does not override a later play, stop or failed state', () {
++    expect(canRestore(state: PlaybackState.playing), isFalse);
++    expect(canRestore(state: PlaybackState.idle), isFalse);
++    expect(canRestore(state: PlaybackState.failed), isFalse);
++  });
++
++  test('does not resume while the application is backgrounded', () {
++    expect(canRestore(lifecycle: AppLifecycleState.paused), isFalse);
++    expect(canRestore(lifecycle: AppLifecycleState.inactive), isFalse);
++    expect(canRestore(lifecycle: null), isFalse);
++  });
++}
+
+FILE apps/mobile/test/player_controller_test.dart
+@@ -37,6 +37,7 @@ class _FakeEngine implements AudioEngineAdapter {
+   bool failPlay = false;
+   bool failSeek = false;
+   Completer<void>? firstPrepare;
++  Completer<void>? nextPlay;
+ 
+   @override
+   Future<void> prepare(PlayableSource source) async {
+@@ -53,6 +54,9 @@ class _FakeEngine implements AudioEngineAdapter {
+     if (failPlay) throw StateError('play failed');
+     playCount++;
+     states.add(PlaybackState.playing);
++    final pending = nextPlay;
++    nextPlay = null;
++    if (pending != null) await pending.future;
+   }
+ 
+   @override
+@@ -92,6 +96,39 @@ class _FakeEngine implements AudioEngineAdapter {
+   }
+ }
+ 
++class _FakeGaplessEngine extends _FakeEngine implements GaplessLocalQueueEngine {
++  final StreamController<int?> indices = StreamController<int?>.broadcast();
++  List<PlayableSource> playlist = [];
++  final List<int> seekIndices = [];
++
++  @override
++  bool get supportsGaplessLocalFiles => true;
++
++  @override
++  Stream<int?> get currentIndexStream => indices.stream;
++
++  @override
++  Future<void> prepareLocalPlaylist(
++    List<PlayableSource> sources, {
++    required int initialIndex,
++  }) async {
++    playlist = sources;
++    indices.add(initialIndex);
++  }
++
++  @override
++  Future<void> skipToIndex(int index) async {
++    seekIndices.add(index);
++    indices.add(index);
++  }
++
++  @override
++  Future<void> dispose() async {
++    await indices.close();
++    await super.dispose();
++  }
++}
++
+ void main() {
+   TestWidgetsFlutterBinding.ensureInitialized();
+ 
+@@ -113,6 +150,72 @@ void main() {
+     await engine.dispose();
+   });
+ 
++  test('local queue transitions natively without re-preparing the decoder',
++      () async {
++    final native = _FakeGaplessEngine();
++    final active = ProviderContainer(overrides: [
++      playbackResolverProvider.overrideWithValue(resolver),
++    ]);
++    final controller = active.read(playerControllerProvider.notifier);
++    controller.attachEngine(native);
++
++    await controller.playTrack(
++      trackId: 'device:local-a',
++      queue: const [
++        TrackInfo(id: 'device:local-a', title: 'A', localFilePath: '/tmp/a.m4a'),
++        TrackInfo(id: 'device:local-b', title: 'B', localFilePath: '/tmp/b.m4a'),
++      ],
++    );
++
++    expect(native.playlist.map((s) => s.trackId).toList(),
++        ['device:local-a', 'device:local-b']);
++    expect(native.prepared, isEmpty);
++    expect(native.playCount, 1);
++    native.indices.add(1);
++    await Future<void>.delayed(Duration.zero);
++    expect(active.read(playerControllerProvider).currentTrack?.id, 'device:local-b');
++    expect(controller.queue.current?.trackId, 'device:local-b');
++    expect(active.read(playerControllerProvider).playbackState,
++        PlaybackState.playing);
++
++    await controller.previous();
++    expect(native.seekIndices, [0]);
++    expect(active.read(playerControllerProvider).currentTrack?.id, 'device:local-a');
++    await controller.next();
++    expect(native.seekIndices, [0, 1]);
++    expect(active.read(playerControllerProvider).currentTrack?.id, 'device:local-b');
++
++    await controller.stop();
++    active.dispose();
++    await native.dispose();
++  });
++
++  test('editing a native local playlist uses the safe single-source path',
++      () async {
++    final native = _FakeGaplessEngine();
++    final active = ProviderContainer(overrides: [
++      playbackResolverProvider.overrideWithValue(resolver),
++    ]);
++    final controller = active.read(playerControllerProvider.notifier);
++    controller.attachEngine(native);
++    await controller.playTrack(
++      trackId: 'device:local-a',
++      queue: const [
++        TrackInfo(id: 'device:local-a', localFilePath: '/tmp/a.m4a'),
++        TrackInfo(id: 'device:local-b', localFilePath: '/tmp/b.m4a'),
++      ],
++    );
++    controller.playLast(const TrackInfo(
++      id: 'device:local-c', localFilePath: '/tmp/c.m4a',
++    ));
++    await Future<void>.delayed(Duration.zero);
++    expect(native.prepared, ['device:local-a']);
++    expect(controller.queue.upNext.map((e) => e.trackId),
++        ['device:local-b', 'device:local-c']);
++    active.dispose();
++    await native.dispose();
++  });
++
+   test('late resolver response cannot replace the latest selected track',
+       () async {
+     final player = container.read(playerControllerProvider.notifier);
+@@ -315,4 +418,26 @@ void main() {
+         PlaybackState.failed);
+   });
+ 
++  test('a late resume failure does not stop a newly selected track', () async {
++    final player = container.read(playerControllerProvider.notifier);
++    final first = player.playTrack(trackId: 'track-a');
++    resolver.complete('track-a');
++    await first;
++    await player.pause();
++
++    final pendingResume = Completer<void>();
++    engine.nextPlay = pendingResume;
++    await player.resume();
++
++    final second = player.playTrack(trackId: 'track-b');
++    resolver.complete('track-b');
++    await second;
++    pendingResume.completeError(StateError('old playback failed'));
++    await Future<void>.delayed(Duration.zero);
++
++    expect(container.read(playerControllerProvider).currentTrack?.id, 'track-b');
++    expect(container.read(playerControllerProvider).playbackState,
++        PlaybackState.playing);
++  });
++
+ }
+
+FILE apps/mobile/tool/test_listener_runtime.sh
+@@ -0,0 +1,107 @@
++#!/usr/bin/env bash
++set -euo pipefail
++cd "$(dirname "$0")/.."
++device=${1:?pass the emulator or simulator ID}
++# Keep the generated test audio/video out of the shipping bundle.
++saved_manifest=$(mktemp)
++cp pubspec.yaml "$saved_manifest"
++trap 'cp "$saved_manifest" pubspec.yaml; rm -f "$saved_manifest"' EXIT
++sed '/^  assets:/a\
++    - integration_test/fixtures/
++' "$saved_manifest" > pubspec.yaml
++flutter pub get
++dart run build_runner build --delete-conflicting-outputs
++# Exercise the handoff race policy on both hosted platforms before launching native tests.
++flutter test test/features/video/video_handoff_policy_test.dart --reporter expanded
++live_args=()
++if [[ -n "${QA_PREVIEW_API_ORIGIN:-}" ]]; then
++  live_args+=(--dart-define=QA_LIVE_PREVIEW=true "--dart-define=BREEZZE_API_URL=$QA_PREVIEW_API_ORIGIN")
++fi
++if [[ "$device" != emulator-* ]]; then
++  # iOS simulator launch can hang after Xcode says "build done".
++  # Bound the actual test process and report a diagnostic rather than
++  # consuming the entire macOS runner allocation without useful logs.
++  set +e
++  python3 - "$device" "${live_args[@]}" <<'PY'
++import os
++import signal
++import subprocess
++import sys
++
++device, *extra = sys.argv[1:]
++command = [
++    'flutter', 'test', '-d', device,
++    'integration_test/listener_runtime_test.dart',
++    '--reporter', 'expanded', *extra,
++]
++print('QA_IOS_SIMULATOR_START ' + device, flush=True)
++proc = subprocess.Popen(command, start_new_session=True)
++try:
++    code = proc.wait(timeout=14 * 60)
++except subprocess.TimeoutExpired:
++    print('QA_IOS_SIMULATOR_TIMEOUT: flutter test did not finish in 14 minutes',
++          flush=True)
++    os.killpg(proc.pid, signal.SIGTERM)
++    try:
++        proc.wait(timeout=10)
++    except subprocess.TimeoutExpired:
++        os.killpg(proc.pid, signal.SIGKILL)
++        proc.wait()
++    sys.exit(124)
++sys.exit(code)
++PY
++  result=$?
++  set -e
++  if (( result != 0 )); then
++    echo "QA_IOS_SIMULATOR_FAILED with exit code $result"
++    xcrun simctl list devices booted || true
++  fi
++  exit "$result"
++fi
++
++log=$(mktemp)
++wait_for_marker() {
++  for ((i=0; i<900; i++)); do
++    if grep -q "$1" "$log"; then return; fi
++    if ! kill -0 "$test_pid" 2>/dev/null; then return 1; fi
++    sleep 1
++  done
++  return 1
++}
++# A hosted Android emulator occasionally fails to attach the Flutter Dart
++# Development Service after the APK has built and installed. Retry only that
++# infrastructure startup condition once; never retry/obscure app test failures.
++run_android_once() {
++  : > "$log"
++  flutter test -d "$device" integration_test/listener_runtime_test.dart --reporter expanded "${live_args[@]}" --dart-define=QA_ANDROID_MEDIA_KEYS=true >"$log" 2>&1 &
++  test_pid=$!
++  if wait_for_marker QA_ANDROID_MEDIA_KEYS_READY; then
++    adb -s "$device" shell input keyevent KEYCODE_HOME
++    sleep 1
++    adb -s "$device" shell dumpsys media_session | grep -F 'com.breezze.breezze'
++    adb -s "$device" shell cmd media_session dispatch pause
++    sleep 1
++    adb -s "$device" shell am start -n com.breezze.breezze/.MainActivity
++    if wait_for_marker QA_ANDROID_OS_PAUSED; then
++      adb -s "$device" shell cmd media_session dispatch play
++    fi
++  fi
++  local status=0
++  wait "$test_pid" || status=$?
++  cat "$log"
++  if (( status != 0 )) && grep -q 'Failed to start Dart Development Service' "$log"; then
++    return 75
++  fi
++  return "$status"
++}
++result=0
++run_android_once || result=$?
++if (( result == 75 )); then
++  echo "QA_ANDROID_DDS_STARTUP_RETRY: emulator was running but Flutter's debug service failed to attach."
++  adb -s "$device" wait-for-device
++  sleep 5
++  result=0
++  run_android_once || result=$?
++fi
++rm -f "$log"
++exit "$result"
+
+FILE backend/api/src/playback/playback-session.service.spec.ts
+@@ -76,9 +76,11 @@ describe('PlaybackSessionService', () => {
+     expect(result.playback).toEqual({ streamUrl: 'https://cdn.example/audio' });
+   });
+ 
+-  it('plays a YouTube discovery result through its exact catalogue recording', async () => {
+-    const externalTrackId = 'bz:youtube_music:abcdefghijk';
+-    prisma.track.findUnique.mockResolvedValue({ id: 'master-id', source: 'youtube_music' });
++  it.each([
++    ['youtube_music', 'bz:youtube_music:abcdefghijk'],
++    ['deezer', 'bz:deezer:3135556'],
++  ])('resolves the exact authorized master for %s', async (source, externalTrackId) => {
++    prisma.track.findUnique.mockResolvedValue({ id: 'master-id', source });
+     resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/master.m4a' });
+     const session = await service.start('user-1', 'TZ', { externalTrackId, requestedQuality: 'AAC_256' });
+     expect(prisma.track.findUnique).toHaveBeenCalledWith({
+
+FILE backend/api/src/playback/playback-session.service.ts
+@@ -10,6 +10,8 @@ import { PlaybackResolveService } from './playback-resolve.service';
+ const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+ const MAX_HEARTBEAT_CREDIT_MS = 30_000;
+ 
++export const externalRecordingId = /^bz:(?:youtube_music:[A-Za-z0-9_-]{11}|deezer:[0-9]{1,20})$/;
++
+ export interface StartPlaybackSessionInput {
+   trackId?: string;
+   externalTrackId?: string;
+@@ -36,15 +38,15 @@ export class PlaybackSessionService {
+     let playback: Record<string, unknown>;
+ 
+     if (input.externalTrackId !== undefined) {
+-      if (!/^bz:youtube_music:[A-Za-z0-9_-]{11}$/.test(input.externalTrackId) ||
++      if (!externalRecordingId.test(input.externalTrackId) ||
+           input.trackId || input.providerId || input.providerTrackId || input.canonicalTrackId) {
+         throw new ConflictException('INVALID_EXTERNAL_SESSION_REQUEST');
+       }
+       const track = await this.prisma.track.findUnique({
+         where: { externalId: input.externalTrackId },
+         select: { id: true, source: true },
+       });
+-      if (!track || track.source !== 'youtube_music') {
++      if (!track || track.source !== input.externalTrackId.split(':')[1]) {
+         throw new NotFoundException('AUDIO_SOURCE_UNAVAILABLE');
+       }
+       input = { trackId: track.id, requestedQuality: input.requestedQuality };
+
+FILE backend/api/src/playback/playback.controller.ts
+@@ -13,7 +13,7 @@ import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Min } from 'class-v
+ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+ import { CurrentUser } from '../auth/current-user.decorator';
+ import { PlaybackResolveService } from './playback-resolve.service';
+-import { PlaybackSessionService } from './playback-session.service';
++import { externalRecordingId, PlaybackSessionService } from './playback-session.service';
+ 
+ export class ProviderResolveDto {
+   @IsString()
+@@ -31,7 +31,7 @@ export class ProviderResolveDto {
+ }
+ 
+ export class StartPlaybackSessionDto {
+-  @IsOptional() @Matches(/^bz:youtube_music:[A-Za-z0-9_-]{11}$/)
++  @IsOptional() @Matches(externalRecordingId)
+   externalTrackId?: string;
+   @IsOptional() @IsUUID() trackId?: string;
+   @IsOptional() @IsIn(['AAC_128', 'AAC_256', 'LOSSLESS', 'HI_RES'])
+
+FILE backend/api/test/licensed-listener.mjs
+@@ -0,0 +1,68 @@
++// Run only against the disposable Postgres and media worker on the CI runner.
++import assert from 'node:assert/strict';
++import { readFile } from 'node:fs/promises';
++import { randomBytes, randomUUID } from 'node:crypto';
++import { PrismaClient } from '@prisma/client';
++
++assert.equal(new URL(process.env.DATABASE_URL).hostname, '127.0.0.1');
++assert.equal(process.env.CDN_BASE_URL, 'http://127.0.0.1:8787');
++const db = new PrismaClient();
++const id = '24ead000-7bce-498c-806c-d6084a0ed108';
++const audio = await readFile(new URL('../../../apps/mobile/integration_test/fixtures/tone.m4a', import.meta.url));
++let token;
++async function api(path, body) {
++  const response = await fetch('http://127.0.0.1:3000/api/v1' + path, {
++    method: body === undefined ? 'GET' : 'POST',
++    headers: { 'content-type': 'application/json', 'x-breezze-country': 'TZ',
++      ...(token ? { authorization: 'Bearer ' + token } : {}) },
++    body: JSON.stringify(body)
++  });
++  assert.ok(response.ok, path + ' returned ' + response.status);
++  return (await response.json()).data;
++}
++try {
++  await db.track.create({ data: { id, title: 'Runtime recording', duration: 40,
++    artist: { create: { name: 'Breezze QA' } }, source: 'breezze_internal',
++    territories: { create: { territory: 'TZ' } },
++    rights: { create: [{action:'stream.full'}, {action:'download'}] } } });
++  const user = await api('/auth/register', { email: randomUUID() + '@example.invalid', password: randomBytes(24).toString('hex') });
++  token = user.accessToken;
++  assert.ok(token);
++  const session = await api('/playback/sessions', {trackId:id});
++  assert.equal(session.playback.previewOnly, false);
++  const range = await fetch(session.playback.streamUrl, { headers: { Range: 'bytes=0-127' } });
++  assert.equal(range.status, 206);
++  assert.deepEqual(Buffer.from(await range.arrayBuffer()), audio.subarray(0,128));
++  const head = await fetch(session.playback.streamUrl, {method: 'HEAD'});
++  assert.equal(head.status, 200);
++  const etag = head.headers.get('etag');
++  assert.ok(/^"[A-Za-z0-9._:-]{1,120}"$/.test(etag || ''), 'R2 must expose a strong version');
++  const matchingRange = await fetch(session.playback.streamUrl, {
++    headers: { Range: 'bytes=128-255', 'If-Range': etag },
++  });
++  assert.equal(matchingRange.status, 206);
++  assert.deepEqual(Buffer.from(await matchingRange.arrayBuffer()), audio.subarray(128,256));
++  const changedMaster = await fetch(session.playback.streamUrl, {
++    headers: { Range: 'bytes=128-255', 'If-Range': '"obsolete-r2-object"' },
++  });
++  assert.equal(changedMaster.status, 200, 'mismatched If-Range must force a full replacement');
++  assert.deepEqual(Buffer.from(await changedMaster.arrayBuffer()), audio);
++  const stream = await fetch(session.playback.streamUrl);
++  assert.equal(stream.status, 200);
++  assert.deepEqual(Buffer.from(await stream.arrayBuffer()), audio);
++  await api('/playback/sessions/' + session.id + '/pause', {});
++  await api('/playback/sessions/' + session.id + '/resume', {});
++  await api('/playback/sessions/' + session.id + '/stop', {});
++  const grant = await api('/downloads', {trackId:id});
++  assert.equal(grant.allowed,true);
++  assert.ok(Date.parse(grant.offlineLeaseExpiresAt) > Date.now());
++  const saved = await fetch(grant.url);
++  assert.equal(saved.status, 200);
++  assert.deepEqual(Buffer.from(await saved.arrayBuffer()),audio);
++  assert.equal((await api('/downloads/' + id + '/revalidate', {})).allowed,true);
++  await db.rightsUsagePermission.delete({where:{trackId_action:{trackId:id,action:'download'}}});
++  assert.equal((await api('/downloads/' + id + '/revalidate', {})).allowed,false);
++  console.log('Verified full recording, ETag/If-Range safety, range, pause/resume/stop, download, lease renewal and revocation');
++} finally {
++  await db.$disconnect();
++}
+
+FILE docs/architecture/BREEZZE_AUDIO_FIRST_EXECUTION_AND_ACCEPTANCE.md
+@@ -0,0 +1,138 @@
++# Breezze — audio-first execution and acceptance contract
++
++**Canonical repository:** [MetroKim/Breezze](https://github.com/MetroKim/Breezze)  
++**Legacy repository:** [MetroKim/MetroMusic](https://github.com/MetroKim/MetroMusic)  
++**Status:** staged implementation plan and verified baseline, **not** a production-release certificate.  
++**Reconciled:** 2026-11-23.
++
++This contract translates the product's ten-phase audio-first plan into actions compatible with the code that actually exists. Do not replace functioning infrastructure merely because another package was listed in an exploratory proposal.
++
++## Repository consolidation and change control
++
++- The Breezze main branch already includes the MetroMusic application history, including shared commit `a13d3f29d26f68527de6bd45f5c7bc2d05cf3fe3`, plus later Flutter audio/video integration. `MetroMusic/main` adds only a README redirect after that shared commit; it is **not** another active application to copy.
++- All new application work targets `MetroKim/Breezze`. Keep MetroMusic read-only as a legacy reference until GitHub's repository administrator archives it; archival or deletion is **not** implied by this document.
++- Old feature branches in MetroMusic may diverge and must be evaluated file-by-file; never mass-merge historical branches, duplicate native apps, or overwrite generated runners.
++- Preserve `apps/mobile` as the shipping Flutter project, `backend/api` as the NestJS API, `backend/ytmusicapi` as a discovery service, and `packages/*` as the shared implementation.
++- The existing draft [playback verification PR #3](https://github.com/MetroKim/Breezze/pull/3) has a green regression baseline at `391dcd296fe995c3f3499337947747485294b317`. Its code is not yet on `main`. Any later change needs CI against its **new exact commit**.
++
++## Product contract
++
++Four top-level destinations: **Home, Browse, Library, Search**. One application-owned queue and mini/full player shared between routes. No Radio destination, ads, subscriptions, paid tier, artist portal or paywall. Listener-facing artist, album, playlist and account pages are allowed.
++
++### One audio engine; video is opt-in
++
++```text
++Flutter UI (Home / Browse / Library / Search / Now Playing)
++   -> Riverpod PlayerController (one queue, one source of truth)
++       -> backend playback authorization + source resolver
++       -> just_audio adapter (ExoPlayer / AVFoundation)
++       -> audio_service (system controls) + audio_session (focus/interruption)
++
++Video action (separate, explicit UI)
++   -> pause current player/entry
++   -> single video_player decoder OR official in-app video embed
++   -> wait for decoder route disposal
++   -> resume only the same paused entry, same recording, app foreground
++```
++
++Keep the existing `just_audio`, `audio_service`, `audio_session` and `video_player` stack. The app already has a global `PlayerController`, a platform bridge and a video handoff flow. `just_audio_background` is not required alongside the custom `audio_service` handler. A generic media-kit video pool is not a prerequisite for one opt-in video surface. Desktop audio plugins do not imply a second independent global player.
++
++**Audio handoff invariants:** do not reopen a video's decoder while an unrelated track was selected during the asynchronous pause; do not auto-resume a replaced queue entry, a different recording, a user-paused player or a backgrounded app. These behaviors are covered by `video_handoff_policy_test.dart` and by emulator runtime integration tests for the baseline flow.
++
++## Playback sources: rights boundary, not just network reachability
++
++| Source | Discovery | Native full recording | Preview | Offline |
++|---|---|---|---|---|
++| YouTube Music metadata via `ytmusicapi` | Best effort | No grant from metadata alone | Only separately authorized source | No |
++| Deezer public API | Metadata | No automatic full-catalog entitlement; backend may use a separately documented authorized recording | Provider-issued short preview, labelled as such | No preview download |
++| Audius official API | Public/eligible tracks | Eligible public, ungated API-accessible recordings only | Where permitted | Only if separately authorized |
++| Breezze-owned or explicitly licensed master | Yes | Rights + territory + expiring stream grant required | If allowed | Signed download + bounded offline lease |
++| User-chosen local file | Local | Yes | N/A | Already local |
++
++An ARL cookie, YouTube watch URL, extraction tool or third-party preview is **not** proof of a full-stream/download licence. Do not implement cookie-based access-control circumvention or silently substitute a different master. Failover must verify the *same recording*, territory, allowed action, session and expiry. Prefer ISRC plus edition/artist/duration verification; ambiguous candidates produce an unavailable state.
++
++## Ten implementation phases with real acceptance gates
++
++### 1. Foundation and canonical repo — largely in place
++
++- [x] Central Flutter monorepo, shared packages, NestJS API, generated platform targets and cross-platform CI.
++- [x] One canonical Breezze repository with the previous project history.
++- [ ] Administratively archive old MetroMusic after checking all active integrations/remotes; keep redirect and history.
++- [ ] Audit app store metadata, app icon, splash, package identifiers and hosted deployment references for remaining MetroMusic names.
++
++### 2. Brand and adaptive theme — partial
++
++- [x] Shared design-system tokens and Breezze-specific branded UI foundations exist.
++- [x] Wire the bundled launcher icon to palette extraction and use the contrast-checked seeded accent; preserve monochrome for achromatic artwork. Added adaptive theme unit coverage.
++- [x] Extract per-song artwork palettes for the Now Playing ambient backdrop, with race guards and muted tint; use high-contrast and monochrome fallback for unsaturated art.
++- [ ] Audit high-contrast/reduced-motion themes and asset variants on physical supported devices.
++- [ ] Test dark/light/system/high-contrast themes, dynamic type, accessible focus and reduced motion on supported platforms.
++
++### 3. Listener shell — partial
++
++- [x] Four-destination Flutter navigation and shared player foundation.
++- [ ] Review every screen in device-width and desktop layouts: Home, Browse, Library, Search, mini-player, Now Playing, queue, album/artist/playlist pages. Verify pressed/hero/blur behavior and empty/error/offline states.
++- [ ] Confirm a single player survives route changes, sign-out, account switching and lifecycle events.
++
++### 4. Backend and provider integration — partial
++
++- [x] NestJS, Prisma/PostgreSQL, caching foundations, authenticated session resolution, metadata providers and permission checks exist.
++- [ ] Map each visible catalog CTA to a tested backend route. Preserve provider attribution and distinguish metadata-only, full-stream and preview outcomes.
++- [ ] Add provider budget, timeout, outage, source-identity and rights-denial tests. Validate production configuration separately from local mocks.
++- [ ] Use independently authorized licensed sources instead of assuming a Deezer ARL can supply every full recording.
++
++### 5. Playback and offline — emulator baseline verified
++
++- [x] Android and iOS emulators verified local download, offline audio decode, pause/seek/resume, video handoff and native Deezer **preview** decode at PR #3 head; Android also exercised OS media pause/play.
++- [x] Test backend with disposable licensed fixture: byte-range full stream, session controls, download grant, lease revalidation and revocation.
++- [x] Implement device-owned local-file native gapless playlists (Android/iOS/macOS) with one just_audio decoder, native index updates and safe queue-edit fallback; cached catalog downloads are excluded until every offline lease can be validated. Unit and emulator tests added, **exact-head CI pending**.
++- [ ] Measure actual audible silence at two adjacent local-track boundaries and validate long playlist/battery behavior on real devices.
++- [ ] For full remote tracks, implement queue grants with individually validated licensing/session lifecycle before enabling native gapless; keep current per-track backend resolution until proven safe.
++- [ ] Verify skip/repeat/shuffle transitions, failed source retry, network changes and grant-expiry recovery.
++- [ ] Test physical lock-screen, headset/Bluetooth, phone call, and audio-focus behavior. Emulators cannot certify these.
++- [ ] Do not claim gapless merely because `just_audio` has playlist APIs; time the end-to-start output gap with independently granted sources.
++
++### 6. Optional native DSP — not enabled
++
++- [ ] Benchmark output EQ/crossfade/spatial needs before installing native FFI libraries.
++- [ ] Pick one native PCM/output owner and a well-defined integration path. A second FFI player cannot simply be attached to `just_audio` output; uncoordinated engines cause double playback.
++- [ ] Real-time callback contract: no allocation, locks, I/O or Dart VM entry. Measure latency, CPU, battery and ten minutes of glitch-free audio on low-end physical Android.
++
++### 7. Cache and offline hierarchy — partial
++
++- [x] Local downloads with rights/owner metadata and backend lease checks have automated coverage.
++- [x] Fail closed on invalid, expired or preview-only download grants; require HTTPS and a bounded offline lease, and reject downloads after account switches.
++- [x] Bind partial and finalized audio to a stable server assetVersion or the media Worker's strong R2 ETag; use If-Range and validate all 206 responses. Revalidate completed unversioned-backend assets by authorized HEAD, and fail closed or restart on version mismatch.
++- [x] Deny playback of legacy downloaded files whose offline lease is missing or expired. Retain their metadata so an eligible listener can renew rights when online.
++- [ ] Add **authorized** metadata/source prefetch for up to three queue entries; key by listener, territory, recording edition, quality and rights expiry. The signed R2 gateway now exposes ETags; a server-issued encoded-asset manifest/version remains desirable for stronger production integrity validation.
++- [ ] Never persist unauthorized provider audio or share signed user-specific URLs in edge caches. Validate range resumption, evictions, corrupted assets, revocations, airplane-mode behavior and account isolation.
++- [ ] Do not claim arbitrary streamed audio is offline-playable after half its bytes arrive: codec/container boundaries, explicit caching rights and verified chunk indexes are prerequisites.
++
++### 8. Optional video — single native controller in place
++
++- [x] `video_player` supports an explicit local MP4 video surface; the official embedded player handles compatible provider videos separately.
++- [ ] Keep at most one active native video decoder for the current app. Add a bounded LRU pool **only if** a multi-video feed becomes an approved product requirement and hardware profiling justifies it.
++- [ ] Test 20-video scroll and decoder budgets on budget hardware only if a feed is actually shipped.
++
++### 9. Audio/video coordination — guarded regression work
++
++- [x] Audio pauses for video and resumes after the video route completes and releases its decoder; Android/iOS emulator smoke tests pass on baseline.
++- [x] Add race guard for a new audio selection while handoff pause is pending, with unit coverage for queue/recording/lifecycle mismatch.
++- [ ] Add 50-switch stress test with memory/decoder/focus instrumentation; include app background/foreground, video error, OS interruption and explicit user pause cases.
++- [ ] Never transfer timestamps between different recordings or mismatched video edits without a verified timeline mapping.
++
++### 10. Lyrics, operations and release — partial
++
++- [x] Lyrics route and seeking foundations exist in the app.
++- [ ] Choose a tested parser for ordinary/timed/word-synced lyrics; only claim word-level highlighting when licensed provider timestamps are available.
++- [ ] Add accessibility, localization, reduced motion, privacy-safe telemetry, crash monitoring, deployment smoke tests and reproducible backup/restore.
++- [ ] Release only after real-device testing, source rights approval, deployment checks and signing. CI green does not imply production readiness.
++
++## Baseline evidence and repeatable checks
++
++The prior baseline on PR #3 passed:
++- [CI run 45144191636](https://github.com/MetroKim/Breezze/actions/runs/45144191636): Flutter tests/analyzer, NestJS/Prisma/Postgres tests, Cloudflare Worker checks, Android/iOS/Linux/macOS/Windows/Web builds.
++- [Listener runtime 45144191610](https://github.com/MetroKim/Breezze/actions/runs/45144191610): Android emulator, iPhone simulator and local Postgres/R2 licensed-media fixture.
++- [CodeQL 45144191623](https://github.com/MetroKim/Breezze/actions/runs/45144191623): JS/TS, Actions, Python, Java/Kotlin.
++
++Each new commit should run `flutter analyze`, Flutter app/package tests, backend tests and applicable platform builds in GitHub Actions; run native decoder tests on Android/iOS simulators for handoff changes. Report failing, skipped and pending jobs explicitly. This document records an **execution plan**, not ten completed phases.
+
+FILE infra/cloudflare/media-worker/src/index.ts
+@@ -82,7 +82,7 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
+   }
+ 
+   const key = `audio/${trackId}/${variant}`;
+-  const rangeHeader = request.headers.get('range');
++  let rangeHeader = request.headers.get('range');
+   let object: R2ObjectBody | R2Object | null;
+   let status = 200;
+   let rangeStart: number | null = null;
+@@ -95,6 +95,14 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
+     const end = match[2] ? Number(match[2]) : null;
+     const head = await env.MEDIA_BUCKET.head(key);
+     if (!head) return error(404, 'MEDIA_NOT_FOUND');
++    // HTTP If-Range: a replaced R2 object must never be appended to a
++    // different encoded master. A mismatch forces a new full 200 response.
++    const ifRange = request.headers.get('if-range');
++    if (ifRange != null && ifRange !== head.httpEtag) {
++      rangeHeader = null;
++      object = request.method === 'HEAD'
++        ? head : await env.MEDIA_BUCKET.get(key);
++    } else {
+     if (
+       (start === null && (end === null || end <= 0)) ||
+       (start !== null && (!Number.isSafeInteger(start) || start < 0)) ||
+@@ -128,6 +136,7 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
+     totalSize = head.size;
+     object = await env.MEDIA_BUCKET.get(key, { range: { offset, length } });
+     status = 206;
++    }
+   } else {
+     object = request.method === 'HEAD'
+       ? await env.MEDIA_BUCKET.head(key)
+
+FILE packages/api_client/lib/src/downloads_library.dart
+@@ -29,6 +29,13 @@ class DownloadsLibrary {
+     required this.lyrics,
+   });
+ 
++  // R2 returns strong quoted ETags for each stored media version.
++  String? _strongEtagVersion(String? value) {
++    if (value == null) return null;
++    final match = RegExp(r'^"([A-Za-z0-9._:-]{1,120})"$').firstMatch(value.trim());
++    return match == null ? null : 'etag:${match.group(1)}';
++  }
++
+   Directory _dirFor(String trackId) {
+     final safeTrackId = trackId.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+     if (safeTrackId.isEmpty || safeTrackId == '.' || safeTrackId == '..') {
+@@ -47,28 +54,109 @@ class DownloadsLibrary {
+     required String ownerId,
+     required String catalogTrackId,
+     DateTime? rightsExpiresAtUtc,
++    String? assetVersion,
+     void Function(double progress)? onProgress,
+     DownloadCancellation? cancellation,
+   }) async {
+     final dir = _dirFor(track.id);
++    var observedAssetVersion = assetVersion;
+     try {
+       await dir.create(recursive: true);
+ 
+       // 1. Fetch only the short-lived URL issued by the backend after its
+       // download-rights decision. Never extract media directly from a
+       // metadata/search provider in the client.
+       final audioFile = File('${dir.path}/audio.m4a');
++      if (await audioFile.exists()) {
++        // A completed cache is no more trustworthy than a partial one.
++        // An updated master, codec or revoked asset invalidates old bytes.
++        final metaFile = File('${dir.path}/meta.json');
++        String? cachedVersion;
++        try {
++          if (await metaFile.exists()) {
++            final data = jsonDecode(await metaFile.readAsString());
++            if (data is Map) cachedVersion = data['assetVersion'] as String?;
++          }
++        } catch (_) {
++          // Corrupt metadata is never proof of a matching audio master.
++        }
++        var reusable = assetVersion != null &&
++            RegExp(r'^[A-Za-z0-9._:-]{1,128}$').hasMatch(assetVersion) &&
++            cachedVersion == assetVersion;
++        // When the API supplies no master revision, compare the current
++        // object ETag through the already-authorized signed media URL.
++        if (!reusable && assetVersion == null &&
++            cachedVersion != null && cachedVersion.startsWith('etag:')) {
++          final client = HttpClient();
++          try {
++            final request = await client.openUrl('HEAD', Uri.parse(downloadUrl));
++            final response = await request.close();
++            final version = _strongEtagVersion(response.headers.value('etag'));
++            reusable = response.statusCode == HttpStatus.ok &&
++                version != null && version == cachedVersion;
++            await response.drain<void>();
++          } catch (_) {
++            reusable = false;
++          } finally {
++            client.close(force: true);
++          }
++        }
++        if (!reusable) {
++          await audioFile.delete();
++        } else {
++          observedAssetVersion = cachedVersion;
++        }
++      }
+       if (!await audioFile.exists()) {
+         final partialFile = File('${dir.path}/audio.part');
++        final versionFile = File(partialFile.path + '.version');
++        // Partial bytes are only valid for the same encoded asset version.
++        // If no stable version exists, restart instead of splicing masters.
++        final validVersion = assetVersion != null &&
++            RegExp(r'^[A-Za-z0-9._:-]{1,128}$').hasMatch(assetVersion);
++        final storedVersion = await versionFile.exists()
++            ? await versionFile.readAsString() : null;
++        final sameVersion = storedVersion != null &&
++            (validVersion ? storedVersion == assetVersion :
++                assetVersion == null && storedVersion.startsWith('etag:'));
++        if (!sameVersion && await partialFile.exists()) {
++          await partialFile.delete();
++        }
++        if (validVersion) {
++          await versionFile.writeAsString(assetVersion);
++        } else if (!sameVersion && await versionFile.exists()) {
++          await versionFile.delete();
++        }
+         final client = HttpClient();
+         try {
+           final existingBytes =
+               await partialFile.exists() ? await partialFile.length() : 0;
+           final request = await client.getUrl(Uri.parse(downloadUrl));
+           if (existingBytes > 0) {
+             request.headers.set('range', 'bytes=$existingBytes-');
++            if (assetVersion == null && storedVersion != null &&
++                storedVersion.startsWith('etag:')) {
++              request.headers.set(
++                'if-range', '"${storedVersion.substring(5)}"',
++              );
++            }
+           }
+           final response = await request.close();
++          final responseVersion = _strongEtagVersion(
++            response.headers.value('etag'),
++          );
++          if (existingBytes > 0 && assetVersion == null &&
++              response.statusCode == HttpStatus.partialContent &&
++              responseVersion != storedVersion) {
++            await response.drain<void>();
++            if (await partialFile.exists()) await partialFile.delete();
++            if (await versionFile.exists()) await versionFile.delete();
++            throw const HttpException('resumed_asset_etag_mismatch');
++          }
++          if (assetVersion == null && responseVersion != null) {
++            observedAssetVersion = responseVersion;
++            await versionFile.writeAsString(responseVersion);
++          }
+           final resumes = existingBytes > 0 &&
+               response.statusCode == HttpStatus.partialContent;
+           if (response.statusCode != HttpStatus.ok && !resumes) {
+@@ -113,6 +201,7 @@ class DownloadsLibrary {
+             throw const HttpException('authorized_download_incomplete');
+           }
+           await partialFile.rename(audioFile.path);
++          if (await versionFile.exists()) await versionFile.delete();
+         } catch (_) {
+           // Keep the partial asset. The next authorized attempt can request
+           // the remaining byte range instead of downloading from zero.
+@@ -165,6 +254,7 @@ class DownloadsLibrary {
+         'artist': track.artist,
+         'ownerId': ownerId,
+         'catalogTrackId': catalogTrackId,
++        'assetVersion': observedAssetVersion,
+         'rightsExpiresAtUtc': rightsExpiresAtUtc?.toUtc().toIso8601String(),
+       }));
+ 
+@@ -212,7 +302,7 @@ class DownloadsLibrary {
+         final expiryRaw = raw['rightsExpiresAtUtc'] as String?;
+         final expiry = expiryRaw == null ? null : DateTime.tryParse(expiryRaw);
+         tracks.add(DownloadedTrack(
+-          trackId: entry.uri.pathSegments.last,
++          trackId: entry.uri.pathSegments.lastWhere((part) => part.isNotEmpty),
+           catalogTrackId: catalogTrackId,
+           ownerId: ownerId,
+           rightsExpiresAtUtc: expiry?.toUtc(),
+@@ -236,6 +326,8 @@ class DownloadsLibrary {
+   Future<void> removePartial(String trackId) async {
+     final partial = File('${_dirFor(trackId).path}/audio.part');
+     if (await partial.exists()) await partial.delete();
++    final version = File(partial.path + '.version');
++    if (await version.exists()) await version.delete();
+   }
+ 
+   Future<void> remove(String trackId) async {
+
+FILE packages/api_client/test/downloads_library_test.dart
+@@ -37,6 +37,7 @@ void main() {
+     await trackDir.create();
+     final partial = File('${trackDir.path}/audio.part');
+     await partial.writeAsBytes(utf8.encode('abc'));
++    await File('${trackDir.path}/audio.part.version').writeAsString('asset-v1');
+ 
+     var receivedRange = '';
+     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+@@ -58,6 +59,7 @@ void main() {
+       downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+       ownerId: 'user-1',
+       catalogTrackId: 'catalog-resume',
++      assetVersion: 'asset-v1',
+     );
+ 
+     expect(ok, isTrue);
+@@ -66,6 +68,216 @@ void main() {
+     expect(await partial.exists(), isFalse);
+   });
+ 
++
++  test('discards old partial when asset identity is unavailable', () async {
++    final track = BzTrack(
++      id: 'changed-asset',
++      title: 'Changed master',
++      artist: 'Artist',
++      duration: const Duration(minutes: 2),
++    );
++    final trackDir = Directory('${root.path}/changed-asset');
++    await trackDir.create();
++    await File('${trackDir.path}/audio.part')
++        .writeAsBytes(utf8.encode('wrong-master'));
++    await File('${trackDir.path}/audio.part.version')
++        .writeAsString('old-master');
++
++    var requestedRange = false;
++    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      requestedRange = request.headers.value('range') != null;
++      request.response.statusCode = HttpStatus.ok;
++      request.response.add(utf8.encode('new-master'));
++      await request.response.close();
++    });
++    addTearDown(() async => server.close(force: true));
++
++    final ok = await library.download(
++      track,
++      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
++      ownerId: 'user-1',
++      catalogTrackId: 'changed-asset',
++    );
++
++    expect(ok, isTrue);
++    expect(requestedRange, isFalse);
++    expect(await File('${trackDir.path}/audio.m4a').readAsString(),
++        'new-master');
++    expect(await File('${trackDir.path}/audio.part.version').exists(), isFalse);
++  });
++
++  test('discards old partial when asset version changes', () async {
++    final track = BzTrack(
++      id: 'version-change',
++      title: 'Changed codec',
++      artist: 'Artist',
++      duration: const Duration(minutes: 2),
++    );
++    final trackDir = Directory('${root.path}/version-change');
++    await trackDir.create();
++    await File('${trackDir.path}/audio.part')
++        .writeAsBytes(utf8.encode('old'));
++    await File('${trackDir.path}/audio.part.version')
++        .writeAsString('asset-v1');
++
++    var requestedRange = false;
++    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      requestedRange = request.headers.value('range') != null;
++      request.response.statusCode = HttpStatus.ok;
++      request.response.add(utf8.encode('new'));
++      await request.response.close();
++    });
++    addTearDown(() async => server.close(force: true));
++
++    final ok = await library.download(
++      track,
++      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
++      ownerId: 'user-1',
++      catalogTrackId: 'version-change',
++      assetVersion: 'asset-v2',
++    );
++    expect(ok, isTrue);
++    expect(requestedRange, isFalse);
++    expect(await File('${trackDir.path}/audio.m4a').readAsString(), 'new');
++  });
++
++
++  test('invalidates a completed file when the authorized version changes', () async {
++    final track = BzTrack(
++      id: 'completed-replacement',
++      title: 'Updated master',
++      artist: 'Artist',
++      duration: const Duration(minutes: 2),
++    );
++    final trackDir = Directory('${root.path}/completed-replacement');
++    await trackDir.create();
++    await File('${trackDir.path}/audio.m4a')
++        .writeAsBytes(utf8.encode('old-master'));
++    await File('${trackDir.path}/meta.json').writeAsString(jsonEncode({
++      'ownerId': 'user-1',
++      'catalogTrackId': 'completed-replacement',
++      'assetVersion': 'master-old',
++    }));
++
++    var calls = 0;
++    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      calls++;
++      request.response.statusCode = HttpStatus.ok;
++      request.response.add(utf8.encode('new-master'));
++      await request.response.close();
++    });
++    addTearDown(() async => server.close(force: true));
++
++    final ok = await library.download(
++      track,
++      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
++      ownerId: 'user-1',
++      catalogTrackId: 'completed-replacement',
++      assetVersion: 'master-new',
++    );
++    expect(ok, isTrue);
++    expect(calls, 1);
++    expect(await File('${trackDir.path}/audio.m4a').readAsString(),
++        'new-master');
++    final saved = jsonDecode(await File('${trackDir.path}/meta.json').readAsString());
++    expect(saved['assetVersion'], 'master-new');
++  });
++
++  test('resumes ETag-validated partial bytes using If-Range', () async {
++    final track = BzTrack(
++      id: 'etag-resume', title: 'Etaged', artist: 'Artist',
++      duration: const Duration(minutes: 2),
++    );
++    final dir = Directory('${root.path}/etag-resume');
++    await dir.create();
++    await File('${dir.path}/audio.part').writeAsString('abc');
++    await File('${dir.path}/audio.part.version').writeAsString('etag:rev123');
++    String? ifRange;
++    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      ifRange = request.headers.value('if-range');
++      request.response.statusCode = HttpStatus.partialContent;
++      request.response.headers.set('etag', '"rev123"');
++      request.response.headers.set('content-range', 'bytes 3-5/6');
++      request.response.contentLength = 3;
++      request.response.add(utf8.encode('def'));
++      await request.response.close();
++    });
++    addTearDown(() => server.close(force: true));
++
++    expect(await library.download(
++      track,
++      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
++      ownerId: 'listener', catalogTrackId: 'etag-resume',
++    ), isTrue);
++    expect(ifRange, '"rev123"');
++    expect(await File('${dir.path}/audio.m4a').readAsString(), 'abcdef');
++    final meta = jsonDecode(await File('${dir.path}/meta.json').readAsString());
++    expect(meta['assetVersion'], 'etag:rev123');
++  });
++
++  test('replaced ETag forces full redownload instead of old/new splice', () async {
++    final track = BzTrack(
++      id: 'etag-replaced', title: 'Replaced', artist: 'Artist',
++      duration: const Duration(minutes: 2),
++    );
++    final dir = Directory('${root.path}/etag-replaced');
++    await dir.create();
++    await File('${dir.path}/audio.part').writeAsString('old-master');
++    await File('${dir.path}/audio.part.version').writeAsString('etag:old');
++    String? ifRange;
++    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      ifRange = request.headers.value('if-range');
++      request.response.statusCode = HttpStatus.ok;
++      request.response.headers.set('etag', '"new"');
++      request.response.add(utf8.encode('replacement'));
++      await request.response.close();
++    });
++    addTearDown(() => server.close(force: true));
++
++    expect(await library.download(
++      track,
++      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
++      ownerId: 'listener', catalogTrackId: 'etag-replaced',
++    ), isTrue);
++    expect(ifRange, '"old"');
++    expect(await File('${dir.path}/audio.m4a').readAsString(), 'replacement');
++  });
++
++  test('reuses completed music only after matching authorized HEAD ETag', () async {
++    final track = BzTrack(
++      id: 'etag-complete', title: 'Saved', artist: 'Artist',
++      duration: const Duration(minutes: 2),
++    );
++    final dir = Directory('${root.path}/etag-complete');
++    await dir.create();
++    await File('${dir.path}/audio.m4a').writeAsString('saved-bytes');
++    await File('${dir.path}/meta.json').writeAsString(jsonEncode({
++      'ownerId': 'listener', 'catalogTrackId': 'etag-complete',
++      'assetVersion': 'etag:stable',
++    }));
++    final methods = <String>[];
++    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      methods.add(request.method);
++      request.response.headers.set('etag', '"stable"');
++      await request.response.close();
++    });
++    addTearDown(() => server.close(force: true));
++
++    expect(await library.download(
++      track,
++      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
++      ownerId: 'listener', catalogTrackId: 'etag-complete',
++    ), isTrue);
++    expect(methods, ['HEAD']);
++    expect(await File('${dir.path}/audio.m4a').readAsString(), 'saved-bytes');
++  });
++
+   test('lists only assets owned by the requested account', () async {
+     final alice = Directory('${root.path}/bz_alice-track');
+     final bob = Directory('${root.path}/bz_bob-track');
+@@ -113,7 +325,13 @@ void main() {
+ 
+     final tracks = await library.list(ownerId: 'user-1');
+ 
+-    expect(tracks.single.rightsExpiresAtUtc, expiry);
++    final saved = tracks.single;
++    expect(saved.rightsExpiresAtUtc, expiry);
++    final renewed = expiry.add(const Duration(days: 1));
++    await library.updateOfflineLease(saved.trackId, renewed);
++    expect((await library.list(ownerId: 'user-1')).single.rightsExpiresAtUtc, renewed);
++    await library.remove(saved.trackId);
++    expect(await library.list(ownerId: 'user-1'), isEmpty);
+   });
+ 
+   test('does not expose legacy metadata without an owner', () async {
+
+FILE packages/audio_contracts/lib/src/audio_engine_adapter.dart
+@@ -78,6 +78,26 @@ abstract interface class AudioEngineAdapter {
+   Stream<PlaybackState> get engineStateStream;
+ }
+ 
++/// Optional native playlist capability. This is deliberately separate from
++/// AudioEngineAdapter: licensed remote streams still require per-track
++/// playback sessions, and cannot be speculatively stitched into a playlist.
++abstract interface class GaplessLocalQueueEngine implements AudioEngineAdapter {
++  /// True only when the platform provides a verified native playlist.
++  bool get supportsGaplessLocalFiles;
++
++  /// All sources must be app-private/user-controlled local audio files.
++  Future<void> prepareLocalPlaylist(
++    List<PlayableSource> sources, {
++    required int initialIndex,
++  });
++
++  /// Native sequence index changes without resetting the decoder.
++  Stream<int?> get currentIndexStream;
++
++  /// Seeks within an already prepared native playlist.
++  Future<void> skipToIndex(int index);
++}
++
+ /// Queue entries must have stable IDs, source context, version and
+ /// origin (§53.4) — they are NOT bare track references.
+ class QueueEntry {
+
+FILE packages/audio_contracts/lib/src/queue_manager.dart
+@@ -90,6 +90,18 @@ class QueueManager {
+     onQueueChanged?.call();
+   }
+ 
++  /// Syncs the app queue to a native decoder's automatic playlist index.
++  /// This does not perform a second audio seek or prepare.
++  bool selectEntry(String entryId) {
++    final index = _entries.indexWhere((entry) => entry.entryId == entryId);
++    if (index < 0) return false;
++    if (index == _currentIndex) return true;
++    if (current != null) _history.add(current!);
++    _currentIndex = index;
++    onQueueChanged?.call();
++    return true;
++  }
++
+   /// Removes by entryId; returns false when not found.
+   bool remove(String entryId) {
+     final idx = _entries.indexWhere((e) => e.entryId == entryId);
+
+FILE packages/audio_contracts/test/queue_manager_test.dart
+@@ -37,6 +37,17 @@ void main() {
+       expect(q.advance()!.entryId, 'preview');
+     });
+ 
++    test('native playlist changes select a stable entry without reorder', () {
++      final q = QueueManager();
++      q.replaceWith([entry('a'), entry('b'), entry('c')]);
++      expect(q.selectEntry('b'), isTrue);
++      expect(q.current!.entryId, 'b');
++      expect(q.upNext.map((e) => e.entryId), ['c']);
++      expect(q.history.last.entryId, 'a');
++      expect(q.selectEntry('not-present'), isFalse);
++      expect(q.current!.entryId, 'b');
++    });
++
+     test('playLast appends at end', () {
+       final q = QueueManager();
+       q.replaceWith([entry('a'), entry('b')]);
+
+FILE packages/design_system/lib/src/bz_ambient_backdrop.dart
+@@ -11,16 +11,24 @@ import 'bz_theme.dart';
+ class BzAmbientBackdrop extends StatelessWidget {
+   final Widget child;
+   final String? artworkUrl;
++  final Color? artworkAccent;
+ 
+   const BzAmbientBackdrop({
+     super.key,
+     required this.child,
+     this.artworkUrl,
++    this.artworkAccent,
+   });
+ 
+   @override
+   Widget build(BuildContext context) {
+-    final colors = Theme.of(context).bz;
++    final theme = Theme.of(context);
++    final colors = theme.bz;
++    final seeded = bzColorsFromBrandSeed(
++      brightness: theme.brightness, seedColor: artworkAccent,
++    );
++    final tint = artworkAccent != null && seeded.accent != colors.accent
++        ? seeded.accent : null;
+ 
+     return Stack(
+       fit: StackFit.expand,
+@@ -33,6 +41,22 @@ class BzAmbientBackdrop extends StatelessWidget {
+             alignment: Alignment.topCenter,
+             errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+           ),
++        if (tint != null)
++          IgnorePointer(
++            child: DecoratedBox(
++              decoration: BoxDecoration(
++                gradient: LinearGradient(
++                  begin: Alignment.topCenter,
++                  end: Alignment.bottomCenter,
++                  colors: [
++                    tint.withValues(alpha: 0.16),
++                    tint.withValues(alpha: 0.02),
++                    Colors.transparent,
++                  ],
++                ),
++              ),
++            ),
++          ),
+         BackdropFilter(
+           filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+           child: Container(
+
+FILE packages/design_system/lib/src/bz_theme.dart
+@@ -138,10 +138,39 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
+   }
+ }
+ 
++/// Applies an icon-derived brand seed without sacrificing contrast or
++/// the intentionally monochrome Breezze identity.
++/// A black/white icon stays monochrome; colorful variants can adapt.
++BzThemeColors bzColorsFromBrandSeed({
++  required Brightness brightness,
++  Color? seedColor,
++}) {
++  final base = brightness == Brightness.dark
++      ? BzThemeColors.dark : BzThemeColors.light;
++  if (seedColor == null) return base;
++  final hsv = HSVColor.fromColor(seedColor);
++  if (hsv.saturation < 0.16 || hsv.value < 0.10) return base;
++
++  final generated = ColorScheme.fromSeed(
++    seedColor: seedColor,
++    brightness: brightness,
++  );
++  final accent = generated.primary;
++  final l1 = accent.computeLuminance();
++  final l2 = base.background.computeLuminance();
++  final contrast = (l1 > l2 ? l1 + 0.05 : l2 + 0.05) /
++      (l1 > l2 ? l2 + 0.05 : l1 + 0.05);
++  // Interactive text/icons need WCAG AA-level contrast.
++  if (contrast < 4.5) return base;
++  return base.copyWith(accent: accent);
++}
++
+ /// The light theme, §21.2.
+-ThemeData bzLightTheme() {
++ThemeData bzLightTheme({Color? brandSeed}) {
+   final base = ThemeData.light(useMaterial3: true);
+-  final c = BzThemeColors.light;
++  final c = bzColorsFromBrandSeed(
++    brightness: Brightness.light, seedColor: brandSeed,
++  );
+   return base.copyWith(
+     extensions: [c],
+     scaffoldBackgroundColor: c.background,
+@@ -163,9 +192,11 @@ ThemeData bzLightTheme() {
+ }
+ 
+ /// The dark theme, §21.2.
+-ThemeData bzDarkTheme() {
++ThemeData bzDarkTheme({Color? brandSeed}) {
+   final base = ThemeData.dark(useMaterial3: true);
+-  final c = BzThemeColors.dark;
++  final c = bzColorsFromBrandSeed(
++    brightness: Brightness.dark, seedColor: brandSeed,
++  );
+   return base.copyWith(
+     extensions: [c],
+     scaffoldBackgroundColor: c.background,
+
+FILE packages/design_system/test/bz_adaptive_theme_test.dart
+@@ -0,0 +1,62 @@
++import 'package:breezze_design_system/breezze_design_system.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:material_ui/material_ui.dart';
++
++void main() {
++  test('black and white icon colors preserve Breezze monochrome', () {
++    final dark = bzColorsFromBrandSeed(
++      brightness: Brightness.dark,
++      seedColor: const Color(0xFF000000),
++    );
++    final light = bzColorsFromBrandSeed(
++      brightness: Brightness.light,
++      seedColor: const Color(0xFFFFFFFF),
++    );
++    expect(dark.accent, BzThemeColors.dark.accent);
++    expect(light.accent, BzThemeColors.light.accent);
++  });
++
++  test('saturated brand seeds can adapt light and dark themes', () {
++    const seed = Color(0xFF2469E8);
++    final light = bzColorsFromBrandSeed(
++      brightness: Brightness.light, seedColor: seed,
++    );
++    final dark = bzColorsFromBrandSeed(
++      brightness: Brightness.dark, seedColor: seed,
++    );
++    expect(light.background, BzThemeColors.light.background);
++    expect(dark.background, BzThemeColors.dark.background);
++    expect(light.accent, isNot(BzThemeColors.light.accent));
++    expect(dark.accent, isNot(BzThemeColors.dark.accent));
++    expect(bzLightTheme(brandSeed: seed).bz.accent, light.accent);
++    expect(bzDarkTheme(brandSeed: seed).bz.accent, dark.accent);
++  });
++
++  test('contrast of adapted accents meets 4.5:1 on the main surface', () {
++    for (final brightness in [Brightness.light, Brightness.dark]) {
++      final c = bzColorsFromBrandSeed(
++        brightness: brightness, seedColor: const Color(0xFF2469E8),
++      );
++      final accent = c.accent.computeLuminance();
++      final background = c.background.computeLuminance();
++      final ratio = (accent > background
++          ? (accent + 0.05) / (background + 0.05)
++          : (background + 0.05) / (accent + 0.05));
++      expect(ratio, greaterThanOrEqualTo(4.5));
++    }
++  });
++
++  test('a missing or invalid seed retains the safe baseline', () {
++    expect(
++      bzColorsFromBrandSeed(brightness: Brightness.light).accent,
++      BzThemeColors.light.accent,
++    );
++    expect(
++      bzColorsFromBrandSeed(
++        brightness: Brightness.dark,
++        seedColor: const Color(0xFF111111),
++      ).accent,
++      BzThemeColors.dark.accent,
++    );
++  });
++}
