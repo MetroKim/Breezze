@@ -14,7 +14,7 @@ bool isSpotifyTrackId(String id) => _spotifyTrackId.hasMatch(id);
 /// A queued song must still resolve to a playable, permitted media source.
 bool isMetadataOnlyTrackId(String id) =>
     id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !isDeezerPreview(id));
+    id.startsWith('bz:');
 
 /// Native audio playback is separate from the visible YouTube player.
 bool canQueueTrackId(String id) =>
@@ -28,7 +28,6 @@ bool canOfferPlaybackAction(String id, {bool hasPreview = false}) =>
     isYouTubeSongId(id) ||
     isSpotifyTrackId(id) ||
     _youtubeVideoId.hasMatch(id) ||
-    (hasPreview && _deezerCatalogId.hasMatch(id)) ||
     canQueueTrackId(id);
 
 /// Only permits REQUESTING a server-side offline grant, not downloading it.
@@ -37,6 +36,8 @@ bool canRequestOfflineDownload(String id) =>
     !id.startsWith('bz:') &&
     !id.startsWith('bzv:');
 
+/// Legacy Deezer preview-matching helper retained only for migration of
+/// previously saved metadata; never used to start new playback.
 /// Preview fallback must refer unambiguously to the selected recording.
 String? matchingDeezerPreview(
   Object? rows,
