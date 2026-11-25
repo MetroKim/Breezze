@@ -11,6 +11,7 @@ import '../core/api/breezze_api.dart';
 import '../core/audio/playback_source_policy.dart';
 import '../core/audio/remote_audio_grant.dart';
 import '../core/audio/authorized_youtube_music_source.dart';
+import '../core/audio/device_youtube_audio_resolver.dart';
 import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
@@ -210,8 +211,10 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
-    // A verified internal recording can match a public YouTube Music
-    // catalog ID, but metadata itself never becomes an audio grant.
+    // Prefer our own, separately ingested and rights-approved recording.
+    // When none is present, resolve a transient audio URL on the listener's
+    // device (Liner-like architecture). No URL is sent to our database or
+    // media worker, nor stored in queue/cache snapshots.
     if (isYouTubeSongId(track.id)) {
       try {
         final preferences = await DownloadPreferencesStore().load();
@@ -219,14 +222,15 @@ class LiveResolver implements PlaybackResolver {
           externalTrackId: track.id,
           requestedQuality: preferences.streamingQuality,
         );
-        final source = authorizedYouTubeMusicPlayback(track.id, session);
-        if (source == null && session['id'] is String) {
+        final owned = authorizedYouTubeMusicPlayback(track.id, session);
+        if (owned != null) return owned;
+        if (session['id'] is String) {
           try { await api.stopPlaybackSession(session['id'] as String); } catch (_) {}
         }
-        return source;
       } catch (_) {
-        return null;
+        // No matched licensed asset: attempt direct on-device resolution.
       }
+      return _ref.read(deviceYouTubeAudioResolverProvider).resolve(track.id);
     }
 
     try {
