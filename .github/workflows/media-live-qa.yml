@@ -1,11 +1,8 @@
 name: Breezze Live QA Media Delivery (No Production Deployment)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'infra/cloudflare/media-worker/**'
-      - '.github/workflows/media-live-qa.yml'
+  # Explicit opt-in until the repository has a scoped Cloudflare Actions
+  # deployment token; unrelated main pushes must never fail on absent secrets.
   workflow_dispatch:
 
 permissions:
