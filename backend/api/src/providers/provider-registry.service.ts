@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
 import { DeezerAdapter } from './deezer.adapter';
-import { ProviderAdapter } from './provider-adapter.interface';
+import { MusicBrainzAdapter } from './musicbrainz.adapter';
+import { ProviderAdapter, ProviderTrack } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
 
 // The registry owns provider identity, capabilities, and health.
@@ -16,10 +17,12 @@ export class ProviderRegistry {
     internal: InternalCatalogAdapter,
     spotify: SpotifyAdapter,
     deezer: DeezerAdapter,
+    musicbrainz: MusicBrainzAdapter,
   ) {
     this.register(internal);
     this.register(spotify);
     this.register(deezer);
+    this.register(musicbrainz);
   }
 
   register(adapter: ProviderAdapter) {
@@ -79,8 +82,10 @@ export class ProviderRegistry {
   }
 
   private async performMusicSearch(query: string) {
+    // No Spotify credentials? Do not show a fake or permanently empty
+    // Spotify shelf. Deezer still serves real catalog results immediately.
     const supported = ['spotify', 'deezer'] as const;
-    const shelves = await Promise.all(supported.map(async (id) => {
+    const shelves = await Promise.all(supported.filter(id => this.get(id)).map(async (id) => {
       const adapter = this.get(id);
       const displayName = id === 'spotify' ? 'Spotify' : 'Deezer';
       if (!adapter) {
@@ -119,6 +124,39 @@ export class ProviderRegistry {
       });
       return { providerId: id, displayName, result };
     }));
+    // MusicBrainz is a clearly labeled KEYLESS backup, never spoofed Spotify
+    // data. Query it only when the normal catalogs returned no tracks. The
+    // adapter requires non-commercial acknowledgment and a global 1/sec
+    // Redis permit before contacting the public MusicBrainz service.
+    const hasResults = shelves.some(shelf =>
+      shelf.result.kind === 'ok' && shelf.result.value.length > 0);
+    if (!hasResults) {
+      const backup = this.get('musicbrainz');
+      if (backup) {
+        const result = await Promise.race<ProviderResult<ProviderTrack[]>>([
+          Promise.resolve().then(() => backup.search(query)).catch(
+            () => ({
+              kind: 'error' as const,
+              code: 'MUSICBRAINZ_SEARCH_FAILED',
+              retryable: true,
+              message: 'Backup catalog unavailable',
+            }),
+          ),
+          new Promise(resolve => setTimeout(
+            () => resolve({
+              kind: 'error',
+              code: 'MUSICBRAINZ_TIMEOUT',
+              retryable: true,
+              message: 'Backup catalog timeout',
+            }), 3600)),
+        ]);
+        shelves.push({
+          providerId: 'musicbrainz',
+          displayName: 'MusicBrainz',
+          result,
+        });
+      }
+    }
     return {
       query,
       providers: shelves,
@@ -135,7 +173,8 @@ export class ProviderRegistry {
     // YouTube is reserved for visible music videos. Provider metadata is
     // never permission to download or decode a protected full recording.
     const adapters = [...this.adapters.values()].filter(
-      (adapter) => adapter.enabled !== false && adapter.capabilities.search,
+      (adapter) => adapter.providerId !== 'musicbrainz' &&
+        adapter.enabled !== false && adapter.capabilities.search,
     ).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     const settled = await Promise.allSettled(
       adapters.map(async (adapter) => ({
