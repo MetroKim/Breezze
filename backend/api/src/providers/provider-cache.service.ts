@@ -40,6 +40,25 @@ export class ProviderCacheService implements OnModuleDestroy {
   }
 
   /**
+   * Atomic short-window permit for low-rate public catalog endpoints.
+   * Shared across Railway replicas. Fail closed when Redis is down to
+   * avoid abusive traffic to a third-party's free public API.
+   */
+  async reserveProviderInterval(namespace: string, milliseconds: number): Promise<boolean> {
+    if (!/^[a-z0-9:_-]{2,80}$/.test(namespace) ||
+        !Number.isSafeInteger(milliseconds) || milliseconds < 1000 ||
+        milliseconds > 60000) return false;
+    try {
+      if (this.redis.status === 'wait') await this.redis.connect();
+      return await this.redis.set(
+        'provider:interval:' + namespace, '1', 'PX', milliseconds, 'NX',
+      ) === 'OK';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Reserve one official-provider search request across every API replica.
    * Google's 2026 search.list quota is a separate daily bucket. Fail closed
    * if Redis is down: a transient cache outage must not burn the user's key.
