@@ -19,6 +19,7 @@ import 'playlist_detail_screen.dart';
 import 'add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
+import '../video/open_youtube_player.dart';
 
 /// Library navigation follows the user's requested section order. Only
 /// Songs/Favorites and Downloaded currently have live local data; the other
@@ -307,14 +308,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
-    final nativeIndex = _favorites.indexWhere((item) => canQueueTrackId(item.id));
-    if (nativeIndex >= 0) {
-      if (_favorites.any((item) => !canQueueTrackId(item.id)) && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
-        );
-      }
-      await _playOne(nativeIndex);
+    final index = _favorites.indexWhere((item) =>
+        canQueueTrackId(item.id) || isYouTubeSongId(item.id));
+    if (index >= 0) {
+      // YouTube songs use the official visible player. Native recordings and
+      // YouTube videos cannot be mixed into a single audio-only queue.
+      await _playOne(index);
       return;
     }
     if (mounted) {
@@ -326,6 +325,28 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
+    if (isYouTubeSongId(track.id)) {
+      final visibleQueue = [
+        for (final song in _favorites)
+          if (isYouTubeSongId(song.id))
+            <String, String?>{
+              'videoId': song.id.substring('bz:youtube_music:'.length),
+              'title': song.title,
+              'artist': song.artist,
+              'artworkUrl': song.artworkUrl,
+            },
+      ];
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: track.id.substring('bz:youtube_music:'.length),
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        visibleQueue: visibleQueue,
+      );
+      return;
+    }
     if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
