@@ -145,7 +145,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(playlist.tracks.any((item) =>
+        SnackBar(content: Text(playlist.tracks.any((item) =>
               isYouTubeSongId(item.id) || item.id.startsWith('bzv:'))
               ? 'Tap a YouTube song to watch it in the official player. Native Play All is unavailable for these tracks.'
               : 'This playlist contains no currently playable songs.')),
