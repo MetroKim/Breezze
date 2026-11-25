@@ -1,4 +1,4 @@
-name: Breezze Spotify Music and YouTube Video Separation
+name: Breezze Spotify Deezer Audio and YouTube Video Isolation
 
 on:
   push:
@@ -14,6 +14,7 @@ on:
       - 'apps/mobile/test/browse_screen_test.dart'
       - 'apps/mobile/test/search_typeahead_test.dart'
       - 'apps/mobile/test/spotify_playback_handoff_test.dart'
+      - 'apps/mobile/test/deezer_playback_handoff_test.dart'
       - 'apps/mobile/pubspec.yaml'
       - '.github/workflows/spotify-integration-verify.yml'
   pull_request:
@@ -41,7 +42,7 @@ concurrency:
 
 jobs:
   spotify-api:
-    name: Spotify API metadata-only acceptance
+    name: Spotify and Deezer catalog authorization acceptance
     runs-on: ubuntu-latest
     timeout-minutes: 12
     defaults:
@@ -56,11 +57,11 @@ jobs:
         run: npm install --no-audit --no-fund && npx prisma generate
       - name: Verify backend TypeScript
         run: npm run typecheck
-      - name: Verify Spotify credentials handling and provider isolation
-        run: npx jest --runInBand src/providers/spotify.adapter.spec.ts src/providers/provider-registry.service.spec.ts
+      - name: Verify Spotify and Deezer metadata contracts and provider isolation
+        run: npx jest --runInBand src/providers/spotify.adapter.spec.ts src/providers/deezer.adapter.spec.ts src/providers/provider-registry.service.spec.ts
 
   mobile:
-    name: Flutter Spotify official-app route and no-native-YouTube guard
+    name: Flutter Spotify Deezer handoffs and no-native-YouTube guard
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -81,5 +82,5 @@ jobs:
             echo 'Unsupported YouTube native-audio resolution remains in Flutter production source' >&2
             exit 1
           fi
-      - name: Validate Spotify URI routing and playback policy
-        run: flutter test --reporter expanded test/spotify_playback_handoff_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart test/browse_screen_test.dart test/search_typeahead_test.dart
+      - name: Validate official Spotify and Deezer routing, previews and playback policy
+        run: flutter test --reporter expanded test/spotify_playback_handoff_test.dart test/deezer_playback_handoff_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart test/browse_screen_test.dart test/search_typeahead_test.dart
