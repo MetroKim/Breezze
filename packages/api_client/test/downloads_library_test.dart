@@ -140,6 +140,68 @@ void main() {
     expect(await File('${root.path}/licensed-aac/audio.m4a').exists(), isFalse);
   });
 
+  test('cannot relabel somebody else\'s existing audio as a new user\'s license', () async {
+    final track = BzTrack(
+      id: 'owned-music',
+      title: 'Owned song',
+      artist: 'Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final dir = Directory('${root.path}/owned-music');
+    await dir.create(recursive: true);
+    final file = File('${dir.path}/audio.m4a');
+    await file.writeAsBytes([1, 2, 3, 4]);
+    final meta = File('${dir.path}/meta.json');
+    await meta.writeAsString(jsonEncode({
+      'title': track.title,
+      'ownerId': 'alice',
+      'catalogTrackId': 'catalog-alice',
+      'assetVariant': 'AAC_256',
+      'rightsExpiresAtUtc': DateTime.now().toUtc()
+          .add(const Duration(hours: 1)).toIso8601String(),
+    }));
+
+    final ok = await library.download(
+      track,
+      downloadUrl: 'https://media.example.invalid/unreachable',
+      ownerId: 'bob',
+      catalogTrackId: 'catalog-bob',
+      assetVariant: 'AAC_256',
+      rightsExpiresAtUtc: DateTime.now().toUtc()
+          .add(const Duration(hours: 1)),
+    );
+    expect(ok, isFalse);
+    expect(await file.readAsBytes(), [1, 2, 3, 4]);
+    expect((jsonDecode(await meta.readAsString()) as Map)['ownerId'], 'alice');
+    expect((await library.list(ownerId: 'bob')), isEmpty);
+  });
+
+  test('existing AAC quality cannot be silently relabelled as a higher variant', () async {
+    final track = BzTrack(
+      id: 'quality-locked',
+      title: 'Quality locked',
+      artist: 'Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final dir = Directory('${root.path}/quality-locked');
+    await dir.create(recursive: true);
+    await File('${dir.path}/audio.m4a').writeAsBytes([5, 6, 7]);
+    await File('${dir.path}/meta.json').writeAsString(jsonEncode({
+      'ownerId': 'alice',
+      'catalogTrackId': 'same-catalog',
+      'assetVariant': 'AAC_128',
+    }));
+    expect(await library.download(
+      track,
+      downloadUrl: 'https://media.example.invalid/unreachable',
+      ownerId: 'alice',
+      catalogTrackId: 'same-catalog',
+      assetVariant: 'AAC_256',
+      rightsExpiresAtUtc: DateTime.now().toUtc()
+          .add(const Duration(hours: 1)),
+    ), isFalse);
+  });
+
   test('lists only assets owned by the requested account', () async {
     final alice = Directory('${root.path}/bz_alice-track');
     final bob = Directory('${root.path}/bz_bob-track');

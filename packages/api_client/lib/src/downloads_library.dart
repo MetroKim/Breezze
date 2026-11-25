@@ -47,15 +47,36 @@ class DownloadsLibrary {
     required String ownerId,
     required String catalogTrackId,
     required DateTime rightsExpiresAtUtc,
+    String assetVariant = 'AAC_256',
     void Function(double progress)? onProgress,
     DownloadCancellation? cancellation,
   }) async {
-    if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc())) {
+    if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc()) ||
+        (assetVariant != 'AAC_128' && assetVariant != 'AAC_256')) {
       return false;
     }
     final dir = _dirFor(track.id);
     try {
       await dir.create(recursive: true);
+      final audioFile = File('${dir.path}/audio.m4a');
+      final metadataFile = File('${dir.path}/meta.json');
+      // A pre-existing file is NOT automatically proof of this listener's
+      // ownership, source track, rendition or an authorized complete transfer.
+      // Do not overwrite metadata to make somebody else's cached bytes appear
+      // licensed. Unknown legacy files are preserved but unavailable pending
+      // an explicit remove/redownload.
+      if (await audioFile.exists()) {
+        if (!await metadataFile.exists() || await audioFile.length() == 0) {
+          return false;
+        }
+        final prior = jsonDecode(await metadataFile.readAsString());
+        if (prior is! Map<String, dynamic> ||
+            prior['ownerId'] != ownerId ||
+            prior['catalogTrackId'] != catalogTrackId ||
+            prior['assetVariant'] != assetVariant) {
+          return false;
+        }
+      }
 
       // 1. Fetch only the short-lived URL issued by the backend after its
       // download-rights decision. Never extract media directly from a
@@ -115,7 +136,8 @@ class DownloadsLibrary {
         'artist': track.artist,
         'ownerId': ownerId,
         'catalogTrackId': catalogTrackId,
-        'rightsExpiresAtUtc': rightsExpiresAtUtc?.toUtc().toIso8601String(),
+        'assetVariant': assetVariant,
+        'rightsExpiresAtUtc': rightsExpiresAtUtc.toUtc().toIso8601String(),
       }));
 
       return true;
