@@ -846,11 +846,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            track.id.startsWith('bz:deezer:') || isDeezerPreview(track.id)
-                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer preview (30s)' : 'Deezer catalog'}'
-                                                : track.id.startsWith('bz:youtube_music:')
-                                                    ? '${track.artist} · YouTube Music'
-                                                    : track.artist,
+                                            isSpotifyTrackId(track.id)
+                                                ? '${track.artist} · Spotify'
+                                                : track.id.startsWith('bz:deezer:') || isDeezerPreview(track.id)
+                                                    ? '${track.artist} · Legacy Deezer'
+                                                    : isYouTubeSongId(track.id)
+                                                        ? '${track.artist} · YouTube video'
+                                                        : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -865,8 +867,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             tooltip: track.id.startsWith('bzv:')
                                                 ? 'Watch music video'
                                                 : isYouTubeSongId(track.id)
-                                                    ? 'Play song or watch on YouTube'
-                                                    : track.hasPreview ? 'Play preview' : 'Play',
+                                                    ? 'Watch on YouTube'
+                                                    : isSpotifyTrackId(track.id)
+                                                         ? 'Listen in Spotify'
+                                                         : track.hasPreview ? 'Play preview' : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
@@ -875,7 +879,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             tooltip: 'Song actions',
                                             icon: const BzSvgIcon(name: 'more-vertical', size: 20),
                                             onSelected: (action) {
-                                              if (action == 'original') {
+                                              if (action == 'spotify') {
+                                                _play(track);
+                                              } else if (action == 'original') {
                                                 openYouTubePlayer(
                                                   context: context,
                                                   ref: ref,
@@ -914,18 +920,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               }
                                             },
                                             itemBuilder: (context) => [
-                                              if (isYouTubeSongId(track.id)) ...[
-                                                const PopupMenuItem(value: 'original', child: Text('Open YouTube player')),
-                                                const PopupMenuItem(value: 'video', child: Text('Watch music video')),
+                                              if (isSpotifyTrackId(track.id))
+                                                const PopupMenuItem(
+                                                  value: 'spotify',
+                                                  child: Text('Open in Spotify'),
+                                                )
+                                              else ...[
+                                                if (isYouTubeSongId(track.id)) ...[
+                                                  const PopupMenuItem(value: 'original', child: Text('Open YouTube player')),
+                                                  const PopupMenuItem(value: 'video', child: Text('Watch music video')),
+                                                ],
+                                                const PopupMenuItem(
+                                                  value: 'playlist',
+                                                  child: Text('Add to Playlists'),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'favorite',
+                                                  child: Text('Add to Library'),
+                                                ),
                                               ],
-                                              const PopupMenuItem(
-                                                value: 'playlist',
-                                                child: Text('Add to Playlists'),
-                                              ),
-                                              const PopupMenuItem(
-                                                value: 'favorite',
-                                                child: Text('Add to Library'),
-                                              ),
                                               if (canQueueTrackId(track.id)) ...[
                                                 const PopupMenuItem(
                                                   value: 'play_next',
@@ -953,6 +966,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ||
                                             isYouTubeSongId(track.id) ||
+                                            isSpotifyTrackId(track.id) ||
                                             canQueueTrackId(track.id) || track.hasPreview
                                         ? _play(track)
                                         : _openTrack(track),
