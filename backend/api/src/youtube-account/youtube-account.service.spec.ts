@@ -83,6 +83,23 @@ describe('YoutubeAccountService owner-bound OAuth authorization', () => {
     await expect(service.start(userId)).rejects.toThrow('YOUTUBE_ACCOUNT_LINK_NOT_CONFIGURED');
   });
 
+  it('reports unavailable when OAuth settings are present but invalid', async () => {
+    prisma.youtubeAccountConnection.findUnique.mockResolvedValue(null);
+    delete process.env.YOUTUBE_ACCOUNT_CLIENT_SECRET;
+    expect((await service.status(userId)).available).toBe(false);
+
+    process.env.YOUTUBE_ACCOUNT_CLIENT_SECRET = 'private-client-secret';
+    process.env.YOUTUBE_ACCOUNT_REDIRECT_URI =
+      'http://untrusted.example/api/v1/youtube-account/callback';
+    expect((await service.status(userId)).available).toBe(false);
+
+    process.env.YOUTUBE_ACCOUNT_REDIRECT_URI =
+      'https://edge.breezze.test/api/v1/youtube-account/callback';
+    expect((await service.status(userId)).available).toBe(true);
+    expect(prisma.youtubeAccountLinkFlow.create).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  });
+
   it('creates a state-bound, one-time read-only Google OAuth PKCE consent URL', async () => {
     const flow = await service.start(userId);
     const url = new URL(flow.authorizationUrl);

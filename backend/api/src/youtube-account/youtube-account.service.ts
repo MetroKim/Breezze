@@ -94,11 +94,15 @@ export class YoutubeAccountService {
   }
 
   async status(userId: string) {
-    const configured = process.env.YOUTUBE_ACCOUNT_LINK_ENABLED === 'true' &&
-      Boolean(process.env.YOUTUBE_ACCOUNT_CLIENT_ID &&
-        process.env.YOUTUBE_ACCOUNT_CLIENT_SECRET &&
-        process.env.YOUTUBE_ACCOUNT_REDIRECT_URI &&
-        Buffer.from(process.env.YOUTUBE_ACCOUNT_TOKEN_KEY ?? '', 'base64').length === 32);
+    // Status must agree with the actual consent preflight. A malformed
+    // redirect URI or disabled consent must never surface as available.
+    let configured = false;
+    try {
+      this.config();
+      configured = true;
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+    }
     const record = await this.prisma.youtubeAccountConnection.findUnique({
       where: { userId },
       select: { channelTitle: true, channelId: true, createdAt: true },

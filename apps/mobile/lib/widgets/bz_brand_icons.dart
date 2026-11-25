@@ -104,15 +104,41 @@ class BzBnoteMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SvgPicture.asset(
-      Theme.of(context).brightness == Brightness.dark
-          ? 'assets/icons/breezze-symbol-white.svg'
-          : 'assets/icons/breezze-symbol-black.svg',
+      'assets/icons/breezze-symbol-monochrome-adaptive.svg',
       width: size,
       height: size,
       colorFilter: ColorFilter.mode(
         color ?? Theme.of(context).colorScheme.onSurface,
         BlendMode.srcIn,
       ),
+    );
+  }
+}
+
+
+/// Official Breezze pixel-B app tile, with no gradients or third-party marks.
+/// The foreground glyph is identical in both high-contrast monochrome assets.
+class BzMonochromeAppIcon extends StatelessWidget {
+  final double size;
+  final String? semanticsLabel;
+
+  const BzMonochromeAppIcon({
+    super.key,
+    this.size = 56,
+    this.semanticsLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return SvgPicture.asset(
+      dark
+          ? 'assets/icons/breezze-app-monochrome-dark.svg'
+          : 'assets/icons/breezze-app-monochrome-light.svg',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      semanticsLabel: semanticsLabel ?? 'Breezze',
     );
   }
 }

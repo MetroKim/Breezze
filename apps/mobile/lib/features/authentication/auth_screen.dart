@@ -1,4 +1,3 @@
-import '../search/search_screen.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -308,6 +307,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: BzMonochromeAppIcon(size: 56),
+              ),
+              const SizedBox(height: 18),
               Text(
                 _registerMode ? 'Create your account' : 'Welcome to Breezze',
                 style: theme.textTheme.headlineMedium?.copyWith(
@@ -325,12 +329,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              OutlinedButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => Scaffold(appBar: AppBar(), body: const SearchScreen()))),
-                child: const Text('Browse music'),
-              ),
-              const SizedBox(height: 12),
               if (SupabaseAuthBridge.enabled) ...[
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
@@ -355,30 +353,35 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
-              if (SupabaseAuthBridge.enabled &&
-                  (SupabaseAuthBridge.nativeAppleReady ||
-                      SupabaseAuthBridge.nativeGoogleReady)) ...[
-                if (SupabaseAuthBridge.nativeAppleReady) ...[
-                  _socialButton(
-                    label: 'Continue with Apple',
-                    isApple: true,
-                    enabled: !busy,
-                    onPressed: () => ref
-                        .read(authSessionProvider.notifier)
-                        .socialLogin('apple'),
+              if (SupabaseAuthBridge.enabled) ...[
+                // Keep both official provider affordances visible on the
+                // required sign-in screen. Unverified native integrations
+                // remain disabled rather than falling back to legacy OAuth.
+                _socialButton(
+                  label: 'Continue with Apple',
+                  isApple: true,
+                  enabled: !busy && SupabaseAuthBridge.nativeAppleReady,
+                  onPressed: () => ref
+                      .read(authSessionProvider.notifier)
+                      .socialLogin('apple'),
+                ),
+                const SizedBox(height: 12),
+                _socialButton(
+                  label: 'Continue with Google',
+                  isApple: false,
+                  enabled: !busy && SupabaseAuthBridge.nativeGoogleReady,
+                  onPressed: () => ref
+                      .read(authSessionProvider.notifier)
+                      .socialLogin('google'),
+                ),
+                if (!SupabaseAuthBridge.nativeAppleReady ||
+                    !SupabaseAuthBridge.nativeGoogleReady) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Some sign-in options are awaiting native platform '
+                    'verification. You can continue securely with email.',
+                    style: TextStyle(color: theme.bzText2, fontSize: 12),
                   ),
-                  const SizedBox(height: 12),
-                ],
-                if (SupabaseAuthBridge.nativeGoogleReady) ...[
-                  _socialButton(
-                    label: 'Continue with Google',
-                    isApple: false,
-                    enabled: !busy,
-                    onPressed: () => ref
-                        .read(authSessionProvider.notifier)
-                        .socialLogin('google'),
-                  ),
-                  const SizedBox(height: 12),
                 ],
                 const SizedBox(height: 12),
                 Row(

@@ -575,6 +575,16 @@ class _YouTubeMusicClientScreenState
                                 OutlinedButton(
                                   onPressed: () => Navigator.of(context).push(
                                     MaterialPageRoute<void>(
+                                      builder: (_) => const _YtSongSearchScreen(
+                                        officialVideos: true,
+                                      ),
+                                    ),
+                                  ),
+                                  child: const Text('Find videos'),
+                                ),
+                                OutlinedButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
                                       builder: (_) => const _YtArtistSearchScreen(),
                                     ),
                                   ),
@@ -1212,7 +1222,10 @@ class _YtChartsState extends ConsumerState<_YtChartsScreen> {
 }
 
 class _YtSongSearchScreen extends ConsumerStatefulWidget {
-  const _YtSongSearchScreen();
+  const _YtSongSearchScreen({this.officialVideos = false});
+
+  /// Reuses the existing official-video discovery API, not a new provider.
+  final bool officialVideos;
 
   @override
   ConsumerState<_YtSongSearchScreen> createState() => _YtSongSearchState();
@@ -1245,24 +1258,43 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
     }
     setState(() { _loading = true; _songs = null; _error = null; });
     try {
-      final result = await ref.read(authSessionProvider.notifier).api
-          .ytMusicSearchSongs(query);
-      if (result['kind'] != 'ok' || result['value'] is! List) {
-        throw const FormatException('YTMUSIC_SEARCH_UNAVAILABLE');
+      final api = ref.read(authSessionProvider.notifier).api;
+      final result = widget.officialVideos
+          ? await api.discoveryMusicVideos(query: query)
+          : await api.ytMusicSearchSongs(query);
+      late final List<Map<String, dynamic>> rows;
+      if (widget.officialVideos) {
+        // Public YouTube Music original music videos only: no signed media
+        // links, audio-only extraction, UGC, or new streaming permissions.
+        if (result['source'] != 'YouTube Music via ytmusicapi' ||
+            result['items'] is! List) {
+          throw const FormatException('YTMUSIC_VIDEOS_UNAVAILABLE');
+        }
+        rows = _ytRows(result['items']).where((item) =>
+            item['playback'] == 'external_youtube_only' &&
+            item['classification'] == 'youtube_music_original_music_video' &&
+            _ytVideoId(item['id'])).toList();
+      } else {
+        if (result['kind'] != 'ok' || result['value'] is! List) {
+          throw const FormatException('YTMUSIC_SEARCH_UNAVAILABLE');
+        }
+        rows = _ytRows(result['value']);
       }
       if (!mounted || generation != _generation) return;
-      setState(() { _songs = _ytRows(result['value']); _loading = false; });
+      setState(() { _songs = rows; _loading = false; });
     } catch (_) {
       if (!mounted || generation != _generation) return;
       setState(() {
         _loading = false;
-        _error = 'Song search unavailable • Retry';
+        _error = widget.officialVideos
+            ? 'Official video search unavailable • Retry'
+            : 'Song search unavailable • Retry';
       });
     }
   }
 
   Future<void> _watch(Map<String, dynamic> song) async {
-    final id = song['providerTrackId'];
+    final id = song[widget.officialVideos ? 'id' : 'providerTrackId'];
     if (!_ytVideoId(id)) return;
     await openYouTubePlayer(
       context: context,
@@ -1275,7 +1307,7 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
   }
 
   void _related(Map<String, dynamic> song) {
-    final id = song['providerTrackId'];
+    final id = song[widget.officialVideos ? 'id' : 'providerTrackId'];
     if (!_ytVideoId(id)) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => _YtWatchQueueScreen(
@@ -1289,7 +1321,8 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('YouTube Music song search')),
+      appBar: AppBar(title: Text(widget.officialVideos
+            ? 'YouTube Music videos' : 'YouTube Music song search')),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -1297,11 +1330,15 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
               children: [
-                Text('Find songs', style: theme.textTheme.headlineSmall),
+                Text(widget.officialVideos ? 'Find official videos' : 'Find songs',
+                    style: theme.textTheme.headlineSmall),
                 const SizedBox(height: 8),
-                Text('Search the public catalog. Songs open in the visible '
-                  'official YouTube player; metadata does not grant '
-                  'native audio or downloads.',
+                Text(widget.officialVideos
+                  ? 'Find original music videos. Playback stays in the '
+                    'visible official YouTube player, not the native audio queue.'
+                  : 'Search the public catalog. Songs open in the visible '
+                    'official YouTube player; metadata does not grant '
+                    'native audio or downloads.',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
                 const SizedBox(height: 20),
                 TextField(
@@ -1317,7 +1354,7 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
                 ),
                 FilledButton(
                   onPressed: _loading ? null : _search,
-                  child: const Text('Search songs'),
+                  child: Text(widget.officialVideos ? 'Search videos' : 'Search songs'),
                 ),
                 if (_loading) ...[
                   const SizedBox(height: 20),
@@ -1329,22 +1366,27 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
                 ],
                 if (_songs != null) ...[
                   const SizedBox(height: 20),
-                  Text('Songs', style: theme.textTheme.titleLarge),
+                  Text(widget.officialVideos ? 'Official music videos' : 'Songs',
+                      style: theme.textTheme.titleLarge),
                   if (_songs!.isEmpty)
-                    const ListTile(title: Text('No matching songs found')),
+                    ListTile(title: Text(widget.officialVideos
+                        ? 'No matching official videos found'
+                        : 'No matching songs found')),
                   for (final song in _songs!)
                     Material(
                       color: Colors.transparent,
                       child: ListTile(
                         leading: _ytArtwork(song['artworkUrl'] as String?),
                         title: Text(song['title'] as String? ?? 'Untitled'),
-                        subtitle: Text(_ytArtist(song) + ' • Watch on YouTube'),
-                        onTap: _ytVideoId(song['providerTrackId'])
+                        subtitle: Text(_ytArtist(song) + (widget.officialVideos
+                            ? ' • Official music video'
+                            : ' • Watch on YouTube')),
+                        onTap: _ytVideoId(song[widget.officialVideos ? 'id' : 'providerTrackId'])
                             ? () => _watch(song) : null,
                         trailing: IconButton(
                           tooltip: 'Up next for ' + (song['title'] as String? ?? 'Song'),
                           icon: const Icon(Icons.queue_music),
-                          onPressed: _ytVideoId(song['providerTrackId'])
+                          onPressed: _ytVideoId(song[widget.officialVideos ? 'id' : 'providerTrackId'])
                               ? () => _related(song) : null,
                         ),
                       ),

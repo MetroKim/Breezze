@@ -18,6 +18,50 @@ import '../../features/player/player_controller.dart';
 import '../../features/player/now_playing_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
+/// Shared, bounded Browse artwork rendering. Never fetch arbitrary non-HTTPS
+/// image URLs supplied by catalog metadata or decode oversized list thumbnails.
+Widget _browseArtwork(
+  BuildContext context,
+  ThemeData theme,
+  String? imageUrl, {
+  double size = 48,
+}) {
+  final fallback = Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(BzRadius.artwork),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [theme.bzSurface1, theme.bzSurface2],
+      ),
+      border: Border.all(color: theme.bzSeparator),
+    ),
+    alignment: Alignment.center,
+    child: BzBnoteMark(size: size * 0.58, color: theme.bzText2),
+  );
+  final uri = imageUrl == null ? null : Uri.tryParse(imageUrl);
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+    return fallback;
+  }
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(BzRadius.artwork),
+    child: Image.network(
+      imageUrl!,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+      gaplessPlayback: true,
+      excludeFromSemantics: true,
+      loadingBuilder: (_, image, progress) =>
+          progress == null ? image : fallback,
+      errorBuilder: (_, __, ___) => fallback,
+    ),
+  );
+}
+
 /// Browse uses live source search for genre discovery. It does not label
 /// provider search results as official charts or editorial recommendations.
 class BrowseScreen extends ConsumerStatefulWidget {
@@ -150,6 +194,91 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
         );
   }
 
+  /// This is Breezze's real Flutter discovery surface, not a mockup.
+  /// Its route opens catalog metadata and the official visible video player.
+  Widget _buildYouTubeHero(ThemeData theme) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(BzRadius.sheet),
+      child: InkWell(
+        key: const ValueKey('browse-youtube-hero'),
+        onTap: () => _openCollection(_browseDestinations.first),
+        borderRadius: BorderRadius.circular(BzRadius.sheet),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(BzRadius.sheet),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [theme.bzSurface1, theme.bzSurface2],
+            ),
+            border: Border.all(color: theme.bzSeparator),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: BzSpacing.s20,
+              vertical: BzSpacing.s24,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: theme.bzBackground,
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    border: Border.all(color: theme.bzSeparator),
+                  ),
+                  alignment: Alignment.center,
+                  child: BzBnoteMark(size: 38, color: theme.bzText1),
+                ),
+                const SizedBox(width: BzSpacing.s16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'PUBLIC MUSIC DISCOVERY',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.bzText2,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: BzSpacing.s4),
+                      Text(
+                        'YouTube Music',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: BzSpacing.s4),
+                      Text(
+                        'Songs, artists, albums and official videos.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.bzText2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: BzSpacing.s8),
+                BzSvgIcon(
+                  name: 'chevron-right',
+                  size: 21,
+                  color: theme.bzText2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -164,16 +293,19 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('New', style: theme.textTheme.displayMedium),
+                  Text('Browse', style: theme.textTheme.displayMedium),
                   const SizedBox(height: 6),
-                  Text('New releases, music videos, charts, genres and more.', style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 18),
+                  Text('Find your next favorite. Explore songs, releases, genres and videos.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.bzText2)),
+                  const SizedBox(height: 24),
+                  _buildYouTubeHero(theme),
+                  const SizedBox(height: 26),
                   Text('Explore by genre', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 10),
                   // Capsule pill genre rail — spec §2.3 tab indicators use
                   // --radius-pill. Same treatment as Library and Search.
                   SizedBox(
-                    height: 52,
+                    height: MediaQuery.textScalerOf(context).scale(16) > 24
+                        ? 80 : 52,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _genres.length,
@@ -190,7 +322,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                     ),
                   ),
                   const SizedBox(height: 22),
-                  Text('Discover', style: theme.textTheme.titleLarge),
+                  Text('Catalog and collections', style: theme.textTheme.titleLarge),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -201,11 +333,14 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.crossAxisExtent;
-                final columns = width >= 1080 ? 4 : width >= 620 ? 3 : 2;
+                // Preserve readable card content at 200% text scale: phone-sized
+                // layouts use a single column instead of clipped tiny tiles.
+                final columns = width >= 1100 ? 4 : width >= 810 ? 3
+                    : width >= 540 ? 2 : 1;
                 return SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final destination = _browseDestinations[index];
+                      final destination = _browseDestinations[index + 1];
                       return Material(
                         color: theme.bzSurface1,
                         borderRadius: BorderRadius.circular(BzRadius.card),
@@ -248,7 +383,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                         ),
                       );
                     },
-                    childCount: _browseDestinations.length,
+                    childCount: _browseDestinations.length - 1,
                   ),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columns,
@@ -301,13 +436,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                     final track = _tracks[index];
                     final download = progress[track.id];
                     return ListTile(
-                      leading: track.artworkUrl == null
-                          ? BzBnoteMark(size: 48, color: theme.bzText2)
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(BzRadius.artwork),
-                              child: Image.network(track.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => BzBnoteMark(size: 48, color: theme.bzText2)),
-                            ),
+                      leading: _browseArtwork(context, theme, track.artworkUrl),
                       title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                       trailing: download != null
@@ -787,7 +916,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       appBar: AppBar(
         title: Text(widget.destination.title),
         leading: IconButton(
-          tooltip: 'Back to New',
+          tooltip: 'Back to Browse',
           icon: const BzSvgIcon(name: 'chevron-left'),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
@@ -870,15 +999,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                           final track = _tracks[index];
                                           final download = progress[track.id];
                                           return ListTile(
-                                            leading: track.artworkUrl == null
-                                                ? BzBnoteMark(size: 48, color: theme.bzText2)
-                                                : ClipRRect(
-                                                    borderRadius: BorderRadius.circular(BzRadius.artwork),
-                                                    child: Image.network(
-                                                      track.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover,
-                                                      errorBuilder: (_, __, ___) => BzBnoteMark(size: 48, color: theme.bzText2),
-                                                    ),
-                                                  ),
+                                            leading: _browseArtwork(context, theme, track.artworkUrl),
                                             title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                                             subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                                             trailing: download != null
@@ -1003,17 +1124,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                         child: Text(rank.toString(), style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2)),
                                       ),
                                     Expanded(
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(BzRadius.artwork),
-                                        child: artwork is String
-                                            ? Image.network(
-                                                artwork,
-                                                width: 48,
-                                                height: 48,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (_, __, ___) => BzBnoteMark(size: 44, color: theme.bzText2),
-                                              )
-                                            : BzBnoteMark(size: 44, color: theme.bzText2),
+                                      child: _browseArtwork(
+                                        context, theme,
+                                        artwork is String ? artwork : null,
                                       ),
                                     ),
                                   ],

@@ -4,6 +4,7 @@ import 'package:breezze/app/bootstrap.dart';
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/features/browse/browse_screen.dart';
+import 'package:breezze/widgets/bz_brand_icons.dart';
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,13 +34,17 @@ class _BrowseSource implements ProviderAdapter {
       ProviderUnsupported('Not used in Browse tests');
 }
 
-ProviderOp<List<ProviderTrack>> _tracks(String title, {String id = 'bz:youtube_music:abcdefghijk'}) =>
+ProviderOp<List<ProviderTrack>> _tracks(String title, {
+  String id = 'bz:youtube_music:abcdefghijk',
+  String? artworkUrl,
+}) =>
     ProviderOk([
       ProviderTrack(
         breezzeTrackId: id,
         providerTrackId: 'abcdefghijk',
         title: title,
         artist: 'Browse QA',
+        artworkUrl: artworkUrl,
         duration: const Duration(minutes: 3),
       ),
     ]);
@@ -116,7 +121,7 @@ class _BrowseSession extends AuthSessionController {
   BreezzeApi get api => catalogApi;
 }
 
-Widget _browseApp(_BrowseSource source, {BreezzeApi? api}) => ProviderScope(
+Widget _browseApp(_BrowseSource source, {BreezzeApi? api, double textScale = 1.0}) => ProviderScope(
       overrides: [
         catalogSourceProvider.overrideWithValue(source),
         if (api != null)
@@ -124,6 +129,12 @@ Widget _browseApp(_BrowseSource source, {BreezzeApi? api}) => ProviderScope(
       ],
       child: MaterialApp(
         theme: bzLightTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: const Scaffold(body: BrowseScreen()),
       ),
     );
@@ -144,6 +155,26 @@ Future<void> _mountBrowse(
 }
 
 void main() {
+  testWidgets('Browse remains legible at 320px with 200% text and one column',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = _BrowseSource();
+    await tester.pumpWidget(_browseApp(source, textScale: 2.0));
+    await tester.pump();
+
+    expect(find.text('Browse'), findsOneWidget);
+    expect(find.byKey(const ValueKey('browse-youtube-hero')), findsOneWidget);
+    await tester.ensureVisible(find.text('Catalog and collections'));
+    await tester.pump();
+    final sliver = tester.widget<SliverGrid>(find.byType(SliverGrid).first);
+    final grid = sliver.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(grid.crossAxisCount, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Browse genre switching ignores older provider responses',
       (tester) async {
     final source = _BrowseSource();
@@ -208,6 +239,25 @@ void main() {
     );
   });
 
+  testWidgets('Browse uses an offline fallback for insecure artwork URLs',
+      (tester) async {
+    final source = _BrowseSource();
+    await _mountBrowse(tester, source);
+    source.requests[0].complete(
+      _tracks('Insecure artwork', artworkUrl: 'http://untrusted.example/art.png'),
+    );
+    await tester.pump();
+
+    final row = find.ancestor(
+      of: find.text('Insecure artwork'),
+      matching: find.byType(ListTile),
+    );
+    expect(row, findsOneWidget);
+    expect(find.descendant(of: row, matching: find.byType(Image)), findsNothing);
+    expect(find.descendant(of: row, matching: find.byType(BzBnoteMark)),
+      findsOneWidget);
+  });
+
   testWidgets('Browse labels the Deezer global chart fallback, not Daily Top 100',
       (tester) async {
     final source = _BrowseSource();
@@ -234,6 +284,11 @@ void main() {
     source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
 
+    expect(find.text('Browse'), findsOneWidget);
+    expect(find.byKey(const ValueKey('browse-youtube-hero')), findsOneWidget);
+    expect(find.text('PUBLIC MUSIC DISCOVERY'), findsOneWidget);
+    // A promoted discovery surface replaces, rather than duplicates, its tile.
+    expect(find.text('YouTube Music'), findsOneWidget);
     await tester.ensureVisible(find.text('YouTube Music'));
     await tester.tap(find.text('YouTube Music'));
     await tester.pumpAndSettle();

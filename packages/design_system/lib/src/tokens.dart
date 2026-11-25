@@ -19,7 +19,7 @@ class BzColorsLight {
   static const surfaceElevated = Color(0xFFFFFFFF);
   static const textPrimary = Color(0xFF1D1D1F);
   static const textSecondary = Color(0xFF6E6E73);
-  static const textTertiary = Color(0xFF86868B);
+  static const textTertiary = Color(0xFF6D6D72); // >= 4.5:1 on cool light surfaces
   static const separator = Color(0x12000000); // 7% black hairline
   static const brandMonochrome = Color(0xFF1D1D1F);
   static const accent = Color(0xFF29292C);
@@ -37,7 +37,7 @@ class BzColorsDark {
   static const surfaceElevated = Color(0xFF1C1C1E);
   static const textPrimary = Color(0xFFFFFFFF);
   static const textSecondary = Color(0xFFB3B3B8); // ~rgba(255,255,255,0.7)
-  static const textTertiary = Color(0xFF737378); // ~rgba(255,255,255,0.45)
+  static const textTertiary = Color(0xFF96969D); // >= 4.5:1 on dark secondary surfaces
   static const separator = Color(0x1AFFFFFF); // 10% white hairline
   static const brandOnDark = Color(0xFFFFFFFF);
   static const accent = Color(0xFFE9E9ED);

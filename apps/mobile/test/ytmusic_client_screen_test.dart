@@ -14,6 +14,7 @@ class _ClientApi extends BreezzeApi {
   int moodCalls = 0;
   int playlistCalls = 0;
   int songSearchCalls = 0;
+  int videoSearchCalls = 0;
   int watchQueueCalls = 0;
   bool songSearchUnavailable = false;
   int artistSearchCalls = 0;
@@ -71,6 +72,28 @@ class _ClientApi extends BreezzeApi {
 
   Map<String, dynamic> _ok(Map<String, dynamic> value) =>
       {'kind': 'ok', 'value': {'source': 'youtube_music', ...value}};
+
+  @override
+  Future<Map<String, dynamic>> discoveryMusicVideos({
+    String query = 'official music video',
+  }) async {
+    videoSearchCalls++;
+    expect(query, 'Daft Punk');
+    return {
+      'source': 'YouTube Music via ytmusicapi',
+      'items': [
+        {'id': '0fllyJTBsRU', 'title': 'Original Music Video',
+         'artist': 'Example Artist', 'playback': 'external_youtube_only',
+         'classification': 'youtube_music_original_music_video'},
+        {'id': 'invalid', 'title': 'Invalid ID',
+         'playback': 'external_youtube_only',
+         'classification': 'youtube_music_original_music_video'},
+        {'id': 'bcdefghijkl', 'title': 'Nonofficial Upload',
+         'playback': 'external_youtube_only',
+         'classification': 'user_generated_content'},
+      ],
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> ytMusicSearchSongs(String query) async {
@@ -315,6 +338,30 @@ void main() {
     );
     final row = tester.widget<ListTile>(invalid);
     expect(row.onTap, isNull);
+  });
+
+  testWidgets('official video search reuses provider discovery and rejects '
+      'untrusted/nonofficial rows', (tester) async {
+    final api = _ClientApi();
+    await _mount(tester, api);
+    await tester.tap(find.text('Find videos'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Find official videos'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Daft Punk');
+    await tester.tap(find.text('Search videos'));
+    await tester.pumpAndSettle();
+
+    expect(api.videoSearchCalls, 1);
+    expect(api.songSearchCalls, 0);
+    expect(find.text('Original Music Video'), findsOneWidget);
+    expect(find.text('Invalid ID'), findsNothing);
+    expect(find.text('Nonofficial Upload'), findsNothing);
+    final valid = find.ancestor(
+      of: find.text('Original Music Video'),
+      matching: find.byType(ListTile),
+    );
+    expect(tester.widget<ListTile>(valid).onTap, isNotNull);
   });
 
   testWidgets('mood discovery opens public playlist tracks without native audio',
