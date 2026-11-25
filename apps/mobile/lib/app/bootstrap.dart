@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -11,8 +10,6 @@ import 'package:path_provider/path_provider.dart';
 import '../core/api/breezze_api.dart';
 import '../core/audio/playback_source_policy.dart';
 import '../core/audio/remote_audio_grant.dart';
-import '../core/audio/authorized_youtube_music_source.dart';
-import '../core/audio/device_youtube_audio_resolver.dart';
 import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
@@ -212,33 +209,12 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
-    // Prefer a real rights-approved full recording. The official YouTube
-    // Data API cannot authorize an audio-only stream. If no approved native
-    // asset exists, return null promptly so the source-aware coordinator
-    // opens the official VISIBLE YouTube player, not a stalled native spinner.
-    // Keep unsupported on-device extraction only behind an explicit,
-    // non-release feasibility flag, never as a production fallback.
-    if (isYouTubeSongId(track.id)) {
-      try {
-        final preferences = await DownloadPreferencesStore().load();
-        final session = await api.startPlaybackSession(
-          externalTrackId: track.id,
-          requestedQuality: preferences.streamingQuality,
-        );
-        final owned = authorizedYouTubeMusicPlayback(track.id, session);
-        if (owned != null) return owned;
-        if (session['id'] is String) {
-          try { await api.stopPlaybackSession(session['id'] as String); } catch (_) {}
-        }
-      } catch (_) {
-        // No matched licensed asset: attempt direct on-device resolution.
-      }
-      const experimentalProbe = bool.fromEnvironment(
-        'BREEZZE_EXPERIMENTAL_DEVICE_YOUTUBE_AUDIO', defaultValue: false,
-      );
-      if (experimentalProbe && !kReleaseMode) {
-        return _ref.read(deviceYouTubeAudioResolverProvider).resolve(track.id);
-      }
+    // YouTube is VIDEO ONLY. Never resolve video metadata to native audio,
+    // including previously matched local copies or device-side extraction.
+    // The visible official YouTube player is opened by the UI coordinator.
+    // Spotify tracks are also never raw media; official Spotify playback
+    // is launched outside the Breezze audio engine via App Remote / deep link.
+    if (isYouTubeSongId(track.id) || track.id.startsWith('bz:spotify:')) {
       return null;
     }
 
