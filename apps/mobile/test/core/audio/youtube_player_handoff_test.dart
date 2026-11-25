@@ -19,6 +19,16 @@ void main() {
     }
   });
 
+  test('official YouTube Music handoff uses an exact safe watch URL', () {
+    final uri = YoutubePlayerHandoff.officialMusicUri('dQw4w9WgXcQ');
+    expect(uri.scheme, 'https');
+    expect(uri.host, 'music.youtube.com');
+    expect(uri.path, '/watch');
+    expect(uri.queryParameters, {'v': 'dQw4w9WgXcQ'});
+    expect(() => YoutubePlayerHandoff.officialMusicUri(
+      'dQw4w9WgXcQ&autoplay=1'), throwsArgumentError);
+  });
+
   test('embed supported only where plugin implements the player', () {
     for (final platform in [
       TargetPlatform.android,

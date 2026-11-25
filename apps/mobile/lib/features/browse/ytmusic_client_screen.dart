@@ -773,6 +773,18 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
   Future<void> _watch(Map<String, dynamic> item) async {
     final id = item['providerTrackId'];
     if (!_ytVideoId(id)) return;
+    // Preserve this album/playlist's actual published order, not an unrelated
+    // YouTube Music radio queue. The iframe stays visible for every song.
+    final visibleQueue = _ytRows(_collection?['tracks']).map((row) =>
+      <String, String?>{
+        'videoId': row['providerTrackId'] is String
+            ? row['providerTrackId'] as String : null,
+        'title': row['title'] is String ? row['title'] as String : null,
+        'artist': _ytArtist(row),
+        'artworkUrl': row['artworkUrl'] is String
+            ? row['artworkUrl'] as String : null,
+      },
+    ).toList();
     await openYouTubePlayer(
       context: context,
       ref: ref,
@@ -780,6 +792,7 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
       title: item['title'] as String? ?? 'YouTube Music',
       artist: _ytArtist(item),
       artworkUrl: item['artworkUrl'] as String?,
+      visibleQueue: visibleQueue,
     );
   }
 
@@ -804,6 +817,17 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
                         'offline downloads are not available.',
                       ),
                     ),
+                    if (rows.any((item) => _ytVideoId(item['providerTrackId'])))
+                      ListTile(
+                        leading: const Icon(Icons.play_circle_fill),
+                        title: Text(widget.album ? 'Play album' : 'Play playlist'),
+                        subtitle: const Text(
+                          'Watch all available songs in order in the YouTube player',
+                        ),
+                        onTap: () => _watch(rows.firstWhere(
+                          (item) => _ytVideoId(item['providerTrackId']),
+                        )),
+                      ),
                     if (rows.isEmpty)
                       const ListTile(title: Text('No tracks available')),
                     for (final item in rows)
@@ -882,6 +906,16 @@ class _YtConnectedPlaylistScreenState
   Future<void> _watch(Map<String, dynamic> item) async {
     final videoId = item['videoId'];
     if (!_ytVideoId(videoId)) return;
+    // These are the read-only connected YouTube playlist items already
+    // returned for this owner; never treat them as downloadable audio.
+    final visibleQueue = (_items ?? const <Map<String, dynamic>>[])
+        .map((row) => <String, String?>{
+          'videoId': row['videoId'] is String ? row['videoId'] as String : null,
+          'title': row['title'] is String ? row['title'] as String : null,
+          'artist': _ytArtist(row),
+          'artworkUrl': row['artworkUrl'] is String
+              ? row['artworkUrl'] as String : null,
+        }).toList();
     await openYouTubePlayer(
       context: context,
       ref: ref,
@@ -889,6 +923,7 @@ class _YtConnectedPlaylistScreenState
       title: item['title'] as String? ?? 'YouTube video',
       artist: _ytArtist(item),
       artworkUrl: item['artworkUrl'] as String?,
+      visibleQueue: visibleQueue,
     );
   }
 
@@ -911,6 +946,17 @@ class _YtConnectedPlaylistScreenState
                       'Offline YouTube downloads are not available.',
                     ),
                   ),
+                  if (_items!.any((item) => _ytVideoId(item['videoId'])))
+                    ListTile(
+                      leading: const Icon(Icons.play_circle_fill),
+                      title: const Text('Play playlist'),
+                      subtitle: const Text(
+                        'Watch all available videos in playlist order',
+                      ),
+                      onTap: () => _watch(_items!.firstWhere(
+                        (item) => _ytVideoId(item['videoId']),
+                      )),
+                    ),
                   if (_items!.isEmpty)
                     const ListTile(title: Text('No videos in this playlist')),
                   for (final item in _items!)

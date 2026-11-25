@@ -90,6 +90,12 @@ class _VideoDiscoveryApi extends BreezzeApi {
                   'artist': 'Breezze QA',
                   'durationSec': 180,
                 },
+                {
+                  'id': 'not-a-valid-video-123',
+                  'title': 'Invalid Video Must Not Render',
+                  'artist': 'Unknown',
+                  'durationSec': 180,
+                },
               ],
       };
 }
@@ -131,6 +137,25 @@ void main() {
     await tester.pump();
     expect(find.text('New result'), findsOneWidget);
   });
+  testWidgets('YouTube Music songs in main Search have a playable watch action',
+      (tester) async {
+    final source = _SearchSource();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [catalogSourceProvider.overrideWithValue(source)],
+      child: MaterialApp(theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen())),
+    ));
+    await tester.enterText(find.byType(TextField), 'youtube full song');
+    await tester.pump(const Duration(milliseconds: 500));
+    source.pending['youtube full song']!.complete(_result('Visible YouTube song'));
+    await tester.pump();
+    expect(find.text('Visible YouTube song'), findsOneWidget);
+    expect(find.byTooltip('Play on YouTube'), findsOneWidget);
+    final row = find.ancestor(
+      of: find.text('Visible YouTube song'), matching: find.byType(ListTile));
+    expect(tester.widget<ListTile>(row).onTap, isNotNull);
+  });
+
   testWidgets('Search save action refreshes Library without toggling an existing favorite',
       (tester) async {
     final source = _SearchSource();
@@ -267,6 +292,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
     expect(find.text('Official Video QA'), findsOneWidget);
+    expect(find.text('Invalid Video Must Not Render'), findsNothing);
     expect(find.byTooltip('Watch music video'), findsOneWidget);
     expect(find.byTooltip('Song actions'), findsNothing);
 

@@ -197,7 +197,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               artworkUrl: item['artworkUrl'] as String?,
               duration: Duration(seconds: duration is num ? duration.toInt() : 0),
             );
-          }).where((track) => track.id.length > 9).toList();
+          }).where((track) =>
+              RegExp(r'^bzv:[A-Za-z0-9_-]{11}$').hasMatch(track.id))
+              .toList();
         });
       } else {
         final op = await ref.read(catalogSourceProvider).search(normalized);
@@ -473,8 +475,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ? track.id.substring(4)
         : null;
     if (embeddedId != null) {
-      // A video is watched in the official visible iframe, never extracted
-      // into Breezze's native audio-only playback queue.
+      // Keep original video-search order in the visible YouTube iframe.
+      // Never extract video audio or grant an offline download.
+      final videoQueue = [
+        for (final result in _results)
+          if (RegExp(r'^bzv:[A-Za-z0-9_-]{11}$').hasMatch(result.id))
+            <String, String?>{
+              'videoId': result.id.substring(4),
+              'title': result.title,
+              'artist': result.artist,
+              'artworkUrl': result.artworkUrl,
+            },
+      ];
       await openYouTubePlayer(
         context: context,
         ref: ref,
@@ -482,12 +494,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         title: track.title,
         artist: track.artist,
         artworkUrl: track.artworkUrl,
+        visibleQueue: videoQueue,
       );
       return;
     }
     if (isYouTubeSongId(track.id)) {
-      // Foreground playback uses YouTube's visible player, not extracted
-      // audio or a native Breezze stream/background playback entitlement.
+      // Play full-length tracks in the visible YouTube iframe, keeping
+      // search order for Next/Previous without entering the native audio queue.
+      final musicQueue = [
+        for (final result in _results)
+          if (isYouTubeSongId(result.id))
+            <String, String?>{
+              'videoId': result.id.substring('bz:youtube_music:'.length),
+              'title': result.title,
+              'artist': result.artist,
+              'artworkUrl': result.artworkUrl,
+            },
+      ];
       await openYouTubePlayer(
         context: context,
         ref: ref,
@@ -495,6 +518,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         title: track.title,
         artist: track.artist,
         artworkUrl: track.artworkUrl,
+        visibleQueue: musicQueue,
       );
       return;
     }
@@ -782,6 +806,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         if (track.id.startsWith('bzv:') ||
+                                            isYouTubeSongId(track.id) ||
                                             track.hasPreview || canQueueTrackId(track.id))
                                           IconButton(
                                             tooltip: track.id.startsWith('bzv:')
@@ -874,6 +899,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       ],
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ||
+                                            isYouTubeSongId(track.id) ||
                                             (canQueueTrackId(track.id) || track.hasPreview)
                                         ? _play(track)
                                         : _openTrack(track),

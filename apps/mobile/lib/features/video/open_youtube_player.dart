@@ -13,9 +13,11 @@ Future<void> openYouTubePlayer({
   required String title,
   required String artist,
   String? artworkUrl,
+  List<Map<String, String?>>? visibleQueue,
 }) async {
   await openVideoSurface(context, (_) => OfficialMusicVideoScreen(
     videoId: videoId, title: title, artist: artist, artworkUrl: artworkUrl,
+    visibleQueue: visibleQueue,
   ));
 }
 
