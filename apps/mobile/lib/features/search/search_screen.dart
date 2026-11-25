@@ -246,7 +246,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ))
                   ];
           if (_results.isEmpty && op is! ProviderOk<List<ProviderTrack>>) {
-            _error = 'Spotify and Deezer catalog search is unavailable. '
+            _error = 'Music catalog search is temporarily unavailable. '
                 'Try again in Breezze.';
           }
         });
@@ -823,7 +823,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                   final musicSearch = !_searchVideos && !_searchLibrary;
                                   final shelf = isSpotifyTrackId(track.id)
                                       ? 'Spotify'
-                                      : isDeezerTrackId(track.id) ? 'Deezer' : null;
+                                      : isDeezerTrackId(track.id)
+                                          ? 'Deezer'
+                                          : isMusicBrainzTrackId(track.id)
+                                              ? 'MusicBrainz · Backup catalog'
+                                              : null;
                                   final previous = index == 0 ? null : _results[index - 1];
                                   final previousShelf = previous == null
                                       ? null
@@ -831,7 +835,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                           ? 'Spotify'
                                           : isDeezerTrackId(previous.id)
                                               ? 'Deezer'
-                                              : null;
+                                              : isMusicBrainzTrackId(previous.id)
+                                                  ? 'MusicBrainz · Backup catalog'
+                                                  : null;
                                   return Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
@@ -884,9 +890,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                 ? '${track.artist} · Spotify'
                                                 : track.id.startsWith('bz:deezer:') || isDeezerPreview(track.id)
                                                     ? '${track.artist} · Deezer${track.hasPreview ? ' · Preview available' : ''}'
-                                                    : isYouTubeSongId(track.id)
-                                                        ? '${track.artist} · YouTube video'
-                                                        : track.artist,
+                                                    : isMusicBrainzTrackId(track.id)
+                                                        ? '${track.artist} · MusicBrainz metadata'
+                                                        : isYouTubeSongId(track.id)
+                                                            ? '${track.artist} · YouTube video'
+                                                            : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
