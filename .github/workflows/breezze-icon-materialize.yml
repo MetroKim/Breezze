@@ -1,0 +1,54 @@
+# One-time private native icon materialization for PR #69.
+# Runs only when this workflow is added to the named private review branch.
+# Never publishes releases, artifacts, deployments or repository source.
+name: Breezze official native icon materialization
+
+on:
+  push:
+    branches: [fix/official-pixel-b-icon-assets-20261125]
+    paths:
+      - .github/workflows/breezze-icon-materialize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.repository == 'MetroKim/Breezze' && github.event.repository.private == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned local rasterizers
+        run: python -m pip install --disable-pip-version-check "CairoSVG==2.7.1" "Pillow==11.3.0"
+      - name: Generate and prove exact official native assets
+        run: |
+          set -euo pipefail
+          python apps/mobile/tool/sync_native_icons.py
+          python apps/mobile/tool/sync_native_icons.py --check
+      - name: Commit generated icons to private PR (never main)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_NAME" != "fix/official-pixel-b-icon-assets-20261125" ]; then
+            echo "Refusing to write outside the approved PR review branch" >&2
+            exit 1
+          fi
+          git add apps/mobile/android/app/src/main/res/ apps/mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "Official native icon outputs were already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(brand): materialize official pixel-B native launcher resources"
+          git push origin "HEAD:$GITHUB_REF_NAME"
