@@ -107,7 +107,7 @@ jobs:
     # the Google Console Android package + SHA-1 registration is verified.
     env:
       BREEZZE_GOOGLE_ANDROID_VERIFIED: ${{ vars.BREEZZE_GOOGLE_ANDROID_VERIFIED }}
-      BREEZZE_GOOGLE_WEB_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_ANDROID_VERIFIED == 'true' && vars.BREEZZE_GOOGLE_WEB_CLIENT_ID || '' }}
+      BREEZZE_GOOGLE_WEB_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_ANDROID_VERIFIED == 'true' && (vars.BREEZZE_GOOGLE_WEB_CLIENT_ID || '524100653326-8i401dbgt8h33fjp5qjdnjkrtnuqmdis.apps.googleusercontent.com') || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -205,7 +205,7 @@ jobs:
     # iOS OAuth client matching the app bundle ID; values are public IDs.
     env:
       BREEZZE_GOOGLE_IOS_VERIFIED: ${{ vars.BREEZZE_GOOGLE_IOS_VERIFIED }}
-      BREEZZE_GOOGLE_WEB_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_IOS_VERIFIED == 'true' && vars.BREEZZE_GOOGLE_WEB_CLIENT_ID || '' }}
+      BREEZZE_GOOGLE_WEB_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_IOS_VERIFIED == 'true' && (vars.BREEZZE_GOOGLE_WEB_CLIENT_ID || '524100653326-8i401dbgt8h33fjp5qjdnjkrtnuqmdis.apps.googleusercontent.com') || '' }}
       BREEZZE_GOOGLE_IOS_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_IOS_VERIFIED == 'true' && vars.BREEZZE_GOOGLE_IOS_CLIENT_ID || '' }}
     steps:
       - name: Checkout

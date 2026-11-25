@@ -31,6 +31,8 @@ The existing GitHub Actions [Breezze Quality](../../.github/workflows/breezze-qu
 | GitHub Actions repository variable | Meaning |
 | --- | --- |
 | `BREEZZE_GOOGLE_WEB_CLIENT_ID` | Existing registered Google **Web application** OAuth client ID, enabled in Supabase Google provider |
+
+Previously configured Breezze Web OAuth client ID (public identifier; prior Google Cloud setup, pending current dashboard revalidation): `524100653326-8i401dbgt8h33fjp5qjdnjkrtnuqmdis.apps.googleusercontent.com`. GitHub native Android/iOS builds use this ID as a **fallback only when the corresponding `*_VERIFIED=true` flag is explicitly set**; an Actions repository variable overrides it if the Google Web client is rotated. This does **not** activate an unverified Android/iOS sign-in, replace the native OAuth client registration or supply server-only secrets.
 | `BREEZZE_GOOGLE_IOS_CLIENT_ID` | Separate iOS OAuth client ID matching the generated iOS bundle identifier |
 | `BREEZZE_GOOGLE_ANDROID_VERIFIED` | Set to `true` **only after** the Android package and the actual signed APK's SHA-1 are registered and verified in Google Cloud |
 | `BREEZZE_GOOGLE_IOS_VERIFIED` | Set to `true` **only after** iOS bundle ID, OAuth client, and URL callback registration are verified |
