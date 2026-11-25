@@ -24,7 +24,10 @@ class BzAmbientBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).bz;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final hasArtwork = artworkUrl != null && artworkUrl!.trim().isNotEmpty;
+    final hasArtwork = artworkUrl != null &&
+        artworkUrl!.trim().isNotEmpty &&
+        !MediaQuery.highContrastOf(context);
+    final blurArtwork = hasArtwork && !MediaQuery.disableAnimationsOf(context);
 
     return Stack(
       fit: StackFit.expand,
@@ -34,12 +37,13 @@ class BzAmbientBackdrop extends StatelessWidget {
           Image.network(
             artworkUrl!,
             fit: BoxFit.cover,
+            filterQuality: FilterQuality.low,
             alignment: Alignment.topCenter,
             errorBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
         // One backdrop blur rather than overlapping filtered circles.
         // The artwork supplies the track/artist-specific colour palette.
-        if (hasArtwork)
+        if (blurArtwork)
           BackdropFilter(
             filter: ui.ImageFilter.blur(sigmaX: 54, sigmaY: 54),
             child: const ColoredBox(color: Colors.transparent),
