@@ -42,8 +42,8 @@ jobs:
         run: npx prisma generate
       - name: Typecheck backend
         run: npm run typecheck
-      - name: Test download grants and offline lease revocation
-        run: npx jest --runInBand src/downloads/downloads.service.spec.ts
+      - name: Test download grants, audio-ingest rights and offline lease revocation
+        run: npx jest --runInBand src/downloads/downloads.service.spec.ts src/admin/audio-catalog.service.spec.ts src/playback/playback-resolve.service.spec.ts
 
   worker:
     name: Private R2 signed-byte delivery
@@ -62,3 +62,9 @@ jobs:
         run: npm run check
       - name: Test HMAC, expiration, HEAD, byte ranges and denial paths
         run: npm test
+      - name: Install audio fixture decoder and encoder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Verify real local Worker HTTP ingest/playback via R2 binding
+        run: npm run test:http
