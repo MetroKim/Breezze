@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,7 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../core/audio/youtube_player_handoff.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+import 'official_youtube_queue_policy.dart';
 
 /// In-app official YouTube video player. This is video playback only; it does
 /// not provide an audio-only stream, ad removal, background audio or downloads.
@@ -35,6 +38,8 @@ class OfficialMusicVideoScreen extends ConsumerStatefulWidget {
 class _OfficialMusicVideoScreenState
     extends ConsumerState<OfficialMusicVideoScreen> with WidgetsBindingObserver {
   YoutubePlayerController? _controller;
+  StreamSubscription<YoutubePlayerValue>? _playerEvents;
+  String? _autoAdvancedVideoId;
   late String _currentVideoId;
   late String _currentTitle;
   late String _currentArtist;
@@ -86,6 +91,25 @@ class _OfficialMusicVideoScreenState
     } catch (_) {
       // Unofficial queue failure must not prevent the official video player.
     }
+  }
+
+  // Advance only while the official player remains visible. Never use an
+  // invisible audio-only background player or replay stale ended events.
+  void _onPlayerValue(YoutubePlayerValue value) {
+    if (!mounted) return;
+    final currentId = _currentVideoId;
+    final next = nextForegroundYouTubeQueueIndex(
+      videoEnded: value.playerState == PlayerState.ended,
+      playerVisible:
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+      currentVideoId: currentId,
+      reportedVideoId: value.metaData.videoId,
+      currentIndex: _queuePosition,
+      queueLength: _watchQueue.length,
+    );
+    if (next == null || _autoAdvancedVideoId == currentId) return;
+    _autoAdvancedVideoId = currentId;
+    unawaited(_jumpToQueueItem(next));
   }
 
   Future<void> _jumpToQueueItem(int position) async {
@@ -143,6 +167,7 @@ class _OfficialMusicVideoScreenState
           showFullscreenButton: true,
         ),
       );
+      _playerEvents = _controller!.stream.listen(_onPlayerValue);
     }
     // Queue metadata is optional; it never holds up the first video.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -158,6 +183,7 @@ class _OfficialMusicVideoScreenState
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_playerEvents?.cancel());
     _controller?.close();
     super.dispose();
   }
