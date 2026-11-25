@@ -222,7 +222,8 @@ jobs:
         working-directory: apps/mobile
         run: flutter build web --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
-      - name: Publish installable test builds
+      - name: Publish installable test builds (private development only)
+        if: github.event.repository.private == true
         uses: actions/upload-artifact@v4
         with:
           name: breezze-test-builds-${{ github.sha }}

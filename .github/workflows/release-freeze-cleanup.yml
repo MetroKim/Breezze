@@ -1,0 +1,98 @@
+name: Remove unauthorized Breezze releases (development freeze)
+
+# No official Breezze application release is authorized before full
+# production, licensing, OAuth, security and accessibility acceptance.
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-freeze-cleanup.yml]
+  release:
+    types: [created, published, prereleased]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: breezze-release-freeze-cleanup
+  cancel-in-progress: false
+
+jobs:
+  remove-published-source:
+    name: Remove published source bundles and deny new releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Confirm source privacy, enumerate GitHub Releases and remove them
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::notice::Breezze release freeze: no app releases are authorized."
+          visibility="$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')"
+          if [[ "$visibility" != "private" ]]; then
+            echo "::error::Source-code exposure: repository is $visibility. Repository owner must set it PRIVATE in GitHub Settings > Danger Zone immediately."
+          fi
+          # Use the GitHub API, not local Git, to enumerate all releases.
+          mapfile -t release_ids < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[].id'
+          )
+          failures=0
+          for release_id in "${release_ids[@]}"; do
+            [[ "$release_id" =~ ^[0-9]+$ ]] || continue
+            tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq '.tag_name')"
+            echo "::warning::Removing published Breezze release $release_id (tag $tag)"
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$release_id"; then
+              echo "Removed release $release_id"
+              # Remove only tags previously belonging to published releases.
+              if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" ||
+                  echo "::warning::Could not remove release tag: $tag"
+              fi
+            else
+              echo "::error::Could not delete release $release_id. If GitHub marks the release immutable, first turn off release immutability in repository Settings and rerun this workflow."
+              failures=$((failures+1))
+            fi
+          done
+          remaining="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].id' | wc -l | tr -d ' ')"
+          echo "Remaining GitHub Releases: $remaining"
+          if (( remaining > 0 || failures > 0 )); then
+            echo "::error::RELEASE FREEZE FAILED: published release assets are still accessible."
+            exit 1
+          fi
+          if [[ "$visibility" != "private" ]]; then
+            echo "::error::RELEASE FREEZE UNVERIFIED: public source remains accessible even though Releases are empty."
+            exit 1
+          fi
+          echo "PASS: no releases remain and repository is private."
+
+      - name: Purge previously published CI artifacts while repository is public
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          visibility="$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')"
+          if [[ "$visibility" == "private" ]]; then
+            echo "Repository private; preserve internal verification artifacts."
+            exit 0
+          fi
+          # Source and installable APK artifact exposure must not continue on
+          # a public repository, even after GitHub Releases are deleted.
+          mapfile -t artifact_ids < <(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[].id')
+          failures=0
+          for id in "${artifact_ids[@]}"; do
+            [[ "$id" =~ ^[0-9]+$ ]] || continue
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; then
+              echo "Removed public downloadable CI artifact $id"
+            else
+              echo "::error::Could not remove public CI artifact $id"
+              failures=$((failures+1))
+            fi
+          done
+          echo "Processed ${#artifact_ids[@]} public CI artifacts."
+          if (( failures > 0 )); then exit 1; fi
