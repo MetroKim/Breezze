@@ -287,8 +287,8 @@ BitChord's Kotlin/GPL implementation or imply Google endorsement.
 | Boundary | Single source of truth | Enforcement and observability |
 | --- | --- | --- |
 | Authentication | Supabase Auth for verified user identity; existing NestJS exchange maps identity to owned Breezze records | Require verified-email/session checks, revocation, secure refresh storage, account-bound API retries; never reuse YouTube OAuth as Breezze login |
-| Client transport | One Breezze API client at \`apps/mobile/lib/core/api/breezze_api.dart\` | HTTPS in release, bounded network timeouts, one transient GET retry, no mutation retry after network failure, fail-closed account changes |
-| API authority | NestJS at \`backend/api\`, via Cloudflare Worker | Validation, user-scoped authorization, rights decisions, request IDs; no provider secret in Flutter |
+| Client transport | One Breezze API client at `apps/mobile/lib/core/api/breezze_api.dart` | HTTPS in release, bounded network timeouts, one transient GET retry, no mutation retry after network failure, fail-closed account changes |
+| API authority | NestJS at `backend/api`, via Cloudflare Worker | Validation, user-scoped authorization, rights decisions, request IDs; no provider secret in Flutter |
 | Metadata | Deezer public catalog and ytmusicapi sidecar, through typed provider adapters | Isolation, timeouts, Redis cache, provider failure containment; metadata does not imply playback permission |
 | YouTube content playback | Visible official YouTube player or external YouTube Music handoff | Respect iframe/upstream restrictions; never fabricate audio-only, background or download capability |
 | Native audio | One session-authorized Breezze player and licensed R2 media rendition | Territory/action/expiry checks before issuing signed audio URLs; no fallback to third-party extraction |
@@ -299,22 +299,22 @@ BitChord's Kotlin/GPL implementation or imply Google endorsement.
 
 - Railway project Breezze currently reports four running production services:
   API, Catalog Metadata, Redis, and Postgres (one live replica each at audit).
-  The API deployment source revision does not match current GitHub \`main\`.
-- Supabase project was \`ACTIVE_HEALTHY\` and reported no security or health
+  The API deployment source revision does not match current GitHub `main`.
+- Supabase project was `ACTIVE_HEALTHY` and reported no security or health
   advisor findings at the audit. These checks do not replace tenant-isolation
   and sign-in-device tests.
-- Cloudflare R2 \`breezze-media\` contained **zero objects** on the live read.
+- Cloudflare R2 `breezze-media` contained **zero objects** on the live read.
   No production full-track streaming or download test can pass from this
   bucket until approved masters and rights records exist.
-- Railway API variable names still included historical \`AUDIUS_*\` and
-  \`JAMENDO_*\` flags. Audit consumers and remove through a reviewed
+- Railway API variable names still included historical `AUDIUS_*` and
+  `JAMENDO_*` flags. Audit consumers and remove through a reviewed
   configuration change; never rotate/delete secrets or alter production
   values merely because a name looks obsolete.
 - The separate YouTube account-link OAuth client ID/secret were not present
   among the API service's variable names at audit. Supabase Google sign-in
   is a different grant and cannot fill that gap automatically.
 - Existing GitHub Actions runs failed before runner allocation; all affected
-  jobs have \`steps: null\`. This is **CI infrastructure blocked**, not a
+  jobs have `steps: null`. This is **CI infrastructure blocked**, not a
   test suite pass or an application assertion failure.
 
 ### Release gates (all mandatory)
