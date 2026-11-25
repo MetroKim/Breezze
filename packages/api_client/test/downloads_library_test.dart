@@ -37,14 +37,18 @@ void main() {
     await trackDir.create();
     final partial = File('${trackDir.path}/audio.part');
     await partial.writeAsBytes(utf8.encode('abc'));
+    await File('${partial.path}.etag').writeAsString('"fixture-etag"');
 
     var receivedRange = '';
+    var receivedIfRange = '';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       receivedRange = request.headers.value('range') ?? '';
+      receivedIfRange = request.headers.value('if-range') ?? '';
       request.response.statusCode = HttpStatus.partialContent;
       request.response.headers
         ..set('content-type', 'audio/mp4')
+        ..set('etag', '"fixture-etag"')
         ..set('content-range', 'bytes 3-5/6')
         ..contentLength = 3;
       request.response.add(utf8.encode('def'));
@@ -64,10 +68,47 @@ void main() {
 
     expect(ok, isTrue);
     expect(receivedRange, 'bytes=3-');
+    expect(receivedIfRange, '"fixture-etag"');
     expect(await File('${trackDir.path}/audio.m4a').readAsString(), 'abcdef');
+    expect(await File('${partial.path}.etag').exists(), isFalse);
     expect(await partial.exists(), isFalse);
   });
 
+
+  test('partial audio without an ETag restarts from byte zero', () async {
+    final track = BzTrack(
+      id: 'restart-safe',
+      title: 'Restart-safe track',
+      artist: 'Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final directory = Directory('${root.path}/restart-safe');
+    await directory.create(recursive: true);
+    await File('${directory.path}/audio.part').writeAsBytes([1, 2, 3, 4]);
+
+    String? range;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      range = request.headers.value('range');
+      request.response.headers
+        ..set('content-type', 'audio/mp4')
+        ..set('etag', '"new-rendition"')
+        ..contentLength = 6;
+      request.response.add(utf8.encode('abcdef'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final ok = await library.download(
+      track,
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: track.id,
+      rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+    );
+    expect(ok, isTrue);
+    expect(range, isNull);
+    expect(await File('${directory.path}/audio.m4a').readAsString(), 'abcdef');
+  });
 
   test('expired grant or non-audio HTTP response cannot create offline music', () async {
     final track = BzTrack(
@@ -154,6 +195,7 @@ void main() {
     final folder = Directory('${root.path}/videos/$assetId');
     await folder.create(recursive: true);
     await File('${folder.path}/video.part').writeAsBytes(utf8.encode('abc'));
+    await File('${folder.path}/video.part.etag').writeAsString('"video-v1"');
     var range = '';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
@@ -161,6 +203,7 @@ void main() {
       request.response.statusCode = HttpStatus.partialContent;
       request.response.headers
         ..set('content-type', 'video/mp4')
+        ..set('etag', '"video-v1"')
         ..set('content-range', 'bytes 3-5/6')
         ..contentLength = 3;
       request.response.add(utf8.encode('def'));
