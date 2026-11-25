@@ -238,6 +238,38 @@ describe('PlaybackResolveService', () => {
     expect(providers.get).not.toHaveBeenCalled();
   });
 
+  it('rejects provider grants that expire during native player startup', async () => {
+    prepareCanonicalTrack();
+    const adapter = validAdapter();
+    adapter.resolvePlayback.mockResolvedValue({
+      kind: 'ok',
+      value: {
+        url: 'https://media.licensed.example/audio/track123',
+        expiresAt: new Date(Date.now() + 5_000),
+        mimeType: 'audio/mpeg',
+      },
+    });
+    providers.get.mockReturnValue(adapter);
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ'))
+      .rejects.toThrow('PROVIDER_SOURCE_EXPIRES_TOO_SOON');
+  });
+
+  it('never supplies video or HTML URLs to the native audio engine', async () => {
+    prepareCanonicalTrack();
+    const adapter = validAdapter();
+    adapter.resolvePlayback.mockResolvedValue({
+      kind: 'ok',
+      value: {
+        url: 'https://media.licensed.example/watch',
+        expiresAt: new Date(Date.now() + 60_000),
+        mimeType: 'text/html',
+      },
+    });
+    providers.get.mockReturnValue(adapter);
+    await expect(service.resolveProvider('user-1', providerRequest, 'TZ'))
+      .rejects.toThrow('PROVIDER_RETURNED_NON_AUDIO_SOURCE');
+  });
+
   it('rejects an insecure URL returned by a provider adapter', async () => {
     prepareCanonicalTrack();
     const adapter = validAdapter();
