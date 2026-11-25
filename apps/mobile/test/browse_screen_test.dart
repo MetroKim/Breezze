@@ -227,21 +227,20 @@ void main() {
     expect(find.textContaining('Catalog metadata only'), findsOneWidget);
     expect(find.textContaining('Deezer'), findsWidgets);
   });
-  testWidgets('Browse opens real YouTube Music companion without a fifth tab',
+  testWidgets('Browse opens Spotify song search while YouTube stays video-only',
       (tester) async {
     final source = _BrowseSource();
-    await _mountBrowse(tester, source, api: _YouTubeBrowseApi());
+    await _mountBrowse(tester, source);
     source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
 
-    await tester.ensureVisible(find.text('YouTube Music'));
-    await tester.tap(find.text('YouTube Music'));
+    await tester.ensureVisible(find.text('Spotify Music'));
+    await tester.tap(find.text('Spotify Music'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Explore YouTube Music'), findsOneWidget);
-    expect(find.text('Client Album'), findsOneWidget);
-    expect(find.textContaining('personal YouTube Music library is not connected'),
-        findsOneWidget);
+    expect(find.text('Search'), findsOneWidget);
+    expect(find.text('YouTube Music'), findsNothing);
+    expect(find.widgetWithText(BzFilterPill, 'Music Videos'), findsOneWidget);
   });
 
   testWidgets('Unavailable Browse sections do not invent charts',
