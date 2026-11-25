@@ -15,7 +15,7 @@ describe('privileged audio catalogue provisioning', () => {
     audioAssetVariant: { count: jest.fn() },
     rightsUsagePermission: { findUnique: jest.fn() },
     contentTakedownCase: { findFirst: jest.fn() },
-    $transaction: jest.fn(async (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx)),
+    $transaction: jest.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
   };
   const signer = { createPlaybackUrl: jest.fn().mockReturnValue({
     url: 'https://media.breezze.example/audio/recording/AAC_256?e=1&s=signature',

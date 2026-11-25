@@ -19,7 +19,7 @@ export async function inspectSignedMediaObject(
   signedUrl: string,
   options: MediaProbeOptions = {},
 ): Promise<{ mimeType: string; sizeBytes: number } | null> {
-  if (process.env.NODE_ENV !== 'production' && options.force !== true) return;
+  if (process.env.NODE_ENV !== 'production' && options.force !== true) return null;
 
   const base = options.expectedOrigin ?? process.env.CDN_BASE_URL;
   if (!base) throw new ServiceUnavailableException('MEDIA_CDN_NOT_CONFIGURED');

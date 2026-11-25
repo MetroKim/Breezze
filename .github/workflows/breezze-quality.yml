@@ -203,7 +203,20 @@ jobs:
 
       - name: Build Android APK
         working-directory: apps/mobile
-        run: flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }} --dart-define=BREEZZE_GOOGLE_WEB_CLIENT_ID="$BREEZZE_GOOGLE_WEB_CLIENT_ID"
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Bounded backoff for transient Maven and Gradle 429 responses.
+          for attempt in 1 2 3; do
+            if flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }} --dart-define=BREEZZE_GOOGLE_WEB_CLIENT_ID="$BREEZZE_GOOGLE_WEB_CLIENT_ID"; then
+              exit 0
+            fi
+            if (( attempt == 3 )); then
+              echo "Android APK failed after three attempts" >&2
+              exit 1
+            fi
+            sleep $((attempt * 45))
+          done
       - name: Build Android release APK
         working-directory: apps/mobile
         run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }} --dart-define=BREEZZE_GOOGLE_WEB_CLIENT_ID="$BREEZZE_GOOGLE_WEB_CLIENT_ID"
