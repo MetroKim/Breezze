@@ -253,10 +253,74 @@ async function ingestAudio(request: Request, url: URL, env: Env): Promise<Respon
   });
 }
 
+/**
+ * Privileged video ingest. This path is not a public user upload API.
+ * Only the backend signs a grant for an internal, rights-cleared asset.
+ * A successful PUT does not mark it playable: admin verification must
+ * perform a signed HEAD check and promote the database row separately.
+ */
+async function ingestVideo(request: Request, url: URL, env: Env): Promise<Response> {
+  if (request.method !== 'PUT') return error(405, 'METHOD_NOT_ALLOWED');
+  const parts = url.pathname.split('/').filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== 'ingest' || parts[1] !== 'video' ||
+      !/^[0-9a-fA-F-]{36}$/.test(parts[2])) return error(400, 'INVALID_VIDEO_INGEST_PATH');
+  const assetId = parts[2];
+  const size = Number(url.searchParams.get('b'));
+  const expires = Number(url.searchParams.get('e'));
+  const mime = 'video/mp4';
+  if (!Number.isSafeInteger(size) || size < 16 || size > 95_000_000) {
+    return error(400, 'INVALID_VIDEO_INGEST_SIZE');
+  }
+  if (!await validSignature(
+    env.MEDIA_SIGNING_KEY, `ingest:video:${assetId}:${mime}:${size}:${expires}`,
+    url.searchParams.get('s'), expires,
+  ) || expires > Date.now() + 10 * 60 * 1000) {
+    return error(403, 'VIDEO_INGEST_SIGNATURE_INVALID_OR_EXPIRED');
+  }
+  if (request.headers.get('content-type') !== mime ||
+      Number(request.headers.get('content-length')) !== size ||
+      request.body === null) return error(400, 'VIDEO_INGEST_REQUEST_MISMATCH');
+
+  const key = `video/${assetId}/original.mp4`;
+  if (await env.MEDIA_BUCKET.head(key)) return error(409, 'VIDEO_ALREADY_INGESTED');
+  try {
+    const created = await env.MEDIA_BUCKET.put(key, request.body, {
+      httpMetadata: { contentType: mime },
+    });
+    if (!created || created.size !== size) {
+      await env.MEDIA_BUCKET.delete(key);
+      return error(422, 'VIDEO_SIZE_MISMATCH');
+    }
+    // MP4 has a box-size prefix followed by the ftyp box. This is only
+    // a signature sanity check, NOT a codec/rights/malware certification.
+    const prefix = await env.MEDIA_BUCKET.get(key, {
+      range: { offset: 0, length: 16 },
+    });
+    if (!prefix || !('body' in prefix)) {
+      await env.MEDIA_BUCKET.delete(key);
+      return error(422, 'VIDEO_FORMAT_UNREADABLE');
+    }
+    const bytes = new Uint8Array(await new Response(prefix.body).arrayBuffer());
+    const isMp4 = bytes.length >= 12 &&
+      String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp';
+    if (!isMp4) {
+      await env.MEDIA_BUCKET.delete(key);
+      return error(422, 'VIDEO_FORMAT_SIGNATURE_INVALID');
+    }
+    return new Response(null, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    // Never log object keys, signing grants or upstream storage errors.
+    return error(503, 'VIDEO_INGEST_UNAVAILABLE');
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!env.MEDIA_SIGNING_KEY || !env.MEDIA_BUCKET) return error(503, 'MEDIA_STORAGE_NOT_CONFIGURED');
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/ingest/video/')) {
+      return ingestVideo(request, url, env);
+    }
     if (url.pathname.startsWith('/ingest/audio/')) {
       return ingestAudio(request, url, env);
     }

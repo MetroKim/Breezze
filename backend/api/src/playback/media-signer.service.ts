@@ -94,6 +94,26 @@ export class MediaSigner {
     };
   }
 
+  /** Privileged capability for one pre-authorized internal MP4 asset. */
+  createVideoIngestUrl(
+    videoAssetId: string,
+    sizeBytes: number,
+  ): { url: string; expiresAt: Date } {
+    if (!/^[a-f0-9-]{36}$/i.test(videoAssetId) ||
+        !Number.isSafeInteger(sizeBytes) ||
+        sizeBytes < 16 || sizeBytes > 95_000_000) {
+      throw new Error('VIDEO_INGEST_METADATA_INVALID');
+    }
+    const expires = Date.now() + 10 * 60 * 1000;
+    const signature = this.sign(
+      `ingest:video:${videoAssetId}:video/mp4:${sizeBytes}:${expires}`,
+    );
+    return {
+      url: `${this.edgeUrl(`/ingest/video/${videoAssetId}`)}?b=${sizeBytes}&e=${expires}&s=${signature}`,
+      expiresAt: new Date(expires),
+    };
+  }
+
   createUploadUrl(
     userId: string,
     jobId: string,

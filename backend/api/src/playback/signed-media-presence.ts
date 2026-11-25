@@ -6,6 +6,7 @@ export interface MediaProbeOptions {
   force?: boolean;
   expectedOrigin?: string;
   request?: typeof fetch;
+  mediaKind?: 'audio' | 'video';
 }
 
 /**
@@ -46,7 +47,9 @@ export async function inspectSignedMediaObject(
     target.username !== '' ||
     target.password !== '' ||
     target.hash !== '' ||
-    !/^\/audio\/[A-Za-z0-9_-]{1,128}\/[A-Za-z0-9_-]{1,32}$/.test(target.pathname) ||
+    !(options.mediaKind === 'video'
+      ? /^\/video\/[0-9a-fA-F-]{36}\/(stream|download)$/.test(target.pathname)
+      : /^\/audio\/[A-Za-z0-9_-]{1,128}\/[A-Za-z0-9_-]{1,32}$/.test(target.pathname)) ||
     !target.searchParams.has('e') ||
     !target.searchParams.has('s')
   ) {
@@ -74,12 +77,13 @@ export async function inspectSignedMediaObject(
 
   const length = Number(response.headers.get('content-length'));
   const mime = (response.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase();
-  if (!Number.isSafeInteger(length) || length < 1 || !(
-    mime.startsWith('audio/') ||
-    mime === 'application/vnd.apple.mpegurl' ||
-    mime === 'application/x-mpegurl' ||
-    mime === 'application/dash+xml'
-  )) {
+  const mediaMatches = options.mediaKind === 'video'
+    ? mime === 'video/mp4'
+    : mime.startsWith('audio/') ||
+      mime === 'application/vnd.apple.mpegurl' ||
+      mime === 'application/x-mpegurl' ||
+      mime === 'application/dash+xml';
+  if (!Number.isSafeInteger(length) || length < 1 || !mediaMatches) {
     throw new ServiceUnavailableException('MEDIA_CDN_INVALID_AUDIO_OBJECT');
   }
   return { mimeType: mime, sizeBytes: length };
@@ -91,4 +95,12 @@ export async function verifySignedMediaObject(
   options: MediaProbeOptions = {},
 ): Promise<void> {
   await inspectSignedMediaObject(signedUrl, options);
+}
+
+/** R2 readiness gate for one owned MP4; never probes public YouTube URLs. */
+export async function inspectSignedVideoObject(
+  signedUrl: string,
+  options: MediaProbeOptions = {},
+): Promise<{ mimeType: string; sizeBytes: number } | null> {
+  return inspectSignedMediaObject(signedUrl, { ...options, mediaKind: 'video' });
 }
