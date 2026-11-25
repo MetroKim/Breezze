@@ -26,9 +26,10 @@ permissions:
   contents: read
 
 concurrency:
-  # Separate branches must never cancel main's native acceptance run.
+  # Full native iOS acceptance is slow. Do not cancel an executing simulator
+  # for another main commit; preserve its evidence, then run the next queued SHA.
   group: breezze-ios-playlist-acceptance-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   simulator-acceptance:
