@@ -1,0 +1,64 @@
+name: Breezze Media Delivery Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/src/downloads/**'
+      - 'backend/api/src/playback/**'
+      - 'infra/cloudflare/media-worker/**'
+      - '.github/workflows/media-delivery-verify.yml'
+  pull_request:
+    paths:
+      - 'backend/api/src/downloads/**'
+      - 'backend/api/src/playback/**'
+      - 'infra/cloudflare/media-worker/**'
+      - '.github/workflows/media-delivery-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Independent of full Flutter builds; never deploys or publishes media.
+concurrency:
+  group: breezze-media-verification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backend:
+    name: Rights-gated download resolver
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install backend test dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate Prisma types
+        run: npx prisma generate
+      - name: Typecheck backend
+        run: npm run typecheck
+      - name: Test download grants and offline lease revocation
+        run: npx jest --runInBand src/downloads/downloads.service.spec.ts
+
+  worker:
+    name: Private R2 signed-byte delivery
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cloudflare/media-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Worker test dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck Worker
+        run: npm run check
+      - name: Test HMAC, expiration, HEAD, byte ranges and denial paths
+        run: npm test
