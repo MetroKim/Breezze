@@ -19,6 +19,7 @@ export class ProvidersController {
   }
 
   @Get('search')
+  @UseGuards(JwtAuthGuard)
   searchAll(@Query('q') q: string) {
     return this.registry.searchAll(q ?? '');
   }
@@ -126,6 +127,7 @@ export class ProvidersController {
   }
 
   @Get(':id/search')
+  @UseGuards(JwtAuthGuard)
   search(@Param('id') id: string, @Query('q') q: string) {
     const adapter = this.registry.get(id);
     if (!adapter) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
