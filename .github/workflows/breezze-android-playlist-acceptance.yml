@@ -5,6 +5,11 @@ on:
   push:
     paths:
       - .github/workflows/breezze-android-playlist-acceptance.yml
+      - apps/mobile/assets/icons/**
+      - apps/mobile/tool/native_icon_gen.py
+      - apps/mobile/tool/test_native_icons.py
+      - apps/mobile/android/app/src/main/res/**
+      - apps/mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/**
       - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
       - apps/mobile/lib/core/api/breezze_api.dart
       - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
@@ -37,6 +42,9 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Reclaim unused hosted runner toolchains for Android emulator
+        run: bash tools/ci/prepare_android_disk.sh
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -97,7 +105,15 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          # The Pixel 6 default requests ~7.3 GiB of userdata on the
+          # hosted runner, more than remains after Flutter and Gradle builds.
+          # 2 GiB is sufficient for the test app and local playlist database.
+          # This only sizes disposable emulator storage; no user data touched.
+          disk-size: 2048M
           emulator-boot-timeout: 600
+          pre-emulator-launch-script: |
+            echo 'Android emulator boot disk capacity:'
+            df -h /
           script: |
             flutter devices
             cd apps/mobile && flutter test integration_test/playlist_sync_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev && flutter test integration_test/artist_pin_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev && flutter test integration_test/native_playback_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev

@@ -5,6 +5,11 @@ on:
   push:
     paths:
       - .github/workflows/breezze-ios-playlist-acceptance.yml
+      - apps/mobile/assets/icons/**
+      - apps/mobile/tool/native_icon_gen.py
+      - apps/mobile/tool/test_native_icons.py
+      - apps/mobile/android/app/src/main/res/**
+      - apps/mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/**
       - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
       - apps/mobile/lib/core/api/breezze_api.dart
       - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
@@ -120,10 +125,13 @@ jobs:
           # Bound each launch, restart the simulator once on an actual hang,
           # and never retry assertion/test failures.
           python3 - <<'PY'
+          import collections
           import os
           import signal
           import subprocess
           import sys
+          import threading
+          import time
 
           simulator = os.environ["SIMULATOR_ID"]
           for test_file in (
@@ -138,7 +146,20 @@ jobs:
                       "--no-pub", "--reporter", "expanded",
                       "--dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev",
                   ]
-                  process = subprocess.Popen(command, start_new_session=True)
+                  # Stream real assertions to CI while retaining only the tail
+                  # needed to classify a narrowly permitted dependency retry.
+                  output_tail = collections.deque(maxlen=2000)
+                  process = subprocess.Popen(
+                      command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                      text=True, errors="replace", bufsize=1, start_new_session=True,
+                  )
+                  def stream_output():
+                      assert process.stdout is not None
+                      for line in process.stdout:
+                          print(line, end="", flush=True)
+                          output_tail.append(line)
+                  reader = threading.Thread(target=stream_output, daemon=True)
+                  reader.start()
                   try:
                       return_code = process.wait(timeout=12 * 60)
                   except subprocess.TimeoutExpired:
@@ -149,13 +170,29 @@ jobs:
                       except subprocess.TimeoutExpired:
                           os.killpg(process.pid, signal.SIGKILL)
                           process.wait()
+                      reader.join(timeout=3)
                       if attempt == 2:
                           raise SystemExit(f"Native test did not launch after simulator restart: {test_file}")
                       subprocess.run(["xcrun", "simctl", "shutdown", simulator], check=False)
                       subprocess.run(["xcrun", "simctl", "boot", simulator], check=True)
                       subprocess.run(["xcrun", "simctl", "bootstatus", simulator, "-b"], check=True)
                       continue
+                  reader.join(timeout=3)
                   if return_code:
+                      details = "".join(output_tail)
+                      # sqlite3's native build hook fetches a pinned, hash-verified
+                      # binary from GitHub. Only retry transient name resolution;
+                      # NEVER retry a Flutter integration assertion/test failure.
+                      sqlite_dns_failure = (
+                          "sqlite3" in details
+                          and "Failed host lookup: 'github.com'" in details
+                          and ("Building native assets failed" in details
+                               or "Building assets for package:sqlite3 failed" in details)
+                      )
+                      if attempt == 1 and sqlite_dns_failure:
+                          print("Retrying ONLY the transient SQLite native-asset DNS failure once", flush=True)
+                          time.sleep(20)
+                          continue
                       raise SystemExit(return_code)
                   print(f"iPhone acceptance PASS: {test_file}", flush=True)
                   break

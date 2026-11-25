@@ -63,4 +63,44 @@ void main() {
     }
   });
 
+  test('legacy icon names render the exact official pixel-B geometry', () async {
+    const canonicalAsset = 'assets/icons/breezze-app-icon.svg';
+    final canonical = await rootBundle.loadString(canonicalAsset);
+    final paths = RegExp(r'<path[^>]*d="([^"]+)"');
+    final original = paths.allMatches(canonical).map((m) => m.group(1)).toList();
+    expect(original, hasLength(2), reason: 'Official mark is exactly two paths');
+
+    for (final asset in <String>[
+      'assets/icons/b-note-mark.svg',
+      'assets/icons/breezze-icon-app-glossy.svg',
+      'assets/icons/breezze-logo-ribbon-monochrome.svg',
+      'assets/icons/breezze-mark-monochrome-bnote.svg',
+      'assets/icons/breezze-logo-black.svg',
+      'assets/icons/breezze-symbol-black.svg',
+    ]) {
+      final svg = await rootBundle.loadString(asset);
+      final actual = paths.allMatches(svg).map((m) => m.group(1)).toList();
+      expect(actual, original, reason: 'Only official Breezze pixel-B may be used: $asset');
+      expect(svg, contains('fill-rule="evenodd"'), reason: asset);
+    }
+
+    final ribbon = await rootBundle.loadString(
+      'assets/icons/breezze-logo-ribbon-monochrome.svg',
+    );
+    expect(ribbon, contains('>Breezze</text>'));
+    expect(ribbon, contains('color="#FFFFFF"'));
+    expect(ribbon, isNot(contains('sound-wave ribbon')));
+
+    final glossy = await rootBundle.loadString(
+      'assets/icons/breezze-icon-app-glossy.svg',
+    );
+    expect(glossy, contains('id="breezzeOfficialSurface"'));
+    expect(glossy, contains('color="#FFFFFF"'));
+
+    final inverse = await rootBundle.loadString(
+      'assets/icons/breezze-mark-monochrome-bnote.svg',
+    );
+    expect(inverse, contains('rx="218" fill="#FFFFFF"'));
+    expect(inverse, contains('color="#000000"'));
+  });
 }
