@@ -11,8 +11,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../video/open_youtube_player.dart';
 import '../../core/audio/playback_source_policy.dart';
-import '../../core/audio/spotify_playback_handoff.dart';
-import '../../core/audio/deezer_playback_handoff.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
@@ -248,8 +246,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ))
                   ];
           if (_results.isEmpty && op is! ProviderOk<List<ProviderTrack>>) {
-            _error = 'Spotify music search is unavailable. '
-                'You can still open the search in Spotify.';
+            _error = 'Spotify and Deezer catalog search is unavailable. '
+                'Try again in Breezze.';
           }
         });
       }
@@ -503,7 +501,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _playDeezerPreview(BzTrack track) async {
-    final id = DeezerPlaybackHandoff.deezerIdFromBreezze(track.id);
+    final id = (isDeezerTrackId(track.id) || isDeezerPreview(track.id))
+        ? track.id.split(':').last : null;
     if (id == null || (!track.hasPreview && !isDeezerPreview(track.id))) {
       return;
     }
@@ -532,7 +531,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text(
-            'Deezer preview unavailable. Open Deezer for the full song.',
+            'Deezer preview unavailable inside Breezze.',
           )),
         );
       }
@@ -561,53 +560,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
       return;
     }
-    final spotifyId = SpotifyPlaybackHandoff.spotifyIdFromBreezze(track.id);
-    if (spotifyId != null) {
-      // Spotify performs actual full-track streaming in its own application.
-      // Stop the native Breezze player to avoid two concurrent audio sessions.
-      try {
-        await ref.read(playerControllerProvider.notifier).stop();
-        final opened = await SpotifyPlaybackHandoff.openTrack(spotifyId);
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text(
-              'Spotify could not open. Install Spotify or use its website.',
-            )),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text(
-              'Spotify playback is unavailable on this device.',
-            )),
-          );
-        }
+    // Breezze must never open external streaming apps. These providers'
+    // public catalog APIs do not grant full-length, decodable audio bytes.
+    // Once a licensed in-app stream is registered, the source-aware backend
+    // resolver can use it; until then, report unavailable instead of lying.
+    if (isSpotifyTrackId(track.id) || isDeezerTrackId(track.id)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'Full-song playback is not yet licensed for Breezze. '
+            'This track cannot currently play in the Breezze player.',
+          )),
+        );
       }
       return;
     }
-    final deezerId = DeezerPlaybackHandoff.deezerIdFromBreezze(track.id);
-    if (deezerId != null) {
-      // The official Deezer app owns full-length audio and account rights.
-      try {
-        await ref.read(playerControllerProvider.notifier).stop();
-        final opened = await DeezerPlaybackHandoff.openTrack(deezerId);
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text(
-              'Deezer could not open. Install Deezer or use its website.',
-            )),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text(
-              'Deezer playback is unavailable on this device.',
-            )),
-          );
-        }
-      }
+    if (isDeezerPreview(track.id)) {
+      await _playDeezerPreview(track);
       return;
     }
     if (isYouTubeSongId(track.id)) {
@@ -831,21 +800,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                     child: const Text('Try again'),
                                   ),
-                                  if (!_searchVideos && !_searchLibrary) ...[
-                                    const SizedBox(height: 10),
-                                    TextButton(
-                                      onPressed: () async {
-                                        try {
-                                          await SpotifyPlaybackHandoff.openSearch(
-                                            _controller.text,
-                                          );
-                                        } catch (_) {
-                                          // External Spotify search is optional.
-                                        }
-                                      },
-                                      child: const Text('Search in Spotify'),
-                                    ),
-                                  ],
                                 ],
                               ),
                             ),
@@ -926,11 +880,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                 ? 'Watch music video'
                                                 : isYouTubeSongId(track.id)
                                                     ? 'Watch on YouTube'
-                                                    : isSpotifyTrackId(track.id)
-                                                         ? 'Listen in Spotify'
-                                                         : isDeezerTrackId(track.id) || isDeezerPreview(track.id)
-                                                             ? 'Listen in Deezer'
-                                                             : track.hasPreview ? 'Play preview' : 'Play',
+                                                    : isDeezerPreview(track.id)
+                                                        ? 'Play 30-second sample'
+                                                        : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
@@ -939,9 +891,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             tooltip: 'Song actions',
                                             icon: const BzSvgIcon(name: 'more-vertical', size: 20),
                                             onSelected: (action) {
-                                              if (action == 'spotify' || action == 'deezer') {
-                                                _play(track);
-                                              } else if (action == 'deezer_preview') {
+                                              if (action == 'deezer_preview') {
                                                 _playDeezerPreview(track);
                                               } else if (action == 'original') {
                                                 openYouTubePlayer(
@@ -982,22 +932,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               }
                                             },
                                             itemBuilder: (context) => [
-                                              if (isSpotifyTrackId(track.id))
-                                                const PopupMenuItem(
-                                                  value: 'spotify',
-                                                  child: Text('Open in Spotify'),
-                                                )
-                                              else if (isDeezerTrackId(track.id) ||
-                                                       isDeezerPreview(track.id)) ...[
-                                                const PopupMenuItem(
-                                                  value: 'deezer',
-                                                  child: Text('Listen in Deezer'),
-                                                ),
-                                                if (track.hasPreview || isDeezerPreview(track.id))
-                                                  const PopupMenuItem(
-                                                    value: 'deezer_preview',
-                                                    child: Text('Play 30-second preview'),
-                                                  ),
+                                              if (isSpotifyTrackId(track.id) ||
+                                                  isDeezerTrackId(track.id) ||
+                                                  isDeezerPreview(track.id)) ...[
                                                 const PopupMenuItem(
                                                   value: 'playlist',
                                                   child: Text('Add to Playlists'),
@@ -1006,6 +943,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                   value: 'favorite',
                                                   child: Text('Add to Library'),
                                                 ),
+                                                if ((isDeezerTrackId(track.id) &&
+                                                     track.hasPreview) ||
+                                                    isDeezerPreview(track.id))
+                                                  const PopupMenuItem(
+                                                    value: 'deezer_preview',
+                                                    child: Text('Play 30-second sample'),
+                                                  ),
                                               ]
                                               else ...[
                                                 if (isYouTubeSongId(track.id)) ...[
@@ -1048,10 +992,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ||
                                             isYouTubeSongId(track.id) ||
-                                            isSpotifyTrackId(track.id) ||
-                                            isDeezerTrackId(track.id) ||
-                                            isDeezerPreview(track.id) ||
-                                            canQueueTrackId(track.id) || track.hasPreview
+                                            canQueueTrackId(track.id)
                                         ? _play(track)
                                         : _openTrack(track),
                                   );
