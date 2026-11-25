@@ -18,9 +18,9 @@ void main() {
       }
     });
 
-    test('canonical songs and eligible Deezer previews can queue', () {
+    test('only canonical rights-cleared tracks can queue natively', () {
       expect(canQueueTrackId('catalog-uuid'), isTrue);
-      expect(canQueueTrackId('bz:deezer_preview:42'), isTrue);
+      expect(canQueueTrackId('bz:deezer_preview:42'), isFalse);
       expect(canQueueTrackId('bz:deezer_preview:nope'), isFalse);
       expect(canRequestOfflineDownload('bz:deezer_preview:42'), isFalse);
     });
@@ -50,10 +50,12 @@ void main() {
       expect(canOfferPlaybackAction('bzv:dQw4w9WgXcQ'), isTrue);
       expect(canOfferPlaybackAction('bzv:not-valid'), isFalse);
       expect(canOfferPlaybackAction('bz:deezer:123'), isFalse);
-      expect(canOfferPlaybackAction('bz:deezer:123', hasPreview: true), isTrue);
+      expect(canOfferPlaybackAction('bz:deezer:123', hasPreview: true), isFalse);
       expect(canOfferPlaybackAction('bz:deezer:invalid', hasPreview: true), isFalse);
-      expect(canOfferPlaybackAction('bz:deezer_preview:123'), isTrue);
+      expect(canOfferPlaybackAction('bz:deezer_preview:123'), isFalse);
       expect(canOfferPlaybackAction('bz:apple_catalog:123'), isFalse);
+      expect(canOfferPlaybackAction('bz:spotify:4iV5W9uYEdYUVa79Axb7Rh'), isTrue);
+      expect(canQueueTrackId('bz:spotify:4iV5W9uYEdYUVa79Axb7Rh'), isFalse);
       expect(canOfferPlaybackAction(''), isFalse);
     });
 
