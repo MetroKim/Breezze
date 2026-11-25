@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, kReleaseMode, TargetPlatform;
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:just_audio/just_audio.dart' as ja;
+
+import 'native_source_guard.dart';
 
 /// Native audio engine — implements the Breezze engine contract over
 /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
@@ -78,6 +80,10 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
 
   @override
   Future<void> prepare(PlayableSource source) async {
+    validateNativeAudioSource(
+      source,
+      allowDevelopmentLoopback: !kReleaseMode,
+    );
     if (source.isLocal && !kIsWeb && !source.streamUrl.startsWith('content://')) {
       await _player.setFilePath(source.streamUrl);
     } else {
