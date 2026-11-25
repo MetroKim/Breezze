@@ -43,6 +43,19 @@ void main() {
       expect(canRequestOfflineDownload('catalog-uuid'), isTrue);
     });
 
+    test('search offers official video playback without native YouTube queueing', () {
+      const youtube = 'bz:youtube_music:dQw4w9WgXcQ';
+      expect(canOfferPlaybackAction(youtube), isTrue);
+      expect(canQueueTrackId(youtube), isFalse);
+      expect(canOfferPlaybackAction('bzv:dQw4w9WgXcQ'), isTrue);
+      expect(canOfferPlaybackAction('bzv:not-valid'), isTrue);
+      expect(canOfferPlaybackAction('bz:deezer:123'), isFalse);
+      expect(canOfferPlaybackAction('bz:deezer:123', hasPreview: true), isTrue);
+      expect(canOfferPlaybackAction('bz:deezer_preview:123'), isTrue);
+      expect(canOfferPlaybackAction('bz:apple_catalog:123'), isFalse);
+      expect(canOfferPlaybackAction(''), isFalse);
+    });
+
     test('YouTube music IDs remain official-video-only, never native Deezer audio queue', () {
       const id = 'bz:youtube_music:dQw4w9WgXcQ';
       expect(isYouTubeSongId(id), isTrue);

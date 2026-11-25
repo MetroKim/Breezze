@@ -16,6 +16,17 @@ bool canQueueTrackId(String id) =>
     !isYouTubeSongId(id) &&
     !isMetadataOnlyTrackId(id);
 
+/// Whether a search result can launch an appropriate user-visible player.
+///
+/// YouTube Music items open the official foreground YouTube player, not the
+/// native audio queue. Deezer previews and authorized local/catalog tracks
+/// use the native player. Unsupported catalog metadata remains non-playable.
+bool canOfferPlaybackAction(String id, {bool hasPreview = false}) =>
+    isYouTubeSongId(id) ||
+    id.startsWith('bzv:') ||
+    (hasPreview && id.startsWith('bz:deezer:')) ||
+    canQueueTrackId(id);
+
 /// Offline media requires an explicit download grant. Discovery metadata and
 /// provider previews are not full-track downloading rights.
 bool canRequestOfflineDownload(String id) =>

@@ -781,8 +781,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        if (track.id.startsWith('bzv:') ||
-                                            track.hasPreview || canQueueTrackId(track.id))
+                                        if (canOfferPlaybackAction(
+                                              track.id, hasPreview: track.hasPreview))
                                           IconButton(
                                             tooltip: track.id.startsWith('bzv:')
                                                 ? 'Watch music video'
