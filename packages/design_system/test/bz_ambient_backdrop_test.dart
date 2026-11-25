@@ -36,4 +36,27 @@ void main() {
     expect(find.byType(BackdropFilter), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('high contrast suppresses busy network artwork and blur',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: bzDarkTheme(),
+        home: MediaQuery(
+          data: const MediaQueryData(highContrast: true),
+          child: const Scaffold(
+            body: BzAmbientBackdrop(
+              artworkUrl: 'https://example.invalid/cover.png',
+              child: Text('Readable Now Playing'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Readable Now Playing'), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
 }
