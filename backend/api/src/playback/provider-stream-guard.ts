@@ -26,6 +26,7 @@ export function validateProviderAudioSource(
     url.password !== '' ||
     url.hash !== '' ||
     isIP(host) !== 0 ||
+    host.includes(':') ||
     host === 'localhost' ||
     host.endsWith('.localhost') ||
     host.endsWith('.local') ||
@@ -43,7 +44,7 @@ export function validateProviderAudioSource(
   }
 
   if (
-    rightsExpiresAt !== null &&
+    rightsExpiresAt != null &&
     (!(rightsExpiresAt instanceof Date) ||
       !Number.isFinite(rightsExpiresAt.getTime()) ||
       source.expiresAt.getTime() > rightsExpiresAt.getTime())
