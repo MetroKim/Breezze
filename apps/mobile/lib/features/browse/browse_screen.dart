@@ -16,7 +16,6 @@ import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
-import '../../features/player/now_playing_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Spotify owns its audio session. Never feed Spotify tracks into Breezze's
@@ -589,30 +588,22 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     }
   }
 
-  Future<void> _playCatalogPreview(Map<String, dynamic> item) async {
-    final trackId = item['id']?.toString() ?? '';
-    if (!RegExp(r'^[0-9]{1,20}$').hasMatch(trackId) ||
-        item['previewUrl'] is! String) return;
-    // The music resolver rechecks Deezer metadata and its trusted preview
-    // host; the cached browse URL itself is never a streaming entitlement.
-    final id = 'bz:deezer_preview:$trackId';
-    await ref.read(playerControllerProvider.notifier).playTrack(
-      trackId: id,
-      queue: [TrackInfo(
-        id: id,
-        title: item['title'] as String?,
-        artist: item['artist'] as String?,
-        artworkUrl: item['artworkUrl'] as String?,
-        duration: const Duration(seconds: 30),
-      )],
-      startIndex: 0,
-      origin: 'browse',
-      sourceContext: 'Deezer preview (up to 30 seconds)',
-    );
-    if (!mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => const NowPlayingScreen(),
-    ));
+  Future<void> _findOnSpotify(Map<String, dynamic> item) async {
+    // Historic Deezer charts remain read-only metadata. Never play Deezer
+    // preview bytes after switching the music provider to Spotify. Spotify's
+    // own search handles matching availability, territory and authorization.
+    final title = item['title'] is String ? (item['title'] as String).trim() : '';
+    final artist = item['artist'] is String ? (item['artist'] as String).trim() : '';
+    if (title.isEmpty) return;
+    try {
+      await SpotifyPlaybackHandoff.openSearch('$title $artist');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Spotify search could not be opened.')),
+        );
+      }
+    }
   }
 
   Future<void> _openCatalogItem(Map<String, dynamic> item) async {
@@ -1098,8 +1089,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                       ],
                                     )
                                   : IconButton(
-                                tooltip: !isVideoFeed && !isConcertFeed && item['previewUrl'] is String
-                                    ? 'Play Deezer preview (30 seconds)'
+                                tooltip: !isVideoFeed && !isConcertFeed
+                                    ? 'Find this song on Spotify'
                                     : isVideoFeed
                                     ? 'Watch official video'
                                     : isConcertFeed
@@ -1111,9 +1102,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                       ? 'play' : 'arrow-up-right',
                                   size: 19,
                                 ),
-                                onPressed: () => !isVideoFeed && !isConcertFeed &&
-                                        item['previewUrl'] is String
-                                    ? _playCatalogPreview(item) : _openCatalogItem(item),
+                                onPressed: () => !isVideoFeed && !isConcertFeed
+                                    ? _findOnSpotify(item) : _openCatalogItem(item),
                               ),
                               onTap: () => _openCatalogItem(item),
                             );
