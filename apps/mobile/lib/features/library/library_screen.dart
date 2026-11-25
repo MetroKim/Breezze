@@ -19,7 +19,6 @@ import 'playlist_detail_screen.dart';
 import 'add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
-import '../video/open_youtube_player.dart';
 import '../player/unified_media_handoff.dart';
 
 /// Library navigation follows the user's requested section order. Only
