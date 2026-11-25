@@ -1,4 +1,4 @@
-import 'package:http/http.dart' as http';
+import 'package:http/http.dart' as http;
 
 /// Small, non-caching GET to ensure a transient audio URL is usable before
 /// handing it to the native player. Range avoids transferring full song data.
