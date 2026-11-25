@@ -4,6 +4,7 @@ import 'package:breezze/app/bootstrap.dart';
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/features/browse/browse_screen.dart';
+import 'package:breezze/widgets/bz_brand_icons.dart';
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
