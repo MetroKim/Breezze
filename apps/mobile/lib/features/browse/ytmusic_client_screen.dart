@@ -119,6 +119,7 @@ class _YouTubeMusicClientScreenState
   Map<String, dynamic>? _moods;
   bool _loading = true;
   int _generation = 0;
+  int _accountGeneration = 0;
   bool _accountLoading = true;
   bool _accountBusy = false;
   String? _accountError;
@@ -157,6 +158,7 @@ class _YouTubeMusicClientScreenState
   /// The YouTube account connection is independent of Breezze's login.
   /// Server responses contain public channel/playlist data, never credentials.
   Future<void> _loadConnection() async {
+    final generation = ++_accountGeneration;
     final current = ref.read(authSessionProvider);
     if (current is! AuthSignedIn) {
       if (mounted) setState(() {
@@ -191,7 +193,7 @@ class _YouTubeMusicClientScreenState
           warning = 'Could not refresh YouTube playlists. Try again.';
         }
       }
-      if (!mounted) return;
+      if (!mounted || generation != _accountGeneration) return;
       final latest = ref.read(authSessionProvider);
       if (latest is! AuthSignedIn || latest.userId != current.userId) return;
       setState(() {
@@ -201,7 +203,9 @@ class _YouTubeMusicClientScreenState
         _accountLoading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _accountGeneration) return;
+      final latest = ref.read(authSessionProvider);
+      if (latest is! AuthSignedIn || latest.userId != current.userId) return;
       setState(() {
         _accountLoading = false;
         _accountError = 'YouTube account connection is not available.';
@@ -358,7 +362,7 @@ class _YouTubeMusicClientScreenState
                   ),
               ],
             ),
-            if (_accountError != null) ...[
+            if (sameOwner && _accountError != null) ...[
               const SizedBox(height: 8),
               Text(_accountError!,
                 style: theme.textTheme.bodySmall
@@ -429,6 +433,23 @@ class _YouTubeMusicClientScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      final oldOwner = previous is AuthSignedIn ? previous.userId : null;
+      final newOwner = next is AuthSignedIn ? next.userId : null;
+      if (oldOwner == newOwner) return;
+      // Account-specific YouTube data cannot survive a Breezze account switch.
+      _accountGeneration++;
+      setState(() {
+        _account = null;
+        _accountOwnerId = null;
+        _accountPlaylists = [];
+        _accountError = null;
+        _accountLoading = true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadConnection();
+      });
+    });
     final theme = Theme.of(context);
     final explore = _explore;
     final moods = _moods;
