@@ -10,10 +10,14 @@ import 'package:http/http.dart' as http;
 /// No secrets: the backend is Breezze's own; JWT access + refresh tokens
 /// are stored by the session controller, never hardcoded.
 class BreezzeApi {
-  BreezzeApi({required this.baseUrl, http.Client? client})
-      : _client = client ?? http.Client();
+  BreezzeApi({
+    required this.baseUrl,
+    http.Client? client,
+    this.requestTimeout = const Duration(seconds: 10),
+  }) : _client = client ?? http.Client();
 
   final String baseUrl;
+  final Duration requestTimeout;
   final http.Client _client;
 
   String? accessToken;
@@ -65,7 +69,7 @@ class BreezzeApi {
           _uri(path),
           headers: _headers,
           body: jsonEncode(body),
-        );
+        ).timeout(requestTimeout);
     var response = await send();
     if (response.statusCode == 401 &&
         path != '/auth/refresh' &&
@@ -88,7 +92,7 @@ class BreezzeApi {
     final originalToken = accessToken;
     Future<http.Response> send() =>
         _client.get(_uri(path), headers: _headers)
-            .timeout(const Duration(seconds: 10));
+            .timeout(requestTimeout);
     http.Response response;
     try {
       response = await send();
@@ -118,7 +122,7 @@ class BreezzeApi {
           _uri(path),
           headers: _headers,
           body: jsonEncode(body),
-        );
+        ).timeout(requestTimeout);
     var response = await send();
     if (response.statusCode == 401 &&
         onUnauthorized != null &&
@@ -136,7 +140,7 @@ class BreezzeApi {
           _uri(path),
           headers: _headers,
           body: body == null ? null : jsonEncode(body),
-        );
+        ).timeout(requestTimeout);
     var response = await send();
     if (response.statusCode == 401 &&
         onUnauthorized != null &&
