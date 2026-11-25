@@ -1189,6 +1189,7 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
     final generation = ++_generation;
     if (query.length < 2 || query.length > 120) {
       setState(() {
+        _loading = false;
         _songs = null;
         _error = 'Enter a song or artist name (2–120 characters).';
       });
