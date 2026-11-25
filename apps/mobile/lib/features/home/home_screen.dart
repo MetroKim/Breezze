@@ -309,31 +309,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ],
               ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AccountScreen(),
-                    ),
-                  ),
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: theme.bzSurface1,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: theme.bzSeparator),
-                    ),
-                    alignment: Alignment.center,
-                    child: SvgPicture.asset(
-                      'assets/icons/profile.svg',
-                      width: 20,
-                      height: 20,
-                      colorFilter: ColorFilter.mode(
-                        theme.bzText1,
-                        BlendMode.srcIn,
+              Semantics(
+                button: true,
+                label: 'Account and profile',
+                child: Tooltip(
+                  message: 'Open account',
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AccountScreen(),
+                        ),
+                      ),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        alignment: Alignment.center,
+                        child: SvgPicture.asset(
+                          'assets/icons/profile.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: ColorFilter.mode(
+                            theme.bzText1,
+                            BlendMode.srcIn,
+                          ),
+                        ),
                       ),
                     ),
                   ),
