@@ -126,14 +126,14 @@ def generate(app_dir: Path, verify=False) -> list[str]:
         outputs[app_dir / f'android/app/src/main/res/mipmap-{density}/ic_launcher.png'] = render_pixel_b(size, polygons)
     resources = app_dir / 'android/app/src/main/res'
     vector = vector_xml(paths)
-    outputs[resources / 'drawable/breezze_launcher_foreground.xml'] = vector
-    outputs[resources / 'drawable/breezze_launcher_monochrome.xml'] = vector
-    outputs[resources / 'values/breezze_launcher_background.xml'] = b'<?xml version="1.0" encoding="utf-8"?><resources><color name="breezze_launcher_background">#050505</color></resources>'
+    outputs[resources / 'drawable/ic_breezze_foreground.xml'] = vector
+    outputs[resources / 'drawable/ic_breezze_monochrome.xml'] = vector
+    outputs[resources / 'values/breezze_icon_colors.xml'] = b'<?xml version="1.0" encoding="utf-8"?><resources><color name="breezze_icon_background">#050505</color></resources>'
     adaptive = (b'<?xml version="1.0" encoding="utf-8"?>'
                 b'<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">'
-                b'<background android:drawable="@color/breezze_launcher_background"/>'
-                b'<foreground android:drawable="@drawable/breezze_launcher_foreground"/>'
-                b'<monochrome android:drawable="@drawable/breezze_launcher_monochrome"/>'
+                b'<background android:drawable="@color/breezze_icon_background"/>'
+                b'<foreground android:drawable="@drawable/ic_breezze_foreground"/>'
+                b'<monochrome android:drawable="@drawable/ic_breezze_monochrome"/>'
                 b'</adaptive-icon>')
     outputs[resources / 'mipmap-anydpi-v26/ic_launcher.xml'] = adaptive
     outputs[resources / 'mipmap-anydpi-v26/ic_launcher_round.xml'] = adaptive

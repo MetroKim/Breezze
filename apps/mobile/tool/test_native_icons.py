@@ -32,8 +32,8 @@ class NativeIconTests(unittest.TestCase):
         files = generate(self.app_dir)
         self.assertEqual(len(files), 14)
         self.assertEqual(generate(self.app_dir, verify=True), files)
-        for name in ('android/app/src/main/res/drawable/breezze_launcher_monochrome.xml',
-                     'android/app/src/main/res/drawable/breezze_launcher_foreground.xml'):
+        for name in ('android/app/src/main/res/drawable/ic_breezze_monochrome.xml',
+                     'android/app/src/main/res/drawable/ic_breezze_foreground.xml'):
             xml = (self.app_dir / name).read_text()
             for path in paths:
                 self.assertIn(path, xml)
