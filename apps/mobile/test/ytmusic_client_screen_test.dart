@@ -13,6 +13,9 @@ class _ClientApi extends BreezzeApi {
   int exploreCalls = 0;
   int moodCalls = 0;
   int playlistCalls = 0;
+  int artistSearchCalls = 0;
+  int artistDetailCalls = 0;
+  int chartsCalls = 0;
   bool accountAvailable = true;
   bool accountConnected = true;
   int accountPlaylistCalls = 0;
@@ -87,6 +90,45 @@ class _ClientApi extends BreezzeApi {
       ],
       'topSongsAvailable': false,
       'playbackAvailable': false,
+    });
+  }
+
+
+  @override
+  Future<Map<String, dynamic>> ytMusicSearchArtists(String query) async {
+    artistSearchCalls++;
+    expect(query, 'Example');
+    return _ok({'artists': [
+      {'artistId': 'UCabcdefghij123456', 'name': 'Example Artist'},
+      {'artistId': 'invalid', 'name': 'Invalid Artist'},
+    ]});
+  }
+
+  @override
+  Future<Map<String, dynamic>> ytMusicArtist(String artistId) async {
+    artistDetailCalls++;
+    expect(artistId, 'UCabcdefghij123456');
+    return _ok({'artist': {
+      'artistId': artistId, 'name': 'Example Artist',
+      'description': 'Public artist profile',
+      'topSongs': [
+        {'providerTrackId': 'efghijklmno', 'title': 'Artist Song'},
+        {'providerTrackId': 'invalid', 'title': 'Invalid Song'},
+      ],
+      'albums': [{'browseId': 'MPREabcdefghij', 'title': 'Artist Album'}],
+    }});
+  }
+
+  @override
+  Future<Map<String, dynamic>> ytMusicCharts({String country = 'ZZ'}) async {
+    chartsCalls++;
+    expect(country, 'ZZ');
+    return _ok({
+      'country': 'ZZ', 'songRankingAvailable': false,
+      'artists': [{'artistId': 'UCabcdefghij123456', 'name': 'Chart Artist'}],
+      'musicVideoPlaylists': [
+        {'playlistId': 'OLAK5uy_abcdefghij', 'title': 'Video Chart Playlist'},
+      ],
     });
   }
 
@@ -315,4 +357,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Featured Album'), findsOneWidget);
   });
+
+  testWidgets('artist search validates IDs and opens public artist albums',
+      (tester) async {
+    final api = _ClientApi();
+    await _mount(tester, api);
+    await tester.tap(find.text('Find artists'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search artists'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Enter an artist name'), findsOneWidget);
+    expect(api.artistSearchCalls, 0);
+    await tester.enterText(find.byType(TextField), 'Example');
+    await tester.tap(find.text('Search artists'));
+    await tester.pumpAndSettle();
+    expect(api.artistSearchCalls, 1);
+    final invalidArtist = find.ancestor(
+      of: find.text('Invalid Artist'), matching: find.byType(ListTile));
+    expect(tester.widget<ListTile>(invalidArtist).onTap, isNull);
+    await tester.tap(find.text('Example Artist'));
+    await tester.pumpAndSettle();
+    expect(api.artistDetailCalls, 1);
+    expect(find.text('Artist Song'), findsOneWidget);
+    final invalidSong = find.ancestor(
+      of: find.text('Invalid Song'), matching: find.byType(ListTile));
+    expect(tester.widget<ListTile>(invalidSong).onTap, isNull);
+    await tester.tap(find.text('Artist Album'));
+    await tester.pumpAndSettle();
+    expect(find.text('Album Song'), findsOneWidget);
+  });
+
+  testWidgets('charts do not fabricate a Top Songs ranking',
+      (tester) async {
+    final api = _ClientApi();
+    await _mount(tester, api);
+    await tester.tap(find.text('Music charts'));
+    await tester.pumpAndSettle();
+    expect(api.chartsCalls, 1);
+    expect(find.text('Verified Top Songs rankings unavailable'), findsOneWidget);
+    expect(find.text('Chart Artist'), findsOneWidget);
+    await tester.tap(find.text('Video Chart Playlist'));
+    await tester.pumpAndSettle();
+    expect(api.playlistCalls, 1);
+    expect(find.text('Playlist Song'), findsOneWidget);
+  });
+
 }

@@ -7,8 +7,8 @@ import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../video/open_youtube_player.dart';
 
-/// Public YouTube Music companion discovery, inside Breezze's existing Browse
-/// tab. Account-library endpoints, media extraction and downloads are absent.
+/// YouTube Music public discovery and separately consented read-only playlists.
+/// Metadata and account access do not grant full-song playback or downloads.
 class YouTubeMusicClientScreen extends ConsumerStatefulWidget {
   const YouTubeMusicClientScreen({super.key});
 
@@ -53,6 +53,9 @@ bool _ytPlaylistId(Object? raw) =>
 
 bool _ytAlbumId(Object? raw) =>
     raw is String && RegExp(r'^MPRE[A-Za-z0-9_-]{6,60}$').hasMatch(raw);
+
+bool _ytArtistId(Object? raw) =>
+    raw is String && RegExp(r'^[A-Za-z0-9_-]{10,64}$').hasMatch(raw);
 
 String _ytArtist(Map<String, dynamic> item) {
   final artist = item['artist'];
@@ -480,6 +483,29 @@ class _YouTubeMusicClientScreenState
                                   ?.copyWith(color: theme.bzText2),
                             ),
                             const SizedBox(height: 18),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const _YtArtistSearchScreen(),
+                                    ),
+                                  ),
+                                  child: const Text('Find artists'),
+                                ),
+                                OutlinedButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const _YtChartsScreen(),
+                                    ),
+                                  ),
+                                  child: const Text('Music charts'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
                             _accountSection(theme),
                             if (explore == null)
                               const ListTile(
@@ -818,5 +844,284 @@ class _YtConnectedPlaylistScreenState
                     ),
                 ],
               ),
+  );
+}
+
+
+/// Artist search remains public metadata and never requests a media URL.
+class _YtArtistSearchScreen extends ConsumerStatefulWidget {
+  const _YtArtistSearchScreen();
+  @override
+  ConsumerState<_YtArtistSearchScreen> createState() => _YtArtistSearchState();
+}
+
+class _YtArtistSearchState extends ConsumerState<_YtArtistSearchScreen> {
+  final _query = TextEditingController();
+  List<Map<String, dynamic>>? _artists;
+  String? _error;
+  bool _busy = false;
+  int _generation = 0;
+
+  @override
+  void dispose() {
+    _generation++;
+    _query.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    final query = _query.text.trim();
+    final generation = ++_generation;
+    if (query.length < 2 || query.length > 120) {
+      setState(() => _error = 'Enter an artist name (2–120 characters).');
+      return;
+    }
+    setState(() { _busy = true; _error = null; _artists = null; });
+    try {
+      final data = _ytValue(await ref.read(authSessionProvider.notifier).api
+          .ytMusicSearchArtists(query));
+      if (!mounted || generation != _generation) return;
+      setState(() { _artists = _ytRows(data['artists']); _busy = false; });
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _busy = false;
+        _error = 'Artist search unavailable • Retry';
+      });
+    }
+  }
+
+  void _open(Map<String, dynamic> item) {
+    final id = item['artistId'];
+    if (!_ytArtistId(id)) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _YtArtistScreen(
+        artistId: id as String,
+        title: item['name'] as String? ?? 'Artist',
+      ),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('YouTube Music artists')),
+    body: ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('Public artist discovery • songs open in the visible '
+            'YouTube player, not native audio or downloads.'),
+        TextField(
+          controller: _query,
+          maxLength: 120,
+          textInputAction: TextInputAction.search,
+          decoration: const InputDecoration(labelText: 'Artist name'),
+          onSubmitted: (_) { _search(); },
+        ),
+        OutlinedButton(
+          onPressed: _busy ? null : _search,
+          child: const Text('Search artists'),
+        ),
+        if (_busy) const Center(child: CircularProgressIndicator()),
+        if (_error != null) Text(_error!),
+        if (_artists != null) ...[
+          Text('Artists', style: Theme.of(context).textTheme.titleLarge),
+          if (_artists!.isEmpty)
+            const ListTile(title: Text('No matching artists found')),
+          for (final item in _artists!)
+            _ytRow(
+              {...item, 'title': item['name']},
+              subtitle: 'YouTube Music public artist',
+              onTap: _ytArtistId(item['artistId']) ? () => _open(item) : null,
+            ),
+        ],
+      ],
+    ),
+  );
+}
+
+/// Artist songs use the existing visible YouTube handoff; albums are metadata.
+class _YtArtistScreen extends ConsumerStatefulWidget {
+  const _YtArtistScreen({required this.artistId, required this.title});
+  final String artistId;
+  final String title;
+  @override
+  ConsumerState<_YtArtistScreen> createState() => _YtArtistState();
+}
+
+class _YtArtistState extends ConsumerState<_YtArtistScreen> {
+  Map<String, dynamic>? _artist;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final data = await _ytOptional(() => ref.read(authSessionProvider.notifier)
+        .api.ytMusicArtist(widget.artistId));
+    if (!mounted) return;
+    final raw = data?['artist'];
+    final item = raw is Map
+        ? raw.map((key, value) => MapEntry(key.toString(), value))
+        : null;
+    setState(() {
+      _artist = item != null &&
+          item['artistId'] == widget.artistId &&
+          item['name'] is String ? item : null;
+      _loading = false;
+    });
+  }
+
+  Future<void> _watch(Map<String, dynamic> item) async {
+    final id = item['providerTrackId'];
+    if (!_ytVideoId(id)) return;
+    await openYouTubePlayer(
+      context: context, ref: ref, videoId: id as String,
+      title: item['title'] as String? ?? 'YouTube Music',
+      artist: _artist?['name'] as String? ?? widget.title,
+      artworkUrl: item['artworkUrl'] as String?,
+    );
+  }
+
+  void _openAlbum(Map<String, dynamic> item) {
+    final id = item['browseId'];
+    if (!_ytAlbumId(id)) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _YtCollectionScreen(
+        id: id as String, album: true,
+        title: item['title'] as String? ?? 'Album',
+      ),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = _artist;
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title)),
+      body: _loading
+        ? const Center(child: CircularProgressIndicator())
+        : item == null
+          ? Center(child: OutlinedButton(
+              onPressed: _load,
+              child: const Text('Artist unavailable • Retry'),
+            ))
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(item['name'] as String,
+                    style: Theme.of(context).textTheme.headlineSmall),
+                if (item['description'] is String)
+                  Text(item['description'] as String),
+                const Text('Metadata only • songs use the visible '
+                    'YouTube player; offline downloads are unavailable.'),
+                Text('Top songs',
+                    style: Theme.of(context).textTheme.titleLarge),
+                for (final song in _ytRows(item['topSongs']))
+                  _ytRow(song,
+                    subtitle: item['name'] as String,
+                    actionLabel: 'Open visible YouTube player',
+                    onTap: _ytVideoId(song['providerTrackId'])
+                        ? () => _watch(song) : null),
+                Text('Albums',
+                    style: Theme.of(context).textTheme.titleLarge),
+                for (final album in _ytRows(item['albums']))
+                  _ytRow(album,
+                    subtitle: 'Public album',
+                    onTap: _ytAlbumId(album['browseId'])
+                        ? () => _openAlbum(album) : null),
+              ],
+            ),
+    );
+  }
+}
+
+class _YtChartsScreen extends ConsumerStatefulWidget {
+  const _YtChartsScreen();
+  @override
+  ConsumerState<_YtChartsScreen> createState() => _YtChartsState();
+}
+
+class _YtChartsState extends ConsumerState<_YtChartsScreen> {
+  Map<String, dynamic>? _charts;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final data = await _ytOptional(() =>
+        ref.read(authSessionProvider.notifier).api.ytMusicCharts());
+    if (!mounted) return;
+    setState(() {
+      _charts = data?['country'] == 'ZZ' ? data : null;
+      _loading = false;
+    });
+  }
+
+  void _openArtist(Map<String, dynamic> item) {
+    final id = item['artistId'];
+    if (!_ytArtistId(id)) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _YtArtistScreen(
+        artistId: id as String, title: item['name'] as String? ?? 'Artist'),
+    ));
+  }
+
+  void _openPlaylist(Map<String, dynamic> item) {
+    final id = item['playlistId'];
+    if (!_ytPlaylistId(id)) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _YtCollectionScreen(
+        id: id as String, album: false,
+        title: item['title'] as String? ?? 'Playlist'),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('YouTube Music charts')),
+    body: _loading
+      ? const Center(child: CircularProgressIndicator())
+      : _charts == null
+        ? Center(child: OutlinedButton(
+            onPressed: _load,
+            child: const Text('Charts unavailable • Retry'),
+          ))
+        : ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Text('Public global charts • regional data may vary.'),
+              if (_charts!['songRankingAvailable'] != true)
+                const ListTile(
+                  title: Text('Verified Top Songs rankings unavailable'),
+                ),
+              Text('Featured artists',
+                  style: Theme.of(context).textTheme.titleLarge),
+              for (final artist in _ytRows(_charts!['artists']))
+                _ytRow({...artist, 'title': artist['name']},
+                  subtitle: 'Public chart artist',
+                  onTap: _ytArtistId(artist['artistId'])
+                      ? () => _openArtist(artist) : null),
+              Text('Music-video playlists',
+                  style: Theme.of(context).textTheme.titleLarge),
+              for (final playlist in _ytRows(_charts!['musicVideoPlaylists']))
+                _ytRow(playlist,
+                  subtitle: 'Public video playlist',
+                  onTap: _ytPlaylistId(playlist['playlistId'])
+                      ? () => _openPlaylist(playlist) : null),
+            ],
+          ),
   );
 }
