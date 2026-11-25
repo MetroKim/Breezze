@@ -5,7 +5,7 @@ import 'remote_audio_grant.dart';
 /// Accepts a full-length server-approved, signed recording, never raw
 /// YouTube Music metadata, a watch URL, or an unlicensed audio candidate.
 PlayableSource? authorizedYouTubeMusicPlayback(
-  String trackId, Map<String, dynamic> session, {DateTime? nowUtc},
+  String trackId, Map<String, dynamic> session, {DateTime? nowUtc}
 ) {
   if (!isYouTubeSongId(trackId)) return null;
   final sessionId = session['id'];
