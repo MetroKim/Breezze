@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { OfficialYouTubeDataService } from './official-youtube-data.service';
 import * as crypto from 'node:crypto';
 import { ProviderCacheService } from './provider-cache.service';
 import {
@@ -94,7 +95,10 @@ export class YtMusicAdapter implements ProviderAdapter {
   private circuitOpenUntil = 0;
   private halfOpenProbeInFlight = false;
 
-  constructor(private readonly cache: ProviderCacheService) {}
+  constructor(
+    private readonly cache: ProviderCacheService,
+    @Optional() private readonly officialYouTube?: OfficialYouTubeDataService,
+  ) {}
 
   /**
    * Coalesce identical cache misses inside this API process. Redis remains the
@@ -158,6 +162,13 @@ export class YtMusicAdapter implements ProviderAdapter {
     return (process.env.YTMUSIC_API_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
   }
 
+  private async officialVideoFallback(query: string):
+    Promise<ProviderResult<ProviderTrack[]> | null> {
+    if (!this.officialYouTube?.configured) return null;
+    const official = await this.officialYouTube.searchMusicVideos(query);
+    return official.kind === 'ok' ? official : null;
+  }
+
   async search(query: string): Promise<ProviderResult<ProviderTrack[]>> {
     const q = query.trim();
     if (q.length < 2 || q.length > 120) return providerOk([]);
@@ -165,6 +176,12 @@ export class YtMusicAdapter implements ProviderAdapter {
     const cacheKey = `provider:youtube_music:search:v1:${queryHash}`;
     const cached = await this.cache.get<ProviderResult<ProviderTrack[]>>(cacheKey);
     if (cached) return cached;
+    // Never keep a broken ytmusicapi sidecar as the sole discovery source.
+    // Official YouTube returns VIDEO metadata, not licensed audio.
+    if (this.circuitOpenUntil > Date.now()) {
+      return await this.officialVideoFallback(q) ??
+        providerError('YTMUSIC_CIRCUIT_OPEN', 'Public video metadata temporarily unavailable', true);
+    }
     return this.coalesce(cacheKey, () => this.withCircuit(async () => {
       try {
         const url = new URL('/search', this.baseUrl);
@@ -172,16 +189,22 @@ export class YtMusicAdapter implements ProviderAdapter {
         url.searchParams.set('limit', '20');
         const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
         if (!response.ok) {
+          const fallback = await this.officialVideoFallback(q);
+          if (fallback) return fallback;
           return providerError('YTMUSIC_SEARCH_FAILED', `Metadata provider returned HTTP ${response.status}`, response.status >= 500 || response.status === 429);
         }
         const payload = await response.json() as SearchPayload;
         if (!Array.isArray(payload.tracks)) {
+          const fallback = await this.officialVideoFallback(q);
+          if (fallback) return fallback;
           return providerError('YTMUSIC_INVALID_RESPONSE', 'Metadata provider returned an invalid search payload', false);
         }
         const result = providerOk(payload.tracks, 'YouTube Music metadata via ytmusicapi');
         await this.cache.set(cacheKey, result, this.cacheTtl(60));
         return result;
       } catch {
+        const fallback = await this.officialVideoFallback(q);
+        if (fallback) return fallback;
         return providerError('YTMUSIC_UNAVAILABLE', 'YouTube Music metadata provider is temporarily unavailable', true);
       }
     }));
