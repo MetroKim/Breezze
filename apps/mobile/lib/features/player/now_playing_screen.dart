@@ -161,13 +161,34 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     if (track == null) {
       return Scaffold(
         backgroundColor: theme.bzBackground,
-        body: Center(
+        body: SafeArea(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              BzBnoteMark(size: 72, color: theme.bzText2),
-              const SizedBox(height: 16),
-              Text('Nothing playing', style: theme.textTheme.titleMedium),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  tooltip: 'Close',
+                  icon: BzSvgIcon(name: 'chevron-down'),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      BzBnoteMark(size: 72, color: theme.bzText2),
+                      const SizedBox(height: 16),
+                      Text('Nothing playing', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        child: const Text('Back to music'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
