@@ -487,6 +487,14 @@ class _YouTubeMusicClientScreenState
                               spacing: 8,
                               runSpacing: 8,
                               children: [
+                                FilledButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const _YtSongSearchScreen(),
+                                    ),
+                                  ),
+                                  child: const Text('Find songs'),
+                                ),
                                 OutlinedButton(
                                   onPressed: () => Navigator.of(context).push(
                                     MaterialPageRoute<void>(
@@ -1123,5 +1131,238 @@ class _YtChartsState extends ConsumerState<_YtChartsScreen> {
                       ? () => _openPlaylist(playlist) : null),
             ],
           ),
+  );
+}
+
+class _YtSongSearchScreen extends ConsumerStatefulWidget {
+  const _YtSongSearchScreen();
+
+  @override
+  ConsumerState<_YtSongSearchScreen> createState() => _YtSongSearchState();
+}
+
+class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
+  final _query = TextEditingController();
+  List<Map<String, dynamic>>? _songs;
+  String? _error;
+  bool _loading = false;
+  int _generation = 0;
+
+  @override
+  void dispose() {
+    _generation++;
+    _query.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    final query = _query.text.trim();
+    final generation = ++_generation;
+    if (query.length < 2 || query.length > 120) {
+      setState(() {
+        _songs = null;
+        _error = 'Enter a song or artist name (2–120 characters).';
+      });
+      return;
+    }
+    setState(() { _loading = true; _songs = null; _error = null; });
+    try {
+      final result = await ref.read(authSessionProvider.notifier).api
+          .ytMusicSearchSongs(query);
+      if (result['kind'] != 'ok' || result['value'] is! List) {
+        throw const FormatException('YTMUSIC_SEARCH_UNAVAILABLE');
+      }
+      if (!mounted || generation != _generation) return;
+      setState(() { _songs = _ytRows(result['value']); _loading = false; });
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _loading = false;
+        _error = 'Song search unavailable • Retry';
+      });
+    }
+  }
+
+  Future<void> _watch(Map<String, dynamic> song) async {
+    final id = song['providerTrackId'];
+    if (!_ytVideoId(id)) return;
+    await openYouTubePlayer(
+      context: context,
+      ref: ref,
+      videoId: id as String,
+      title: song['title'] as String? ?? 'YouTube Music',
+      artist: _ytArtist(song),
+      artworkUrl: song['artworkUrl'] as String?,
+    );
+  }
+
+  void _related(Map<String, dynamic> song) {
+    final id = song['providerTrackId'];
+    if (!_ytVideoId(id)) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _YtWatchQueueScreen(
+        videoId: id as String,
+        title: song['title'] as String? ?? 'Song',
+      ),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('YouTube Music song search')),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+              children: [
+                Text('Find songs', style: theme.textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                Text('Search the public catalog. Songs open in the visible '
+                  'official YouTube player; metadata does not grant '
+                  'native audio or downloads.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _query,
+                  maxLength: 120,
+                  textInputAction: TextInputAction.search,
+                  decoration: const InputDecoration(
+                    labelText: 'Song or artist',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) { _search(); },
+                ),
+                FilledButton(
+                  onPressed: _loading ? null : _search,
+                  child: const Text('Search songs'),
+                ),
+                if (_loading) ...[
+                  const SizedBox(height: 20),
+                  const Center(child: CircularProgressIndicator()),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!),
+                ],
+                if (_songs != null) ...[
+                  const SizedBox(height: 20),
+                  Text('Songs', style: theme.textTheme.titleLarge),
+                  if (_songs!.isEmpty)
+                    const ListTile(title: Text('No matching songs found')),
+                  for (final song in _songs!)
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        leading: _ytArtwork(song['artworkUrl'] as String?),
+                        title: Text(song['title'] as String? ?? 'Untitled'),
+                        subtitle: Text(_ytArtist(song) + ' • Watch on YouTube'),
+                        onTap: _ytVideoId(song['providerTrackId'])
+                            ? () => _watch(song) : null,
+                        trailing: IconButton(
+                          tooltip: 'Up next for ' + (song['title'] as String? ?? 'Song'),
+                          icon: const Icon(Icons.queue_music),
+                          onPressed: _ytVideoId(song['providerTrackId'])
+                              ? () => _related(song) : null,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _YtWatchQueueScreen extends ConsumerStatefulWidget {
+  const _YtWatchQueueScreen({required this.videoId, required this.title});
+  final String videoId;
+  final String title;
+
+  @override
+  ConsumerState<_YtWatchQueueScreen> createState() => _YtWatchQueueState();
+}
+
+class _YtWatchQueueState extends ConsumerState<_YtWatchQueueScreen> {
+  Map<String, dynamic>? _queue;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final data = await _ytOptional(() =>
+        ref.read(authSessionProvider.notifier).api
+            .ytMusicWatchQueue(widget.videoId));
+    if (!mounted) return;
+    setState(() {
+      _queue = data != null &&
+              data['seedVideoId'] == widget.videoId &&
+              data['playbackAvailable'] == false ? data : null;
+      _loading = false;
+    });
+  }
+
+  Future<void> _watch(Map<String, dynamic> song) async {
+    final id = song['providerTrackId'];
+    if (!_ytVideoId(id)) return;
+    await openYouTubePlayer(
+      context: context,
+      ref: ref,
+      videoId: id as String,
+      title: song['title'] as String? ?? 'YouTube Music',
+      artist: _ytArtist(song),
+      artworkUrl: song['artworkUrl'] as String?,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.title)),
+    body: _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _queue == null
+            ? Center(child: OutlinedButton(
+                onPressed: _load,
+                child: const Text('Related songs unavailable • Retry'),
+              ))
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text('Up next',
+                      style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 8),
+                    const Text('Public YouTube Music suggestions. Choose a song '
+                      'to watch in the official player. This is not a native '
+                      'playback queue or a download playlist.'),
+                    const SizedBox(height: 16),
+                    if (_ytRows(_queue!['tracks']).isEmpty)
+                      const ListTile(title: Text('No related songs available')),
+                    for (final song in _ytRows(_queue!['tracks']))
+                      _ytRow(
+                        song,
+                        subtitle: _ytArtist(song),
+                        actionLabel: 'Watch in official YouTube player',
+                        onTap: _ytVideoId(song['providerTrackId'])
+                            ? () => _watch(song) : null,
+                      ),
+                  ],
+                ),
+              ),
   );
 }
