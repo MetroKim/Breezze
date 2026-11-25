@@ -193,6 +193,11 @@ class BreezzeApi {
   Future<Map<String, dynamic>> officialYouTubeVideoDetails(String videoId) =>
       _get('/providers/youtube/videos/${Uri.encodeComponent(videoId)}');
 
+  /// Spotify-only music discovery (separate from YouTube video discovery).
+  /// Spotify's own application performs playback; this returns metadata only.
+  Future<Map<String, dynamic>> searchSpotify(String query) =>
+      _get('/providers/spotify/search?q=${Uri.encodeQueryComponent(query)}');
+
   Future<Map<String, dynamic>> searchDeezer(String query) =>
       _get('/providers/deezer/search?q=${Uri.encodeQueryComponent(query)}');
 
