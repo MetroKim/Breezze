@@ -195,6 +195,12 @@ class BreezzeApi {
 
   /// Spotify-only music discovery (separate from YouTube video discovery).
   /// Spotify's own application performs playback; this returns metadata only.
+  /// Search both music catalogs concurrently through Breezze NestJS.
+  /// Every provider remains a separate source/attribution shelf, and the
+  /// response contains metadata only (not authorized audio bytes).
+  Future<Map<String, dynamic>> searchMusicCatalogs(String query) =>
+      _get('/providers/music/search?q=${Uri.encodeQueryComponent(query)}');
+
   Future<Map<String, dynamic>> searchSpotify(String query) =>
       _get('/providers/spotify/search?q=${Uri.encodeQueryComponent(query)}');
 
