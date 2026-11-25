@@ -26,7 +26,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: breezze-android-playlist-acceptance
+  # Separate branches must never cancel main's native acceptance run.
+  group: breezze-android-playlist-acceptance-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

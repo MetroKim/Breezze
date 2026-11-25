@@ -1,22 +1,26 @@
-# Breezze — preserved historical original design sources
+# Breezze — legacy design handoff index
 
-This folder preserves **byte-identical** assets supplied during the previous Breezze design phases. They belong to the independent [MetroKim/Breezze](https://github.com/MetroKim/Breezze) repository. The current shipping app stays under `apps/mobile/`; these files are **historical design evidence**, not production assets or a second implementation.
+All original user-supplied artwork is preserved **byte-for-byte** in a single
+canonical archive at [`docs/design/reference/`](../reference/README.md).
 
-## Exact original source archives
-- `originals/Breezze_Frontend_Figma_Import_Pack.zip` — sixteen separate screen SVGs (Home, Browse, Library, Search, Now Playing, Lyrics, Artist, Album, Playlist, Sign In, Settings, Downloads, Queue, Onboarding, Replay, Account), 16-screen SVG board, PNG board and README. SHA-256: `6a9fdb04a023ef99c074d23a3deef98b67935067f6df85734603509a7afe5435`.
-- `originals/breezze_flutter(1).zip` — the visual-only prior Flutter reference including screens, mock catalog, mock player, theme, and widgets. **Never build or ship its dummy playback code.** SHA-256: `140eafd2a95cc9edacd20816861eccd94a28acad1c7ab3d09647ff92af831c40`.
+This folder remains as a stable historical index. Its former `originals/`
+directory and two text export specifications were removed from the active tree
+only after confirming identical Git blob hashes for every file in the canonical
+reference archive. Their history remains in Git.
 
-## Original brand/reference boards
-- `originals/Breezze Music Brand Styleboard.png` — SHA-256 `d8e02e118262add42e598892bfcd2fef0239d07d6d7df5a53f92c9a2b6a0887c`.
-- `originals/Breezze Music Brand Guideline Board.png` — SHA-256 `393b6cf6572ed03051e329b87b067e1070b95d684308547b642593c51e4ba231`.
-- `originals/Breezze Music Branding Collection.png` — SHA-256 `92c76ef08b277acd5f38d191f0148d9d76977cf12c9e485d60098f0f39427eb0`.
+## Exact original files (canonical paths)
 
-All three boards are 1536 × 1024 PNGs.
+- [Frontend Figma import pack](../reference/Breezze_Frontend_Figma_Import_Pack.zip) — 16 screen SVGs, combined board, PNG preview and README.
+- [Flutter UI reference](../reference/breezze_flutter_ui_reference.zip) — visual-only sample. Its mocked player and sample data must never replace Breezze's real runtime.
+- [Historical branding boards](../reference/historical-brand/) — three original PNGs.
+- [Glass Disc export specification](../reference/historical-concepts/GLASS_DISC_EXPORT_SPEC.md) and [Drift export specification](../reference/historical-concepts/DRIFT_EXPORT_SPEC.md) — competing historical design concepts, not shipping icons.
 
-## Original specs and active source separation
-- `PNG-EXPORT-SPEC.md` — historical Glass Disc (Concept B) export recommendation.
-- `breezze-concept-c-export-spec.md` — historical Drift (Concept C), a **competing** alternative. The names in an export specification are not proof every depicted vector was ever supplied. No missing icon may be fabricated and called the original.
-- Recovered actual monochrome vector lockups are installed at `apps/mobile/assets/icons/breezze-logo-black.svg` and `breezze-logo-white.svg`, and retain the existing Flutter design system, four-tab layout and launcher icons. No new Radio, alternative provider, Auth0 or sample catalog is activated.
+The selected production identity remains **white mark on black** in
+`apps/mobile/assets/icons/`. There is still only one Flutter app and one
+player. The four primary tabs remain Home, Browse, Library, and Search.
 
-## Verification
-Run `python apps/mobile/tool/verify_legacy_design_handoff.py` from the repository root. GitHub CI runs the same exact-source verifier. A successful source migration does **not** imply an editable Figma component library or fully emulator-verified app UX. See `docs/migrations/PREVIOUS_BREEZZE_SOURCE_AUDIT.md` for the legacy-branch reconciliation.
+The supported verification command remains:
+`python3 apps/mobile/tool/verify_legacy_design_handoff.py`.
+It delegates archive/brand checksum verification to
+`tools/verify_design_handoff_archives.py` and additionally parses the active
+monochrome Breezze SVG lockups. Both paths continue to run in CI.

@@ -27,8 +27,9 @@ void main() {
       await api.ytMusicMoods();
       await api.ytMusicMoodPlaylists('example_params', limit: 15);
       await api.ytMusicExplore();
+      await api.ytMusicSearchSongs('Sample & Song');
 
-      expect(requests.length, 11);
+      expect(requests.length, 12);
       expect(requests.every((r) => r.method == 'GET'), isTrue);
       expect(requests.every((r) =>
           r.headers['Authorization'] == 'Bearer session-token'), isTrue);
@@ -61,6 +62,9 @@ void main() {
       expect(requests[9].url.queryParameters['limit'], '15');
       expect(requests[10].url.path,
           '/api/v1/providers/youtube_music/explore');
+      expect(requests[11].url.path,
+          '/api/v1/providers/youtube_music/search');
+      expect(requests[11].url.queryParameters['q'], 'Sample & Song');
     });
 
     test('does not mistake provider metadata for an audio playback grant', () async {

@@ -13,6 +13,9 @@ class _ClientApi extends BreezzeApi {
   int exploreCalls = 0;
   int moodCalls = 0;
   int playlistCalls = 0;
+  int songSearchCalls = 0;
+  int watchQueueCalls = 0;
+  bool songSearchUnavailable = false;
   int artistSearchCalls = 0;
   int artistDetailCalls = 0;
   int chartsCalls = 0;
@@ -68,6 +71,43 @@ class _ClientApi extends BreezzeApi {
 
   Map<String, dynamic> _ok(Map<String, dynamic> value) =>
       {'kind': 'ok', 'value': {'source': 'youtube_music', ...value}};
+
+  @override
+  Future<Map<String, dynamic>> ytMusicSearchSongs(String query) async {
+    songSearchCalls++;
+    expect(query, 'Example Song');
+    if (songSearchUnavailable) return {
+      'kind': 'error',
+      'code': 'YTMUSIC_UNAVAILABLE',
+    };
+    return {
+      'kind': 'ok',
+      'value': [
+        {'providerTrackId': 'abcdefghijk', 'title': 'Search Result Song',
+         'artist': 'Example Artist'},
+        {'providerTrackId': 'invalid', 'title': 'Unusable Search Result',
+         'artist': 'Unknown'},
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> ytMusicWatchQueue(String videoId, {int limit = 20}) async {
+    watchQueueCalls++;
+    expect(videoId, 'abcdefghijk');
+    expect(limit, 20);
+    return _ok({
+      'seedVideoId': videoId,
+      'playlistId': null,
+      'playbackAvailable': false,
+      'tracks': [
+        {'providerTrackId': 'bcdefghijkl', 'title': 'Suggested Next Song',
+         'artist': 'Related Artist'},
+        {'providerTrackId': 'invalid', 'title': 'Invalid Suggestion',
+         'artist': 'Untrusted'},
+      ],
+    });
+  }
 
   @override
   Future<Map<String, dynamic>> ytMusicExplore() async {
@@ -212,6 +252,25 @@ class _LinkedClientSession extends AuthSessionController {
   BreezzeApi get api => client;
 }
 
+class _SwitchableClientSession extends AuthSessionController {
+  _SwitchableClientSession(this.client);
+  final BreezzeApi client;
+
+  @override
+  AuthState build() => const AuthSignedIn(
+    userId: 'listener-a', email: 'a@example.test',
+  );
+
+  @override
+  BreezzeApi get api => client;
+
+  void switchOwner() {
+    state = const AuthSignedIn(
+      userId: 'listener-b', email: 'b@example.test',
+    );
+  }
+}
+
 Future<void> _mount(WidgetTester tester, _ClientApi api,
     {bool signedIn = false}) async {
   tester.view.physicalSize = const Size(900, 2200);
@@ -309,6 +368,38 @@ void main() {
     expect(find.text('Connect YouTube'), findsOneWidget);
   });
 
+  testWidgets('YouTube-linked playlist state is never shared after Breezze '
+      'listener account switch', (tester) async {
+    final api = _ClientApi();
+    tester.view.physicalSize = const Size(900, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer(
+      overrides: [
+        authSessionProvider.overrideWith(() => _SwitchableClientSession(api)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const YouTubeMusicClientScreen(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('My Saved Playlist'), findsOneWidget);
+
+    api.accountConnected = false;
+    (container.read(authSessionProvider.notifier) as _SwitchableClientSession)
+        .switchOwner();
+    await tester.pumpAndSettle();
+    expect(find.text('My Saved Playlist'), findsNothing);
+    expect(find.text('Connect YouTube'), findsOneWidget);
+    expect(api.accountPlaylistCalls, 1);
+  });
+
   testWidgets('linked account playlist opens read-only video items in Breezze',
       (tester) async {
     final api = _ClientApi();
@@ -385,6 +476,67 @@ void main() {
     await tester.tap(find.text('Artist Album'));
     await tester.pumpAndSettle();
     expect(find.text('Album Song'), findsOneWidget);
+  });
+
+  testWidgets('YouTube Music song search is routed through current metadata '
+      'provider and validates IDs before browsing Up next', (tester) async {
+    final api = _ClientApi();
+    await _mount(tester, api);
+    await tester.tap(find.text('Find songs'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Search songs'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Enter a song or artist name'), findsOneWidget);
+    expect(api.songSearchCalls, 0);
+
+    await tester.enterText(find.byType(TextField), 'Example Song');
+    await tester.tap(find.text('Search songs'));
+    await tester.pumpAndSettle();
+    expect(api.songSearchCalls, 1);
+    expect(find.text('Search Result Song'), findsOneWidget);
+    final bad = find.ancestor(
+      of: find.text('Unusable Search Result'),
+      matching: find.byType(ListTile),
+    );
+    expect(tester.widget<ListTile>(bad).onTap, isNull);
+    final disabledRelatedButton = find.ancestor(
+      of: find.byTooltip('Up next for Unusable Search Result'),
+      matching: find.byType(IconButton),
+    );
+    expect(disabledRelatedButton, findsOneWidget);
+    expect(tester.widget<IconButton>(disabledRelatedButton).onPressed, isNull);
+
+    await tester.tap(find.byTooltip('Up next for Search Result Song'));
+    await tester.pumpAndSettle();
+    expect(api.watchQueueCalls, 1);
+    expect(find.text('Up next'), findsOneWidget);
+    expect(find.text('Suggested Next Song'), findsOneWidget);
+    final invalid = find.ancestor(
+      of: find.text('Invalid Suggestion'),
+      matching: find.byType(ListTile),
+    );
+    expect(tester.widget<ListTile>(invalid).onTap, isNull);
+  });
+
+  testWidgets('song search provider outage has an explicit recovery path',
+      (tester) async {
+    final api = _ClientApi()..songSearchUnavailable = true;
+    await _mount(tester, api);
+    await tester.tap(find.text('Find songs'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Example Song');
+    await tester.tap(find.text('Search songs'));
+    await tester.pumpAndSettle();
+    expect(find.text('Song search unavailable • Retry'), findsOneWidget);
+    expect(find.text('Search Result Song'), findsNothing);
+
+    api.songSearchUnavailable = false;
+    await tester.tap(find.text('Search songs'));
+    await tester.pumpAndSettle();
+    expect(find.text('Search Result Song'), findsOneWidget);
+    expect(api.songSearchCalls, 2);
   });
 
   testWidgets('charts do not fabricate a Top Songs ranking',
