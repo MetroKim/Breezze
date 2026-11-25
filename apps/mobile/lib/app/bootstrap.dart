@@ -19,9 +19,8 @@ import '../features/player/player_controller.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// Spotify and Deezer handle music through provider-authorized playback.
-/// Deezer previews are 30-second samples; streaming full provider tracks
-/// is exclusively the responsibility of their official applications.
+/// Spotify owns music playback, while YouTube owns visible videos.
+/// Legacy Deezer metadata remains readable but grants no playback rights.
 /// Downloads remain rights-gated. Lyrics
 /// lookup remains keyless through LRCLIB.
 
@@ -91,48 +90,30 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
 
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
-    // Spotify and Deezer are independent music catalogs; Google/YouTube
-    // results are confined to the separate visible Music Videos experience.
+    // Spotify is the only *music playback* discovery source. Deezer records
+    // remain readable via dedicated legacy metadata APIs, never as playback.
     final q = query.trim();
     if (q.length < 2 || q.length > 120) return ProviderOk(<ProviderTrack>[]);
     try {
       final result = await _ref.read(authSessionProvider.notifier).api
-          .searchAllProviders(q);
-      final providers = result['providers'];
-      if (providers is! List) return ProviderError('invalid_music_search');
-      final tracks = <ProviderTrack>[];
-      final seen = <String>{};
-      var sourcesResponded = 0;
-      for (final entry in providers.whereType<Map>()) {
-        final source = entry['providerId'];
-        // Reject legacy YouTube Music, Audius and other provider IDs even
-        // if an old backend revision accidentally includes their results.
-        if (source != 'spotify' && source != 'deezer') continue;
-        final envelope = entry['result'];
-        if (envelope is! Map || envelope['kind'] != 'ok' ||
-            envelope['value'] is! List) continue;
-        sourcesResponded++;
-        for (final raw in (envelope['value'] as List).whereType<Map>()) {
-          final id = raw['providerTrackId'];
-          if (id is! String) continue;
-          if (source == 'spotify' &&
-              !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
-          if (source == 'deezer' &&
-              !RegExp(r'^[0-9]{1,20}$').hasMatch(id)) continue;
-          final track = _trackFromJson(raw, providerId: source as String);
-          if (track.title.trim().isNotEmpty &&
-              track.artist.trim().isNotEmpty &&
-              seen.add(track.breezzeTrackId)) {
-            tracks.add(track);
-          }
-        }
+          .searchSpotify(q);
+      if (result['kind'] != 'ok' || result['value'] is! List) {
+        return ProviderError('spotify_unavailable');
       }
-      if (sourcesResponded == 0) {
-        return ProviderError('spotify_and_deezer_unavailable');
+      final seen = <String>{};
+      final tracks = <ProviderTrack>[];
+      for (final raw in (result['value'] as List).whereType<Map>()) {
+        final id = raw['providerTrackId'];
+        if (id is! String || !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
+        final track = _trackFromJson(raw, providerId: 'spotify');
+        if (track.title.trim().isNotEmpty &&
+            track.artist.trim().isNotEmpty && seen.add(track.breezzeTrackId)) {
+          tracks.add(track);
+        }
       }
       return ProviderOk(tracks);
     } catch (_) {
-      return ProviderError('music_sources_network_error');
+      return ProviderError('spotify_network_error');
     }
   }
 
@@ -185,27 +166,14 @@ class LiveResolver implements PlaybackResolver {
   Future<PlayableSource?> resolve(TrackInfo track) async {
     // Explicit native Deezer PREVIEW only (30 seconds at most).
     // The authorized full Deezer recording remains inside Deezer's app.
-    if (isDeezerPreview(track.id)) {
-      try {
-        final result = await _ref.read(authSessionProvider.notifier).api
-            .getProviderTrack('deezer', track.id.split(':').last);
-        final value = result['value'];
-        if (result['kind'] != 'ok' || value is! Map ||
-            value['previewUrl'] is! String) return null;
-        final uri = Uri.tryParse(value['previewUrl'] as String);
-        if (uri == null || uri.scheme != 'https' ||
-            uri.userInfo.isNotEmpty || uri.hasFragment ||
-            !uri.host.toLowerCase().endsWith('.dzcdn.net')) return null;
-        return PlayableSource(
-          trackId: track.id,
-          streamUrl: uri.toString(),
-          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 2)),
-        );
-      } catch (_) {
-        return null;
-      }
+    // External streaming services do not grant Breezze raw audio.
+    if (isYouTubeSongId(track.id) ||
+        track.id.startsWith('bz:spotify:') ||
+        track.id.startsWith('bz:deezer:') ||
+        isDeezerPreview(track.id) ||
+        track.id.startsWith('bzv:')) {
+      return null;
     }
-    if (track.id.startsWith('bz:deezer:')) return null;
     final auth = _ref.read(authSessionProvider);
     if (auth is! AuthSignedIn) return null;
 
@@ -217,9 +185,6 @@ class LiveResolver implements PlaybackResolver {
     // The visible official YouTube player is opened by the UI coordinator.
     // Spotify tracks are also never raw media; official Spotify playback
     // is launched outside the Breezze audio engine via App Remote / deep link.
-    if (isYouTubeSongId(track.id) || track.id.startsWith('bz:spotify:')) {
-      return null;
-    }
 
     try {
       final catalogId = await _resolveCatalogId(api, track);
