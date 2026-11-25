@@ -61,16 +61,47 @@ class BreezzeApi {
         if (accessToken != null) 'Authorization': 'Bearer $accessToken',
       };
 
+  /// Identifies the user who owns a request, independently of access-token
+  /// rotation. A refresh for user A may replace A's token, but a delayed
+  /// response must never be displayed or replayed after switching to user B.
+  ///
+  /// The authentication controller supplies this scope; standalone callers
+  /// without an auth controller retain their existing transport behavior.
+  String? Function()? currentPrincipal;
+
+  void _assertPrincipalUnchanged(String? expectedPrincipal) {
+    final principal = currentPrincipal;
+    if (principal != null && principal() != expectedPrincipal) {
+      throw const BreezzeApiException(
+        code: 'API_SESSION_CHANGED',
+        message: 'The active account changed during this request. Retry under the current account.',
+      );
+    }
+  }
+
+  Future<bool> _refreshForPrincipal(String? expectedPrincipal) async {
+    final refresh = onUnauthorized;
+    if (refresh == null) return false;
+    _assertPrincipalUnchanged(expectedPrincipal);
+    final success = await refresh();
+    // Refreshing a token for A is valid. Refreshing into B is never a
+    // reason to replay the request or expose A's earlier response to B.
+    _assertPrincipalUnchanged(expectedPrincipal);
+    return success;
+  }
+
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body,
   ) async {
+    final principal = currentPrincipal?.call();
     Future<http.Response> send() => _client.post(
           _uri(path),
           headers: _headers,
           body: jsonEncode(body),
         ).timeout(requestTimeout);
     var response = await send();
+    _assertPrincipalUnchanged(principal);
     if (response.statusCode == 401 &&
         path != '/auth/refresh' &&
         path != '/auth/login' &&
@@ -79,20 +110,20 @@ class BreezzeApi {
         path != '/auth/supabase/link-legacy' &&
         !path.startsWith('/auth/social/') &&
         !path.startsWith('/auth/mfa/') &&
-        onUnauthorized != null &&
-        await onUnauthorized!()) {
+        await _refreshForPrincipal(principal)) {
       response = await send();
+      _assertPrincipalUnchanged(principal);
     }
     return _decode(response);
   }
 
   Future<Map<String, dynamic>> _get(String path) async {
-    // Retrying an idempotent GET is safe after a transient edge/network
-    // interruption. Never apply this retry to POST/PATCH/DELETE mutations.
+    // A transient GET can be retried once. Mutations must never be replayed
+    // on timeouts. Every response and auth retry is fenced to one listener.
+    final principal = currentPrincipal?.call();
     final originalToken = accessToken;
     Future<http.Response> send() =>
-        _client.get(_uri(path), headers: _headers)
-            .timeout(requestTimeout);
+        _client.get(_uri(path), headers: _headers).timeout(requestTimeout);
     http.Response response;
     try {
       response = await send();
@@ -102,32 +133,35 @@ class BreezzeApi {
         rethrow;
       }
       await Future<void>.delayed(const Duration(milliseconds: 250));
-      // An account switch during the backoff must never replay the old read
-      // under a different listener's session.
+      _assertPrincipalUnchanged(principal);
       if (accessToken != originalToken) rethrow;
-      response = await send(); // Exactly one retry; a second failure propagates.
-    }
-    if (response.statusCode == 401 &&
-        onUnauthorized != null &&
-        await onUnauthorized!()) {
       response = await send();
+    }
+    _assertPrincipalUnchanged(principal);
+    if (response.statusCode == 401 &&
+        await _refreshForPrincipal(principal)) {
+      response = await send();
+      _assertPrincipalUnchanged(principal);
     }
     return _decode(response);
   }
+
   Future<Map<String, dynamic>> _patch(
     String path,
     Map<String, dynamic> body,
   ) async {
+    final principal = currentPrincipal?.call();
     Future<http.Response> send() => _client.patch(
           _uri(path),
           headers: _headers,
           body: jsonEncode(body),
         ).timeout(requestTimeout);
     var response = await send();
+    _assertPrincipalUnchanged(principal);
     if (response.statusCode == 401 &&
-        onUnauthorized != null &&
-        await onUnauthorized!()) {
+        await _refreshForPrincipal(principal)) {
       response = await send();
+      _assertPrincipalUnchanged(principal);
     }
     return _decode(response);
   }
@@ -136,16 +170,18 @@ class BreezzeApi {
     String path, {
     Map<String, dynamic>? body,
   }) async {
+    final principal = currentPrincipal?.call();
     Future<http.Response> send() => _client.delete(
           _uri(path),
           headers: _headers,
           body: body == null ? null : jsonEncode(body),
         ).timeout(requestTimeout);
     var response = await send();
+    _assertPrincipalUnchanged(principal);
     if (response.statusCode == 401 &&
-        onUnauthorized != null &&
-        await onUnauthorized!()) {
+        await _refreshForPrincipal(principal)) {
       response = await send();
+      _assertPrincipalUnchanged(principal);
     }
     return _decode(response);
   }
