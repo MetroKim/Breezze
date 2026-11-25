@@ -150,6 +150,91 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
         );
   }
 
+  /// This is Breezze's real Flutter discovery surface, not a mockup.
+  /// Its route opens catalog metadata and the official visible video player.
+  Widget _buildYouTubeHero(ThemeData theme) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(BzRadius.sheet),
+      child: InkWell(
+        key: const ValueKey('browse-youtube-hero'),
+        onTap: () => _openCollection(_browseDestinations.first),
+        borderRadius: BorderRadius.circular(BzRadius.sheet),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(BzRadius.sheet),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [theme.bzSurface1, theme.bzSurface2],
+            ),
+            border: Border.all(color: theme.bzSeparator),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: BzSpacing.s20,
+              vertical: BzSpacing.s24,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: theme.bzBackground,
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    border: Border.all(color: theme.bzSeparator),
+                  ),
+                  alignment: Alignment.center,
+                  child: BzBnoteMark(size: 38, color: theme.bzText1),
+                ),
+                const SizedBox(width: BzSpacing.s16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'PUBLIC MUSIC DISCOVERY',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.bzText2,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: BzSpacing.s4),
+                      Text(
+                        'YouTube Music',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: BzSpacing.s4),
+                      Text(
+                        'Songs, artists, albums and official videos.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.bzText2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: BzSpacing.s8),
+                BzSvgIcon(
+                  name: 'chevron-right',
+                  size: 21,
+                  color: theme.bzText2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -164,10 +249,12 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('New', style: theme.textTheme.displayMedium),
+                  Text('Browse', style: theme.textTheme.displayMedium),
                   const SizedBox(height: 6),
-                  Text('New releases, music videos, charts, genres and more.', style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 18),
+                  Text('Find your next favorite. Explore songs, releases, genres and videos.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.bzText2)),
+                  const SizedBox(height: 24),
+                  _buildYouTubeHero(theme),
+                  const SizedBox(height: 26),
                   Text('Explore by genre', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 10),
                   // Capsule pill genre rail — spec §2.3 tab indicators use
@@ -190,7 +277,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                     ),
                   ),
                   const SizedBox(height: 22),
-                  Text('Discover', style: theme.textTheme.titleLarge),
+                  Text('Catalog and collections', style: theme.textTheme.titleLarge),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -205,7 +292,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                 return SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final destination = _browseDestinations[index];
+                      final destination = _browseDestinations[index + 1];
                       return Material(
                         color: theme.bzSurface1,
                         borderRadius: BorderRadius.circular(BzRadius.card),
@@ -248,7 +335,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                         ),
                       );
                     },
-                    childCount: _browseDestinations.length,
+                    childCount: _browseDestinations.length - 1,
                   ),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columns,
