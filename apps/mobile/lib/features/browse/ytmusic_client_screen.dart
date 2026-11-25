@@ -68,25 +68,47 @@ String _ytArtist(Map<String, dynamic> item) {
   return 'YouTube Music';
 }
 
-Widget _ytArtwork(String? url) {
-  final parsed = url == null ? null : Uri.tryParse(url);
-  if (parsed == null || parsed.scheme != 'https') {
-    return const SizedBox(
-      width: 48, height: 48,
-      child: Center(child: BzSvgIcon(name: 'music-note', size: 24)),
-    );
-  }
-  return ClipRRect(
-    borderRadius: BorderRadius.circular(8),
-    child: Image.network(
-      url!, width: 48, height: 48, fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const SizedBox(
-        width: 48, height: 48,
-        child: Center(child: BzSvgIcon(name: 'music-note', size: 24)),
+/// Artwork is real provider imagery when available. The locally-rendered
+/// gradient is a neutral, branded fallback — never invented album artwork.
+Widget _ytArtwork(String? url) => Builder(
+  builder: (context) {
+    final theme = Theme.of(context);
+    final fallback = Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(BzRadius.artwork),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [theme.bzSurface2, theme.bzSurface1],
+        ),
+        border: Border.all(color: theme.bzSeparator),
       ),
-    ),
-  );
-}
+      child: Center(
+        child: BzBnoteMark(size: 23, color: theme.bzText2),
+      ),
+    );
+    final parsed = url == null ? null : Uri.tryParse(url);
+    if (parsed == null || parsed.scheme != 'https' || parsed.host.isEmpty) {
+      return fallback;
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(BzRadius.artwork),
+      child: Image.network(
+        url!,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        cacheWidth: (48 * MediaQuery.devicePixelRatioOf(context)).round(),
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => fallback,
+        loadingBuilder: (_, image, progress) =>
+            progress == null ? image : fallback,
+      ),
+    );
+  },
+);
 
 Widget _ytRow(
   Map<String, dynamic> item, {
@@ -502,14 +524,40 @@ class _YouTubeMusicClientScreenState
                         child: ListView(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
                           children: [
-                            Text('Explore YouTube Music',
-                                style: theme.textTheme.headlineSmall),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Public catalog • videos use the official player. '
-                              'Your personal YouTube Music library is not connected.',
-                              style: theme.textTheme.bodySmall
-                                  ?.copyWith(color: theme.bzText2),
+                            Container(
+                              padding: const EdgeInsets.all(BzSpacing.s20),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [theme.bzSurface1, theme.bzSurface2],
+                                ),
+                                borderRadius: BorderRadius.circular(BzRadius.sheet),
+                                border: Border.all(color: theme.bzSeparator),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  BzBnoteMark(size: 28, color: theme.bzText1),
+                                  const SizedBox(width: BzSpacing.s16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Explore YouTube Music',
+                                          style: theme.textTheme.headlineSmall),
+                                        const SizedBox(height: BzSpacing.s8),
+                                        Text(
+                                          'Public catalog • videos use the official player. '
+                                          'Your personal YouTube Music library is not connected.',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(color: theme.bzText2),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 18),
                             Wrap(
