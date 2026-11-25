@@ -34,6 +34,59 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
     });
   });
 
+  it('returns separate Spotify/Deezer shelves with the original provider ranking', async () => {
+    spotify.search.mockResolvedValue({kind:'ok',value:[{
+      providerTrackId:'4iV5W9uYEdYUVa79Axb7Rh',title:'Song',artist:'Artist',
+    }]});
+    deezer.search.mockResolvedValue({kind:'ok',value:[{
+      providerTrackId:'3135556',title:'Song',artist:'Artist',
+    }]});
+    const result = await registry().searchMusic('  Song   name ');
+    expect(result.query).toBe('Song name');
+    expect(result.partial).toBe(false);
+    expect(result.providers.map(item => item.providerId)).toEqual(['spotify','deezer']);
+    expect(result.providers[0].result).toMatchObject({kind:'ok',value:[{providerTrackId:'4iV5W9uYEdYUVa79Axb7Rh'}]});
+    expect(result.providers[1].result).toMatchObject({kind:'ok',value:[{providerTrackId:'3135556'}]});
+    expect(internal.search).not.toHaveBeenCalled();
+  });
+
+  it('isolates a Spotify outage without discarding Deezer search results', async () => {
+    spotify.search.mockRejectedValue(new Error('upstream down'));
+    deezer.search.mockResolvedValue({kind:'ok',value:[{providerTrackId:'3135556'}]});
+    const response = await registry().searchMusic('afrobeats');
+    expect(response.partial).toBe(true);
+    expect(response.providers[0].result).toMatchObject({kind:'error',code:'MUSIC_PROVIDER_UNAVAILABLE'});
+    expect(response.providers[1].result).toMatchObject({kind:'ok',value:[{providerTrackId:'3135556'}]});
+  });
+
+  it('coalesces concurrent typeahead requests for the same normalized query', async () => {
+    let finishSpotify!: (result: any) => void;
+    spotify.search.mockImplementation(() => new Promise(resolve => {
+      finishSpotify = resolve;
+    }));
+    deezer.search.mockResolvedValue({kind:'ok',value:[]});
+    const instance = registry();
+    const first = instance.searchMusic('  Jazz   Trio ');
+    const second = instance.searchMusic('jazz trio');
+    expect(first).toBe(second);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(spotify.search).toHaveBeenCalledTimes(1);
+    expect(deezer.search).toHaveBeenCalledTimes(1);
+    finishSpotify({kind:'ok',value:[{providerTrackId:'spotify-1'}]});
+    const result = await first;
+    expect(result.partial).toBe(false);
+    expect(result.query).toBe('Jazz Trio');
+  });
+
+  it('does not spend upstream search quota for invalid music queries', async () => {
+    const instance = registry();
+    const result = await instance.searchMusic('x');
+    expect(result).toEqual({query:'x',providers:[],partial:false});
+    expect(spotify.search).not.toHaveBeenCalled();
+    expect(deezer.search).not.toHaveBeenCalled();
+  });
+
   it('skips upstreams for invalid input', async () => {
     await expect(registry().searchAll('x')).resolves.toEqual({ query: 'x', providers: [] });
     expect(internal.search).not.toHaveBeenCalled();
