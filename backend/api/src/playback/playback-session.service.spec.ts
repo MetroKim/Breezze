@@ -10,6 +10,7 @@ import { PlaybackSessionService } from './playback-session.service';
 describe('PlaybackSessionService', () => {
   const prisma = {
     track: { findUnique: jest.fn() },
+    catalogPlaybackMatch: { findUnique: jest.fn() },
     playbackSession: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -79,24 +80,56 @@ describe('PlaybackSessionService', () => {
     });
   });
 
-  it('plays a YouTube discovery result through its exact catalogue recording', async () => {
+  it('links external song ID to a separately verified Breezze recording', async () => {
     const externalTrackId = 'bz:youtube_music:abcdefghijk';
-    prisma.track.findUnique.mockResolvedValue({ id: 'master-id', source: 'youtube_music' });
-    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/master.m4a', expiresAt: new Date(Date.now() + 60_000) });
-    const session = await service.start('user-1', 'TZ', { externalTrackId, requestedQuality: 'AAC_256' });
-    expect(prisma.track.findUnique).toHaveBeenCalledWith({
-      where: { externalId: externalTrackId }, select: { id: true, source: true },
+    prisma.catalogPlaybackMatch.findUnique.mockResolvedValue({
+      playableTrackId: 'master-id',
+      status: 'approved',
+      verifiedAt: new Date(),
+      playableTrack: { source: 'breezze_internal', externalId: null },
+    });
+    resolver.resolve.mockResolvedValue({
+      streamUrl: 'https://cdn.example/master.m4a',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const result = await service.start('user-1', 'TZ', {
+      externalTrackId, requestedQuality: 'AAC_256',
+    });
+    expect(prisma.catalogPlaybackMatch.findUnique).toHaveBeenCalledWith({
+      where: {
+        source_externalTrackId: { source: 'youtube_music', externalTrackId },
+      },
+      select: {
+        playableTrackId: true, status: true, verifiedAt: true,
+        playableTrack: { select: { source: true, externalId: true } },
+      },
     });
     expect(resolver.resolve).toHaveBeenCalledWith('user-1', {
       trackId: 'master-id', requestedQuality: 'AAC_256',
     }, 'TZ');
-    expect(session.playback.streamUrl).toBe('https://cdn.example/master.m4a');
+    expect(result.playback.streamUrl).toBe('https://cdn.example/master.m4a');
   });
 
-  it('does not create a session for a song without a matching recording', async () => {
-    prisma.track.findUnique.mockResolvedValue(null);
-    await expect(service.start('user-1', 'TZ', { externalTrackId: 'bz:youtube_music:abcdefghijk' }))
-      .rejects.toThrow('AUDIO_SOURCE_UNAVAILABLE');
+  it.each([
+    null,
+    {
+      playableTrackId: 'metadata-id', status: 'approved', verifiedAt: new Date(),
+      playableTrack: { source: 'youtube_music', externalId: 'bz:youtube_music:abcdefghijk' },
+    },
+    {
+      playableTrackId: 'master-id', status: 'pending', verifiedAt: null,
+      playableTrack: { source: 'breezze_internal', externalId: null },
+    },
+    {
+      playableTrackId: 'master-id', status: 'approved', verifiedAt: null,
+      playableTrack: { source: 'breezze_internal', externalId: null },
+    },
+  ])('rejects unapproved or missing catalog playback matches: %p', async (match) => {
+    prisma.catalogPlaybackMatch.findUnique.mockResolvedValue(match);
+    await expect(service.start('user-1', 'TZ', {
+      externalTrackId: 'bz:youtube_music:abcdefghijk',
+    })).rejects.toThrow('AUDIO_SOURCE_UNAVAILABLE');
+    expect(resolver.resolve).not.toHaveBeenCalled();
     expect(prisma.playbackSession.create).not.toHaveBeenCalled();
   });
 

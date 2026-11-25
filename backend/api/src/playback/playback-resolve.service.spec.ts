@@ -14,6 +14,7 @@ describe('PlaybackResolveService', () => {
   const prisma = {
     track: { findUnique: jest.fn() },
     contentTakedownCase: { findFirst: jest.fn() },
+    audioAssetVariant: { findMany: jest.fn() },
   };
   const providers = { get: jest.fn() };
   let service: PlaybackResolveService;
@@ -34,6 +35,10 @@ describe('PlaybackResolveService', () => {
     jest.clearAllMocks();
     // Native signed media paths can only be used by Breezze-owned assets.
     prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source: 'breezze_internal' });
+    prisma.audioAssetVariant.findMany.mockResolvedValue([
+      { quality: 'AAC_128', mimeType: 'audio/mp4', sizeBytes: 1024n },
+      { quality: 'AAC_256', mimeType: 'audio/mp4', sizeBytes: 2048n },
+    ]);
     rights.decide.mockResolvedValue({
       allowed: true,
       previewOnly: false,
@@ -154,6 +159,27 @@ describe('PlaybackResolveService', () => {
     });
     expect(rights.decide).toHaveBeenCalledWith({
       userId: 'user-1', trackId: 'track-1', action: 'stream.full', territory: 'TZ',
+    });
+    expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
+  });
+
+  it('rejects authorized track metadata when no verified media variant is ready', async () => {
+    prisma.audioAssetVariant.findMany.mockResolvedValue([]);
+    await expect(service.resolve('user-1', request, 'TZ'))
+      .rejects.toThrow('LICENSED_AUDIO_VARIANT_NOT_READY');
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+  });
+
+  it('downgrades to the best available verified asset without signing a missing quality', async () => {
+    prisma.audioAssetVariant.findMany.mockResolvedValue([
+      { quality: 'AAC_128', mimeType: 'audio/mp4', sizeBytes: 1024n },
+    ]);
+    signer.createPlaybackUrl.mockReturnValue({
+      url: 'https://cdn.example/audio/signed',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(service.resolve('user-1', request, 'TZ')).resolves.toMatchObject({
+      quality: 'AAC_128', codec: 'aac',
     });
     expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'AAC_128', null);
   });

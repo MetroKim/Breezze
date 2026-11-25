@@ -5,6 +5,7 @@ import { MediaSigner } from './media-signer.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
 import { validateProviderAudioSource } from './provider-stream-guard';
 import { verifySignedMediaObject } from './signed-media-presence';
+import { selectReadyAudioVariant } from './audio-variant-selection';
 
 @Injectable()
 export class PlaybackResolveService {
@@ -61,10 +62,29 @@ export class PlaybackResolveService {
     if (decision.previewOnly) {
       throw new NotAcceptableException('PREVIEW_ONLY');
     }
-    const variant = decision.qualityRestriction ?? dto.requestedQuality ?? 'AAC_256';
+    // A metadata row and rights permission do not prove R2 contains bytes.
+    // Require a provisioned, verified asset row for this exact internal track.
+    // Falling back to a lower quality is safe; upgrading beyond the user's
+    // requested quality or the rights ceiling is not.
+    const assets = await this.prisma.audioAssetVariant.findMany({
+      where: {
+        trackId: dto.trackId,
+        status: 'ready',
+        verifiedAt: { not: null },
+        sizeBytes: { gt: 0 },
+      },
+      select: { quality: true, mimeType: true, sizeBytes: true },
+    });
+    const variant = selectReadyAudioVariant(
+      assets.filter((asset): asset is typeof asset & { sizeBytes: bigint } =>
+        asset.sizeBytes !== null),
+      dto.requestedQuality ?? 'AAC_256',
+      decision.qualityRestriction,
+    );
+    if (!variant) throw new NotFoundException('LICENSED_AUDIO_VARIANT_NOT_READY');
     const signed = this.signer.createPlaybackUrl(
       dto.trackId,
-      variant,
+      variant.quality,
       decision.expiresAt,
     );
     // In production a signed URL alone is not proof that the media exists.
@@ -75,7 +95,9 @@ export class PlaybackResolveService {
       trackId: dto.trackId,
       streamUrl: signed.url,
       expiresAt: signed.expiresAt,
-      codec: variant === 'LOSSLESS' || variant === 'HI_RES' ? 'flac' : 'aac',
+      codec: variant.quality === 'LOSSLESS' || variant.quality === 'HI_RES' ? 'flac' : 'aac',
+      mimeType: variant.mimeType,
+      quality: variant.quality,
       attribution: decision.attribution,
       previewOnly: decision.previewOnly,
     };

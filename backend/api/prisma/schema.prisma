@@ -267,9 +267,48 @@ model Track {
   playlistItems PlaylistItem[]
   downloads DownloadRecord[]
   videoAsset VideoAsset?
+  audioVariants AudioAssetVariant[]
+  playbackMatches CatalogPlaybackMatch[]
   lyrics Lyrics?
 
   @@index([artistId, title])
+}
+
+/// Verified R2 content, independent of catalogue metadata and rights grants.
+/// The object key is deterministic: audio/{trackId}/{quality}. Never store
+/// temporary bearer URLs or provider tokens in this table.
+model AudioAssetVariant {
+  trackId       String
+  quality       String
+  status        String    @default("pending")
+  mimeType      String
+  sizeBytes     BigInt?
+  sha256        String?
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  track         Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, quality])
+  @@index([status, verifiedAt])
+}
+
+/// A third-party catalogue ID may point to a *separately ingested* recording.
+/// Only verified, approved mappings to Breezze-internal assets are resolvable.
+/// A metadata row, fingerprint suggestion or similarity score alone is never
+/// sufficient to grant native playback.
+model CatalogPlaybackMatch {
+  source          String
+  externalTrackId String
+  playableTrackId String
+  status          String    @default("pending")
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  playableTrack   Track     @relation(fields: [playableTrackId], references: [id], onDelete: Cascade)
+
+  @@id([source, externalTrackId])
+  @@index([playableTrackId, status])
 }
 
 model TerritoryAvailability {

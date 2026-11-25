@@ -40,14 +40,32 @@ export class PlaybackSessionService {
           input.trackId || input.providerId || input.providerTrackId || input.canonicalTrackId) {
         throw new ConflictException('INVALID_EXTERNAL_SESSION_REQUEST');
       }
-      const track = await this.prisma.track.findUnique({
-        where: { externalId: input.externalTrackId },
-        select: { id: true, source: true },
+      // A YouTube Music metadata row is not audio. This mapping is independently
+      // approved only for a separately ingested Breezze recording; the internal
+      // playback resolver subsequently verifies full rights and media presence.
+      const match = await this.prisma.catalogPlaybackMatch.findUnique({
+        where: {
+          source_externalTrackId: {
+            source: 'youtube_music',
+            externalTrackId: input.externalTrackId,
+          },
+        },
+        select: {
+          playableTrackId: true,
+          status: true,
+          verifiedAt: true,
+          playableTrack: { select: { source: true, externalId: true } },
+        },
       });
-      if (!track || track.source !== 'youtube_music') {
+      if (!match || match.status !== 'approved' || match.verifiedAt === null ||
+          match.playableTrack.source !== 'breezze_internal' ||
+          match.playableTrack.externalId !== null) {
         throw new NotFoundException('AUDIO_SOURCE_UNAVAILABLE');
       }
-      input = { trackId: track.id, requestedQuality: input.requestedQuality };
+      input = {
+        trackId: match.playableTrackId,
+        requestedQuality: input.requestedQuality,
+      };
     }
 
     if (input.providerId || input.providerTrackId || input.canonicalTrackId) {
