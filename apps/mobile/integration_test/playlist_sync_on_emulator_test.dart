@@ -1,0 +1,363 @@
+import 'dart:io';
+import 'dart:math';
+
+import 'package:breezze/app/bootstrap.dart' show FavoriteTrack;
+import 'package:breezze/app/playlist_store.dart';
+import 'package:breezze/core/api/breezze_api.dart';
+import 'package:breezze/core/database/catalog_id_map_dao.dart';
+import 'package:breezze/core/database/db_instance.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:path_provider/path_provider.dart';
+
+const _edge = String.fromEnvironment(
+  'BREEZZE_API_URL',
+  defaultValue: 'https://breezze-api-edge.ykw8vmq7ph.workers.dev',
+);
+
+class _TemporaryAccount {
+  _TemporaryAccount(this.api, this.email, this.password);
+
+  final BreezzeApi api;
+  final String email;
+  final String password;
+  bool creationAttempted = false;
+  String? userId;
+
+  Future<AuthResponse> register() async {
+    creationAttempted = true;
+    final result = await api.register(email, password,
+        displayName: 'Breezze Android QA');
+    api.accessToken = result.accessToken;
+    userId = result.userId;
+    return result;
+  }
+
+  Future<void> cleanup() async {
+    if (!creationAttempted) return;
+    if (api.accessToken == null) {
+      // Recovery for registration that completed server-side before a
+      // device network timeout prevented receiving the token.
+      try {
+        api.accessToken = (await api.login(email, password)).accessToken;
+      } on BreezzeApiException catch (error) {
+        if (error.code == 'INVALID_CREDENTIALS' ||
+            error.code == 'HTTP_401') {
+          return; // No account was created.
+        }
+        rethrow;
+      }
+    }
+    await api.deleteAccount(password: password);
+    await expectLater(api.me(), throwsA(isA<BreezzeApiException>()));
+  }
+}
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('Android emulator: offline persistence and two-device live '
+      'playlist synchronization', (tester) async {
+    final seed = DateTime.now().microsecondsSinceEpoch.toString() +
+        Random.secure().nextInt(0x7fffffff).toRadixString(16);
+    final root = await Directory(
+      (await getApplicationDocumentsDirectory()).path +
+          '/breezze-qa-' + seed,
+    ).create(recursive: true);
+
+    final apiA = BreezzeApi(baseUrl: _edge);
+    final apiOther = BreezzeApi(baseUrl: _edge);
+    final apiSecond = BreezzeApi(baseUrl: _edge);
+    final accounts = <_TemporaryAccount>[
+      _TemporaryAccount(
+        apiA,
+        'breezze-android-qa-' + seed + '-a@example.com',
+        'QA-Android-' + seed + '-A!Strong',
+      ),
+      _TemporaryAccount(
+        apiOther,
+        'breezze-android-qa-' + seed + '-b@example.com',
+        'QA-Android-' + seed + '-B!Strong',
+      ),
+    ];
+    try {
+      final owner = accounts[0];
+      final other = accounts[1];
+      final ownerAuth = await owner.register();
+      await other.register();
+      final secondSession = await apiSecond.login(owner.email, owner.password);
+      apiSecond.accessToken = secondSession.accessToken;
+      expect(ownerAuth.accessToken, isNot(secondSession.accessToken));
+      expect(ownerAuth.userId, equals(secondSession.userId));
+
+      final canonicalA = await apiA.resolveCatalogTrack(
+        externalId: 'bz:youtube_music:wZaotY2V3gY',
+        source: 'youtube_music',
+        title: 'Love',
+        artistName: 'Keyshia Cole',
+        durationSec: 256,
+      );
+      final canonicalB = await apiA.resolveCatalogTrack(
+        externalId: 'bz:youtube_music:qH1wbp-FASo',
+        source: 'youtube_music',
+        title: 'Love in This Club (feat. Young Jeezy)',
+        artistName: 'Usher',
+        durationSec: 260,
+      );
+      final tracks = [
+        FavoriteTrack(
+          id: canonicalA['id'] as String,
+          title: 'Love',
+          artist: 'Keyshia Cole',
+          durationMs: 256000,
+        ),
+        FavoriteTrack(
+          id: canonicalB['id'] as String,
+          title: 'Love in This Club (feat. Young Jeezy)',
+          artist: 'Usher',
+          durationMs: 260000,
+        ),
+      ];
+      expect(tracks[0].id, isNot(tracks[1].id));
+
+      final dirA = await Directory(root.path + '/phone-a')
+          .create(recursive: true);
+      final dirB = await Directory(root.path + '/phone-b')
+          .create(recursive: true);
+      PlaylistStore phoneA = PlaylistStore(
+        documentsDirectory: () async => dirA,
+      );
+      final phoneB = PlaylistStore(
+        documentsDirectory: () async => dirB,
+      );
+      final userId = owner.userId!;
+      final playlistId = await phoneA.create(userId, 'Offline on phone A');
+
+      // Search/Browse results use provider IDs, not canonical UUIDs.
+      // Exercise the exact user-facing playlist-add path on the emulator.
+      const externalA = 'bz:youtube_music:wZaotY2V3gY';
+      const externalB = 'bz:youtube_music:qH1wbp-FASo';
+      await phoneA.addTrack(userId, playlistId, const FavoriteTrack(
+        id: externalA,
+        title: 'Love',
+        artist: 'Keyshia Cole',
+        durationMs: 256000,
+      ));
+      await phoneA.addTrack(userId, playlistId, const FavoriteTrack(
+        id: externalB,
+        title: 'Love in This Club (feat. Young Jeezy)',
+        artist: 'Usher',
+        durationMs: 260000,
+      ));
+      await phoneA.rename(userId, playlistId, 'Recovered on phone B');
+      expect(await phoneA.pendingCount(userId), 4);
+
+      // Simulate the device losing its network while offline edits remain
+      // durable on its real Android filesystem.
+      final offlineApi = BreezzeApi(
+        baseUrl: _edge,
+        client: MockClient((_) async => http.Response(
+          '{"error":"OFFLINE"}', 503,
+        )),
+      )..accessToken = ownerAuth.accessToken;
+      expect(await phoneA.syncOwner(
+        userId, offlineApi, ownerStillActive: () => true,
+      ), isFalse);
+      expect(await phoneA.pendingCount(userId), 4);
+
+      // Process restart: build a fresh store over the SAME Android files.
+      phoneA = PlaylistStore(documentsDirectory: () async => dirA);
+      expect((await phoneA.load(userId)).single.tracks.length, 2);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      expect(await phoneA.pendingCount(userId), 0);
+      final catalogMap = CatalogIdMapDao(breezzeDb);
+      expect(await catalogMap.lookup(externalA), tracks[0].id);
+      expect(await catalogMap.lookup(externalB), tracks[1].id);
+
+      // The local cache adopts the server's canonical IDs before future
+      // cross-device edits, while provider mapping remains available.
+      await phoneA.mergeRemote(userId, await apiA.playlists());
+
+      // Device B downloads only this owner's cloud state, including songs.
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      final restored = (await phoneB.load(userId)).single;
+      expect(restored.id, playlistId);
+      expect(restored.name, 'Recovered on phone B');
+      expect(restored.tracks.map((track) => track.id).toList(), [
+        tracks[0].id, tracks[1].id,
+      ]);
+      expect((await apiOther.playlists())
+          .any((playlist) => playlist['id'] == playlistId), isFalse);
+      await expectLater(
+        apiOther.getPlaylist(playlistId),
+        throwsA(isA<BreezzeApiException>()),
+      );
+
+      // Pin survives offline mode, process restart and cloud hydration.
+      expect(await phoneA.setPinned(userId, playlistId, true), isTrue);
+      final previousPin = PlaylistStore(documentsDirectory: () async => dirA);
+      expect((await previousPin.load(userId)).single.isPinned, isTrue);
+      expect(await phoneA.syncOwner(
+        userId, offlineApi, ownerStillActive: () => true,
+      ), isFalse);
+      phoneA = PlaylistStore(documentsDirectory: () async => dirA);
+      expect((await phoneA.load(userId)).single.isPinned, isTrue);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect((await phoneB.load(userId)).single.isPinned, isTrue);
+      expect((await apiSecond.getPlaylist(playlistId))['isPinned'], isTrue);
+      await expectLater(
+        apiOther.pinPlaylist(playlistId, false),
+        throwsA(isA<BreezzeApiException>()),
+      );
+      expect(await phoneB.setPinned(userId, playlistId, false), isTrue);
+      expect(await phoneB.syncOwner(
+        userId, apiSecond, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneA.mergeRemote(userId, await apiA.playlists());
+      expect((await phoneA.load(userId)).single.isPinned, isFalse);
+
+      // Multi-select must preserve all chosen memberships in a single
+      // device-local write and replay the same two songs on a second login
+      // session after an offline app restart. Provider IDs are user-facing;
+      // the already-synced original playlist has the canonical UUID.
+      final multiOne = await phoneA.create(userId, 'Selected mix one');
+      final multiTwo = await phoneA.create(userId, 'Selected mix two');
+      const selectedSong = FavoriteTrack(
+        id: externalA, title: 'Love', artist: 'Keyshia Cole',
+        durationMs: 256000,
+      );
+      expect(await phoneA.addTrackToMany(
+        userId, [playlistId, multiOne, multiTwo, multiTwo], selectedSong,
+      ), 2);
+      expect(await phoneA.addTrackToMany(
+        userId, [multiOne, multiTwo], selectedSong,
+      ), 0);
+      expect(await phoneA.pendingCount(userId), 4);
+      expect(await phoneA.syncOwner(
+        userId, offlineApi, ownerStillActive: () => true,
+      ), isFalse);
+      phoneA = PlaylistStore(documentsDirectory: () async => dirA);
+      expect((await phoneA.load(userId))
+          .where((playlist) => playlist.id == multiOne ||
+              playlist.id == multiTwo)
+          .every((playlist) => playlist.tracks.single.id == externalA), isTrue);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      expect(await phoneA.pendingCount(userId), 0);
+
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      final allOnB = {
+        for (final playlist in await phoneB.load(userId))
+          playlist.id: playlist,
+      };
+      expect(allOnB.keys.toSet(), {playlistId, multiOne, multiTwo});
+      expect(allOnB[playlistId]!.tracks, hasLength(2));
+      expect(allOnB[multiOne]!.tracks.map((item) => item.id), [tracks[0].id]);
+      expect(allOnB[multiTwo]!.tracks.map((item) => item.id), [tracks[0].id]);
+      expect((await apiOther.playlists())
+          .any((row) => row['id'] == multiOne || row['id'] == multiTwo), isFalse);
+
+      // Restore the original single-playlist fixture for subsequent reorder
+      // and deletion checks. Each helper playlist is removed from the cloud.
+      await phoneA.delete(userId, multiOne);
+      await phoneA.delete(userId, multiTwo);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect((await phoneB.load(userId)).single.id, playlistId);
+
+      // Device A changes the order OFFLINE while device B adds a real
+      // third song. A's first replay gets a membership mismatch, then
+      // preserves B's newly added song when rebasing its order.
+      final canonicalC = await apiA.resolveCatalogTrack(
+        externalId: 'bz:youtube_music:UZWmtxLiiFE',
+        source: 'youtube_music',
+        title: 'L-O-V-E',
+        artistName: 'Nat King Cole',
+        durationSec: 155,
+      );
+      final third = FavoriteTrack(
+        id: canonicalC['id'] as String,
+        title: 'L-O-V-E',
+        artist: 'Nat King Cole',
+        durationMs: 155000,
+      );
+      await phoneA.reorderTracks(userId, playlistId, 0, 1);
+      expect(await phoneA.pendingCount(userId), 1);
+      await phoneB.addTrack(userId, playlistId, third);
+      expect(await phoneB.syncOwner(
+        userId, apiSecond, ownerStillActive: () => true,
+      ), isTrue);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      expect(await phoneA.pendingCount(userId), 0);
+      await phoneA.mergeRemote(userId, await apiA.playlists());
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect((await phoneB.load(userId)).single.tracks
+          .map((track) => track.id).toList(), [
+        tracks[1].id, tracks[0].id, third.id,
+      ]);
+
+      // B reorders again, A sees that order after cloud reconciliation.
+      await phoneB.reorderTracks(userId, playlistId, 0, 2);
+      expect(await phoneB.syncOwner(
+        userId, apiSecond, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneA.mergeRemote(userId, await apiA.playlists());
+      expect((await phoneA.load(userId)).single.tracks
+          .map((track) => track.id).toList(), [
+        tracks[0].id, third.id, tracks[1].id,
+      ]);
+
+      // A removes a real song; B must see its removal across sessions.
+      await phoneA.removeTrack(userId, playlistId, third.id);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect((await phoneB.load(userId)).single.tracks
+          .map((track) => track.id).toList(), [
+        tracks[0].id, tracks[1].id,
+      ]);
+
+      await phoneA.delete(userId, playlistId);
+      expect(await phoneA.syncOwner(
+        userId, apiA, ownerStillActive: () => true,
+      ), isTrue);
+      await phoneB.mergeRemote(userId, await apiSecond.playlists());
+      expect(await phoneB.load(userId), isEmpty);
+    } finally {
+      // One failed cleanup must not prevent removal of the OTHER account.
+      // Never print temporary credentials in CI output.
+      final cleanupFailures = <String>[];
+      for (final account in accounts.reversed) {
+        try {
+          await account.cleanup();
+        } catch (error) {
+          cleanupFailures.add('Account cleanup: ' +
+              error.runtimeType.toString());
+        }
+      }
+      try {
+        await root.delete(recursive: true);
+      } catch (error) {
+        cleanupFailures.add('Device fixture cleanup: ' +
+            error.runtimeType.toString());
+      }
+      if (cleanupFailures.isNotEmpty) {
+        fail('Breezze acceptance cleanup incomplete: ' +
+            cleanupFailures.join(', '));
+      }
+    }
+  });
+}

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
@@ -7,12 +9,14 @@ import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../app/playlist_store.dart';
 import '../../app/saved_album_store.dart';
+import '../../app/followed_artist_store.dart';
 import '../../app/library_section_preferences_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
+import 'add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
 
@@ -42,9 +46,41 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final _playlistStore = PlaylistStore();
   String _ownerId = 'guest';
   List<UserPlaylist> _playlists = [];
+  Set<String> _pendingPlaylistIds = {};
   List<FavoriteTrack> _favorites = [];
   List<SavedAlbum> _albums = [];
+  List<FollowedArtist> _followedArtists = [];
   var _loading = true;
+  int _refreshGeneration = 0;
+
+  bool _ownerStillActive(String ownerId) {
+    if (!mounted) return false;
+    final active = ref.read(authSessionProvider);
+    final current = active is AuthSignedIn ? active.userId : 'guest';
+    return current == ownerId;
+  }
+
+  List<FavoriteTrack> _decodeCloudFavorites(List<Map<String, dynamic>> cloud) {
+    final favorites = <FavoriteTrack>[];
+    for (final row in cloud) {
+      final trackId = row['trackId'];
+      final rawTrack = row['track'];
+      if (trackId is! String || trackId.isEmpty ||
+          rawTrack is! Map || rawTrack['title'] is! String ||
+          rawTrack['artist'] is! Map ||
+          (rawTrack['artist'] as Map)['name'] is! String ||
+          rawTrack['duration'] is! num) {
+        throw const FormatException('Invalid cloud favorites record');
+      }
+      favorites.add(FavoriteTrack(
+        id: trackId,
+        title: rawTrack['title'] as String,
+        artist: (rawTrack['artist'] as Map)['name'] as String,
+        durationMs: ((rawTrack['duration'] as num) * 1000).toInt(),
+      ));
+    }
+    return favorites;
+  }
 
   @override
   void initState() {
@@ -53,14 +89,42 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _refresh() async {
+    final generation = ++_refreshGeneration;
     final auth = ref.read(authSessionProvider);
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
+    var favorites = await ref.read(favoritesStoreProvider).load(ownerId: ownerId);
     var playlists = await _playlistStore.load(ownerId);
     final albumStore = SavedAlbumStore();
     var savedAlbums = await albumStore.load(ownerId);
+    final followedStore = FollowedArtistStore();
+    var followedArtists = await followedStore.load(ownerId);
     final visibleSections = await LibrarySectionPreferencesStore().load(ownerId);
     if (auth is AuthSignedIn) {
+      try {
+        // Upload local edits before accepting a remote snapshot. If an edit
+        // remains pending, the transactional DAO will refuse reconciliation.
+        await ref.read(outboxSyncProvider).drainIfSignedIn();
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        final cloud = await ref
+            .read(authSessionProvider.notifier)
+            .api.fetchCloudFavorites();
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        final validated = _decodeCloudFavorites(cloud);
+        if (await ref.read(favoritesStoreProvider)
+            .reconcileCloud(ownerId, validated)) {
+          favorites = await ref.read(favoritesStoreProvider)
+              .load(ownerId: ownerId);
+        }
+      } catch (_) {
+        // Preserve the owner's offline favorites and unsynced changes.
+      }
+      if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+        return;
+      }
       try {
         await albumStore.syncWithCloud(
           ownerId,
@@ -76,7 +140,37 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         // Keep owner-specific cached albums and pending operations offline.
       }
       try {
-        final remote = await ref.read(authSessionProvider.notifier).api.playlists();
+        final api = ref.read(authSessionProvider.notifier).api;
+        await followedStore.syncWithCloud(
+          ownerId, api,
+          ownerStillActive: () =>
+              _ownerStillActive(ownerId) && generation == _refreshGeneration,
+        );
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        followedArtists = await followedStore.load(ownerId);
+      } catch (_) {
+        // Preserve cached follows and queued pin edits while offline.
+      }
+      try {
+        final api = ref.read(authSessionProvider.notifier).api;
+        // Replay durable offline edits before accepting a remote snapshot.
+        // Failed edits remain journaled, and mergeRemote preserves their
+        // local state instead of replacing it with stale server data.
+        await _playlistStore.syncOwner(
+          ownerId,
+          api,
+          ownerStillActive: () =>
+              _ownerStillActive(ownerId) && generation == _refreshGeneration,
+        );
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
+        final remote = await api.playlists();
+        if (!_ownerStillActive(ownerId) || generation != _refreshGeneration) {
+          return;
+        }
         await _playlistStore.mergeRemote(ownerId, remote);
         playlists = await _playlistStore.load(ownerId);
       } catch (_) {
@@ -86,12 +180,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final currentAuth = ref.read(authSessionProvider);
     final currentOwnerId =
         currentAuth is AuthSignedIn ? currentAuth.userId : 'guest';
-    if (!mounted || currentOwnerId != ownerId) return;
+    if (!mounted || currentOwnerId != ownerId ||
+        generation != _refreshGeneration) return;
+    // Pending status is read from the same atomic playlist file as the edits.
+    final pendingPlaylistIds = await _playlistStore.pendingPlaylistIds(ownerId);
+    if (!mounted || !_ownerStillActive(ownerId) ||
+        generation != _refreshGeneration) return;
     setState(() {
       _ownerId = ownerId;
       _favorites = favorites;
       _playlists = playlists;
+      _pendingPlaylistIds = pendingPlaylistIds;
       _albums = savedAlbums;
+      _followedArtists = followedArtists;
       _visibleSections = visibleSections;
       if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
         _selected = _allSections.firstWhere(_visibleSections.contains);
@@ -100,7 +201,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     });
   }
 
-  Future<void> _createPlaylist() async {
+  Future<String?> _requestPlaylistName() async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -126,25 +227,65 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
     );
     controller.dispose();
-    if (name == null || name.trim().isEmpty) return;
+    final normalized = name?.trim();
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  Future<void> _createPlaylist() async {
+    final name = await _requestPlaylistName();
+    if (name == null || !mounted) return;
     final auth = ref.read(authSessionProvider);
-    String? remoteId;
-    if (auth is AuthSignedIn) {
-      try {
-        final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name.trim());
-        remoteId = remote['id'] as String?;
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Playlist saved locally; account sync is unavailable.')),
-          );
-        }
-      }
-    }
-    await _playlistStore.create(_ownerId, name, id: remoteId);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    await _playlistStore.create(ownerId, name);
     if (!mounted) return;
     setState(() => _selected = 'Playlists');
     await _refresh();
+  }
+
+  Future<void> _addFavoriteToPlaylists(FavoriteTrack track) async {
+    final initialAuth = ref.read(authSessionProvider);
+    final ownerId =
+        initialAuth is AuthSignedIn ? initialAuth.userId : 'guest';
+    bool stillOwner() {
+      if (!mounted || _ownerId != ownerId) return false;
+      final current = ref.read(authSessionProvider);
+      return initialAuth is AuthSignedIn
+          ? current is AuthSignedIn && current.userId == ownerId
+          : initialAuth is AuthSignedOut && current is AuthSignedOut;
+    }
+
+    final int? count;
+    try {
+      count = await addSongToMultiplePlaylists(
+      context: context,
+      store: _playlistStore,
+      ownerId: ownerId,
+      track: track,
+      ownerStillActive: stillOwner,
+      requestPlaylistName: _requestPlaylistName,
+      );
+    } catch (_) {
+      if (stillOwner()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not update playlists. Try again.'),
+        ));
+      }
+      return;
+    }
+    if (count == null || count == 0 || !stillOwner()) return;
+    if (initialAuth is AuthSignedIn) {
+      unawaited(_playlistStore.syncOwner(
+        ownerId,
+        ref.read(authSessionProvider.notifier).api,
+        ownerStillActive: stillOwner,
+      ));
+    }
+    ref.read(playlistRefreshSignalProvider.notifier).state++;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(count == 1
+          ? 'Added to 1 playlist'
+          : 'Added to $count playlists'),
+    ));
   }
 
   void _openPlaylist(UserPlaylist playlist) {
@@ -278,6 +419,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     ref.listen<AuthState>(authSessionProvider, (previous, next) => _refresh());
     ref.listen<int>(playlistRefreshSignalProvider, (previous, next) => _refresh());
     ref.listen<int>(savedAlbumRefreshProvider, (previous, next) => _refresh());
+    ref.listen<int>(favoritesRefreshProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
     final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
@@ -309,7 +451,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           // --radius-pill. Solid active fill, no outline chips: the Apple
           // Music Library filter treatment (quiet chrome, artwork forward).
           SizedBox(
-            height: 36,
+            height: 52,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
@@ -318,7 +460,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               itemBuilder: (context, index) {
                 final section = sections[index];
                 final active = section == _selected;
-                return _LibraryPill(
+                return BzFilterPill(
                   label: section,
                   active: active,
                   onTap: () => setState(() {
@@ -431,10 +573,52 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           title: Text(playlist.name,
               maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
-            '${playlist.tracks.length} songs · On this device',
+            '${playlist.tracks.length} songs · '
+            '${_ownerId == 'guest' ? 'On this device' : _pendingPlaylistIds.contains(playlist.id) ? 'Pending sync' : 'Synced'}'
+            '${playlist.isPinned ? ' · Pinned' : ''}',
             style: TextStyle(color: theme.bzText2),
           ),
-          trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
+          trailing: PopupMenuButton<String>(
+            tooltip: 'Playlist options',
+            icon: const BzSvgIcon(name: 'more-vertical'),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'pin',
+                child: Row(
+                  children: [
+                    BzSvgIcon(name: playlist.isPinned ? 'star-filled' : 'star'),
+                    const SizedBox(width: 12),
+                    Text(playlist.isPinned ? 'Unpin playlist' : 'Pin to top'),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (action) async {
+              if (action != 'pin') return;
+              final owner = _ownerId;
+              try {
+                if (!await _playlistStore.setPinned(
+                  owner, playlist.id, !playlist.isPinned,
+                )) return;
+                if (!mounted || !_ownerStillActive(owner)) return;
+                await _refresh();
+                if (!mounted || !_ownerStillActive(owner)) return;
+                final pending = await _playlistStore.pendingPlaylistIds(owner);
+                if (!mounted || !_ownerStillActive(owner)) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(pending.contains(playlist.id)
+                      ? 'Pin saved on this device. Cloud sync will retry.'
+                      : 'Playlist pin updated.'),
+                ));
+              } catch (_) {
+                if (mounted && _ownerStillActive(owner)) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Could not update playlist pin.'),
+                  ));
+                }
+              }
+            },
+          ),
           onTap: () => _openPlaylist(playlist),
         );
       },
@@ -484,20 +668,101 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ),
           ),
           title: Text(album.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(album.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => AppleAlbumCatalogScreen(
-              albumId: album.id,
-              title: album.title,
-              artist: album.artist,
-              artworkUrl: album.artworkUrl,
-              appleUrl: album.catalogUrl,
-            ),
-          )),
-          trailing: IconButton(
-            tooltip: 'Remove saved album',
+          subtitle: Text(
+            album.artist + (album.isPinned ? ' · Pinned' : ''),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () {
+            // A historical saved Apple/iTunes album numeric ID is not a
+            // Deezer album ID. Never silently open a different recording.
+            final uri = Uri.tryParse(album.catalogUrl ?? '');
+            if (uri == null || uri.scheme != 'https' ||
+                !(uri.host == 'www.deezer.com' || uri.host == 'deezer.com') ||
+                !RegExp(r'^/album/[0-9]+').hasMatch(uri.path)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text(
+                  'This saved album uses an older catalog source. '
+                  'Search for it on Deezer to view its current tracklist.',
+                )),
+              );
+              return;
+            }
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => DeezerAlbumCatalogScreen(
+                albumId: album.id,
+                title: album.title,
+                artist: album.artist,
+                artworkUrl: album.artworkUrl,
+                deezerUrl: album.catalogUrl,
+              ),
+            ));
+          },
+          trailing: PopupMenuButton<String>(
+            tooltip: 'Album actions',
             icon: const BzSvgIcon(name: 'more-vertical'),
-            onPressed: () async {
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                value: 'pin',
+                child: Row(
+                  children: [
+                    BzSvgIcon(name: album.isPinned ? 'star-filled' : 'star'),
+                    const SizedBox(width: 12),
+                    Text(album.isPinned ? 'Unpin album' : 'Pin to top'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'remove',
+                child: Text('Remove from Library'),
+              ),
+            ],
+            onSelected: (action) async {
+              if (action == 'pin') {
+                final owner = _ownerId;
+                if (!_ownerStillActive(owner)) return;
+                try {
+                  final store = SavedAlbumStore();
+                  final changed = await store.setPinned(
+                    owner, album.id, !album.isPinned,
+                  );
+                  if (!changed || !_ownerStillActive(owner)) return;
+                  final auth = ref.read(authSessionProvider);
+                  if (auth is AuthSignedIn && auth.userId == owner) {
+                    try {
+                      await store.syncWithCloud(
+                        owner,
+                        ref.read(authSessionProvider.notifier).api,
+                        ownerStillActive: () => _ownerStillActive(owner) &&
+                            ref.read(authSessionProvider) is AuthSignedIn,
+                      );
+                    } catch (_) {
+                      if (mounted && _ownerStillActive(owner)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text(
+                            'Pin saved on this device. Cloud sync will retry.',
+                          )),
+                        );
+                      }
+                    }
+                  }
+                  if (_ownerStillActive(owner)) {
+                    ref.invalidate(isAlbumPinnedProvider(
+                      (ownerId: owner, albumId: album.id),
+                    ));
+                    ref.read(savedAlbumRefreshProvider.notifier).state++;
+                  }
+                } catch (_) {
+                  if (_ownerStillActive(owner)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not update album pin.')),
+                    );
+                  }
+                }
+                return;
+              }
+              if (action != 'remove') return;
+              final owner = _ownerId;
+              if (!_ownerStillActive(owner)) return;
               final shouldRemove = await showDialog<bool>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
@@ -515,10 +780,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ],
                 ),
               );
-              if (shouldRemove != true || !mounted) return;
+              if (shouldRemove != true || !mounted ||
+                  !_ownerStillActive(owner)) return;
               try {
                 final store = SavedAlbumStore();
-                final owner = _ownerId;
                 await store.remove(owner, album.id);
                 final auth = ref.read(authSessionProvider);
                 if (auth is AuthSignedIn && auth.userId == owner) {
@@ -542,9 +807,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     }
                   }
                 }
-                if (!mounted) return;
+                if (!_ownerStillActive(owner)) return;
                 ref.invalidate(isAlbumSavedProvider(
-                  (ownerId: _ownerId, albumId: album.id),
+                  (ownerId: owner, albumId: album.id),
+                ));
+                ref.invalidate(isAlbumPinnedProvider(
+                  (ownerId: owner, albumId: album.id),
                 ));
                 ref.read(savedAlbumRefreshProvider.notifier).state++;
               } catch (_) {
@@ -635,30 +903,126 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemBuilder: (_, __) => const BzSkeletonTrackRow(),
     );
-    final grouped = <String, List<FavoriteTrack>>{};
+
+    final songsByArtist = <String, List<FavoriteTrack>>{};
     for (final track in _favorites) {
-      grouped.putIfAbsent(track.artist.trim().isEmpty ? 'Unknown artist' : track.artist, () => []).add(track);
+      final name = track.artist.trim().isEmpty
+          ? 'Unknown artist'
+          : track.artist.trim();
+      songsByArtist.putIfAbsent(name, () => []).add(track);
     }
-    if (grouped.isEmpty) return _emptyState(theme, 'No artists yet', 'Save songs to build your artist library.');
-    final artists = grouped.entries.toList()..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    final followedNames = <String>{};
+    final artists = <({
+      String name,
+      String? key,
+      bool pinned,
+      List<FavoriteTrack> tracks,
+    })>[];
+    for (final artist in _followedArtists) {
+      final name = artist.displayName;
+      followedNames.add(name.toLowerCase());
+      artists.add((
+        name: name,
+        key: artist.artistKey,
+        pinned: artist.isPinned,
+        tracks: songsByArtist[name] ?? const <FavoriteTrack>[],
+      ));
+    }
+    for (final entry in songsByArtist.entries) {
+      if (followedNames.contains(entry.key.toLowerCase())) continue;
+      artists.add((
+        name: entry.key,
+        key: null,
+        pinned: false,
+        tracks: entry.value,
+      ));
+    }
+    if (artists.isEmpty) {
+      return _emptyState(
+        theme, 'No artists yet',
+        'Follow artists or save their songs to build your library.',
+      );
+    }
+    artists.sort((a, b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+      if ((a.key != null) != (b.key != null)) return a.key != null ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 150),
       itemCount: artists.length,
       itemBuilder: (context, index) {
         final entry = artists[index];
         return ListTile(
-          leading: CircleAvatar(backgroundColor: theme.bzSurface2, child: BzSvgIcon(name: 'mic', color: theme.bzText1)),
-          title: Text(entry.key),
-          subtitle: Text('${entry.value.length} saved songs'),
-          trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ArtistDetailScreen(
-                artist: entry.key,
-                savedTracks: entry.value,
-              ),
-            ),
+          leading: CircleAvatar(
+            backgroundColor: theme.bzSurface2,
+            child: BzSvgIcon(name: 'mic', color: theme.bzText1),
           ),
+          title: Text(entry.name),
+          subtitle: Text(
+            '${entry.tracks.length} saved songs'
+            '${entry.key == null ? '' : ' · Following'}'
+            '${entry.pinned ? ' · Pinned' : ''}',
+          ),
+          trailing: entry.key == null
+              ? BzSvgIcon(name: 'chevron-right', color: theme.bzText2)
+              : PopupMenuButton<String>(
+                  tooltip: 'Artist options',
+                  icon: const BzSvgIcon(name: 'more-vertical'),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'pin',
+                      child: Row(
+                        children: [
+                          BzSvgIcon(name: entry.pinned ? 'star-filled' : 'star'),
+                          const SizedBox(width: 12),
+                          Text(entry.pinned ? 'Unpin artist' : 'Pin to top'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (action) async {
+                    if (action != 'pin' || entry.key == null) return;
+                    final owner = _ownerId;
+                    try {
+                      final store = FollowedArtistStore();
+                      if (!await store.setPinned(
+                        owner, entry.key!, !entry.pinned,
+                      )) return;
+                      if (!mounted || !_ownerStillActive(owner)) return;
+                      await _refresh();
+                      if (!mounted || !_ownerStillActive(owner)) return;
+                      final pending = await store.pendingCount(owner);
+                      if (!mounted || !_ownerStillActive(owner)) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(pending > 0
+                            ? 'Pin saved on this device. Cloud sync will retry.'
+                            : 'Artist pin updated.'),
+                      ));
+                    } catch (_) {
+                      if (mounted && _ownerStillActive(owner)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not update artist pin.'),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ArtistDetailScreen(
+                artist: entry.name,
+                savedTracks: entry.tracks,
+                canonicalArtistId: entry.key != null &&
+                        entry.key!.startsWith('catalog:')
+                    ? entry.key!.substring('catalog:'.length)
+                    : null,
+              ),
+            ));
+            if (mounted) await _refresh();
+          },
         );
       },
     );
@@ -734,22 +1098,44 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 subtitle: Text(fav.artist,
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 onTap: () => _playOne(i),
-                trailing: IconButton(
-                  tooltip: 'Remove from favorites',
-                  icon: SvgPicture.asset(
-                    'assets/icons/star-filled.svg',
-                    width: 20,
-                    height: 20,
-                    colorFilter: ColorFilter.mode(
-                      theme.bzWarning,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  onPressed: () async {
-                    await ref.read(favoritesStoreProvider).toggle(fav, ownerId: _ownerId);
-                    await ref.read(outboxSyncProvider).drainIfSignedIn();
-                    _refresh();
+                trailing: PopupMenuButton<String>(
+                  tooltip: 'Song actions',
+                  icon: const BzSvgIcon(name: 'more-vertical', size: 20),
+                  onSelected: (action) async {
+                    if (action == 'playlists') {
+                      await _addFavoriteToPlaylists(fav);
+                    } else if (action == 'remove') {
+                      final owner = _ownerId;
+                      try {
+                        await ref.read(favoritesStoreProvider)
+                            .toggle(fav, ownerId: owner);
+                        if (!mounted || !_ownerStillActive(owner)) return;
+                        ref.read(favoritesRefreshProvider.notifier).state++;
+                        try {
+                          await ref.read(outboxSyncProvider).drainIfSignedIn();
+                        } catch (_) {
+                          // Offline removal stays in the durable owner outbox.
+                        }
+                      } catch (_) {
+                        if (mounted && _ownerStillActive(owner)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content:
+                                Text('Could not remove saved song.')),
+                          );
+                        }
+                      }
+                    }
                   },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'playlists',
+                      child: Text('Add to Playlists'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: Text('Remove from Library'),
+                    ),
+                  ],
                 ),
               );
             },
@@ -805,46 +1191,3 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 /// Library section pill — capsule (spec --radius-pill) with a solid
 /// text1 fill when active, surface2 when not. 36pt visual height with
 /// a generous hit area for the 44pt minimum.
-class _LibraryPill extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _LibraryPill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      button: true,
-      selected: active,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: BzMotion.fastMs),
-          curve: const Cubic(0.22, 1, 0.36, 1),
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? theme.bzText1 : theme.bzSurface2,
-            borderRadius: BorderRadius.circular(BzRadius.capsule),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: BzType.subheadline,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? theme.bzBackground : theme.bzText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

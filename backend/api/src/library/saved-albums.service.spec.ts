@@ -21,7 +21,7 @@ describe('Saved catalog albums: owner isolation and rights boundaries', () => {
     });
     expect(prisma.userSavedCatalogAlbum.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: 'user-a', source: 'apple_itunes' },
+        where: { userId: 'user-a', source: 'deezer' },
         take: 101,
       }),
     );
@@ -32,7 +32,7 @@ describe('Saved catalog albums: owner isolation and rights boundaries', () => {
     await expect(service.listSavedAlbums('user-b', 'album-from-user-a'))
       .rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.userSavedCatalogAlbum.findFirst).toHaveBeenCalledWith({
-      where: { userId: 'user-b', id: 'album-from-user-a' },
+      where: { userId: 'user-b', id: 'album-from-user-a', source: 'deezer' },
       select: { id: true },
     });
     expect(prisma.userSavedCatalogAlbum.findMany).not.toHaveBeenCalled();
@@ -58,15 +58,15 @@ describe('Saved catalog albums: owner isolation and rights boundaries', () => {
       artist: 'Artist',
       genres: ['Afrobeats', 'Afrobeats', 'Dance'],
       isCompilation: true,
-      artworkUrl: 'https://is1-ssl.mzstatic.com/image.jpg',
-      catalogUrl: 'https://music.apple.com/album/123',
+      artworkUrl: 'https://cdn-images.dzcdn.net/images/cover/abcdef/250x250-000000-80-0-0.jpg',
+      catalogUrl: 'https://www.deezer.com/album/123',
     });
     expect(prisma.userSavedCatalogAlbum.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           userId_source_externalAlbumId: {
             userId: 'user-a',
-            source: 'apple_itunes',
+            source: 'deezer',
             externalAlbumId: '123',
           },
         },
@@ -77,6 +77,34 @@ describe('Saved catalog albums: owner isolation and rights boundaries', () => {
           isCompilation: true,
         }),
       }),
+    );
+  });
+
+  it('preserves pin status on unrelated metadata updates', async () => {
+    prisma.userSavedCatalogAlbum.upsert.mockResolvedValue({ externalAlbumId: '123' });
+    await service.upsertSavedAlbum('user-a', {
+      externalAlbumId: '123', title: 'Album', artist: 'Artist',
+    });
+    expect(prisma.userSavedCatalogAlbum.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ isPinned: false }),
+        update: expect.not.objectContaining({ isPinned: expect.anything() }),
+      }),
+    );
+    await service.upsertSavedAlbum('user-a', {
+      externalAlbumId: '123', title: 'Album', artist: 'Artist', isPinned: true,
+    });
+    expect(prisma.userSavedCatalogAlbum.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ isPinned: true }),
+        update: expect.objectContaining({ isPinned: true }),
+      }),
+    );
+    await service.upsertSavedAlbum('user-a', {
+      externalAlbumId: '123', title: 'Album', artist: 'Artist', isPinned: false,
+    });
+    expect(prisma.userSavedCatalogAlbum.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ isPinned: false }) }),
     );
   });
 
@@ -97,7 +125,7 @@ describe('Saved catalog albums: owner isolation and rights boundaries', () => {
     expect(prisma.userSavedCatalogAlbum.deleteMany).toHaveBeenCalledWith({
       where: {
         userId: 'user-b',
-        source: 'apple_itunes',
+        source: 'deezer',
         externalAlbumId: '123',
       },
     });

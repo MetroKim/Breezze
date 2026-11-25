@@ -41,6 +41,35 @@ void main() {
       expect(result['recorded'], isTrue);
     });
 
+    test('downloads a private cloud favorites snapshot without mixing accounts', () async {
+      late http.Request captured;
+      final api = BreezzeApi(
+        baseUrl: 'https://api.breezze.test',
+        client: _RecordingClient((request) async {
+          captured = request;
+          return http.Response(jsonEncode({
+            'data': [
+              {
+                'trackId': 'canonical-uuid',
+                'track': {
+                  'id': 'canonical-uuid',
+                  'title': 'Cloud Song',
+                  'duration': 180,
+                  'artist': {'name': 'Cloud Artist'},
+                },
+              },
+            ],
+          }), 200);
+        }),
+      )..accessToken = 'owner-a-token';
+
+      final rows = await api.fetchCloudFavorites();
+      expect(captured.method, 'GET');
+      expect(captured.url.path, '/api/v1/library/favorites');
+      expect(captured.headers['Authorization'], 'Bearer owner-a-token');
+      expect(rows.single['trackId'], 'canonical-uuid');
+    });
+
     test('adds favorites through the authenticated library endpoint', () async {
       late http.Request captured;
       final api = BreezzeApi(

@@ -63,7 +63,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('creates a session only after full-track playback authorization', async () => {
-    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/audio' });
+    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/audio', expiresAt: new Date(Date.now() + 60_000) });
     const result = await service.start('user-1', 'tz', { trackId: 'track-1' });
     expect(resolver.resolve).toHaveBeenCalledWith('user-1', { trackId: 'track-1' }, 'TZ');
     expect(prisma.playbackSession.create).toHaveBeenCalledWith({
@@ -73,13 +73,16 @@ describe('PlaybackSessionService', () => {
       }),
       select: { id: true, startedAt: true, expiresAt: true, territory: true },
     });
-    expect(result.playback).toEqual({ streamUrl: 'https://cdn.example/audio' });
+    expect(result.playback).toEqual({
+      streamUrl: 'https://cdn.example/audio',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
   });
 
   it('plays a YouTube discovery result through its exact catalogue recording', async () => {
     const externalTrackId = 'bz:youtube_music:abcdefghijk';
     prisma.track.findUnique.mockResolvedValue({ id: 'master-id', source: 'youtube_music' });
-    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/master.m4a' });
+    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/master.m4a', expiresAt: new Date(Date.now() + 60_000) });
     const session = await service.start('user-1', 'TZ', { externalTrackId, requestedQuality: 'AAC_256' });
     expect(prisma.track.findUnique).toHaveBeenCalledWith({
       where: { externalId: externalTrackId }, select: { id: true, source: true },
@@ -98,7 +101,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('passes the requested streaming quality into full-track authorization', async () => {
-    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/audio' });
+    resolver.resolve.mockResolvedValue({ streamUrl: 'https://cdn.example/audio', expiresAt: new Date(Date.now() + 60_000) });
     await service.start('user-1', 'tz', {
       trackId: 'track-1',
       requestedQuality: 'LOSSLESS',
@@ -116,7 +119,7 @@ describe('PlaybackSessionService', () => {
   });
 
   it('resolves provider playback before creating a provider-bound session', async () => {
-    resolver.resolveProvider.mockResolvedValue({ streamUrl: 'https://provider.example/stream' });
+    resolver.resolveProvider.mockResolvedValue({ streamUrl: 'https://provider.example/stream', expiresAt: new Date(Date.now() + 60_000) });
     await service.start('user-1', 'TZ', {
       providerId: 'audius', providerTrackId: 'remote-1', canonicalTrackId: 'track-1',
     });
@@ -351,4 +354,33 @@ describe('PlaybackSessionService', () => {
     });
     expect(tx.listeningEvent.create).not.toHaveBeenCalled();
   });
+  it('caps a playback session at the shorter authorized media-grant lifetime', async () => {
+    const expiry = new Date(Date.now() + 90_000);
+    resolver.resolve.mockResolvedValue({
+      streamUrl: 'https://cdn.example.com/short-lease',
+      expiresAt: expiry,
+    });
+
+    await service.start('user-1', 'TZ', { trackId: 'track-1' });
+
+    expect(prisma.playbackSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ expiresAt: expiry }),
+    }));
+  });
+
+  it('rejects a missing or already expired grant before creating a session', async () => {
+    resolver.resolve.mockResolvedValueOnce({
+      streamUrl: 'https://cdn.example.com/without-expiry',
+    });
+    await expect(service.start('user-1', 'TZ', { trackId: 'track-1' }))
+      .rejects.toThrow('PLAYBACK_GRANT_EXPIRED');
+    resolver.resolve.mockResolvedValueOnce({
+      streamUrl: 'https://cdn.example.com/expired',
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    await expect(service.start('user-1', 'TZ', { trackId: 'track-1' }))
+      .rejects.toThrow('PLAYBACK_GRANT_EXPIRED');
+    expect(prisma.playbackSession.create).not.toHaveBeenCalled();
+  });
+
 });

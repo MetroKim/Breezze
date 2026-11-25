@@ -22,6 +22,26 @@ class _RecordingClient extends http.BaseClient {
 
 void main() {
   group('BreezzeApi playlist synchronization', () {
+    test('posts a client UUID when replaying a local playlist creation', () async {
+      late http.Request captured;
+      final api = BreezzeApi(
+        baseUrl: 'https://api.breezze.test',
+        client: _RecordingClient((request) async {
+          captured = request;
+          return http.Response('{"data":{"id":"client-id","name":"Offline"}}', 200);
+        }),
+      )..accessToken = 'owner-a';
+
+      await api.createPlaylist('Offline', id: 'client-id');
+      expect(captured.method, 'POST');
+      expect(captured.url.path, '/api/v1/playlists');
+      expect(captured.headers['Authorization'], 'Bearer owner-a');
+      expect(jsonDecode(captured.body), {
+        'id': 'client-id',
+        'name': 'Offline',
+      });
+    });
+
     test('loads a playlist with server-ordered track metadata', () async {
       late http.Request captured;
       final api = BreezzeApi(

@@ -1,10 +1,16 @@
 # Breezze
 
-> Development and production deployments have moved to [MetroKim/Breezze](https://github.com/MetroKim/Breezze). This repository preserves earlier releases, branches, issues and pull requests. Open new changes in the consolidated repository.
-
 **A free, listener-first music platform built with Flutter and NestJS.**
 
 Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
+
+> **Unified v6 master specification:** [One authoritative v5+v6 architecture and execution ledger](docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md) supersedes both draft versions. Reuse the existing Flutter player, Drift outbox, NestJS/Prisma backend and Cloudflare Workers. Advanced AI/DSP, Supabase identity cutover and collaborative features are explicitly gated; they are not considered complete merely because a module is listed.
+
+## Active implementation
+
+The production-target client is Flutter in `apps/mobile`, with NestJS in `backend/api` and the Python discovery service in `backend/ytmusicapi`. The unused Kotlin/Chordline app trees have been removed from this checkout; their historical commits remain in Git. License and attribution obligations are retained and must be reviewed before distribution. Run Flutter builds from `apps/mobile`.
+
+**Auth migration:** `main` still contains its working legacy authentication endpoints. Supabase Auth and the custom login screens are being integrated separately; do not delete or disable the live auth path before that rollout passes integration tests.
 
 ## Product boundaries
 
@@ -13,7 +19,7 @@ Breezze is an independent product. It is not affiliated with or endorsed by YouT
 - No artist portal, artist upload workflow, subscriptions, billing, memberships or paywalls in this release.
 - Artist and album pages are listener-facing catalog experiences only.
 - Search metadata is not a playback licence. Playback requires a backend-authorized source with applicable rights.
-- YouTube Music through `ytmusicapi` is metadata/discovery only. Audius is an in-app playback source for eligible public, ungated, API-accessible tracks. Breezze owns the playback UI and queue; provider sources never require opening another app.
+- The only external music catalogue providers are YouTube Music (through `ytmusicapi`, metadata/discovery only) and Deezer (catalogue metadata plus any officially available short previews). Breezze owns the playback UI and queue.
 - Breezze does not extract YouTube audio, bypass provider access controls, or re-host third-party recordings.
 
 ## Repository layout
@@ -24,28 +30,27 @@ packages/design_system/    Breezze tokens, themes, components and SVG icons
 packages/audio_contracts/  Playback state, queue and engine contracts
 packages/api_client/       Typed Breezze API client
 backend/api/               NestJS API, Prisma/PostgreSQL, Redis and BullMQ
+backend/ytmusicapi/         Python music metadata/discovery adapter
 infra/cloudflare/          API edge, WAF, rate limits and public metadata cache
 docs/                      Product, design, architecture, legal and release records
 ```
 
-## Open the app in GitHub Codespaces (or any Linux workspace)
+## Launch Breezze on Linux or GitHub Codespaces
 
-From the repository root, run:
+Run `bash run.sh` from the repository root. It automatically opens the Flutter
+application under `apps/mobile`, installs dependencies, generates Drift database
+code, prepares browser SQLite assets, and starts the native Linux desktop when
+a GUI is available. In GitHub Codespaces/headless environments, it starts a
+browser preview on port 8080; open that port in the **Ports** panel.
 
-```bash
-bash run.sh
-```
+The Linux runner is tracked in Git to support `flutter run -d linux` after
+app dependencies and generated database code are ready. Use `bash run.sh linux`
+to force native Linux, or `bash run.sh web` for the browser. Set
+`BREEZZE_API_URL` to use a different backend and `BREEZZE_PORT` to change
+the preview port.
 
-The launcher finds `apps/mobile`, fetches Flutter dependencies, generates Drift
-database code, downloads the pinned WebAssembly database for browser builds, and
-opens the app on port 8080 in Codespaces/headless Linux. Use the **Ports** panel
-to open the forwarded port. With a graphical Linux session, `bash run.sh linux`
-launches the native desktop runner. To use a different backend, set
-`BREEZZE_API_URL`; to use a different preview port, set `BREEZZE_PORT`.
-
-Do not invoke `flutter run` from the monorepo root: `pubspec.yaml` belongs to
-`apps/mobile`. The Linux runner is checked in; Android/iOS/macOS/Windows platform
-generation remains available through `apps/mobile/tool/generate_platform_targets.sh`.
+Do not run `flutter run` from the monorepo root: `pubspec.yaml` lives in
+`apps/mobile`.
 
 ## Quick start
 
@@ -83,7 +88,7 @@ The local API defaults to `http://localhost:3000`; Swagger is exposed at `/api/d
 
 - Flutter uses one global `PlayerController` backed by the shared audio-engine adapter.
 - The NestJS backend owns canonical track identity, provider selection, rights checks and playback resolution.
-- Audius public ungated tracks may be resolved through its official API; gated or API-restricted tracks are rejected.
+- Audius and Jamendo are removed. Full songs require separately authorized recordings with valid territorial `stream.full` rights; neither YouTube Music metadata nor Deezer preview links grant full-song streaming permissions.
 - YouTube Music metadata is never passed to the native audio engine as a playable source.
 - Audio is streamed directly from an approved provider to the device by default. Cloudflare Workers and NestJS do not proxy audio segments.
 - Local files remain user-controlled. Offline downloads require explicit download rights and backend authorization.
@@ -109,7 +114,7 @@ The Flutter codebase targets Android, iOS, Web, Linux, macOS and Windows. Build 
 
 ## Current verification
 
-The current main baseline includes the merged provider, playback and backend-hardening work through commit `bbb61f565812ad3a6a7458c1e1bef02dff5b2406`. Its post-merge quality workflow [45008430816](https://github.com/MetroKim/MetroMusic/actions/runs/45008430816) passed all 7 jobs. The in-app experience contract is proposed in [PR #33](https://github.com/MetroKim/MetroMusic/pull/33); remaining product implementation and acceptance evidence are tracked in [Issue #27](https://github.com/MetroKim/MetroMusic/issues/27).
+The pre-cleanup `main` baseline `c74b98cdf3e17dee26367cc2d3237d09f76bbf0b` passed [CI](https://github.com/MetroKim/Breezze/actions/runs/45165004967), [Flutter web preview smoke](https://github.com/MetroKim/Breezze/actions/runs/45165004943), and [CodeQL](https://github.com/MetroKim/Breezze/actions/runs/45165004941). Cleanup commits require their own post-change CI checks; this paragraph does not claim physical-device or streaming-rights verification.
 
 Breezze's one-million-active-listener goal is an engineering target, not a measured capacity claim. Production deployment, provider rights approval, load testing and physical-device certification remain release gates.
 

@@ -1,0 +1,102 @@
+name: Breezze Android Playlist Emulator Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/breezze-android-playlist-acceptance.yml
+      - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
+      - apps/mobile/lib/core/api/breezze_api.dart
+      - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
+      - apps/mobile/integration_test/native_playback_on_emulator_test.dart
+      - apps/mobile/lib/features/player/player_controller.dart
+      - apps/mobile/lib/core/audio/audio_service_bridge.dart
+      - apps/mobile/lib/core/audio/playback_queue_store.dart
+      - packages/audio_contracts/lib/src/queue_manager.dart
+      - apps/mobile/pubspec.yaml
+      - apps/mobile/lib/app/playlist_store.dart
+      - apps/mobile/lib/app/saved_album_store.dart
+      - apps/mobile/lib/app/bootstrap.dart
+      - apps/mobile/lib/features/catalog/catalog_detail_screens.dart
+      - apps/mobile/lib/features/search/search_screen.dart
+      - apps/mobile/lib/app/search_history_store.dart
+      - apps/mobile/lib/features/library/library_screen.dart
+
+permissions:
+  contents: read
+
+concurrency:
+  group: breezze-android-playlist-acceptance
+  cancel-in-progress: true
+
+jobs:
+  emulator-acceptance:
+    name: Android device offline and production cloud sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate native Android runner
+        working-directory: apps/mobile
+        run: bash tool/generate_platform_targets.sh
+      - name: Resolve Flutter dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+      - name: Generate Drift database code
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+      # Flutter's generated Android Gradle project downloads Kotlin plugins
+      # from Maven Central. CI can receive transient HTTP 429 responses.
+      # Cache resolved artifacts and retry only the build preparation, never
+      # the production-writing integration test itself.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-breezze-android-gradle-${{ hashFiles('apps/mobile/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-breezze-android-gradle-
+      - name: Prebuild Android debug with dependency backoff
+        working-directory: apps/mobile
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if flutter build apk --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Android dependency resolution failed after five attempts" >&2
+              exit 1
+            fi
+            delay=$((15 * attempt * attempt))
+            echo "Gradle dependency fetch failed; retrying after ${delay}s" >&2
+            sleep "$delay"
+          done
+      - name: Enable KVM acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Run real Android filesystem and production API acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: |
+            flutter devices
+            cd apps/mobile && flutter test integration_test/playlist_sync_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev && flutter test integration_test/artist_pin_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev && flutter test integration_test/native_playback_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev

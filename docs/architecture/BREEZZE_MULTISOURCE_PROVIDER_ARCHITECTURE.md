@@ -8,7 +8,7 @@
 
 Breezze adopts a multi-source architecture. It is not a YouTube Music wrapper and it is not tied to one catalogue or playback vendor.
 
-Audius integration scope: Breezze uses the official Audius REST API for catalogue search and the official `/tracks/{track_id}/stream` endpoint for public, ungated tracks. The adapter rejects gated releases and tracks whose API access is explicitly restricted. It does not implement gated-release signatures, downloads, uploads or redistribution. Configure `AUDIUS_ENABLED=false` to disable it; `AUDIUS_API_URL` defaults to `https://api.audius.co/v1`; `AUDIUS_API_KEY` is optional for read-only use and raises the documented free-tier quota when configured. A free developer key can be obtained from the Audius developer portal.
+**Current external provider scope (24 November 2026):** YouTube Music (metadata/search via `ytmusicapi`) and Deezer (metadata/search and eligible short previews) only. Audius and Jamendo have been removed from the registry and repository. This does not create full-track streaming rights for either remaining source.
 
 Breezze owns:
 - The listener-facing product, navigation, library, playlists, favorites and history.
@@ -90,7 +90,7 @@ Retry only transient failures, with bounded exponential backoff and jitter. Neve
 | Provider | Catalogue | Native playback | Download | Role |
 |---|---:|---:|---:|---|
 | YouTube Music via ytmusicapi | Yes, best-effort | No | No | Metadata/discovery only |
-| Audius official API | Yes | Public, ungated tracks only | No | First third-party native audio provider; gated/API-restricted tracks are denied |
+| Deezer public catalogue API | Yes | Only eligible short previews | No | Discovery and previews; no full-track stream right |
 | Breezze licensed media/CDN | Internal catalogue | Yes, only with explicit rights record | Only with download rights | First-party authorized media |
 | User-owned local files | Local metadata | Yes, on supported platforms | Already local | User-controlled playback |
 | Additional licensed providers | When integrated | Only after rights/terms approval | Only if explicitly licensed | Future pluggable sources |
@@ -163,7 +163,7 @@ Breezze has no subscriptions, tiers, payment flows or artist portal in this rele
 - [ ] Add server-controlled registry and provider enable/priority configuration.
 - [ ] Add contract tests for every capability and unsupported operation.
 - [ ] Add provider-specific recording mappings and source provenance.
-- [x] Register Audius as the first official API playback adapter; only public, ungated tracks are eligible.
+- [x] Register only YouTube Music and Deezer as external music providers; reject removed provider IDs.
 
 ### Phase 2 — Catalogue
 - [ ] Complete typed search across songs, artists, albums, playlists and videos.
@@ -174,7 +174,7 @@ Breezze has no subscriptions, tiers, payment flows or artist portal in this rele
 ### Phase 3 — Playback
 
 The shared Flutter engine uses `just_audio`; Linux and Windows use the `just_audio_media_kit` platform implementation with the corresponding native audio libraries. Android/iOS expose one `audio_service` media session whose commands delegate to the same global `PlayerController` (there is no second player). The native runner generator configures Android foreground media playback and iOS audio background mode. Platform build success is not a substitute for real-device playback certification. Desktop media-session adapters are registered for macOS, Web, Linux MPRIS and Windows SMTC. Linux MPRIS does not currently expose seek through the audio_service platform interface; validate the actual controls on each target.
-- [x] Add a backend provider playback resolver; Audius uses its official stream endpoint and rejects gated/API-restricted tracks.
+- [x] Keep the backend playback resolver rights-gated; do not authorize full audio based on YouTube Music or Deezer metadata.
 - [ ] Complete canonical recording mappings, territory policy and same-recording failover before enabling additional providers.
 - [ ] Return short-lived, typed playback grants, never provider-specific secrets.
 - [ ] Resolve queue entries when they reach the front.

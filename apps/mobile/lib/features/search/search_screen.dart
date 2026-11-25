@@ -1,4 +1,5 @@
 import '../free_music/device_audio.dart';
+import '../video/device_video.dart';
 import '../player/now_playing_screen.dart';
 import 'dart:async';
 
@@ -14,6 +15,7 @@ import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../app/search_history_store.dart';
 import '../../app/playlist_store.dart';
+import '../library/add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -228,15 +230,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _removeHistory(String query) async {
-    final history = await _history.remove(query);
-    if (!mounted) return;
-    setState(() => _recentSearches = history);
+    final owner = ref.read(authSessionProvider);
+    final ownerId = owner is AuthSignedIn ? owner.userId : 'guest';
+    try {
+      final history = await _history.remove(query);
+      if (!mounted) return;
+      final active = ref.read(authSessionProvider);
+      if ((active is AuthSignedIn ? active.userId : 'guest') != ownerId) return;
+      setState(() => _recentSearches = history);
+    } catch (_) {
+      // Search stays usable if personal history cannot be written.
+    }
   }
 
   Future<void> _clearHistory() async {
-    await _history.clear();
-    if (!mounted) return;
-    setState(() => _recentSearches = []);
+    final owner = ref.read(authSessionProvider);
+    final ownerId = owner is AuthSignedIn ? owner.userId : 'guest';
+    try {
+      await _history.clear();
+      if (!mounted) return;
+      final active = ref.read(authSessionProvider);
+      if ((active is AuthSignedIn ? active.userId : 'guest') != ownerId) return;
+      setState(() => _recentSearches = []);
+    } catch (_) {
+      // Search stays usable if personal history cannot be written.
+    }
   }
 
   void _reuseSearch(String query) {
@@ -281,111 +299,114 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _showAddToPlaylist(BzTrack track) async {
-    final auth = ref.read(authSessionProvider);
-    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final initialAuth = ref.read(authSessionProvider);
+    final ownerId =
+        initialAuth is AuthSignedIn ? initialAuth.userId : 'guest';
+    bool stillOwner() {
+      if (!mounted) return false;
+      final current = ref.read(authSessionProvider);
+      return initialAuth is AuthSignedIn
+          ? current is AuthSignedIn && current.userId == ownerId
+          : initialAuth is AuthSignedOut && current is AuthSignedOut;
+    }
+
     final store = PlaylistStore();
-    var playlists = await store.load(ownerId);
-    String? selectedId;
-
-    Future<String?> create(String name) async {
-      String? remoteId;
-      if (auth is AuthSignedIn) {
-        try {
-          final remote = await ref.read(authSessionProvider.notifier).api.createPlaylist(name);
-          remoteId = remote['id'] as String?;
-        } catch (_) {}
-      }
-      await store.create(ownerId, name, id: remoteId);
-      return remoteId;
-    }
-
-    if (playlists.isEmpty) {
-      final name = await _requestPlaylistName();
-      if (name == null || name.isEmpty) return;
-      await create(name);
-      playlists = await store.load(ownerId);
-      if (playlists.isNotEmpty) selectedId = playlists.first.id;
-    } else {
-      selectedId = await showModalBottomSheet<String>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                child: Text('Add to Playlist', style: Theme.of(context).textTheme.titleLarge),
-              ),
-              for (final playlist in playlists)
-                ListTile(
-                  leading: BzBnoteMark(size: 40, color: Theme.of(context).bzText2),
-                  title: Text(playlist.name),
-                  subtitle: Text('${playlist.tracks.length} songs'),
-                  onTap: () => Navigator.of(context).pop(playlist.id),
-                ),
-              ListTile(
-                leading: BzSvgIcon(name: 'plus', color: Theme.of(context).bzAccent),
-                title: const Text('New Playlist'),
-                onTap: () => Navigator.of(context).pop('__new__'),
-              ),
-            ],
-          ),
-        ),
+    final int? count;
+    try {
+      count = await addSongToMultiplePlaylists(
+      context: context,
+      store: store,
+      ownerId: ownerId,
+      track: FavoriteTrack(
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        durationMs: track.duration.inMilliseconds,
+      ),
+      ownerStillActive: stillOwner,
+      requestPlaylistName: _requestPlaylistName,
       );
-      if (selectedId == '__new__') {
-        final name = await _requestPlaylistName();
-        if (name == null || name.isEmpty) return;
-        await create(name);
-        playlists = await store.load(ownerId);
-        selectedId = playlists.isEmpty ? null : playlists.first.id;
+    } catch (_) {
+      if (stillOwner()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not update playlists. Try again.'),
+        ));
       }
+      return;
     }
-
-    if (selectedId == null) return;
-    final remotePlaylist = RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(selectedId);
-    if (auth is AuthSignedIn && remotePlaylist) {
-      try {
-        await ref.read(authSessionProvider.notifier).api.addPlaylistTrack(selectedId, track.id);
-      } catch (_) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not sync this song to your playlist.')));
-        return;
-      }
+    if (count == null || count == 0 || !stillOwner()) return;
+    if (initialAuth is AuthSignedIn) {
+      unawaited(store.syncOwner(
+        ownerId,
+        ref.read(authSessionProvider.notifier).api,
+        ownerStillActive: stillOwner,
+      ));
     }
-    await store.addTrack(ownerId, selectedId, FavoriteTrack(
-      id: track.id,
-      title: track.title,
-      artist: track.artist,
-      artworkUrl: track.artworkUrl,
-      durationMs: track.duration.inMilliseconds,
-    ));
-    if (!mounted) return;
     ref.read(playlistRefreshSignalProvider.notifier).state++;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to playlist')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(count == 1
+          ? 'Added to 1 playlist'
+          : 'Added to $count playlists'),
+    ));
   }
 
   Future<void> _addFavorite(BzTrack track) async {
-    final auth = ref.read(authSessionProvider);
-    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-    final favorites = ref.read(favoritesStoreProvider);
-    if (!await favorites.isFavorite(track.id, ownerId: ownerId)) {
-      await favorites.toggle(
-        FavoriteTrack(
-          id: track.id,
-          title: track.title,
-          artist: track.artist,
-          artworkUrl: track.artworkUrl,
-          durationMs: track.duration.inMilliseconds,
-        ),
-        ownerId: ownerId,
-      );
-      await ref.read(outboxSyncProvider).drainIfSignedIn();
+    final initialAuth = ref.read(authSessionProvider);
+    final ownerId =
+        initialAuth is AuthSignedIn ? initialAuth.userId : 'guest';
+    bool stillOwner() {
+      if (!mounted) return false;
+      final current = ref.read(authSessionProvider);
+      return initialAuth is AuthSignedIn
+          ? current is AuthSignedIn && current.userId == ownerId
+          : current is AuthSignedOut || current is AuthUninitialized;
     }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Library updated')),
-    );
+
+    try {
+      final favorites = ref.read(favoritesStoreProvider);
+      final alreadySaved =
+          await favorites.isFavorite(track.id, ownerId: ownerId);
+      // An async lookup may finish after sign-out/account switching. Never
+      // write a private favorite for a session that is no longer active.
+      if (!stillOwner()) return;
+      if (!alreadySaved) {
+        await favorites.toggle(
+          FavoriteTrack(
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            artworkUrl: track.artworkUrl,
+            durationMs: track.duration.inMilliseconds,
+          ),
+          ownerId: ownerId,
+        );
+      }
+      if (!stillOwner()) return;
+      ref.invalidate(isTrackFavoriteProvider(
+        (ownerId: ownerId, trackId: track.id),
+      ));
+      ref.read(favoritesRefreshProvider.notifier).state++;
+      // The local favorite and outbox are already durable. Network failures
+      // must not hide a successful offline save or lose its retry intent.
+      try {
+        await ref.read(outboxSyncProvider).drainIfSignedIn();
+      } catch (_) {
+        // The outbox will replay the operation when the user reconnects.
+      }
+      if (!stillOwner()) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(alreadySaved
+            ? 'Already in Library'
+            : 'Saved to Library on this device'),
+      ));
+    } catch (_) {
+      if (stillOwner()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save song to Library.')),
+        );
+      }
+    }
   }
 
   void _download(BzTrack track) {
@@ -464,13 +485,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
       return;
     }
-    if (track.id.startsWith('bz:deezer:')) {
+    if (isYouTubeSongId(track.id)) {
+      // Foreground playback uses YouTube's visible player, not extracted
+      // audio or a native Breezze stream/background playback entitlement.
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: track.id.substring('bz:youtube_music:'.length),
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+      );
+      return;
+    }
+    if (isDeezerPreview(track.id) ||
+        (track.id.startsWith('bz:deezer:') && track.hasPreview)) {
       final id = track.id.replaceFirst('bz:deezer:', 'bz:deezer_preview:');
       final preview = TrackInfo(id: id, title: track.title, artist: track.artist,
-          artworkUrl: track.artworkUrl);
+          artworkUrl: track.artworkUrl, duration: const Duration(seconds: 30));
       ref.read(playerControllerProvider.notifier).playTrack(
         trackId: id, queue: [preview], startIndex: 0, origin: 'search',
-        sourceContext: 'Deezer preview',
+        sourceContext: 'Deezer preview (up to 30 seconds)',
       );
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()));
       return;
@@ -582,7 +617,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _SearchScopePill(
+                    BzFilterPill(
                       label: 'Breezze',
                       active: !_searchLibrary,
                       onTap: () {
@@ -593,7 +628,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       },
                     ),
                     const SizedBox(width: 8),
-                    _SearchScopePill(
+                    BzFilterPill(
                       label: 'Your Library',
                       active: _searchLibrary,
                       onTap: () {
@@ -609,7 +644,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      _SearchScopePill(
+                      BzFilterPill(
                         label: 'Songs',
                         active: !_searchVideos,
                         onTap: () {
@@ -622,7 +657,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      _SearchScopePill(
+                      BzFilterPill(
                         label: 'Music Videos',
                         active: _searchVideos,
                         onTap: () {
@@ -654,10 +689,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         ? Center(
                             child: Padding(
                               padding: const EdgeInsets.all(24),
-                              child: Text(
-                                _error!,
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodyMedium,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _error!,
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  OutlinedButton(
+                                    onPressed: _controller.text.trim().isEmpty
+                                        ? null
+                                        : () => _search(
+                                              _controller.text,
+                                              recordHistory: false,
+                                            ),
+                                    child: const Text('Try again'),
+                                  ),
+                                ],
                               ),
                             ),
                           )
@@ -715,13 +765,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                           )
                                         : Text(
-                                            track.id.startsWith('bz:deezer:')
-                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer preview' : 'Deezer catalog'}'
+                                            track.id.startsWith('bz:deezer:') || isDeezerPreview(track.id)
+                                                ? '${track.artist} · ${track.hasPreview ? 'Deezer preview (30s)' : 'Deezer catalog'}'
                                                 : track.id.startsWith('bz:youtube_music:')
-                                                        ? '${track.artist} · YouTube Music'
-                                                        : track.id.startsWith('bz:jamendo:')
-                                                            ? '${track.artist} · Jamendo'
-                                                            : track.artist,
+                                                    ? '${track.artist} · YouTube Music'
+                                                    : track.artist,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -735,7 +783,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                           IconButton(
                                             tooltip: track.id.startsWith('bzv:')
                                                 ? 'Watch music video'
-                                                : track.hasPreview ? 'Play preview' : 'Play',
+                                                : isYouTubeSongId(track.id)
+                                                    ? 'Play on YouTube'
+                                                    : track.hasPreview ? 'Play preview' : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
@@ -789,7 +839,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                               ],
                                               const PopupMenuItem(
                                                 value: 'playlist',
-                                                child: Text('Add to Playlist'),
+                                                child: Text('Add to Playlists'),
                                               ),
                                               const PopupMenuItem(
                                                 value: 'favorite',
@@ -837,6 +887,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return ListView(
       padding: EdgeInsets.fromLTRB(16, 12, 16, BzBreakpoints.bottomClearance(context, compact: 180)),
       children: [
+        if (_searchVideos && supportsDeviceVideo)
+          ListTile(
+            leading: const BzSvgIcon(name: 'video'),
+            title: const Text('Open a music video'),
+            onTap: () => pickDeviceVideo(context),
+          ),
         ListTile(
           leading: const BzSvgIcon(name: 'play'),
           title: const Text('Open audio files'),
@@ -913,46 +969,3 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
 /// Search scope pill — capsule (spec --radius-pill) with a solid text1
 /// fill when active, surface2 when not. Mirrors the Library section pill.
-class _SearchScopePill extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _SearchScopePill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      button: true,
-      selected: active,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: BzMotion.fastMs),
-          curve: const Cubic(0.22, 1, 0.36, 1),
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? theme.bzText1 : theme.bzSurface2,
-            borderRadius: BorderRadius.circular(BzRadius.capsule),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: BzType.subheadline,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? theme.bzBackground : theme.bzText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

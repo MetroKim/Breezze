@@ -128,10 +128,13 @@ export class CloudflareAwareThrottlerGuard
 
       // Add a second independent bucket for login attempts against one account.
       // Hash the normalized identifier so Redis keys never contain email addresses.
-      const email = req.body?.email;
+      const passwordAttempt = req.method === 'POST' &&
+        (path.endsWith('/auth/login') || path.endsWith('/auth/supabase/link-legacy'));
+      const email = path.endsWith('/auth/supabase/link-legacy')
+        ? req.body?.legacyEmail
+        : req.body?.email;
       if (
-        req.method === 'POST' &&
-        path.endsWith('/auth/login') &&
+        passwordAttempt &&
         typeof email === 'string' &&
         email.trim().length > 0
       ) {

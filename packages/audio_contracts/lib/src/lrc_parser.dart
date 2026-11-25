@@ -75,9 +75,11 @@ class LrcParser {
   static const _defaultLine = Duration(seconds: 5);
 
   static Lyrics parse(String trackId, String raw) {
+    final offsetTag = RegExp(r'\[offset:\s*([+-]?\d+)\s*\]', caseSensitive: false).firstMatch(raw);
+    final offset = Duration(milliseconds: int.tryParse(offsetTag?.group(1) ?? '') ?? 0);
     final lines = <LyricLine>[];
     for (final rawLine in raw.split('\n')) {
-      final line = _parseLine(rawLine);
+      final line = _parseLine(rawLine, offset);
       if (line != null) lines.add(line);
     }
     lines.sort((a, b) => a.start.compareTo(b.start));
@@ -97,10 +99,14 @@ class LrcParser {
     return Lyrics(trackId, withEnds);
   }
 
-  static LyricLine? _parseLine(String raw) {
+  static LyricLine? _parseLine(String raw, Duration offset) {
     final match = _lineRe.firstMatch(raw);
     if (match == null) return null;
-    final start = _toDuration(match);
+    Duration adjusted(RegExpMatch tag) {
+      final time = _toDuration(tag) - offset;
+      return time.isNegative ? Duration.zero : time;
+    }
+    final start = adjusted(match);
     final content = raw.replaceAll(_lineRe, '').trim();
     if (content.isEmpty) return null;
 
@@ -111,7 +117,7 @@ class LrcParser {
       final from = tags[i].end;
       final to = (i + 1 < tags.length) ? tags[i + 1].start : content.length;
       final word = content.substring(from, to).trim();
-      if (word.isNotEmpty) words.add(LyricWord(word, _toDuration(tags[i])));
+      if (word.isNotEmpty) words.add(LyricWord(word, adjusted(tags[i])));
     }
 
     return LyricLine(

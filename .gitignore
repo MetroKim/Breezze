@@ -44,3 +44,9 @@ downloads/
 tmp/
 .temp/
 .DS_Store
+
+# Downloaded/locally generated AI model binaries (licensed, checksummed at fetch)
+*.onnx
+*.ort
+*.safetensors
+*.gguf

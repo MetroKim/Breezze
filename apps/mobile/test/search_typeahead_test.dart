@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:breezze/app/bootstrap.dart';
+import 'package:breezze/core/auth/auth_session.dart';
+import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/features/search/search_screen.dart';
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
@@ -41,6 +43,69 @@ ProviderOp<List<ProviderTrack>> _result(String title) => ProviderOk([
       ),
     ]);
 
+class _FavoriteMemoryStore extends FavoritesStore {
+  final byOwner = <String, Set<String>>{};
+  Completer<void>? pendingLookup;
+  int writes = 0;
+
+  @override
+  Future<bool> isFavorite(String id, {String ownerId = 'guest'}) async {
+    if (pendingLookup case final pending?) await pending.future;
+    return byOwner[ownerId]?.contains(id) ?? false;
+  }
+
+  @override
+  Future<bool> toggle(FavoriteTrack track, {String ownerId = 'guest'}) async {
+    writes++;
+    final saved = byOwner.putIfAbsent(ownerId, () => {});
+    if (saved.add(track.id)) return true;
+    saved.remove(track.id);
+    return false;
+  }
+}
+
+class _SearchSignedInSession extends AuthSessionController {
+  @override
+  AuthState build() =>
+      const AuthSignedIn(userId: 'search-user-a', email: 'a@example.test');
+
+  void switchTo(String owner) {
+    state = AuthSignedIn(userId: owner, email: '$owner@example.test');
+  }
+}
+
+class _VideoDiscoveryApi extends BreezzeApi {
+  _VideoDiscoveryApi() : super(baseUrl: 'https://breezze.example.test');
+
+  @override
+  Future<Map<String, dynamic>> discoveryMusicVideos({
+    String query = 'official music video',
+  }) async => {
+        'items': query == 'no video match'
+            ? <Map<String, dynamic>>[]
+            : <Map<String, dynamic>>[
+                {
+                  'id': 'abcdefghijk',
+                  'title': 'Official Video QA',
+                  'artist': 'Breezze QA',
+                  'durationSec': 180,
+                },
+              ],
+      };
+}
+
+class _VideoSearchSession extends AuthSessionController {
+  _VideoSearchSession(this.videoApi);
+
+  final BreezzeApi videoApi;
+
+  @override
+  AuthState build() => const AuthSignedOut();
+
+  @override
+  BreezzeApi get api => videoApi;
+}
+
 void main() {
   testWidgets('typeahead debounces and discards older results', (tester) async {
     final source = _SearchSource();
@@ -66,4 +131,153 @@ void main() {
     await tester.pump();
     expect(find.text('New result'), findsOneWidget);
   });
+  testWidgets('Search save action refreshes Library without toggling an existing favorite',
+      (tester) async {
+    final source = _SearchSource();
+    final favorites = _FavoriteMemoryStore();
+    final container = ProviderContainer(overrides: [
+      catalogSourceProvider.overrideWithValue(source),
+      favoritesStoreProvider.overrideWithValue(favorites),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    await tester.enterText(find.byType(TextField), 'breezze qa');
+    await tester.pump(const Duration(milliseconds: 500));
+    source.pending['breezze qa']!.complete(_result('Save from Search'));
+    await tester.pump();
+    expect(find.text('Save from Search'), findsOneWidget);
+
+    Future<void> selectSave() async {
+      await tester.ensureVisible(find.byTooltip('Song actions'));
+      await tester.tap(find.byTooltip('Song actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add to Library').last);
+      await tester.pumpAndSettle();
+    }
+
+    expect(container.read(favoritesRefreshProvider), 0);
+    await selectSave();
+    expect(favorites.byOwner['guest'], {'bz:youtube_music:abcdefghijk'});
+    expect(favorites.writes, 1);
+    expect(container.read(favoritesRefreshProvider), 1);
+    expect(find.text('Saved to Library on this device'), findsOneWidget);
+
+    await selectSave();
+    expect(favorites.writes, 1);
+    expect(container.read(favoritesRefreshProvider), 2);
+    // ScaffoldMessenger queues consecutive snackbars. The first successful
+    // save remains visible for its standard duration before the second
+    // idempotent-save confirmation is presented.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Already in Library'), findsOneWidget);
+  });
+
+  testWidgets('Search never saves to the previous owner after account switch',
+      (tester) async {
+    final source = _SearchSource();
+    final favorites = _FavoriteMemoryStore();
+    final gate = Completer<void>();
+    favorites.pendingLookup = gate;
+    final container = ProviderContainer(overrides: [
+      catalogSourceProvider.overrideWithValue(source),
+      favoritesStoreProvider.overrideWithValue(favorites),
+      authSessionProvider.overrideWith(_SearchSignedInSession.new),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    await tester.enterText(find.byType(TextField), 'account switch');
+    await tester.pump(const Duration(milliseconds: 500));
+    source.pending['account switch']!.complete(_result('Owner A Result'));
+    await tester.pump();
+    expect(find.text('Owner A Result'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Song actions'));
+    await tester.tap(find.byTooltip('Song actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to Library').last);
+    await tester.pump();
+    (container.read(authSessionProvider.notifier) as _SearchSignedInSession)
+        .switchTo('search-user-b');
+    await tester.pump();
+    gate.complete();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(favorites.writes, 0);
+    expect(favorites.byOwner, isEmpty);
+    expect(container.read(favoritesRefreshProvider), 0);
+  });
+
+
+
+  testWidgets('Search network errors offer a retry that recovers catalog results',
+      (tester) async {
+    final source = _SearchSource();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [catalogSourceProvider.overrideWithValue(source)],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+
+    await tester.enterText(find.byType(TextField), 'retry example');
+    await tester.pump(const Duration(milliseconds: 500));
+    source.pending['retry example']!
+        .complete(ProviderError('temporary_provider_failure'));
+    await tester.pump();
+    expect(
+      find.text('Search could not be completed. Try again in a moment.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    expect(source.calls, ['retry example', 'retry example']);
+    source.pending['retry example']!.complete(_result('Recovered song'));
+    await tester.pump();
+    expect(find.text('Recovered song'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+  });
+
+
+  testWidgets('Music Videos filter renders external video action and honest empty state',
+      (tester) async {
+    final api = _VideoDiscoveryApi();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authSessionProvider.overrideWith(() => _VideoSearchSession(api)),
+      ],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    await tester.tap(find.widgetWithText(BzFilterPill, 'Music Videos'));
+    await tester.enterText(find.byType(TextField), 'official qa');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(find.text('Official Video QA'), findsOneWidget);
+    expect(find.byTooltip('Watch music video'), findsOneWidget);
+    expect(find.byTooltip('Song actions'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'no video match');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(
+      find.text('No official videos found for "no video match"'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Watch music video'), findsNothing);
+  });
+
 }

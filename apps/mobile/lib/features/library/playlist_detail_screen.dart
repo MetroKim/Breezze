@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,13 @@ import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
+
+/// A guest playlist is local; a private playlist belongs only to the active
+/// signed-in account. Transitional auth states expose neither owner's data.
+bool playlistOwnerMatchesSession(String ownerId, AuthState auth) =>
+    ownerId == 'guest'
+        ? auth is AuthSignedOut || auth is AuthUninitialized
+        : auth is AuthSignedIn && auth.userId == ownerId;
 
 /// Detail view for a device-local Breezze playlist.
 class PlaylistDetailScreen extends ConsumerStatefulWidget {
@@ -33,17 +42,49 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   bool _loading = true;
   bool _remoteSynced = false;
 
+  /// A mounted playlist route must never reveal account A's cached data
+  /// after a logout, login or account switch to B.
+  bool _ownerStillActive() {
+    if (!mounted) return false;
+    final auth = ref.read(authSessionProvider);
+    return playlistOwnerMatchesSession(widget.ownerId, auth);
+  }
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _sync() async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || auth.userId != widget.ownerId) return;
+    await _store.syncOwner(
+      widget.ownerId,
+      ref.read(authSessionProvider.notifier).api,
+      ownerStillActive: () {
+        if (!mounted) return false;
+        final current = ref.read(authSessionProvider);
+        return current is AuthSignedIn && current.userId == widget.ownerId;
+      },
+    );
+  }
+
+  Future<void> _load({bool sync = true}) async {
+    if (!_ownerStillActive()) return;
+    if (sync) await _sync();
+    if (!_ownerStillActive()) return;
     var playlists = await _store.load(widget.ownerId);
+    if (!_ownerStillActive()) return;
     var remoteSynced = false;
     final auth = ref.read(authSessionProvider);
-    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(widget.playlistId)) {
+    final hasPending = await _store.pendingCount(
+      widget.ownerId, playlistId: widget.playlistId,
+    ) > 0;
+    if (auth is AuthSignedIn &&
+        auth.userId == widget.ownerId &&
+        !hasPending &&
+        RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(widget.playlistId)) {
       try {
         final remote = await ref.read(authSessionProvider.notifier).api.getPlaylist(widget.playlistId);
         final rawItems = remote['items'];
@@ -64,14 +105,18 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             ));
           }
         }
-        await _store.replaceTracks(widget.ownerId, widget.playlistId, tracks);
+        // The remote request may have outlived a logout or user switch.
+        // Do not write its response to a private local cache in that case.
+        if (!_ownerStillActive()) return;
+        remoteSynced = await _store.replaceTracks(
+          widget.ownerId, widget.playlistId, tracks,
+        );
         playlists = await _store.load(widget.ownerId);
-        remoteSynced = true;
       } catch (_) {
         // Preserve the last locally cached playlist while offline.
       }
     }
-    if (!mounted) return;
+    if (!_ownerStillActive()) return;
     setState(() {
       final matches = playlists.where((item) => item.id == widget.playlistId).toList();
       _playlist = matches.isEmpty ? null : matches.first;
@@ -86,7 +131,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       ];
 
   Future<void> _playAll(UserPlaylist playlist) async {
-    if (playlist.tracks.isEmpty) return;
+    if (!_ownerStillActive() || playlist.tracks.isEmpty) return;
     final nativeIndex = playlist.tracks.indexWhere((item) => canQueueTrackId(item.id));
     if (nativeIndex >= 0) {
       if (playlist.tracks.any((item) => !canQueueTrackId(item.id)) && mounted) {
@@ -105,6 +150,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   }
 
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
+    if (!_ownerStillActive()) return;
     final track = playlist.tracks[index];
     if (!canQueueTrackId(track.id)) {
       if (mounted) {
@@ -151,20 +197,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       ),
     );
     controller.dispose();
-    if (name == null || name.trim().isEmpty) return;
-    final auth = ref.read(authSessionProvider);
-    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
-      try {
-        await ref.read(authSessionProvider.notifier).api.renamePlaylist(playlist.id, name.trim());
-      } catch (_) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not sync this playlist name. Try again.')),
-        );
-        return;
-      }
-    }
+    if (!_ownerStillActive() || name == null || name.trim().isEmpty) return;
     await _store.rename(widget.ownerId, playlist.id, name);
-    await _load();
+    await _load(sync: false);
+    unawaited(_sync());
     widget.onChanged?.call();
   }
 
@@ -173,7 +209,9 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete playlist?'),
-        content: Text('“${playlist.name}” will be removed from this device.'),
+        content: Text(widget.ownerId == 'guest'
+          ? '“${playlist.name}” will be removed from this device.'
+          : '“${playlist.name}” will be removed here and deleted from your other devices when synchronization completes.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -186,25 +224,26 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    final auth = ref.read(authSessionProvider);
-    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
-      try {
-        await ref.read(authSessionProvider.notifier).api.deletePlaylist(playlist.id);
-      } catch (_) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not delete the synced playlist. Try again.')),
-        );
-        return;
-      }
-    }
+    if (confirmed != true || !_ownerStillActive()) return;
     await _store.delete(widget.ownerId, playlist.id);
+    unawaited(_sync());
     widget.onChanged?.call();
     if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watching auth ensures a previously opened private route is immediately
+    // replaced on sign-out or account switch, even if it has loaded artwork.
+    final auth = ref.watch(authSessionProvider);
+    if (!playlistOwnerMatchesSession(widget.ownerId, auth)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Playlist unavailable')),
+        body: const Center(
+          child: Text('This playlist is not available in the current account.'),
+        ),
+      );
+    }
     final theme = Theme.of(context);
     if (_loading) {
       return Scaffold(
@@ -263,7 +302,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         ),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text('Delete from this device'),
+                          child: Text('Delete playlist'),
                         ),
                       ],
                     ),
@@ -313,7 +352,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     Text(playlist.name, style: theme.textTheme.headlineMedium),
                     const SizedBox(height: 4),
                     Text(
-                      'Playlist · ${playlist.tracks.length} songs · ${_remoteSynced ? 'Synced' : 'On this device'}',
+                      'Playlist · ${playlist.tracks.length} songs · ${_remoteSynced ? 'Synced' : 'Pending sync / offline'}',
                       style: theme.textTheme.bodyMedium
                           ?.copyWith(color: theme.bzText2),
                     ),
@@ -385,25 +424,15 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                   padding: EdgeInsets.zero,
                   itemCount: playlist.tracks.length,
                   onReorderItem: (oldIndex, newIndex) async {
+                    if (!_ownerStillActive()) return;
                     final orderedTracks = List<FavoriteTrack>.from(playlist.tracks);
                     final moved = orderedTracks.removeAt(oldIndex);
                     orderedTracks.insert(newIndex, moved);
-                    final auth = ref.read(authSessionProvider);
-                    if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
-                      try {
-                        await ref.read(authSessionProvider.notifier).api.reorderPlaylistTracks(
-                          playlist.id,
-                          orderedTracks.map((track) => track.id).toList(),
-                        );
-                      } catch (_) {
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Could not sync playlist order. Try again.')),
-                        );
-                        return;
-                      }
-                    }
-                    await _store.reorderTracks(widget.ownerId, playlist.id, oldIndex, newIndex);
-                    await _load();
+                    await _store.reorderTracks(
+                      widget.ownerId, playlist.id, oldIndex, newIndex,
+                    );
+                    await _load(sync: false);
+                    unawaited(_sync());
                     widget.onChanged?.call();
                   },
                   itemBuilder: (context, index) {
@@ -421,20 +450,12 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         ),
                       ),
                       onDismissed: (_) async {
-                        final auth = ref.read(authSessionProvider);
-                        if (auth is AuthSignedIn && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(playlist.id)) {
-                          try {
-                            await ref.read(authSessionProvider.notifier).api.removePlaylistTrack(playlist.id, track.id);
-                          } catch (_) {
-                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Could not remove this synced song. Refresh and try again.')),
-                            );
-                            await _load();
-                            return;
-                          }
-                        }
-                        await _store.removeTrack(widget.ownerId, playlist.id, track.id);
-                        await _load();
+                        if (!_ownerStillActive()) return;
+                        await _store.removeTrack(
+                          widget.ownerId, playlist.id, track.id,
+                        );
+                        await _load(sync: false);
+                        unawaited(_sync());
                         widget.onChanged?.call();
                       },
                       child: ListTile(

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -24,6 +25,19 @@ export class FavoriteDto {
 class ArtistKeyParams {
   @Matches(/^(apple:[0-9]{1,20}|catalog:[a-zA-Z0-9_-]{1,128})$/)
   artistKey!: string;
+}
+
+export class FollowArtistDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  displayName?: string;
+}
+
+export class PinArtistDto {
+  @IsBoolean()
+  pinned!: boolean;
 }
 
 export class SavedCatalogAlbumDto {
@@ -61,6 +75,10 @@ export class SavedCatalogAlbumDto {
   @IsOptional()
   @IsBoolean()
   isCompilation?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isPinned?: boolean;
 }
 
 @Controller('library')
@@ -68,14 +86,34 @@ export class SavedCatalogAlbumDto {
 export class LibraryController {
   constructor(private readonly library: LibraryService) {}
 
+  @Get('artists')
+  listArtists(@CurrentUser() userId: string) {
+    return this.library.listFollowedArtists(userId);
+  }
+
   @Get('artists/:artistKey')
   artistStatus(@CurrentUser() userId: string, @Param() params: ArtistKeyParams) {
     return this.library.artistStatus(userId, params.artistKey);
   }
 
   @Post('artists/:artistKey')
-  followArtist(@CurrentUser() userId: string, @Param() params: ArtistKeyParams) {
-    return this.library.setFollowing(userId, params.artistKey, true);
+  followArtist(
+    @CurrentUser() userId: string,
+    @Param() params: ArtistKeyParams,
+    @Body() dto: FollowArtistDto,
+  ) {
+    return this.library.setFollowing(
+      userId, params.artistKey, true, dto?.displayName,
+    );
+  }
+
+  @Patch('artists/:artistKey/pin')
+  pinArtist(
+    @CurrentUser() userId: string,
+    @Param() params: ArtistKeyParams,
+    @Body() dto: PinArtistDto,
+  ) {
+    return this.library.setArtistPinned(userId, params.artistKey, dto.pinned);
   }
 
   @Delete('artists/:artistKey')

@@ -20,6 +20,8 @@ void main() {
     expect(restored.addedAt, album.addedAt);
     expect(restored.genres, isEmpty);
     expect(restored.isCompilation, isFalse);
+    expect(restored.isPinned, isFalse);
+    expect(SavedAlbum.fromJson(album.withPinned(true).toJson()).isPinned, isTrue);
   });
 
   test('album metadata has safe missing-field defaults', () {
@@ -27,6 +29,7 @@ void main() {
     expect(album.title, 'Unknown album');
     expect(album.artist, 'Unknown artist');
     expect(album.artworkUrl, isNull);
+    expect(album.isPinned, isFalse);
   });
   test('verified genre/compilation metadata round-trips without inference', () {
     final compilation = SavedAlbum(

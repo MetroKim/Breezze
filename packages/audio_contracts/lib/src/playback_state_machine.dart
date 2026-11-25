@@ -21,6 +21,13 @@ enum PlaybackState {
 
 sealed class PlaybackEvent {}
 
+/// Restored queue metadata is paused until a fresh authorized grant is
+/// obtained. Restoration never autoplays media or reuses old signed URLs.
+class RestorePaused extends PlaybackEvent {
+  final String trackId;
+  RestorePaused(this.trackId);
+}
+
 class StopRequested extends PlaybackEvent {
   final int requestId;
   StopRequested({this.requestId = 0});
@@ -101,6 +108,12 @@ class PlaybackStateMachine {
       _activeRequestId = e.requestId;
       _activeTrackId = null;
       return PlaybackState.idle;
+    }
+
+    if (e is RestorePaused) {
+      _activeRequestId++;
+      _activeTrackId = e.trackId;
+      return PlaybackState.paused;
     }
 
     if (e is StartRequested) {

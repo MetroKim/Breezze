@@ -5,17 +5,34 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/saved_album_store.dart';
+import '../../app/followed_artist_store.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../core/audio/youtube_player_handoff.dart';
 import '../video/official_music_video_screen.dart';
+import '../video/open_youtube_player.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
-final _artistFollowing = FutureProvider.autoDispose.family<bool, String>((ref, key) {
-  ref.watch(authSessionProvider);
-  return ref.read(authSessionProvider.notifier).api.artistFollowing(key);
+final _artistFollowing =
+    FutureProvider.autoDispose.family<FollowedArtist?, String>((ref, key) async {
+  final session = ref.watch(authSessionProvider);
+  if (session is! AuthSignedIn) return null;
+  final store = FollowedArtistStore();
+  try {
+    await store.syncWithCloud(
+      session.userId,
+      ref.read(authSessionProvider.notifier).api,
+      ownerStillActive: () {
+        final current = ref.read(authSessionProvider);
+        return current is AuthSignedIn && current.userId == session.userId;
+      },
+    );
+  } catch (_) {
+    // An offline library remains usable from the owner-scoped secure cache.
+  }
+  return store.find(session.userId, key);
 });
 
 final _artistVideos = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
@@ -43,7 +60,7 @@ final _artistConcerts = FutureProvider.autoDispose.family<List<Map>, String>((re
   }).toList();
 });
 
-final _appleTrackMatchesProvider =
+final _deezerTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
   final data = await ref
       .read(authSessionProvider.notifier)
@@ -55,7 +72,7 @@ final _appleTrackMatchesProvider =
       item.map((key, value) => MapEntry(key.toString(), value))).toList();
 });
 
-final _appleAlbumTracksProvider =
+final _deezerAlbumTracksProvider =
     FutureProvider.family<Map<String, dynamic>, String>((ref, albumId) async {
   return ref
       .read(authSessionProvider.notifier)
@@ -80,9 +97,13 @@ class TrackDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final favoriteKey = (ownerId: ownerId, trackId: track.id);
+    final favoriteState = ref.watch(isTrackFavoriteProvider(favoriteKey));
     final artistName = track.artist ?? 'Unknown artist';
     final trackTitle = track.title ?? 'Unknown track';
-    final appleTrackMatches = ref.watch(_appleTrackMatchesProvider('$trackTitle $artistName'));
+    final appleTrackMatches = ref.watch(_deezerTrackMatchesProvider('$trackTitle $artistName'));
     final artistTracks = relatedTracks
         .where((item) => (item.artist ?? '').trim().toLowerCase() == artistName.trim().toLowerCase())
         .toList();
@@ -102,24 +123,50 @@ class TrackDetailScreen extends ConsumerWidget {
     ];
     final selectedIndex = queueTracks.indexWhere((item) => item.id == track.id);
 
-    Future<void> saveToLibrary() async {
-      final auth = ref.read(authSessionProvider);
-      final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
-      final favorites = ref.read(favoritesStoreProvider);
-      if (!await favorites.isFavorite(track.id, ownerId: ownerId)) {
-        await favorites.toggle(FavoriteTrack(
-          id: track.id,
-          title: trackTitle,
-          artist: artistName,
-          artworkUrl: track.artworkUrl,
-          durationMs: track.duration.inMilliseconds,
-        ), ownerId: ownerId);
-        await ref.read(outboxSyncProvider).drainIfSignedIn();
+    Future<void> toggleLibrary() async {
+      // Never apply a stale song-detail action to an account that signed out
+      // or switched while this route remained in the navigation stack.
+      final current = ref.read(authSessionProvider);
+      if ((current is AuthSignedIn ? current.userId : 'guest') != ownerId) {
+        return;
       }
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Library updated')),
-      );
+      try {
+        final saved = await ref.read(favoritesStoreProvider).toggle(
+          FavoriteTrack(
+            id: track.id,
+            title: trackTitle,
+            artist: artistName,
+            artworkUrl: track.artworkUrl,
+            durationMs: track.duration.inMilliseconds,
+          ),
+          ownerId: ownerId,
+        );
+        if (!context.mounted) return;
+        ref.invalidate(isTrackFavoriteProvider(favoriteKey));
+        ref.read(favoritesRefreshProvider.notifier).state++;
+        try {
+          await ref.read(outboxSyncProvider).drainIfSignedIn();
+        } catch (_) {
+          // The local favorite and outbox are already durable. Failed cloud
+          // delivery must not turn a successful local edit into a UI error.
+        }
+        if (!context.mounted) return;
+        final latest = ref.read(authSessionProvider);
+        if ((latest is AuthSignedIn ? latest.userId : 'guest') != ownerId) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(saved
+              ? 'Saved to Library on this device'
+              : 'Removed from Library on this device'),
+        ));
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not update Library.')),
+          );
+        }
+      }
     }
 
     return Scaffold(
@@ -172,6 +219,17 @@ class TrackDetailScreen extends ConsumerWidget {
                       onPressed: isMetadataOnlyTrackId(track.id)
                           ? null
                           : () async {
+                        if (isYouTubeSongId(track.id)) {
+                          await openYouTubePlayer(
+                            context: context,
+                            ref: ref,
+                            videoId: track.id.substring('bz:youtube_music:'.length),
+                            title: trackTitle,
+                            artist: artistName,
+                            artworkUrl: track.artworkUrl,
+                          );
+                          return;
+                        }
                         await ref.read(playerControllerProvider.notifier).playTrack(
                           trackId: track.id,
                           queue: queue,
@@ -182,12 +240,26 @@ class TrackDetailScreen extends ConsumerWidget {
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
                       label: Text(isMetadataOnlyTrackId(track.id)
-                          ? 'Playback unavailable' : 'Play'),
+                          ? 'Playback unavailable'
+                          : isYouTubeSongId(track.id) ? 'Play on YouTube' : 'Play'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: saveToLibrary,
-                      icon: const BzSvgIcon(name: 'plus'),
-                      label: const Text('Add to Library'),
+                      // Never display an actionable-looking "Add" state
+                      // before the native owner-scoped favorite lookup ends.
+                      // The button remains disabled on lookup failure.
+                      onPressed: favoriteState.isLoading ||
+                              favoriteState.hasError
+                          ? null
+                          : toggleLibrary,
+                      icon: BzSvgIcon(name:
+                          favoriteState.valueOrNull == true ? 'check' : 'plus'),
+                      label: Text(favoriteState.isLoading
+                          ? 'Checking Library...'
+                          : favoriteState.hasError
+                              ? 'Library unavailable'
+                              : favoriteState.valueOrNull == true
+                                  ? 'Remove from Library'
+                                  : 'Add to Library'),
                     ),
                     OutlinedButton.icon(
                       onPressed: isMetadataOnlyTrackId(track.id)
@@ -240,7 +312,7 @@ class TrackDetailScreen extends ConsumerWidget {
                 appleTrackMatches.when(
                   loading: () => _CatalogSection(
                     title: 'Album',
-                    subtitle: 'Checking the Apple catalog for an exact track-to-album relationship.',
+                    subtitle: 'Checking the Deezer catalog for an exact track-to-album relationship.',
                     available: true,
                     child: const Padding(
                       padding: EdgeInsets.all(14),
@@ -249,7 +321,7 @@ class TrackDetailScreen extends ConsumerWidget {
                   ),
                   error: (_, __) => _CatalogSection(
                     title: 'Album',
-                    subtitle: 'The Apple catalog could not verify an album relationship for this track.',
+                    subtitle: 'The Deezer catalog could not verify an album relationship for this track.',
                     available: false,
                   ),
                   data: (matches) {
@@ -265,14 +337,14 @@ class TrackDetailScreen extends ConsumerWidget {
                     if (exact.isEmpty) {
                       return _CatalogSection(
                         title: 'Album',
-                        subtitle: 'No exact Apple catalog track match was found. Breezze will not infer an album from similar titles or artist names.',
+                        subtitle: 'No exact Deezer catalog track match was found. Breezze will not infer an album from similar titles or artist names.',
                         available: false,
                       );
                     }
                     final album = exact.first;
                     return _CatalogSection(
                       title: 'Verified album relationship',
-                      subtitle: 'Exact title and artist match from Apple iTunes catalog metadata.',
+                      subtitle: 'Exact title and artist match from Deezer catalog metadata.',
                       available: true,
                       child: ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -285,7 +357,7 @@ class TrackDetailScreen extends ConsumerWidget {
                           [
                             if (album['releaseDate'] is String)
                               (album['releaseDate'] as String).split('T').first,
-                            'Apple catalog',
+                            'Deezer catalog',
                           ].join(' · '),
                         ),
                         trailing: const BzSvgIcon(name: 'arrow-up-right', size: 19),
@@ -293,12 +365,12 @@ class TrackDetailScreen extends ConsumerWidget {
                           final albumId = album['albumId'];
                           if (albumId == null) return;
                           Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => AppleAlbumCatalogScreen(
+                            builder: (_) => DeezerAlbumCatalogScreen(
                               albumId: albumId.toString(),
                               title: album['albumTitle'] as String? ?? 'Unknown album',
                               artist: album['artist'] as String? ?? artistName,
                               artworkUrl: album['artworkUrl'] as String?,
-                              appleUrl: album['albumUrl'] as String?,
+                              deezerUrl: album['albumUrl'] as String?,
                             ),
                           ));
                         },
@@ -351,10 +423,10 @@ class ArtistDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
-  List<Map<String, dynamic>> _appleAlbums = [];
+  List<Map<String, dynamic>> _deezerAlbums = [];
   bool _discographyLoading = true;
   String? _discographyError;
-  String? _appleArtistId;
+  String? _deezerArtistId;
   bool _changingFollow = false;
 
   String get artist => widget.artist;
@@ -366,10 +438,10 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAppleDiscography();
+    _loadDeezerDiscography();
   }
 
-  Future<void> _loadAppleDiscography() async {
+  Future<void> _loadDeezerDiscography() async {
     try {
       final api = ref.read(authSessionProvider.notifier).api;
       final search = await api.discoveryArtistSearch(artist);
@@ -396,8 +468,8 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
       final rawAlbums = result['items'];
       if (!mounted) return;
       setState(() {
-        _appleArtistId = id.toString();
-        _appleAlbums = rawAlbums is List
+        _deezerArtistId = id.toString();
+        _deezerAlbums = rawAlbums is List
             ? rawAlbums.whereType<Map>().map((item) =>
                 item.map((key, value) => MapEntry(key.toString(), value))).toList()
             : [];
@@ -406,17 +478,63 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _discographyError = 'Apple artist catalog is temporarily unavailable.';
+        _discographyError = 'Deezer artist catalog is temporarily unavailable.';
         _discographyLoading = false;
       });
     }
   }
 
-  Future<void> _openAppleAlbum(Map<String, dynamic> album) async {
+  Future<void> _openDeezerAlbum(Map<String, dynamic> album) async {
     final rawUrl = album['url'];
     final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
     if (uri == null || uri.scheme != 'https') return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+    Future<void> _changeArtistMembership(
+    String key, {
+    bool? follow,
+    bool? pinned,
+  }) async {
+    if (_changingFollow) return;
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return;
+    setState(() => _changingFollow = true);
+    final store = FollowedArtistStore();
+    try {
+      if (follow == true) {
+        await store.follow(auth.userId, key, artist);
+      } else if (follow == false) {
+        await store.unfollow(auth.userId, key);
+      } else if (pinned != null) {
+        await store.setPinned(auth.userId, key, pinned);
+      }
+      try {
+        await store.syncWithCloud(
+          auth.userId,
+          ref.read(authSessionProvider.notifier).api,
+          ownerStillActive: () {
+            final current = ref.read(authSessionProvider);
+            return current is AuthSignedIn && current.userId == auth.userId;
+          },
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Saved on this device. Sync will retry online.'),
+          ));
+        }
+      }
+      if (mounted) ref.invalidate(_artistFollowing(key));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not update this artist. Try again.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _changingFollow = false);
+    }
   }
 
   @override
@@ -424,7 +542,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
     final theme = Theme.of(context);
     final artistKey = canonicalArtistId != null
         ? 'catalog:$canonicalArtistId'
-        : _appleArtistId != null ? 'apple:$_appleArtistId' : null;
+        : _deezerArtistId != null ? 'apple:$_deezerArtistId' : null;
     final signedIn = ref.watch(authSessionProvider) is AuthSignedIn;
     final following = signedIn && artistKey != null
         ? ref.watch(_artistFollowing(artistKey))
@@ -449,7 +567,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: BzAmbientBackdrop(
-              // Artist pages tint from cover art (Apple Music 7.0): the
+              // Artist pages tint from cover art (Deezer Music 7.0): the
               // hero blooms from the first available artwork while the
               // tracklist below stays readable on the plain ground.
               artworkUrl: heroArtwork,
@@ -514,12 +632,26 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                     FilledButton.icon(
                       onPressed: savedTracks.isEmpty
                           ? null
-                           : () => ref.read(playerControllerProvider.notifier).playTrack(
-                                trackId: savedTracks.first.id,
+                          : () async {
+                              final first = savedTracks.first;
+                              if (isYouTubeSongId(first.id)) {
+                                await openYouTubePlayer(
+                                  context: context,
+                                  ref: ref,
+                                  videoId: first.id.substring('bz:youtube_music:'.length),
+                                  title: first.title,
+                                  artist: first.artist,
+                                  artworkUrl: first.artworkUrl,
+                                );
+                                return;
+                              }
+                              await ref.read(playerControllerProvider.notifier).playTrack(
+                                trackId: first.id,
                                 queue: queue,
                                 origin: 'library',
                                 sourceContext: artist,
-                              ),
+                              );
+                            },
                       icon: BzSvgIcon(
                         name: 'play',
                         color: theme.bzBackground,
@@ -536,25 +668,31 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                           onPressed: () => ref.invalidate(_artistFollowing(artistKey)),
                           child: const Text('Retry follow status'),
                         ),
-                        data: (active) => OutlinedButton.icon(
-                          icon: BzSvgIcon(name: active ? 'check' : 'user-round-plus'),
-                          label: Text(active ? 'Following' : 'Follow'),
-                          onPressed: _changingFollow ? null : () async {
-                            setState(() => _changingFollow = true);
-                            try {
-                              await ref.read(authSessionProvider.notifier).api
-                                  .followArtist(artistKey, !active);
-                              if (mounted) ref.invalidate(_artistFollowing(artistKey));
-                            } catch (_) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Could not update this artist. Try again.')),
-                                );
-                              }
-                            } finally {
-                              if (mounted) setState(() => _changingFollow = false);
-                            }
-                          },
+                        data: (record) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            OutlinedButton.icon(
+                              icon: BzSvgIcon(name: record != null
+                                  ? 'check' : 'user-round-plus'),
+                              label: Text(record != null ? 'Following' : 'Follow'),
+                              onPressed: _changingFollow ? null : () =>
+                                  _changeArtistMembership(
+                                    artistKey, follow: record == null,
+                                  ),
+                            ),
+                            if (record != null) ...[
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                icon: BzSvgIcon(name: record.isPinned
+                                    ? 'star-filled' : 'star'),
+                                label: Text(record.isPinned ? 'Unpin' : 'Pin'),
+                                onPressed: _changingFollow ? null : () =>
+                                    _changeArtistMembership(
+                                      artistKey, pinned: !record.isPinned,
+                                    ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                   ],
@@ -583,13 +721,27 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
-                            trackId: savedTracks[i].id,
-                            queue: queue,
-                            startIndex: i,
-                            origin: 'library',
-                            sourceContext: artist,
-                          ),
+                          onTap: () async {
+                            final song = savedTracks[i];
+                            if (isYouTubeSongId(song.id)) {
+                              await openYouTubePlayer(
+                                context: context,
+                                ref: ref,
+                                videoId: song.id.substring('bz:youtube_music:'.length),
+                                title: song.title,
+                                artist: song.artist,
+                                artworkUrl: song.artworkUrl,
+                              );
+                              return;
+                            }
+                            await ref.read(playerControllerProvider.notifier).playTrack(
+                              trackId: song.id,
+                              queue: queue,
+                              startIndex: i,
+                              origin: 'library',
+                              sourceContext: artist,
+                            );
+                          },
                         ),
                     ],
                   ),
@@ -607,13 +759,27 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                             leading: _TrackArtwork(url: searchTracks[i].artworkUrl, size: 48),
                             title: Text(searchTracks[i].title, maxLines: 1, overflow: TextOverflow.ellipsis),
                             subtitle: Text(searchTracks[i].artist, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            onTap: () => ref.read(playerControllerProvider.notifier).playTrack(
-                              trackId: searchTracks[i].id,
-                              queue: [for (final item in searchTracks) item.toTrackInfo()],
-                              startIndex: i,
-                              origin: 'search',
-                              sourceContext: artist,
-                            ),
+                            onTap: () async {
+                              final song = searchTracks[i];
+                              if (isYouTubeSongId(song.id)) {
+                                await openYouTubePlayer(
+                                  context: context,
+                                  ref: ref,
+                                  videoId: song.id.substring('bz:youtube_music:'.length),
+                                  title: song.title,
+                                  artist: song.artist,
+                                  artworkUrl: song.artworkUrl,
+                                );
+                                return;
+                              }
+                              await ref.read(playerControllerProvider.notifier).playTrack(
+                                trackId: song.id,
+                                queue: [for (final item in searchTracks) item.toTrackInfo()],
+                                startIndex: i,
+                                origin: 'search',
+                                sourceContext: artist,
+                              );
+                            },
                           ),
                       ],
                     ),
@@ -625,20 +791,20 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                   )
                 else if (_discographyError != null)
                   _CatalogSection(
-                    title: 'Apple catalog discography',
+                    title: 'Deezer catalog discography',
                     subtitle: _discographyError!,
                     available: false,
                   )
                 else
                   _CatalogSection(
-                    title: 'Apple catalog discography',
-                    subtitle: _appleArtistId == null
-                        ? 'No exact artist match was returned by Apple for this name.'
-                        : 'Albums and singles linked to the exact Apple artist record. This is Apple catalog coverage, not a guarantee of every regional release.',
-                    available: _appleAlbums.isNotEmpty,
+                    title: 'Deezer catalog discography',
+                    subtitle: _deezerArtistId == null
+                        ? 'No exact artist match was returned by Deezer for this name.'
+                        : 'Albums and singles linked to the exact Deezer artist record. This is Deezer catalog coverage, not a guarantee of every regional release.',
+                    available: _deezerAlbums.isNotEmpty,
                     child: Column(
                       children: [
-                        for (final album in _appleAlbums)
+                        for (final album in _deezerAlbums)
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: _TrackArtwork(
@@ -661,20 +827,20 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: IconButton(
-                              tooltip: 'Open release in Apple Music',
+                              tooltip: 'Open release in Deezer Music',
                               icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
-                              onPressed: () => _openAppleAlbum(album),
+                              onPressed: () => _openDeezerAlbum(album),
                             ),
                             onTap: () {
                               final albumId = album['id'];
                               if (albumId == null) return;
                               Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => AppleAlbumCatalogScreen(
+                                builder: (_) => DeezerAlbumCatalogScreen(
                                   albumId: albumId.toString(),
                                   title: album['title'] as String? ?? 'Unknown album',
                                   artist: album['artist'] as String? ?? artist,
                                   artworkUrl: album['artworkUrl'] as String?,
-                                  appleUrl: album['url'] as String?,
+                                  deezerUrl: album['url'] as String?,
                                 ),
                               ));
                             },
@@ -758,22 +924,22 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
 }
 
 
-/// Metadata-only album detail from Apple's canonical collection and track records.
+/// Deezer album detail from the public album and track API.
 /// It never turns a preview URL into a full-track playback source.
-class AppleAlbumCatalogScreen extends ConsumerWidget {
+class DeezerAlbumCatalogScreen extends ConsumerWidget {
   final String albumId;
   final String title;
   final String artist;
   final String? artworkUrl;
-  final String? appleUrl;
+  final String? deezerUrl;
 
-  const AppleAlbumCatalogScreen({
+  const DeezerAlbumCatalogScreen({
     super.key,
     required this.albumId,
     required this.title,
     required this.artist,
     this.artworkUrl,
-    this.appleUrl,
+    this.deezerUrl,
   });
 
   Future<void> _open(String? rawUrl) async {
@@ -790,7 +956,8 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
     final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
     final savedKey = (ownerId: ownerId, albumId: albumId);
     final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
-    final tracks = ref.watch(_appleAlbumTracksProvider(albumId));
+    final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
+    final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
     return Scaffold(
       backgroundColor: theme.bzBackground,
       appBar: AppBar(
@@ -817,10 +984,10 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                       const SizedBox(height: 12),
                       Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 8),
-                      Text('Apple could not return this album tracklist.', textAlign: TextAlign.center),
+                      Text('Deezer could not return this album tracklist.', textAlign: TextAlign.center),
                       const SizedBox(height: 12),
                       OutlinedButton(
-                        onPressed: () => ref.invalidate(_appleAlbumTracksProvider(albumId)),
+                        onPressed: () => ref.invalidate(_deezerAlbumTracksProvider(albumId)),
                         child: const Text('Try again'),
                       ),
                     ],
@@ -887,7 +1054,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                                 title: title,
                                 artist: artist,
                                 artworkUrl: artworkUrl,
-                                catalogUrl: appleUrl,
+                                catalogUrl: deezerUrl,
                                 genres: albumGenres,
                                 isCompilation: isCompilation,
                                 addedAt: DateTime.now().toUtc(),
@@ -918,6 +1085,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                               }
                             }
                             ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.invalidate(isAlbumPinnedProvider(savedKey));
                             ref.read(savedAlbumRefreshProvider.notifier).state++;
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -948,11 +1116,71 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                             ? 'Saved in Library'
                             : 'Add Album to Library'),
                       ),
+                      if (isSaved.valueOrNull == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: isPinned.isLoading ? null : () async {
+                            final active = ref.read(authSessionProvider);
+                            final activeOwner = active is AuthSignedIn
+                                ? active.userId : 'guest';
+                            if (activeOwner != ownerId) return;
+                            try {
+                              final store = SavedAlbumStore();
+                              final nextPinned = isPinned.valueOrNull != true;
+                              final updated = await store.setPinned(
+                                ownerId, albumId, nextPinned,
+                              );
+                              if (!updated || !context.mounted) return;
+                              var synced = active is! AuthSignedIn;
+                              if (active is AuthSignedIn) {
+                                try {
+                                  await store.syncWithCloud(
+                                    ownerId,
+                                    ref.read(authSessionProvider.notifier).api,
+                                    ownerStillActive: () {
+                                      if (!context.mounted) return false;
+                                      final current = ref.read(authSessionProvider);
+                                      return current is AuthSignedIn &&
+                                          current.userId == ownerId;
+                                    },
+                                  );
+                                  synced = true;
+                                } catch (_) {
+                                  // Pin remains durable locally when offline.
+                                }
+                              }
+                              if (!context.mounted) return;
+                              final latest = ref.read(authSessionProvider);
+                              if ((latest is AuthSignedIn
+                                  ? latest.userId : 'guest') != ownerId) return;
+                              ref.invalidate(isAlbumPinnedProvider(savedKey));
+                              ref.read(savedAlbumRefreshProvider.notifier).state++;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(synced
+                                    ? (nextPinned ? 'Album pinned to top'
+                                        : 'Album unpinned')
+                                    : 'Pin saved on this device. Cloud sync will retry.')),
+                              );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content:
+                                      Text('Could not update album pin.')),
+                                );
+                              }
+                            }
+                          },
+                          icon: BzSvgIcon(name:
+                              isPinned.valueOrNull == true ? 'star-filled' : 'star'),
+                          label: Text(isPinned.valueOrNull == true
+                              ? 'Unpin album' : 'Pin album to top'),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
-                        onPressed: appleUrl == null ? null : () => _open(appleUrl),
+                        onPressed: deezerUrl == null ? null : () => _open(deezerUrl),
                         icon: const BzSvgIcon(name: 'arrow-up-right'),
-                        label: const Text('Open album in Apple Music'),
+                        label: const Text('Open album on Deezer'),
                       ),
                       const SizedBox(height: 16),
                       Container(
@@ -963,7 +1191,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                           border: Border.all(color: theme.bzSeparator),
                         ),
                         child: Text(
-                          'Verified Apple album tracklist. iTunes preview links, when supplied, are short previews only. Full-track playback inside Breezze requires a separate provider with approved streaming rights.',
+                          'Deezer album metadata and short audio previews. These are not full recordings; full-track and offline playback require separately authorized rights.',
                           style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
                         ),
                       ),
@@ -971,7 +1199,7 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                       Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 8),
                       if (items.isEmpty)
-                        Text('Apple did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                        Text('Deezer did not return tracks for this album.', style: theme.textTheme.bodyMedium)
                       else
                         for (var i = 0; i < items.length; i++)
                           ListTile(
@@ -990,9 +1218,33 @@ class AppleAlbumCatalogScreen extends ConsumerWidget {
                                   : 'Duration not supplied',
                             ),
                             trailing: IconButton(
-                              tooltip: 'Open track in Apple Music',
-                              icon: const BzSvgIcon(name: 'arrow-up-right', size: 18),
-                              onPressed: () => _open(items[i]['url'] as String?),
+                              tooltip: items[i]['previewUrl'] is String
+                                  ? 'Play Deezer preview (30 seconds)' : 'Open track on Deezer',
+                              icon: BzSvgIcon(name: items[i]['previewUrl'] is String
+                                  ? 'play' : 'arrow-up-right', size: 18),
+                              onPressed: () async {
+                                final item = items[i];
+                                final trackId = item['id']?.toString() ?? '';
+                                if (item['previewUrl'] is String &&
+                                    RegExp(r'^[0-9]{1,20}$').hasMatch(trackId)) {
+                                  final id = 'bz:deezer_preview:$trackId';
+                                  await ref.read(playerControllerProvider.notifier).playTrack(
+                                    trackId: id,
+                                    queue: [TrackInfo(
+                                      id: id,
+                                      title: item['title'] as String?,
+                                      artist: artist,
+                                      artworkUrl: artworkUrl,
+                                      duration: const Duration(seconds: 30),
+                                    )],
+                                    startIndex: 0,
+                                    origin: 'album',
+                                    sourceContext: 'Deezer preview (up to 30 seconds)',
+                                  );
+                                } else {
+                                  await _open(item['url'] as String?);
+                                }
+                              },
                             ),
                           ),
                     ],
@@ -1045,6 +1297,17 @@ class AlbumDetailScreen extends ConsumerWidget {
     Future<void> playAt(int index, {bool shuffle = false}) async {
       if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
       final track = tracks[index];
+      if (isYouTubeSongId(track.id)) {
+        await openYouTubePlayer(
+          context: context,
+          ref: ref,
+          videoId: track.id.substring('bz:youtube_music:'.length),
+          title: track.title ?? 'YouTube Music',
+          artist: track.artist ?? artist,
+          artworkUrl: track.artworkUrl,
+        );
+        return;
+      }
       if (isMetadataOnlyTrackId(track.id)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),

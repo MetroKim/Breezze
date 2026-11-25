@@ -95,13 +95,13 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:jamendo:session-one',
+          trackId: 'catalog-qa:session-one',
           streamUrl: 'https://media.example/one.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'session-one',
         ),
         PlayableSource(
-          trackId: 'bz:jamendo:session-two',
+          trackId: 'catalog-qa:session-two',
           streamUrl: 'https://media.example/two.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'session-two',
@@ -121,8 +121,8 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const first = TrackInfo(id: 'bz:jamendo:session-one', title: 'One');
-    const second = TrackInfo(id: 'bz:jamendo:session-two', title: 'Two');
+    const first = TrackInfo(id: 'catalog-qa:session-one', title: 'One');
+    const second = TrackInfo(id: 'catalog-qa:session-two', title: 'Two');
 
     await player.playTrack(trackId: first.id, queue: const [first]);
     await player.pause();
@@ -140,7 +140,7 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:jamendo:heartbeat',
+          trackId: 'catalog-qa:heartbeat',
           streamUrl: 'https://media.example/heartbeat.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'heartbeat-session',
@@ -160,7 +160,7 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const track = TrackInfo(id: 'bz:jamendo:heartbeat', title: 'Heartbeat');
+    const track = TrackInfo(id: 'catalog-qa:heartbeat', title: 'Heartbeat');
     await player.playTrack(trackId: track.id, queue: const [track]);
     await Future<void>.delayed(const Duration(milliseconds: 35));
     await player.pause();
@@ -175,7 +175,7 @@ void main() {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:jamendo:play-failure',
+          trackId: 'catalog-qa:play-failure',
           streamUrl: 'https://media.example/failure.mp3',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
           sessionId: 'play-failure-session',
@@ -194,7 +194,7 @@ void main() {
 
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
-    const track = TrackInfo(id: 'bz:jamendo:play-failure', title: 'Failure');
+    const track = TrackInfo(id: 'catalog-qa:play-failure', title: 'Failure');
     await player.playTrack(trackId: track.id, queue: const [track]);
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
@@ -217,7 +217,7 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const track = TrackInfo(
-      id: 'bz:jamendo:interrupt-test',
+      id: 'catalog-qa:interrupt-test',
       title: 'Interruption test',
       artist: 'Example Artist',
     );
@@ -250,12 +250,12 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const first = TrackInfo(
-      id: 'bz:jamendo:queue-first',
+      id: 'catalog-qa:queue-first',
       title: 'First track',
       artist: 'Example Artist',
     );
     const second = TrackInfo(
-      id: 'bz:jamendo:queue-second',
+      id: 'catalog-qa:queue-second',
       title: 'Second track',
       artist: 'Example Artist',
     );
@@ -283,6 +283,129 @@ void main() {
     expect(resolver.calls, 2);
   });
 
+
+  test('restored queue is paused and must resolve a new authorized URL', () async {
+    final originalResolver = _FakeResolver();
+    final originalEngine = _FakeAudioEngine();
+    final original = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(originalResolver),
+    ]);
+    addTearDown(() async {
+      original.dispose();
+      await originalEngine.dispose();
+    });
+    final player = original.read(playerControllerProvider.notifier);
+    player.attachEngine(originalEngine);
+    const first = TrackInfo(id: 'catalog-qa:restore-1',
+        title: 'Resume this track', artist: 'Breezze QA');
+    const second = TrackInfo(id: 'catalog-qa:restore-2',
+        title: 'Upcoming', artist: 'Breezze QA');
+    await player.playTrack(trackId: first.id, queue: const [first, second]);
+    await player.seekTo(const Duration(seconds: 36));
+    player.toggleShuffle();
+    final serialized = player.exportQueueSnapshot()!;
+    expect(serialized.toString(), isNot(contains('https://media.example')));
+    expect(serialized.toString(), isNot(contains('sessionId')));
+    expect(serialized['positionMs'], 36000);
+
+    final newResolver = _FakeResolver();
+    final newEngine = _FakeAudioEngine();
+    final fresh = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(newResolver),
+    ]);
+    addTearDown(() async {
+      fresh.dispose();
+      await newEngine.dispose();
+    });
+    final restored = fresh.read(playerControllerProvider.notifier);
+    restored.attachEngine(newEngine);
+    expect(restored.restoreQueueSnapshot(serialized), isTrue);
+    expect(restored.state.currentTrack?.title, first.title);
+    expect(restored.state.playbackState, PlaybackState.paused);
+    expect(restored.state.position, const Duration(seconds: 36));
+    expect(restored.queue.shuffle, isTrue);
+    expect(newEngine.prepareCount, 0);
+    expect(newResolver.calls, 0);
+
+    newEngine.emit(PlaybackState.idle);
+    await Future<void>.delayed(Duration.zero);
+    expect(restored.state.playbackState, PlaybackState.paused);
+
+    await restored.resume();
+    expect(newResolver.calls, 1);
+    expect(newEngine.prepareCount, 1);
+    expect(newEngine.lastSeekPosition, const Duration(seconds: 36));
+    expect(restored.state.playbackState, PlaybackState.playing);
+  });
+
+  test('queue restoration rejects metadata-only and corrupt snapshots', () {
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(_FakeResolver()),
+    ]);
+    addTearDown(container.dispose);
+    final player = container.read(playerControllerProvider.notifier);
+    final snapshot = <String, dynamic>{
+      'v': 1,
+      'selected': 'one',
+      'entries': [
+        {'id': 'one', 'track': 'bz:apple_catalog:123', 'origin': 'fake'}
+      ],
+      'tracks': [
+        {'id': 'bz:apple_catalog:123', 'title': 'Unlicensed'}
+      ],
+    };
+    expect(player.restoreQueueSnapshot(snapshot), isFalse);
+    expect(player.state.playbackState, PlaybackState.idle);
+  });
+
+
+  test('expired backend session re-resolves on resume instead of reusing old media', () async {
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'catalog-qa:session-expiry',
+          streamUrl: 'https://media.example/old.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 6)),
+          sessionId: 'expired-server-session',
+        ),
+        PlayableSource(
+          trackId: 'catalog-qa:session-expiry',
+          streamUrl: 'https://media.example/new.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+          sessionId: 'fresh-server-session',
+        ),
+      ];
+    final client = _FakePlaybackSessionClient()..rejectNextResume = true;
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackSessionClientProvider.overrideWithValue(client),
+      playbackHeartbeatIntervalProvider.overrideWithValue(const Duration(hours: 1)),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const track = TrackInfo(id: 'catalog-qa:session-expiry', title: 'Session renewal QA');
+    await player.playTrack(trackId: track.id, queue: const [track]);
+    await player.seekTo(const Duration(seconds: 33));
+    await player.pause();
+    expect(player.state.playbackState, PlaybackState.paused);
+
+    await player.resume();
+
+    expect(resolver.calls, 2);
+    expect(engine.prepareCount, 2);
+    expect(engine.lastSeekPosition, const Duration(seconds: 33));
+    expect(player.state.playbackState, PlaybackState.playing);
+    expect(player.state.currentTrack?.id, track.id);
+    expect(client.stopped, contains('expired-server-session'));
+    await player.stop();
+    expect(client.stopped, contains('fresh-server-session'));
+  });
+
 }
 
 class _FakePlaybackSessionClient implements PlaybackSessionClient {
@@ -291,6 +414,7 @@ class _FakePlaybackSessionClient implements PlaybackSessionClient {
   final List<String> stopped = [];
   final List<Map<String, Object>> heartbeatCalls = [];
   bool failFirstHeartbeat = false;
+  bool rejectNextResume = false;
 
   @override
   Future<Map<String, dynamic>> heartbeat({
@@ -313,7 +437,13 @@ class _FakePlaybackSessionClient implements PlaybackSessionClient {
   Future<void> pause(String sessionId) async { paused.add(sessionId); }
 
   @override
-  Future<void> resume(String sessionId) async { resumed.add(sessionId); }
+  Future<void> resume(String sessionId) async {
+    if (rejectNextResume) {
+      rejectNextResume = false;
+      throw StateError('SERVER_SESSION_EXPIRED');
+    }
+    resumed.add(sessionId);
+  }
 
   @override
   Future<void> stop(String sessionId) async { stopped.add(sessionId); }

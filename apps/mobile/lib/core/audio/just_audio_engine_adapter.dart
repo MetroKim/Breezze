@@ -33,7 +33,9 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
         mapped = PlaybackState.buffering;
       } else if (processing == ja.ProcessingState.completed) {
         mapped = PlaybackState.ended;
-      } else if (state.playing) {
+      } else if (processing == ja.ProcessingState.idle) {
+        mapped = PlaybackState.idle;
+      } else if (state.playing && processing == ja.ProcessingState.ready) {
         mapped = PlaybackState.playing;
       } else {
         mapped = PlaybackState.paused;

@@ -71,7 +71,18 @@ export class PlaybackSessionService {
     }
 
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
+    // Every authorized playback resolver returns a bounded media grant.
+    // A session must never remain valid after that grant expires.
+    const grantExpiresAt = playback.expiresAt;
+    if (!(grantExpiresAt instanceof Date) ||
+        !Number.isFinite(grantExpiresAt.getTime()) ||
+        grantExpiresAt.getTime() <= now.getTime()) {
+      throw new GoneException('PLAYBACK_GRANT_EXPIRED');
+    }
+    const expiresAt = new Date(Math.min(
+      now.getTime() + SESSION_TTL_MS,
+      grantExpiresAt.getTime(),
+    ));
     const session = await this.prisma.playbackSession.create({
       data: {
         userId,

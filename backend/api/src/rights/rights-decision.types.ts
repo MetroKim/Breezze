@@ -5,6 +5,7 @@ export type RightsAction =
   | 'download'
   | 'cache'
   | 'video.play'
+  | 'video.download'
   | 'lyrics.display'
   | 'lyrics.translate'
   | 'promote';

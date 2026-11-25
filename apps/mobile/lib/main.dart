@@ -4,6 +4,7 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 import 'app/bootstrap.dart';
 import 'core/auth/auth_session.dart';
+import 'core/auth/supabase_auth_bridge.dart';
 import 'core/database/database_providers.dart';
 import 'features/player/player_controller.dart';
 import 'features/player/playback_session_client.dart';
@@ -14,6 +15,7 @@ void main() async {
   // Register the just_audio Linux/Windows implementations before the
   // global AudioPlayer is constructed by BreezzeAppRoot.
   JustAudioMediaKit.ensureInitialized();
+  await SupabaseAuthBridge.initialize();
 
   runApp(
     ProviderScope(

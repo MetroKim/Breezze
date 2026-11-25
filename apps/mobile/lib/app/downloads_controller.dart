@@ -30,6 +30,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   final Ref ref;
   final Map<String, DownloadCancellation> _cancellations = {};
   final Map<String, BzTrack> _tracks = {};
+  final Map<String, String> _videoTitles = {};
 
   Future<File> _jobsFile() async {
     final dir = await getApplicationSupportDirectory();
@@ -55,6 +56,16 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
           'status': statuses[entry.key] ?? 'queued',
         };
       }
+      for (final entry in _videoTitles.entries) {
+        final key = 'video:${entry.key}';
+        records[key] = {
+          'kind': 'video',
+          // Jobs file is shared at the app level; do not expose video titles
+          // belonging to a different signed-in listener.
+          'title': 'Video',
+          'status': statuses[key] ?? 'queued',
+        };
+      }
       final temp = File('${file.path}.tmp');
       await temp.writeAsString(jsonEncode(records), flush: true);
       if (await file.exists()) await file.delete();
@@ -73,6 +84,15 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         final raw = entry.value;
         if (raw is! Map) continue;
         final item = raw.cast<String, dynamic>();
+        if (item['kind'] == 'video' && entry.key.startsWith('video:')) {
+          final videoAssetId = entry.key.substring('video:'.length);
+          if (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) {
+            _videoTitles[videoAssetId] = 'Video';
+            final saved = item['status'] as String? ?? 'failed';
+            statuses[entry.key] = saved == 'downloading' ? 'paused' : saved;
+          }
+          continue;
+        }
         final track = BzTrack(
           id: entry.key,
           title: item['title'] as String? ?? 'Unknown track',
@@ -98,12 +118,31 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     _persistJobs();
   }
 
+  void forgetVideo(String videoAssetId) {
+    final key = 'video:$videoAssetId';
+    _cancellations.remove(key)?.cancel();
+    _videoTitles.remove(videoAssetId);
+    if (mounted) {
+      final next = Map<String, String>.of(ref.read(downloadJobStatusProvider))
+        ..remove(key);
+      ref.read(downloadJobStatusProvider.notifier).state = next;
+      state = Map<String, double>.of(state)..remove(key);
+    }
+    _persistJobs();
+  }
+
   Future<void> pause(String trackId) async {
     _setStatus(trackId, 'paused');
     _cancellations[trackId]?.cancel();
   }
 
   Future<void> resume(String trackId) async {
+    if (trackId.startsWith('video:')) {
+      final assetId = trackId.substring('video:'.length);
+      final title = _videoTitles[assetId];
+      if (title != null) await downloadVideo(videoAssetId: assetId, title: title);
+      return;
+    }
     final track = _tracks[trackId];
     if (track != null) {
       final next = Map<String, double>.of(state)..remove(trackId);
@@ -113,6 +152,12 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   }
 
   Future<void> retry(String trackId) async {
+    if (trackId.startsWith('video:')) {
+      final assetId = trackId.substring('video:'.length);
+      final title = _videoTitles[assetId];
+      if (title != null) await downloadVideo(videoAssetId: assetId, title: title);
+      return;
+    }
     final track = _tracks[trackId];
     if (track != null) await download(track);
   }
@@ -120,6 +165,16 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   Future<void> cancel(String trackId) async {
     _setStatus(trackId, 'cancelled');
     _cancellations[trackId]?.cancel();
+    if (trackId.startsWith('video:')) {
+      final auth = ref.read(authSessionProvider);
+      if (auth is AuthSignedIn) {
+        final dir = await downloadsDirectory(userId: auth.userId);
+        final library = DownloadsLibrary(root: dir, lyrics: ref.read(lyricsProvider));
+        await library.removeVideoPartial(trackId.substring('video:'.length));
+      }
+      if (mounted) state = Map<String, double>.of(state)..remove(trackId);
+      return;
+    }
     final auth = ref.read(authSessionProvider);
     if (auth is AuthSignedIn) {
       final dir = await downloadsDirectory(userId: auth.userId);
@@ -128,6 +183,77 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     if (mounted) {
       final next = Map<String, double>.of(state)..remove(trackId);
       state = next;
+    }
+  }
+
+  /// Licensed MP4 jobs share the existing download queue and transfer library.
+  Future<void> downloadVideo({
+    required String videoAssetId,
+    required String title,
+  }) async {
+    if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) return;
+    final key = 'video:$videoAssetId';
+    if (state.containsKey(key) ||
+        ref.read(downloadJobStatusProvider)[key] == 'downloaded') return;
+    _videoTitles[videoAssetId] = title;
+    final cancellation = DownloadCancellation();
+    _cancellations[key] = cancellation;
+    _setStatus(key, 'downloading');
+    try {
+      final preferences = await DownloadPreferencesStore().load();
+      final network = await Connectivity().checkConnectivity();
+      final onWifi = network.contains(ConnectivityResult.wifi);
+      final onMobile = network.contains(ConnectivityResult.mobile);
+      if (!onWifi && (!onMobile || preferences.wifiOnly || !preferences.allowCellular)) {
+        _setStatus(key, onMobile ? 'waiting_for_wifi' : 'waiting_for_network');
+        return;
+      }
+      final auth = ref.read(authSessionProvider);
+      if (auth is! AuthSignedIn) { _setStatus(key, 'failed'); return; }
+      final api = ref.read(authSessionProvider.notifier).api;
+      if (api.accessToken == null) { _setStatus(key, 'failed'); return; }
+      final result = await api.authorizeVideoDownload(videoAssetId);
+      if (cancellation.isCancelled) return;
+      if (result['allowed'] != true || result['videoAssetId'] != videoAssetId ||
+          result['mimeType'] != 'video/mp4') {
+        _setStatus(key, 'failed');
+        return;
+      }
+      final url = result['url'] as String?;
+      final leaseRaw = result['offlineLeaseExpiresAt'] as String?;
+      final lease = DateTime.tryParse(leaseRaw ?? '')?.toUtc();
+      final uri = url == null ? null : Uri.tryParse(url);
+      if (url == null || uri == null || uri.scheme != 'https' || uri.pathSegments.length != 3 ||
+          uri.pathSegments.first != 'video' ||
+          uri.pathSegments[1] != videoAssetId ||
+          uri.pathSegments.last != 'download' ||
+          lease == null || !lease.isAfter(DateTime.now().toUtc())) {
+        _setStatus(key, 'failed');
+        return;
+      }
+      state = {...state, key: 0.0};
+      final dir = await downloadsDirectory(userId: auth.userId);
+      final library = DownloadsLibrary(root: dir, lyrics: ref.read(lyricsProvider));
+      final ok = await library.downloadVideo(
+        videoAssetId: videoAssetId,
+        title: title,
+        ownerId: auth.userId,
+        downloadUrl: url,
+        rightsExpiresAtUtc: lease,
+        cancellation: cancellation,
+        onProgress: (value) {
+          if (mounted) state = {...state, key: value};
+        },
+      );
+      if (cancellation.isCancelled) return;
+      _setStatus(key, ok ? 'downloaded' : 'failed');
+    } catch (_) {
+      if (!cancellation.isCancelled) _setStatus(key, 'failed');
+    } finally {
+      if (identical(_cancellations[key], cancellation)) _cancellations.remove(key);
+      if (mounted && ref.read(downloadJobStatusProvider)[key] != 'paused') {
+        state = Map<String, double>.of(state)..remove(key);
+      }
     }
   }
 
