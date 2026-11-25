@@ -10,6 +10,7 @@ import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
+import '../video/open_youtube_player.dart';
 
 /// A guest playlist is local; a private playlist belongs only to the active
 /// signed-in account. Transitional auth states expose neither owner's data.
@@ -144,7 +145,10 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This playlist contains no currently playable songs.')),
+        const SnackBar(content: Text(playlist.tracks.any((item) =>
+              isYouTubeSongId(item.id) || item.id.startsWith('bzv:'))
+              ? 'Tap a YouTube song to watch it in the official player. Native Play All is unavailable for these tracks.'
+              : 'This playlist contains no currently playable songs.')),
       );
     }
   }
@@ -152,6 +156,25 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
     if (!_ownerStillActive()) return;
     final track = playlist.tracks[index];
+    // The saved playlist can keep YouTube Music tracks as library entries,
+    // but their playback is through the official foreground video surface.
+    // They must never enter the native audio queue or offline download path.
+    final youtubeVideoId = isYouTubeSongId(track.id)
+        ? track.id.substring('bz:youtube_music:'.length)
+        : track.id.startsWith('bzv:')
+            ? track.id.substring(4)
+            : null;
+    if (youtubeVideoId != null && canOfferPlaybackAction(track.id)) {
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: youtubeVideoId,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+      );
+      return;
+    }
     if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
