@@ -817,6 +817,17 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
                         'offline downloads are not available.',
                       ),
                     ),
+                    if (rows.any((item) => _ytVideoId(item['providerTrackId'])))
+                      ListTile(
+                        leading: const Icon(Icons.play_circle_fill),
+                        title: Text(widget.album ? 'Play album' : 'Play playlist'),
+                        subtitle: const Text(
+                          'Watch all available songs in order in the YouTube player',
+                        ),
+                        onTap: () => _watch(rows.firstWhere(
+                          (item) => _ytVideoId(item['providerTrackId']),
+                        )),
+                      ),
                     if (rows.isEmpty)
                       const ListTile(title: Text('No tracks available')),
                     for (final item in rows)
@@ -935,6 +946,17 @@ class _YtConnectedPlaylistScreenState
                       'Offline YouTube downloads are not available.',
                     ),
                   ),
+                  if (_items!.any((item) => _ytVideoId(item['videoId'])))
+                    ListTile(
+                      leading: const Icon(Icons.play_circle_fill),
+                      title: const Text('Play playlist'),
+                      subtitle: const Text(
+                        'Watch all available videos in playlist order',
+                      ),
+                      onTap: () => _watch(_items!.firstWhere(
+                        (item) => _ytVideoId(item['videoId']),
+                      )),
+                    ),
                   if (_items!.isEmpty)
                     const ListTile(title: Text('No videos in this playlist')),
                   for (final item in _items!)
