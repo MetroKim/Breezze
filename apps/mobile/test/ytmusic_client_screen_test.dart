@@ -500,9 +500,12 @@ void main() {
       matching: find.byType(ListTile),
     );
     expect(tester.widget<ListTile>(bad).onTap, isNull);
-    expect(tester.widget<IconButton>(
-      find.byTooltip('Up next for Unusable Search Result'),
-    ).onPressed, isNull);
+    final disabledRelatedButton = find.ancestor(
+      of: find.byTooltip('Up next for Unusable Search Result'),
+      matching: find.byType(IconButton),
+    );
+    expect(disabledRelatedButton, findsOneWidget);
+    expect(tester.widget<IconButton>(disabledRelatedButton).onPressed, isNull);
 
     await tester.tap(find.byTooltip('Up next for Search Result Song'));
     await tester.pumpAndSettle();
