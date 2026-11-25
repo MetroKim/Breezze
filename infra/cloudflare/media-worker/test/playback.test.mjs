@@ -58,6 +58,48 @@ async function urlFor({ track = mediaId, quality = variant, expiry = Date.now() 
 
 const env = () => ({ MEDIA_BUCKET: fakeR2(), MEDIA_SIGNING_KEY: key });
 
+
+async function audioDownloadUrlFor({
+  track = mediaId, quality = variant, expiry = Date.now() + 60_000,
+} = {}) {
+  const payload = `download:${track}:${quality}:${expiry}`;
+  const imported = await webcrypto.subtle.importKey(
+    'raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign'],
+  );
+  const signature = Buffer.from(
+    await webcrypto.subtle.sign('HMAC', imported, new TextEncoder().encode(payload)),
+  ).toString('base64url');
+  return `https://media.breezze.test/audio/${track}/${quality}?mode=download&e=${expiry}&s=${signature}`;
+}
+
+test('licensed offline audio reads the original rendition with purpose isolation', async () => {
+  const url = await audioDownloadUrlFor();
+  const response = await worker.fetch(new Request(url), env());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Disposition'),
+    'attachment; filename="breezze-audio.m4a"');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+
+  const ranged = await worker.fetch(new Request(url, {
+    headers: { Range: 'bytes=2-6' },
+  }), env());
+  assert.equal(ranged.status, 206);
+  assert.deepEqual(new Uint8Array(await ranged.arrayBuffer()), bytes.slice(2, 7));
+  const streaming = await urlFor();
+  assert.equal((await worker.fetch(new Request(
+    streaming.replace('?', '?mode=download&')), env())).status, 403);
+  assert.equal((await worker.fetch(new Request(
+    url.replace('mode=download&', '')), env())).status, 403);
+  assert.equal((await worker.fetch(new Request(
+    url.replace('/AAC_256?', '/LOSSLESS?')), env())).status, 403);
+  assert.equal((await worker.fetch(new Request(
+    await audioDownloadUrlFor({ expiry: Date.now() - 1 })), env())).status, 403);
+  assert.equal((await worker.fetch(new Request(
+    url.replace('mode=download', 'mode=preview')), env())).status, 400);
+});
+
 test('signed GET serves exact bytes without exposing them through shared caches', async () => {
   const response = await worker.fetch(new Request(await urlFor()), env());
   assert.equal(response.status, 200);

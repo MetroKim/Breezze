@@ -84,9 +84,18 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
 
   const expires = Number(url.searchParams.get('e'));
   const signature = url.searchParams.get('s');
+  // Explicit offline grants use separate HMACs; streaming URLs cannot be
+  // repurposed by appending a query parameter.
+  const downloadMode = !video && url.searchParams.get('mode') === 'download';
+  if ((video && url.searchParams.has('mode')) ||
+      (!video && url.searchParams.has('mode') && !downloadMode)) {
+    return error(400, 'INVALID_MEDIA_MODE');
+  }
   const payload = video
     ? `video:${trackId}:${variant}:${expires}`
-    : `${trackId}:${variant}:${expires}`;
+    : downloadMode
+      ? `download:${trackId}:${variant}:${expires}`
+      : `${trackId}:${variant}:${expires}`;
   if (!await validSignature(env.MEDIA_SIGNING_KEY, payload, signature, expires)) {
     return error(403, 'MEDIA_SIGNATURE_INVALID_OR_EXPIRED');
   }
@@ -163,6 +172,9 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   });
   if (video && variant === 'download') {
     headers.set('Content-Disposition', 'attachment; filename="breezze-video.mp4"');
+  }
+  if (downloadMode) {
+    headers.set('Content-Disposition', 'attachment; filename="breezze-audio.m4a"');
   }
   if (rangeHeader && rangeStart !== null && rangeLength !== null && totalSize !== null) {
     headers.set('Content-Range', `bytes ${rangeStart}-${rangeStart + rangeLength - 1}/${totalSize}`);
