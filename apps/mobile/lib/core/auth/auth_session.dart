@@ -94,7 +94,16 @@ class AuthSessionController extends Notifier<AuthState> {
     baseUrl: _configuredApiUrl.isNotEmpty
         ? _configuredApiUrl
         : (kReleaseMode ? _productionApiUrl : 'http://localhost:3000'),
-  )..onUnauthorized = _refreshAccessToken;
+  )..onUnauthorized = _refreshAccessToken
+   ..currentPrincipal = () {
+     // Tokens can rotate without changing listeners. Read the live owner
+     // each time so any earlier request fails closed on account switches.
+     final active = state;
+     if (active is AuthSignedIn) return active.userId;
+     if (active is AuthMfaRequired) return active.userId;
+     if (active is AuthMfaRecoveryCodes) return active.userId;
+     return null;
+   };
 
   @override
   AuthState build() {
