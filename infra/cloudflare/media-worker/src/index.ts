@@ -91,7 +91,11 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
     return error(403, 'MEDIA_SIGNATURE_INVALID_OR_EXPIRED');
   }
 
-  const key = video ? `video/${trackId}/original.mp4` : `audio/${trackId}/${variant}`;
+  // Downloads are a separate signed *purpose*, not a separate R2 encoding.
+  // They serve the approved AAC_256 audio asset, not a phantom `download`
+  // object that was never ingested by the media pipeline.
+  const storageVariant = !video && variant === 'download' ? 'AAC_256' : variant;
+  const key = video ? `video/${trackId}/original.mp4` : `audio/${trackId}/${storageVariant}`;
   const rangeHeader = request.headers.get('range');
   let object: R2ObjectBody | R2Object | null;
   let status = 200;
@@ -163,6 +167,8 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   });
   if (video && variant === 'download') {
     headers.set('Content-Disposition', 'attachment; filename="breezze-video.mp4"');
+  } else if (!video && variant === 'download') {
+    headers.set('Content-Disposition', 'attachment; filename="breezze-audio.m4a"');
   }
   if (rangeHeader && rangeStart !== null && rangeLength !== null && totalSize !== null) {
     headers.set('Content-Range', `bytes ${rangeStart}-${rangeStart + rangeLength - 1}/${totalSize}`);

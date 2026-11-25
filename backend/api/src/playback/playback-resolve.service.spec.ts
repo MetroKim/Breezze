@@ -75,6 +75,30 @@ describe('PlaybackResolveService', () => {
     },
   );
 
+  it.each(['licensed_partner', 'soundcloud', 'audius', 'unapproved_catalog'])(
+    'never signs external metadata from provider %s as an internal R2 asset',
+    async (source) => {
+      prisma.track.findUnique.mockResolvedValue({
+        id: 'track-1',
+        source,
+        externalId: 'bz:' + source + ':recording-1',
+      });
+      await expect(service.resolve('user-1', request, 'TZ'))
+        .rejects.toThrow('USE_PROVIDER_PLAYBACK_RESOLVER');
+      expect(rights.decide).not.toHaveBeenCalled();
+      expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects legacy tracks carrying an external ID but no source', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'track-1', source: null, externalId: 'bz:youtube_music:dQw4w9WgXcQ',
+    });
+    await expect(service.resolve('user-1', request, 'TZ'))
+      .rejects.toThrow('USE_PROVIDER_PLAYBACK_RESOLVER');
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+  });
+
   it('never signs a full playback URL for a preview-only grant', async () => {
     rights.decide.mockResolvedValue({
       allowed: true,

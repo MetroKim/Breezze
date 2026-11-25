@@ -4,6 +4,7 @@ import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from './media-signer.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
 import { validateProviderAudioSource } from './provider-stream-guard';
+import { verifySignedMediaObject } from './signed-media-presence';
 
 @Injectable()
 export class PlaybackResolveService {
@@ -34,10 +35,15 @@ export class PlaybackResolveService {
     // not proof that any audio bytes exist in Breezze's media storage.
     const track = await this.prisma.track.findUnique({
       where: { id: dto.trackId },
-      select: { source: true },
+      select: { source: true, externalId: true },
     });
     if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
-    if (track.source === 'youtube_music' || track.source === 'deezer') {
+    // A licensed partner, former source or metadata-only recording must never
+    // be signed as though an internal R2 audio asset were ingested.
+    if (
+      track.source !== 'breezze_internal' &&
+      !(track.source === null && track.externalId === null)
+    ) {
       throw new NotAcceptableException('USE_PROVIDER_PLAYBACK_RESOLVER');
     }
 
@@ -61,6 +67,10 @@ export class PlaybackResolveService {
       variant,
       decision.expiresAt,
     );
+    // In production a signed URL alone is not proof that the media exists.
+    // Verify the private media Worker's R2 HEAD response before issuing a
+    // native player session, instead of sending the client a guaranteed 404.
+    await verifySignedMediaObject(signed.url);
     return {
       trackId: dto.trackId,
       streamUrl: signed.url,

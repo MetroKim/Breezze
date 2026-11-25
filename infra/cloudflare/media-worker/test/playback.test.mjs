@@ -183,3 +183,23 @@ test('video signatures cannot be repurposed for signed audio delivery', async ()
     MEDIA_BUCKET: fakeR2(false), MEDIA_SIGNING_KEY: key,
   })).status, 404);
 });
+
+test('signed audio download reuses ingested AAC_256 bytes, not a missing download object', async () => {
+  const downloadUrl = await urlFor({ quality: 'download' });
+  const response = await worker.fetch(new Request(downloadUrl), env());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'audio/wav');
+  assert.equal(response.headers.get('Content-Disposition'),
+    'attachment; filename="breezze-audio.m4a"');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+
+  // Signatures are purpose-specific: changing a streaming URL to the
+  // download path must not give a listener unauthorized download rights.
+  const streamingUrl = await urlFor({ quality: 'AAC_256' });
+  const forged = streamingUrl.replace('/AAC_256?', '/download?');
+  assert.equal((await worker.fetch(new Request(forged), env())).status, 403);
+
+  const head = await worker.fetch(new Request(downloadUrl, { method: 'HEAD' }), env());
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get('Content-Length'), String(bytes.length));
+});
