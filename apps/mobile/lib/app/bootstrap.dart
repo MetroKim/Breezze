@@ -88,57 +88,35 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
 
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
+    // Spotify is the *only* music-discovery provider. Do not mix Spotify
+    // results with Deezer previews, YouTube videos or native media queues.
+    final q = query.trim();
+    if (q.length < 2 || q.length > 120) return ProviderOk(<ProviderTrack>[]);
     try {
-      final data = await _ref.read(authSessionProvider.notifier).api
-          .searchAllProviders(query);
-      final rawProviders = data['providers'];
-      if (rawProviders is! List) return ProviderError('invalid_catalog_response');
-
+      final result = await _ref.read(authSessionProvider.notifier).api
+          .searchSpotify(q);
+      if (result['kind'] != 'ok' || result['value'] is! List) {
+        return ProviderError(
+          result['reason'] is String
+              ? result['reason'] as String
+              : 'spotify_unavailable',
+        );
+      }
+      final unique = <String>{};
       final tracks = <ProviderTrack>[];
-      final seen = <String>{};
-      var successfulProviders = 0;
-      for (final providerEntry in rawProviders.whereType<Map>()) {
-        final providerId = providerEntry['providerId'] as String? ?? '';
-        final envelope = providerEntry['result'];
-        if (providerId.isEmpty || envelope is! Map || envelope['kind'] != 'ok') {
-          // One provider's error/unsupported response does not discard the
-          // successful results returned by other providers.
-          continue;
-        }
-        final rawTracks = envelope['value'];
-        if (rawTracks is! List) continue;
-        successfulProviders++;
-        for (final rawTrack in rawTracks.whereType<Map>()) {
-          final providerTrackId = rawTrack['providerTrackId'] as String? ?? '';
-          final title = rawTrack['title'] as String? ?? '';
-          final artist = rawTrack['artist'] as String? ?? '';
-          if (providerTrackId.isEmpty || title.isEmpty || artist.isEmpty) continue;
-
-          // The internal catalog already returns canonical Breezze IDs.
-          // External provider IDs are namespaced to avoid cross-provider
-          // collisions and are converged by the backend before playback.
-          final track = providerId == 'breezze_internal'
-              ? _localTrackFromJson({
-                  'id': providerTrackId,
-                  'title': title,
-                  'artist': {'name': artist},
-                  'duration': rawTrack['durationSec'],
-                  'artworkUrl': rawTrack['artworkUrl'],
-                })
-              : _trackFromJson(rawTrack, providerId: providerId);
-          if (track.breezzeTrackId.isNotEmpty &&
-              track.title.isNotEmpty &&
-              seen.add(track.breezzeTrackId)) {
-            tracks.add(track);
-          }
+      for (final raw in (result['value'] as List).whereType<Map>()) {
+        final id = raw['providerTrackId'];
+        if (id is! String || !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
+        final track = _trackFromJson(raw, providerId: 'spotify');
+        if (track.title.trim().isNotEmpty &&
+            track.artist.trim().isNotEmpty &&
+            unique.add(track.breezzeTrackId)) {
+          tracks.add(track);
         }
       }
-      if (successfulProviders == 0) return ProviderError('all_providers_unavailable');
-      // A successful empty catalogue query is not a network failure.
-      if (tracks.isEmpty) return ProviderOk(<ProviderTrack>[]);
       return ProviderOk(tracks);
     } catch (_) {
-      return ProviderError('network_error');
+      return ProviderError('spotify_network_error');
     }
   }
 
