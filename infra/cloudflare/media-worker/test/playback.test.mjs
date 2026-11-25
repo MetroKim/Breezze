@@ -95,6 +95,57 @@ test('byte-range seek and suffix requests return precise RFC 9110 ranges', async
   assert.equal(invalid.headers.get('Content-Range'), `bytes */${bytes.length}`);
 });
 
+test('If-Range resumes only the exact authorized R2 object revision', async () => {
+  const url = await urlFor();
+  const matching = await worker.fetch(new Request(url, {
+    headers: {
+      Range: 'bytes=4-8',
+      'If-Range': '"synthetic-qa-fixture"',
+    },
+  }), env());
+  assert.equal(matching.status, 206);
+  assert.equal(matching.headers.get('Content-Range'),
+    `bytes 4-8/${bytes.length}`);
+  assert.deepEqual(new Uint8Array(await matching.arrayBuffer()),
+    bytes.slice(4, 9));
+
+  const obsolete = await worker.fetch(new Request(url, {
+    headers: { Range: 'bytes=4-8', 'If-Range': '"old-object-revision"' },
+  }), env());
+  assert.equal(obsolete.status, 200);
+  assert.equal(obsolete.headers.get('Content-Range'), null);
+  assert.deepEqual(new Uint8Array(await obsolete.arrayBuffer()), bytes);
+
+  const weak = await worker.fetch(new Request(url, {
+    headers: { Range: 'bytes=4-8', 'If-Range': 'W/"synthetic-qa-fixture"' },
+  }), env());
+  assert.equal(weak.status, 200);
+  assert.deepEqual(new Uint8Array(await weak.arrayBuffer()), bytes);
+});
+
+test('conditional media requests require valid signature before 304', async () => {
+  const url = await urlFor();
+  const accepted = await worker.fetch(new Request(url, {
+    headers: { 'If-None-Match': '"synthetic-qa-fixture"' },
+  }), env());
+  assert.equal(accepted.status, 304);
+  assert.equal(accepted.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(accepted.headers.get('ETag'), '"synthetic-qa-fixture"');
+  assert.equal(await accepted.text(), '');
+
+  const weak = await worker.fetch(new Request(url, {
+    method: 'HEAD',
+    headers: { 'If-None-Match': 'W/"synthetic-qa-fixture"' },
+  }), env());
+  assert.equal(weak.status, 304);
+
+  const unauthorized = await worker.fetch(new Request(
+    url.replace(/s=[^&]+/, 's=wrong-signature'),
+    { headers: { 'If-None-Match': '"synthetic-qa-fixture"' } },
+  ), env());
+  assert.equal(unauthorized.status, 403);
+});
+
 test('rejects a forged track, signature or expired capability', async () => {
   const valid = await urlFor();
   for (const requestUrl of [
