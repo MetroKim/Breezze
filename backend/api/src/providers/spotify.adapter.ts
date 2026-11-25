@@ -33,8 +33,8 @@ interface SpotifyTokenPayload {
  * Spotify music discovery through the official Web API.
  *
  * Spotify never supplies raw audio, download grants, or a native Breezze
- * audio-engine source. Users listen through the official Spotify application;
- * Premium is required for on-demand full-track playback.
+ * audio-engine source. Breezze must not claim it can play Spotify songs
+ * without a separately approved in-app streaming integration.
  *
  * All client credentials and bearer tokens stay on this server, never on
  * Flutter or inside serialized provider results.
@@ -176,7 +176,7 @@ export class SpotifyAdapter implements ProviderAdapter {
         .filter((row): row is ProviderTrack =>
           row !== null && !seen.has(row.providerTrackId) &&
           (seen.add(row.providerTrackId), true)),
-      'Spotify music catalog. Playback opens Spotify; not Breezze native audio.',
+      'Spotify metadata only. Full Breezze playback requires separate rights.',
     );
     // Short-lived cache reduces Spotify development-mode API consumption.
     await this.cache.set(key, result, 90);
@@ -192,7 +192,7 @@ export class SpotifyAdapter implements ProviderAdapter {
     const track = this.mapTrack(result.value);
     if (!track) return providerError('SPOTIFY_TRACK_UNAVAILABLE',
       'This track cannot be played in the current catalog');
-    return providerOk(track, 'Spotify. Open the official Spotify app to listen.');
+    return providerOk(track, 'Spotify metadata only; no Breezze full-stream grant.');
   }
 
   async getAvailability(): Promise<ProviderResult<{available: boolean}>> {
@@ -201,6 +201,6 @@ export class SpotifyAdapter implements ProviderAdapter {
 
   async resolvePlayback(_request: ProviderPlaybackRequest):
     Promise<ProviderResult<ProviderPlaybackSource>> {
-    return providerUnsupported('Spotify playback requires Spotify App Remote or Spotify Connect.');
+    return providerUnsupported('Spotify public Web API does not provide raw Breezze audio streams.');
   }
 }
