@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,6 +31,15 @@ String downloadDenialStatus(Object? reason) => switch (reason) {
   _ => 'failed',
 };
 
+/// Owner-specific queue filename. The legacy global jobs.json did not carry
+/// an owner ID and must never be silently imported by a different listener.
+String scopedDownloadJobsFilename(String userId) {
+  if (userId.trim().isEmpty) {
+    throw ArgumentError.value(userId, 'userId', 'owner required');
+  }
+  return '${base64Url.encode(utf8.encode(userId)).replaceAll('=', '')}.json';
+}
+
 /// Live transfer progress and queue state, keyed by track ID.
 final downloadJobStatusProvider = StateProvider<Map<String, String>>((ref) => {});
 
@@ -42,23 +52,46 @@ final downloadProgressProvider =
 /// Provider metadata/search adapters are never allowed to grant download
 /// rights or expose a raw stream URL.
 class DownloadsController extends StateNotifier<Map<String, double>> {
-  DownloadsController(this.ref) : super({}) { _restoreJobs(); }
+  DownloadsController(this.ref) : super({}) {
+    ref.listen<AuthState>(authSessionProvider, (_, next) {
+      _switchOwner(next is AuthSignedIn ? next.userId : null);
+    });
+    final initial = ref.read(authSessionProvider);
+    _switchOwner(initial is AuthSignedIn ? initial.userId : null);
+  }
 
   final Ref ref;
+  String? _ownerId;
+
+  void _switchOwner(String? nextOwner) {
+    if (_ownerId == nextOwner) return;
+    for (final pending in _cancellations.values) {
+      pending.cancel();
+    }
+    _cancellations.clear();
+    _tracks.clear();
+    _videoTitles.clear();
+    _ownerId = nextOwner;
+    if (!mounted) return;
+    state = {};
+    ref.read(downloadJobStatusProvider.notifier).state = {};
+    if (nextOwner != null) unawaited(_restoreJobs(nextOwner));
+  }
   final Map<String, DownloadCancellation> _cancellations = {};
   final Map<String, BzTrack> _tracks = {};
   final Map<String, String> _videoTitles = {};
 
-  Future<File> _jobsFile() async {
+  Future<File> _jobsFile(String ownerId) async {
     final dir = await getApplicationSupportDirectory();
-    final folder = Directory('${dir.path}/Breezze/Downloads');
+    final folder = Directory('${dir.path}/Breezze/Downloads/Jobs');
     await folder.create(recursive: true);
-    return File('${folder.path}/jobs.json');
+    return File('${folder.path}/${scopedDownloadJobsFilename(ownerId)}');
   }
 
   Future<void> _persistJobs() async {
+    final ownerId = _ownerId;
+    if (ownerId == null || !mounted) return;
     try {
-      final file = await _jobsFile();
       final records = <String, Object?>{};
       final statuses = ref.read(downloadJobStatusProvider);
       for (final entry in _tracks.entries) {
@@ -83,6 +116,8 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
           'status': statuses[key] ?? 'queued',
         };
       }
+      final file = await _jobsFile(ownerId);
+      if (!mounted || _ownerId != ownerId) return;
       final temp = File('${file.path}.tmp');
       await temp.writeAsString(jsonEncode(records), flush: true);
       if (await file.exists()) await file.delete();
@@ -90,45 +125,57 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     } catch (_) {}
   }
 
-  Future<void> _restoreJobs() async {
+  Future<void> _restoreJobs(String ownerId) async {
     try {
-      final file = await _jobsFile();
+      final file = await _jobsFile(ownerId);
       if (!await file.exists()) return;
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map<String, dynamic>) return;
       final statuses = <String, String>{};
+      final tracks = <String, BzTrack>{};
+      final videos = <String, String>{};
       for (final entry in decoded.entries) {
         final raw = entry.value;
         if (raw is! Map) continue;
         final item = raw.cast<String, dynamic>();
+        final saved = item['status'] as String? ?? 'failed';
+        // The library independently verifies completed audio files and leases.
+        // A stale JSON job cannot declare that music is downloaded.
+        if (saved == 'downloaded' || saved == 'cancelled') continue;
+        final status = saved == 'downloading' ? 'paused' : saved;
         if (item['kind'] == 'video' && entry.key.startsWith('video:')) {
-          final videoAssetId = entry.key.substring('video:'.length);
-          if (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) {
-            _videoTitles[videoAssetId] = 'Video';
-            final saved = item['status'] as String? ?? 'failed';
-            statuses[entry.key] = saved == 'downloading' ? 'paused' : saved;
+          final id = entry.key.substring('video:'.length);
+          if (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id)) {
+            videos[id] = 'Video';
+            statuses[entry.key] = status;
           }
           continue;
         }
-        final track = BzTrack(
+        tracks[entry.key] = BzTrack(
           id: entry.key,
           title: item['title'] as String? ?? 'Unknown track',
           artist: item['artist'] as String? ?? 'Unknown artist',
           album: item['album'] as String?,
           artworkUrl: item['artworkUrl'] as String?,
-          duration: Duration(milliseconds: (item['durationMs'] as num?)?.toInt() ?? 0),
+          duration: Duration(
+            milliseconds: (item['durationMs'] as num?)?.toInt() ?? 0,
+          ),
           explicit: item['explicit'] == true,
         );
-        _tracks[entry.key] = track;
-        final saved = item['status'] as String? ?? 'failed';
-        statuses[entry.key] = saved == 'downloading' ? 'paused' : saved;
+        statuses[entry.key] = status;
       }
-      if (mounted) ref.read(downloadJobStatusProvider.notifier).state = statuses;
-    } catch (_) {}
+      // Discard async restore results if this session is no longer the owner.
+      if (!mounted || _ownerId != ownerId) return;
+      _tracks.addAll(tracks);
+      _videoTitles.addAll(videos);
+      ref.read(downloadJobStatusProvider.notifier).state = statuses;
+    } catch (_) {
+      // A bad jobs.json cannot authorize or expose any audio.
+    }
   }
 
   void _setStatus(String id, String status) {
-    if (!mounted) return;
+    if (!mounted || _ownerId == null) return;
     final next = Map<String, String>.of(ref.read(downloadJobStatusProvider));
     next[id] = status;
     ref.read(downloadJobStatusProvider.notifier).state = next;
@@ -208,6 +255,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     required String videoAssetId,
     required String title,
   }) async {
+    if (_ownerId == null) return;
     if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) return;
     final key = 'video:$videoAssetId';
     if (state.containsKey(key) ||
@@ -275,6 +323,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   }
 
   Future<void> download(BzTrack track) async {
+    if (_ownerId == null) return;
     if (state.containsKey(track.id) || ['downloading', 'downloaded'].contains(ref.read(downloadJobStatusProvider)[track.id])) return;
     _tracks[track.id] = track;
     final cancellation = DownloadCancellation();
