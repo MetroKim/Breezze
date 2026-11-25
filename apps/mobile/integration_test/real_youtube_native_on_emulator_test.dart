@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:just_audio/just_audio.dart' as ja;
+import 'package:http/http.dart' as http;
 
 /// Creative Commons Attribution 3.0 test video from Blender Foundation:
 /// https://www.youtube.com/watch?v=aqz-KE-bpKQ
@@ -41,7 +43,9 @@ class _DiagnosticAudioEngine extends JustAudioEngineAdapter {
     try {
       await super.prepare(source);
     } on Object catch (error) {
-      prepareFailureType = error.runtimeType.toString();
+      prepareFailureType = error is ja.PlayerException
+          ? 'PlayerException(code=${error.code})'
+          : error.runtimeType.toString();
       rethrow;
     }
   }
@@ -56,7 +60,7 @@ class _CreativeCommonsDirectAudioResolver implements PlaybackResolver {
     requests++;
     return PlayableSource(
       trackId: track.id,
-      streamUrl: 'https://commons.wikimedia.org/wiki/Special:Redirect/file/BigBuckBunny-stereo.ogg',
+      streamUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/22/BigBuckBunny-stereo.ogg',
       expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
       codec: 'vorbis',
     );
@@ -161,6 +165,31 @@ void main() {
         home: Scaffold(body: Text('Authorized full-track streaming QA')),
       ));
       try {
+        // Network preflight is independent of just_audio. Read at most one
+        // byte and cancel immediately; do not log a media URL or response.
+        final preflightStatus = await tester.runAsync(() async {
+          final client = http.Client();
+          try {
+            final request = http.Request('GET', Uri.parse(
+              'https://upload.wikimedia.org/wikipedia/commons/2/22/BigBuckBunny-stereo.ogg',
+            ))..headers['Range'] = 'bytes=0-0';
+            final response = await client.send(request)
+                .timeout(const Duration(seconds: 15));
+            final status = response.statusCode;
+            final type = response.headers['content-type'] ?? '';
+            final subscription = response.stream.listen((_) {});
+            await subscription.cancel();
+            return (status, type);
+          } finally {
+            client.close();
+          }
+        });
+        expect(preflightStatus, isNotNull);
+        expect(preflightStatus!.$1, anyOf(200, 206),
+          reason: 'Official CC media CDN was unreachable inside Android; '
+              'HTTP status ${preflightStatus.$1}');
+        expect(preflightStatus.$2.toLowerCase(), contains('ogg'),
+          reason: 'CDN responded with a non-audio MIME type');
         await tester.runAsync(() async {
           await player.playTrack(
             trackId: track.id,
