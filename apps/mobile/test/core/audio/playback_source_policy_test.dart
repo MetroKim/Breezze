@@ -52,12 +52,14 @@ void main() {
       expect(canQueueTrackId(youtube), isFalse);
       expect(canOfferPlaybackAction('bzv:dQw4w9WgXcQ'), isTrue);
       expect(canOfferPlaybackAction('bzv:not-valid'), isFalse);
-      expect(canOfferPlaybackAction('bz:deezer:123'), isTrue);
-      expect(canOfferPlaybackAction('bz:deezer:123', hasPreview: true), isTrue);
+      expect(canOfferPlaybackAction('bz:deezer:123'), isFalse);
+      expect(canOfferPlaybackAction('bz:deezer:123', hasPreview: true), isFalse);
       expect(canOfferPlaybackAction('bz:deezer:invalid', hasPreview: true), isFalse);
       expect(canOfferPlaybackAction('bz:deezer_preview:123'), isTrue);
+      // A short preview is not confused with a full-track play button.
+      expect(canQueueTrackId('bz:deezer_preview:123'), isTrue);
       expect(canOfferPlaybackAction('bz:apple_catalog:123'), isFalse);
-      expect(canOfferPlaybackAction('bz:spotify:4iV5W9uYEdYUVa79Axb7Rh'), isTrue);
+      expect(canOfferPlaybackAction('bz:spotify:4iV5W9uYEdYUVa79Axb7Rh'), isFalse);
       expect(canQueueTrackId('bz:spotify:4iV5W9uYEdYUVa79Axb7Rh'), isFalse);
       expect(canOfferPlaybackAction(''), isFalse);
     });
