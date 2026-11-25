@@ -252,6 +252,25 @@ class _LinkedClientSession extends AuthSessionController {
   BreezzeApi get api => client;
 }
 
+class _SwitchableClientSession extends AuthSessionController {
+  _SwitchableClientSession(this.client);
+  final BreezzeApi client;
+
+  @override
+  AuthState build() => const AuthSignedIn(
+    userId: 'listener-a', email: 'a@example.test',
+  );
+
+  @override
+  BreezzeApi get api => client;
+
+  void switchOwner() {
+    state = const AuthSignedIn(
+      userId: 'listener-b', email: 'b@example.test',
+    );
+  }
+}
+
 Future<void> _mount(WidgetTester tester, _ClientApi api,
     {bool signedIn = false}) async {
   tester.view.physicalSize = const Size(900, 2200);
@@ -347,6 +366,38 @@ void main() {
     expect(api.disconnectCalls, 1);
     expect(find.text('My Saved Playlist'), findsNothing);
     expect(find.text('Connect YouTube'), findsOneWidget);
+  });
+
+  testWidgets('YouTube-linked playlist state is never shared after Breezze '
+      'listener account switch', (tester) async {
+    final api = _ClientApi();
+    tester.view.physicalSize = const Size(900, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer(
+      overrides: [
+        authSessionProvider.overrideWith(() => _SwitchableClientSession(api)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const YouTubeMusicClientScreen(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('My Saved Playlist'), findsOneWidget);
+
+    api.accountConnected = false;
+    (container.read(authSessionProvider.notifier) as _SwitchableClientSession)
+        .switchOwner();
+    await tester.pumpAndSettle();
+    expect(find.text('My Saved Playlist'), findsNothing);
+    expect(find.text('Connect YouTube'), findsOneWidget);
+    expect(api.accountPlaylistCalls, 1);
   });
 
   testWidgets('linked account playlist opens read-only video items in Breezze',
