@@ -17,6 +17,26 @@ describe('DeezerAdapter', () => {
     else process.env.DEEZER_ENABLED = originalEnabled;
   });
 
+  it('promotes matching songs over unrelated chart rows in public search results', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 1, title: 'Unrelated', artist: { name: 'Other' } },
+          { id: 2, title: 'Popular Track', artist: { name: 'Burna Boy' } },
+        ],
+      }),
+    }) as unknown as typeof fetch;
+    const result = await adapter.search('Burna Boy');
+    expect(result).toMatchObject({
+      kind: 'ok',
+      value: [
+        { providerTrackId: '2', artist: 'Burna Boy' },
+        { providerTrackId: '1', title: 'Unrelated' },
+      ],
+    });
+  });
+
   it('searches Deezer and normalizes metadata without claiming playback rights', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true, json: async () => ({ data: [{
