@@ -16,6 +16,15 @@
 
 The Supabase public tables and Railway Postgres are **not** interchangeable by name. Until an explicit migration is accepted and verified, treat the existing Railway Postgres as the API's current operational database and Supabase as the identity/profile layer. Do not dual-write canonical media rights or perform destructive migrations.
 
+## 2026-11-26 verified follow-up (do not confuse QA with production)
+
+- Source revision `d241f3a`: the no-deploy media verification jobs passed (NestJS rights tests and local Wrangler/R2 real HTTP ingest/seek tests).
+- GitHub run [45712075608](https://github.com/MetroKim/Breezze/actions/runs/45712075608): **three jobs PASS**, including applying the real Prisma migration history on a fresh PostgreSQL 16 instance and running the actual audio-catalog database integration test.
+- A dedicated **non-production** Cloudflare Worker `breezze-media-qa` now runs the current media source with an isolated private R2 bucket `breezze-media-qa`; its remote `/health` returned HTTP 200, and an invalid signed-media request returned HTTP 403. This does **not** certify a live, authorized audio recording; the production media Worker is unchanged.
+- The separate `media-live-qa.yml` workflow is manual-only: repository Cloudflare deployment secrets were not configured during its first invocation. The QA Worker was instead deployed through the connected Cloudflare API. It is **not** permissible to treat this first GitHub Actions attempt as successful or to copy a production secret into GitHub.
+- The global native Flutter test has been extended to verify a 125-second original WAV file, far seeking, pause and resume on Android and iOS runners. Acceptance for the *new revision* remains pending until both simulators complete successfully.
+- The NestJS protected `/health/ready` endpoint checks media schema availability at runtime while the public `/health` remains a shallow liveness probe. This endpoint needs a reviewed **backend deployment** before it exists on Railway.
+
 ## 2. Current contract
 
 `apps/mobile` maintains one authoritative playback coordinator and queue. NestJS owns the recording identity, rights, country-specific availability, and issuance of a session/short-lived media grant. The private Cloudflare media Worker authenticates the grant before responding to HEAD, GET or byte-range GET. R2 stores only Breezze-owned or separately rights-cleared AAC/FLAC and MP4 files. Official YouTube video playback remains with the official visible player.
