@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from './media-signer.service';
 import { ProviderRegistry } from '../providers/provider-registry.service';
+import { validateProviderAudioSource } from './provider-stream-guard';
 
 @Injectable()
 export class PlaybackResolveService {
@@ -153,25 +154,9 @@ export class PlaybackResolveService {
       throw new ServiceUnavailableException(result.code);
     }
 
-    // A provider adapter must never hand the client an insecure or expired URL.
-    let streamUrl: URL;
-    try {
-      streamUrl = new URL(result.value.url);
-    } catch {
-      throw new ServiceUnavailableException('PROVIDER_RETURNED_INVALID_URL');
-    }
-    if (
-      streamUrl.protocol !== 'https:' ||
-      result.value.expiresAt.getTime() <= Date.now()
-    ) {
-      throw new ServiceUnavailableException('PROVIDER_RETURNED_INVALID_SOURCE');
-    }
-    // A provider URL whose validity extends beyond this recording's
-    // explicit license window is not safe to hand out. Adapter metadata
-    // cannot silently widen our canonical authorization interval.
-    if (decision.expiresAt && result.value.expiresAt > decision.expiresAt) {
-      throw new NotAcceptableException('PROVIDER_GRANT_OUTLIVES_RIGHTS');
-    }
+    // Fail closed before exposing the provider's bearer URL to Flutter.
+    // Short leases are re-resolved, not cached or passed to the audio engine.
+    const streamUrl = validateProviderAudioSource(result.value, decision.expiresAt);
 
     return {
       providerId: dto.providerId,
