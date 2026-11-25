@@ -38,3 +38,10 @@ The old fork also contains unmerged `feat/supabase-auth-breezze`, `integration/p
 4. Original user-provided Figma and Flutter visual ZIPs transferred **byte-for-byte** to the repository: **PASS**, with CI archive verifier.
 5. All historical **unmerged branch commits** preserved independently: **NOT COMPLETE**. Archive attempt [run #45564087967](https://github.com/MetroKim/Breezze/actions/runs/45564087967) fetched 11 old fork branches, but GitHub refused to push branches containing `.github/workflows/listener-runtime.yml` because the connected GitHub App lacks `workflows` permission. The failed import workflow was removed from `main` to keep the release pipeline clean. Keep the old fork intact until an authorized Git credential/workflow permission is available; do not misreport those branches as imported.
 5. Production rights and OAuth permissions: remain under their own verified gate; source migration is not authorization.
+
+## Backported offline-rights protection (25 November 2026)
+
+The earlier unmerged `feat/audio-first-video-handoff` source at `28061bcf69504c9bfe93988596d5b8de19a0a09a` contained two useful, standalone policies absent from independent main:
+`AuthorizedDownloadGrant` and `hasValidOfflineLease`. Their exact implementations and four Dart test cases were migrated into the active Flutter application. `DownloadsController.download` now consumes the validated *server-issued* HTTPS download grant rather than allowing a missing or oversized offline lease, and `DownloadsScreen._play` fails closed when the cached audio lease is missing or expired. This is an actual runtime integration; it does not add a second audio player or new download provider. The existing backend already bounds leases to 72 hours.
+
+Acceptance: unit tests and Flutter analyzer must pass on the exact migration commit; real offline/emulator playback acceptance is still separate. This client change does not grant new music rights and does not require a production backend migration.

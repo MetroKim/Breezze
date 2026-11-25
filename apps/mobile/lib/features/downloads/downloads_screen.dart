@@ -12,6 +12,7 @@ import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 import '../video/device_video.dart';
+import '../../core/audio/offline_lease_policy.dart';
 
 /// Downloads library — offline tracks with cover art + lyrics, plus a
 /// live in-progress section (§6.1).
@@ -133,7 +134,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final auth = ref.read(authSessionProvider);
     if (auth is! AuthSignedIn || auth.userId != track.ownerId) return;
     final expiry = track.rightsExpiresAtUtc;
-    if (expiry != null && !expiry.isAfter(DateTime.now().toUtc())) {
+    if (!hasValidOfflineLease(expiry)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('This download has expired. Connect to the internet and download it again.'),

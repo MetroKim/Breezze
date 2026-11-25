@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/auth/auth_session.dart';
+import '../core/audio/authorized_download_grant.dart';
 import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
 import 'bootstrap.dart';
@@ -299,20 +300,16 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         return;
       }
 
-      final downloadUrl = authorization['url'] as String?;
-      if (downloadUrl == null || downloadUrl.isEmpty) { _setStatus(track.id, 'failed'); return; }
-      // The server issues a bounded offline lease, capped by the actual rights end.
-      // Keep the effective expiry in the local metadata so a device offline for
-      // longer than the lease cannot continue playing indefinitely.
-      final rightsExpiryRaw = (authorization['offlineLeaseExpiresAt']
-          ?? authorization['rightsExpiresAt']) as String?;
-      final rightsExpiry = rightsExpiryRaw == null
-          ? null
-          : DateTime.tryParse(rightsExpiryRaw)?.toUtc();
-      if (rightsExpiryRaw != null && rightsExpiry == null) return;
-      if (rightsExpiry != null && !rightsExpiry.isAfter(DateTime.now().toUtc())) {
+      // Legacy Breezze grant validation, now wired into the active downloader:
+      // a preview or an absent/expired/off-contract offline lease is never
+      // authorization for locally persistent music.
+      final grant = AuthorizedDownloadGrant.fromResponse(authorization);
+      if (grant == null) {
+        _setStatus(track.id, 'failed');
         return;
       }
+      final downloadUrl = grant.downloadUrl.toString();
+      final rightsExpiry = grant.offlineLeaseExpiresAtUtc;
 
       state = {...state, track.id: 0.0};
       final dir = await downloadsDirectory(userId: auth.userId);
