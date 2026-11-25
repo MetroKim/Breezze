@@ -39,6 +39,31 @@ void main() {
       client.close();
     });
 
+    test('drops stale response after same-user logout and login', () async {
+      final started = Completer<void>();
+      final reply = Completer<http.Response>();
+      final client = MockClient((_) async {
+        started.complete();
+        return reply.future;
+      });
+      var authGeneration = 7;
+      final api = BreezzeApi(
+        baseUrl: 'https://api.breezze.test',
+        client: client,
+      );
+      api.accessToken = 'first-login';
+      api.currentPrincipal = () => '$authGeneration:listener-a';
+
+      final pending = api.me();
+      await started.future;
+      authGeneration++; // Sign out and subsequently sign in as listener A.
+      api.accessToken = 'second-login';
+      reply.complete(http.Response('{"data":{"id":"listener-a"}}', 200));
+
+      await expectLater(pending, throwsA(sessionChanged()));
+      client.close();
+    });
+
     test('never retries a 401 under a different listener', () async {
       final sent = <http.Request>[];
       final client = MockClient((request) async {
