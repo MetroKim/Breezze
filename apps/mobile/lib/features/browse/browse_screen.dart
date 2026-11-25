@@ -18,6 +18,50 @@ import '../../features/player/player_controller.dart';
 import '../../features/player/now_playing_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 
+/// Shared, bounded Browse artwork rendering. Never fetch arbitrary non-HTTPS
+/// image URLs supplied by catalog metadata or decode oversized list thumbnails.
+Widget _browseArtwork(
+  BuildContext context,
+  ThemeData theme,
+  String? imageUrl, {
+  double size = 48,
+}) {
+  final fallback = Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(BzRadius.artwork),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [theme.bzSurface1, theme.bzSurface2],
+      ),
+      border: Border.all(color: theme.bzSeparator),
+    ),
+    alignment: Alignment.center,
+    child: BzBnoteMark(size: size * 0.58, color: theme.bzText2),
+  );
+  final uri = imageUrl == null ? null : Uri.tryParse(imageUrl);
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+    return fallback;
+  }
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(BzRadius.artwork),
+    child: Image.network(
+      imageUrl!,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+      gaplessPlayback: true,
+      excludeFromSemantics: true,
+      loadingBuilder: (_, image, progress) =>
+          progress == null ? image : fallback,
+      errorBuilder: (_, __, ___) => fallback,
+    ),
+  );
+}
+
 /// Browse uses live source search for genre discovery. It does not label
 /// provider search results as official charts or editorial recommendations.
 class BrowseScreen extends ConsumerStatefulWidget {
@@ -388,13 +432,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                     final track = _tracks[index];
                     final download = progress[track.id];
                     return ListTile(
-                      leading: track.artworkUrl == null
-                          ? BzBnoteMark(size: 48, color: theme.bzText2)
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(BzRadius.artwork),
-                              child: Image.network(track.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => BzBnoteMark(size: 48, color: theme.bzText2)),
-                            ),
+                      leading: _browseArtwork(context, theme, track.artworkUrl),
                       title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                       trailing: download != null
@@ -874,7 +912,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       appBar: AppBar(
         title: Text(widget.destination.title),
         leading: IconButton(
-          tooltip: 'Back to New',
+          tooltip: 'Back to Browse',
           icon: const BzSvgIcon(name: 'chevron-left'),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
@@ -957,15 +995,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                           final track = _tracks[index];
                                           final download = progress[track.id];
                                           return ListTile(
-                                            leading: track.artworkUrl == null
-                                                ? BzBnoteMark(size: 48, color: theme.bzText2)
-                                                : ClipRRect(
-                                                    borderRadius: BorderRadius.circular(BzRadius.artwork),
-                                                    child: Image.network(
-                                                      track.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover,
-                                                      errorBuilder: (_, __, ___) => BzBnoteMark(size: 48, color: theme.bzText2),
-                                                    ),
-                                                  ),
+                                            leading: _browseArtwork(context, theme, track.artworkUrl),
                                             title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                                             subtitle: Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                                             trailing: download != null
@@ -1090,17 +1120,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                         child: Text(rank.toString(), style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2)),
                                       ),
                                     Expanded(
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(BzRadius.artwork),
-                                        child: artwork is String
-                                            ? Image.network(
-                                                artwork,
-                                                width: 48,
-                                                height: 48,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (_, __, ___) => BzBnoteMark(size: 44, color: theme.bzText2),
-                                              )
-                                            : BzBnoteMark(size: 44, color: theme.bzText2),
+                                      child: _browseArtwork(
+                                        context, theme,
+                                        artwork is String ? artwork : null,
                                       ),
                                     ),
                                   ],
