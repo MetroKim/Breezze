@@ -5,12 +5,16 @@ on:
     branches: [main]
     paths:
       - 'backend/api/src/downloads/**'
+      - 'backend/api/src/admin/**'
+      - 'backend/api/prisma/**'
       - 'backend/api/src/playback/**'
       - 'infra/cloudflare/media-worker/**'
       - '.github/workflows/media-delivery-verify.yml'
   pull_request:
     paths:
       - 'backend/api/src/downloads/**'
+      - 'backend/api/src/admin/**'
+      - 'backend/api/prisma/**'
       - 'backend/api/src/playback/**'
       - 'infra/cloudflare/media-worker/**'
       - '.github/workflows/media-delivery-verify.yml'
@@ -68,3 +72,38 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
       - name: Verify real local Worker HTTP ingest/playback via R2 binding
         run: npm run test:http
+
+  postgres:
+    name: Real PostgreSQL media-rights migration acceptance
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: breezze_ci
+          POSTGRES_PASSWORD: breezze_ci_private_to_runner
+          POSTGRES_DB: breezze_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U breezze_ci -d breezze_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    defaults:
+      run:
+        working-directory: backend/api
+    env:
+      DATABASE_URL: postgresql://breezze_ci:breezze_ci_private_to_runner@localhost:5432/breezze_ci?schema=public
+      INTEGRATION_DATABASE_URL: postgresql://breezze_ci:breezze_ci_private_to_runner@localhost:5432/breezze_ci?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install and generate Prisma client
+        run: npm install --no-audit --no-fund && npx prisma generate
+      - name: Apply actual Railway-format migrations to empty PostgreSQL
+        run: npx prisma migrate deploy
+      - name: Verify migration history has no pending files
+        run: npx prisma migrate status
+      - name: Verify persisted recordings, rights and matching constraints
+        run: npx jest --runInBand src/playback/audio-catalog.integration.spec.ts
