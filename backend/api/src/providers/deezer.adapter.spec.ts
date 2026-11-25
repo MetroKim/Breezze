@@ -46,6 +46,9 @@ describe('DeezerAdapter', () => {
       }] }),
     }) as unknown as typeof fetch;
     const result = await adapter.search('example song');
+    const searchUrl = new URL(String((global.fetch as jest.Mock).mock.calls[0][0]));
+    expect(searchUrl.searchParams.get('limit')).toBe('50');
+    expect(searchUrl.searchParams.get('q')).toBe('example song');
     expect(result).toMatchObject({ kind: 'ok', value: [{
       providerTrackId: '42', title: 'Example Song', artist: 'Example Artist',
       durationSec: 211, artworkUrl: 'https://cdn.example/cover.jpg',
