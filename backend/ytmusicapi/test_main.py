@@ -19,6 +19,9 @@ PLAYLIST_ID = "OLAK5uy_abcdefghijkl"
 
 
 class FakeMusic:
+    def search(self, query, filter=None, limit=20):
+        return []
+
     def get_search_suggestions(self, query):
         return [query, query + " songs"]
 
@@ -87,6 +90,50 @@ class PublicCatalogContractTest(unittest.TestCase):
         self.client_patch = patch.object(main, "YTMusic", FakeMusic)
         self.client_patch.start()
         self.addCleanup(self.client_patch.stop)
+
+    def test_song_search_preserves_valid_results_when_provider_adds_malformed_records(self):
+        upstream = [
+            None,
+            "invalid",
+            42,
+            {"videoId": SONG_ID, "title": "Good song", "artists": 1,
+             "thumbnails": {"url": "https://ignored.example/cover.jpg"},
+             "streamingData": {"url": "https://forbidden.example/audio"}},
+            {"videoId": "../invalid", "title": "Bad song"},
+        ]
+        with patch.object(FakeMusic, "search", return_value=upstream):
+            result = main.search("Afrobeats", limit=10)
+        self.assertEqual(len(result["tracks"]), 1)
+        self.assertEqual(result["tracks"][0]["providerTrackId"], SONG_ID)
+        self.assertIsNone(result["tracks"][0]["artworkUrl"])
+        self.assertEqual(result["tracks"][0]["artist"], "Unknown artist")
+        self.assertNotIn("forbidden.example", json.dumps(result))
+
+    def test_video_search_skips_malformed_and_non_official_entries(self):
+        upstream = [
+            None,
+            [],
+            {"videoId": SONG_ID, "title": "Official video",
+             "videoType": "MUSIC_VIDEO_TYPE_OMV",
+             "artists": 11, "thumbnails": 37},
+            {"videoId": "zxywvutsrqp", "title": "User upload",
+             "videoType": "MUSIC_VIDEO_TYPE_UGC"},
+        ]
+        with patch.object(FakeMusic, "search", return_value=upstream):
+            result = main.search_videos("Official video", limit=10)
+        self.assertEqual(len(result["videos"]), 1)
+        self.assertEqual(result["videos"][0]["videoId"], SONG_ID)
+        self.assertIsNone(result["videos"][0]["artworkUrl"])
+
+    def test_nonlist_search_payloads_fail_closed_without_upstream_data_leaks(self):
+        with patch.object(FakeMusic, "search",
+                          return_value={"cookie": "secret", "results": []}):
+            for endpoint in (main.search, main.search_videos):
+                with self.subTest(endpoint=endpoint.__name__):
+                    with self.assertRaises(HTTPException) as raised:
+                        endpoint("Afrobeats", limit=5)
+                    self.assertEqual(raised.exception.status_code, 502)
+                    self.assertNotIn("secret", str(raised.exception.detail))
 
     def test_album_strips_media_urls_and_cookies(self):
         response = main.get_album_catalog(ALBUM_ID)
