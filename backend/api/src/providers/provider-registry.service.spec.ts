@@ -1,8 +1,9 @@
 import { ProviderRegistry } from './provider-registry.service';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
+import { DeezerAdapter } from './deezer.adapter';
 
-describe('ProviderRegistry: Spotify music / YouTube videos', () => {
+describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
   beforeEach(() => jest.clearAllMocks());
   const makeAdapter = (providerId: string, priority: number, playback = false, availability = false) => ({
     providerId, displayName: providerId, adapterVersion: '1.0.0', priority, enabled: true,
@@ -11,19 +12,23 @@ describe('ProviderRegistry: Spotify music / YouTube videos', () => {
   });
   const internal = makeAdapter('breezze_internal', 50, false, true);
   const spotify = makeAdapter('spotify', 220);
+  const deezer = makeAdapter('deezer', 110);
   const registry = () => new ProviderRegistry(
     internal as unknown as InternalCatalogAdapter,
     spotify as unknown as SpotifyAdapter,
+    deezer as unknown as DeezerAdapter,
   );
 
-  it('searches Spotify and Breezze catalog independently; YouTube stays video-only', async () => {
+  it('searches Spotify and Deezer independently; YouTube stays video-only', async () => {
     internal.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'licensed-1' }] });
     spotify.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'spotify-track-1' }] });
+    deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: '3135556' }] });
     const result = await registry().searchAll('  afrobeats  ');
     expect(result.query).toBe('afrobeats');
     expect(result.providers.map(item => item.providerId))
-      .toEqual(['spotify', 'breezze_internal']);
+      .toEqual(['spotify', 'deezer', 'breezze_internal']);
     expect(spotify.search).toHaveBeenCalledWith('afrobeats');
+    expect(deezer.search).toHaveBeenCalledWith('afrobeats');
     expect(result.providers[0].result).toMatchObject({
       kind: 'ok', value: [{ providerTrackId: 'spotify-track-1' }],
     });
@@ -33,13 +38,16 @@ describe('ProviderRegistry: Spotify music / YouTube videos', () => {
     await expect(registry().searchAll('x')).resolves.toEqual({ query: 'x', providers: [] });
     expect(internal.search).not.toHaveBeenCalled();
     expect(spotify.search).not.toHaveBeenCalled();
+    expect(deezer.search).not.toHaveBeenCalled();
   });
 
-  it('allows no YouTube, Deezer or Spotify native media grants', () => {
+  it('allows no YouTube, Spotify or Deezer unauthorized native full-track grants', () => {
     const instance = registry();
     expect(instance.list().map(item => item.providerId)).toEqual(['spotify', 'breezze_internal']);
     expect(instance.get('youtube_music')).toBeUndefined();
-    expect(instance.get('deezer')).toBeUndefined();
+    expect(instance.get('deezer')?.capabilities).toMatchObject({
+      search: true, metadata: true, playback: false, download: false,
+    });
     expect(instance.get('audius')).toBeUndefined();
     expect(instance.get('spotify')?.capabilities).toMatchObject({
       search: true, metadata: true, playback: false, download: false,
@@ -54,6 +62,7 @@ describe('ProviderRegistry: Spotify music / YouTube videos', () => {
     expect(result.providers[0].result).toMatchObject({
       kind: 'error', code: 'PROVIDER_SEARCH_FAILED',
     });
+    deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: '3135556' }] });
     expect(result.providers[1].result).toMatchObject({ kind: 'ok' });
   });
 
