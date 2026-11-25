@@ -183,15 +183,29 @@ class LiveResolver implements PlaybackResolver {
 
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
-    // Spotify streams are always owned by Spotify. YouTube is video only.
-    // Legacy Deezer metadata or preview IDs must not enter the native engine.
-    if (isYouTubeSongId(track.id) ||
-        track.id.startsWith('bz:spotify:') ||
-        track.id.startsWith('bz:deezer:') ||
-        isDeezerPreview(track.id) ||
-        track.id.startsWith('bzv:')) {
-      return null;
+    // Explicit native Deezer PREVIEW only (30 seconds at most).
+    // The authorized full Deezer recording remains inside Deezer's app.
+    if (isDeezerPreview(track.id)) {
+      try {
+        final result = await _ref.read(authSessionProvider.notifier).api
+            .getProviderTrack('deezer', track.id.split(':').last);
+        final value = result['value'];
+        if (result['kind'] != 'ok' || value is! Map ||
+            value['previewUrl'] is! String) return null;
+        final uri = Uri.tryParse(value['previewUrl'] as String);
+        if (uri == null || uri.scheme != 'https' ||
+            uri.userInfo.isNotEmpty || uri.hasFragment ||
+            !uri.host.toLowerCase().endsWith('.dzcdn.net')) return null;
+        return PlayableSource(
+          trackId: track.id,
+          streamUrl: uri.toString(),
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 2)),
+        );
+      } catch (_) {
+        return null;
+      }
     }
+    if (track.id.startsWith('bz:deezer:')) return null;
     final auth = _ref.read(authSessionProvider);
     if (auth is! AuthSignedIn) return null;
 
