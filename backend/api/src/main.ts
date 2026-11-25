@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import * as crypto from 'crypto';
 import { AppModule } from './app.module';
 import { ResponseEnvelopeInterceptor } from './response-envelope.interceptor';
+import { PrismaService } from './prisma.service';
 
 async function bootstrap() {
   const port = Number(process.env.PORT ?? 3000);
@@ -93,6 +94,26 @@ async function bootstrap() {
   // It exposes no dependency state, credentials, or internal configuration.
   app.getHttpAdapter().get('/health', (_request: unknown, response: any) => {
     response.status(200).json({ status: 'ok', service: 'breezze-api' });
+  });
+
+  // Protected deep readiness checks are intentionally separate from the
+  // public process-liveness endpoint used by Railway. The edge middleware
+  // requires its shared secret on this path; never reveal row counts or DB
+  // connection diagnostics to a listener.
+  const prisma = app.get(PrismaService);
+  app.getHttpAdapter().get('/health/ready', async (_request: unknown, response: any) => {
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM "AudioAssetVariant" LIMIT 0`;
+      await prisma.$queryRaw`SELECT 1 FROM "RightsUsagePermission" LIMIT 0`;
+      await prisma.$queryRaw`SELECT 1 FROM "PlaybackSession" LIMIT 0`;
+      response.status(200).set('Cache-Control', 'no-store').json({
+        status: 'ready', service: 'breezze-api', components: ['postgres', 'media-schema'],
+      });
+    } catch (_) {
+      response.status(503).set('Cache-Control', 'no-store').json({
+        status: 'not_ready', service: 'breezze-api',
+      });
+    }
   });
 
   await app.listen(port, '0.0.0.0');
