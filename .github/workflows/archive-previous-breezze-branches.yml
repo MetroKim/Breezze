@@ -1,0 +1,66 @@
+name: Archive previous Breezze fork branches once
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/archive-previous-breezze-branches.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: breezze-legacy-branch-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Preserve all prior Breezze branch history
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out independent Breezze
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Import source branch Git objects without executing source code
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add legacy-breezze https://github.com/MetroKim/Breezze-legacy-fork.git
+          git fetch --no-tags legacy-breezze '+refs/heads/*:refs/remotes/legacy-breezze/*'
+          source_count="$(git for-each-ref --format='%(refname)' refs/remotes/legacy-breezze/ | wc -l | tr -d ' ')"
+          test "$source_count" -ge 10
+          echo "Source branches: $source_count"
+
+          echo '# Original Breezze branch archive' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Source branch | Preserved commit | Status |' >> "$GITHUB_STEP_SUMMARY"
+          echo '| --- | --- | --- |' >> "$GITHUB_STEP_SUMMARY"
+          total=0
+          while IFS= read -r source_ref; do
+            branch="${source_ref#refs/remotes/legacy-breezze/}"
+            [ "$branch" != HEAD ] || continue
+            sha="$(git rev-parse "$source_ref")"
+            dest="refs/heads/archive/legacy-fork/$branch"
+            existing="$(git ls-remote --heads origin "$dest" | cut -f1)"
+            if [ -z "$existing" ]; then
+              git push origin "$sha:$dest"
+              state=imported
+            elif [ "$existing" = "$sha" ]; then
+              state=already-preserved
+            else
+              echo "::error::Archive branch $dest already exists at a different commit. Refusing to overwrite."
+              exit 1
+            fi
+            actual="$(git ls-remote --heads origin "$dest" | cut -f1)"
+            test "$actual" = "$sha"
+            echo "| \`$branch\` | \`$sha\` | $state (verified) |" >> "$GITHUB_STEP_SUMMARY"
+            total=$((total + 1))
+          done < <(git for-each-ref --format='%(refname)' refs/remotes/legacy-breezze/)
+
+          test "$total" -eq "$source_count"
+          echo "Verified $total/$source_count original branch refs."
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Verified $total/$source_count refs; no main ref, database, production deploy, or secret was changed.**" >> "$GITHUB_STEP_SUMMARY"
