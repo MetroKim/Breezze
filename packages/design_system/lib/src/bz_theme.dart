@@ -157,7 +157,7 @@ ThemeData _bzTheme({required bool dark}) {
     ),
     headlineLarge: base.textTheme.headlineLarge?.copyWith(
       fontSize: BzType.largeTitle,
-      fontWeight: FontWeight.w750,
+      fontWeight: FontWeight.w700,
       letterSpacing: -0.9,
       height: 1.15,
     ),
@@ -168,7 +168,7 @@ ThemeData _bzTheme({required bool dark}) {
     ),
     titleMedium: base.textTheme.titleMedium?.copyWith(
       fontSize: BzType.headline,
-      fontWeight: FontWeight.w650,
+      fontWeight: FontWeight.w600,
     ),
     bodyLarge: base.textTheme.bodyLarge?.copyWith(
       fontSize: BzType.body,
