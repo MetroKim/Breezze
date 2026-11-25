@@ -39,6 +39,33 @@ export class ProviderCacheService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Reserve one official-provider search request across every API replica.
+   * Google's 2026 search.list quota is a separate daily bucket. Fail closed
+   * if Redis is down: a transient cache outage must not burn the user's key.
+   */
+  async reserveDailyProviderRequest(namespace: string, limit: number): Promise<boolean> {
+    if (!/^[a-z0-9:_-]{2,80}$/.test(namespace) ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      return false;
+    }
+    const day = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Los_Angeles', year: 'numeric',
+      month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    const key = 'provider:quota:' + namespace + ':' + day;
+    try {
+      if (this.redis.status === 'wait') await this.redis.connect();
+      const reserved = await this.redis.eval(
+        "local c=redis.call('INCR',KEYS[1]); if c==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return c",
+        1, key, 27 * 3600,
+      ) as number;
+      return Number.isInteger(reserved) && reserved <= limit;
+    } catch {
+      return false;
+    }
+  }
+
   async onModuleDestroy(): Promise<void> {
     if (this.redis.status === 'ready') await this.redis.quit();
     else this.redis.disconnect();
