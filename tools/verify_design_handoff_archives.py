@@ -61,7 +61,7 @@ def main() -> None:
                 if svg.attrib.get("viewBox") != expected:
                     raise AssertionError(f"{name}: unexpected viewport")
             if not design.read("Breezze_Frontend_16_Screen_Board.png").startswith(
-                b"\\x89PNG\\r\\n\\x1a\\n"
+                b"\x89PNG\r\n\x1a\n"
             ):
                 raise AssertionError("Invalid Figma board PNG")
         with verify_zip(FLUTTER, CHECKSUMS[FLUTTER.name]) as reference:
