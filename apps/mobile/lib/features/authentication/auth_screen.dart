@@ -308,6 +308,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: BzMonochromeAppIcon(size: 56),
+              ),
+              const SizedBox(height: 18),
               Text(
                 _registerMode ? 'Create your account' : 'Welcome to Breezze',
                 style: theme.textTheme.headlineMedium?.copyWith(

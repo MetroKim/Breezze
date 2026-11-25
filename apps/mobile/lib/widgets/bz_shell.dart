@@ -43,7 +43,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
 
   static const _tabs = [
     _TabDestination('Home', 'assets/icons/home.svg'),
-    _TabDestination('Browse', 'assets/icons/new.svg'),
+    _TabDestination('Browse', 'assets/icons/browse.svg'),
     _TabDestination('Library', 'assets/icons/library.svg'),
     _TabDestination('Search', 'assets/icons/search.svg'),
   ];
@@ -197,7 +197,7 @@ class _DesktopNavigation extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 28),
                 child: Row(
                   children: [
-                    BzBnoteMark(size: 30, color: theme.bzText1),
+                    const BzMonochromeAppIcon(size: 38),
                     const SizedBox(width: 10),
                     Text(
                       'Breezze',
