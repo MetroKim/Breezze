@@ -82,9 +82,7 @@ const _two = TrackInfo(
 );
 
 
-Uint8List _testStereoWav() {
-  const sampleRate = 44100;
-  const seconds = 3;
+Uint8List _testStereoWav({int sampleRate = 44100, int seconds = 3}) {
   const channels = 2;
   const bytesPerSample = 2;
   const header = 44;
@@ -267,6 +265,57 @@ void main() {
       await engine.dispose();
     }
   });
+
+  testWidgets('native decoder handles full-length app-owned audio and far seek',
+      (tester) async {
+    // A real 125-second recording, intentionally not a preview or a
+    // YouTube-derived file. Exercises ExoPlayer / AVFoundation duration,
+    // native decoder readiness and sample-accurate seeking beyond 2 minutes.
+    final directory = await getTemporaryDirectory();
+    final file = File(
+      '${directory.path}/breezze-full-length-audio-${DateTime.now().microsecondsSinceEpoch}.wav',
+    );
+    await file.writeAsBytes(
+      _testStereoWav(sampleRate: 16000, seconds: 125),
+      flush: true,
+    );
+    final engine = JustAudioEngineAdapter();
+    final container = ProviderContainer();
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: Text('Full-length native audio acceptance')),
+    ));
+    try {
+      await tester.runAsync(() => player.playTrack(
+        trackId: 'device:full-length-native-qa',
+        title: 'Breezze full-length original test tone',
+        artist: 'Synthetic, rights-owned QA',
+        localFilePath: file.path,
+        duration: const Duration(seconds: 125),
+      ).timeout(const Duration(seconds: 35)));
+      expect(player.state.playbackState, PlaybackState.playing);
+      expect(engine.duration, greaterThan(const Duration(minutes: 2)),
+        reason: 'Native decoder must recognize a full-length audio file');
+      await player.seekTo(const Duration(seconds: 100));
+      expect(engine.position, greaterThanOrEqualTo(const Duration(seconds: 99)),
+        reason: 'A far seek must reach the actual decoder, not only the UI');
+      await player.pause();
+      expect(player.state.playbackState, PlaybackState.paused);
+      await player.resume();
+      expect(player.state.playbackState, PlaybackState.playing);
+      await tester.runAsync(() => Future<void>.delayed(
+        const Duration(milliseconds: 800),
+      ));
+      expect(engine.position, greaterThan(const Duration(seconds: 100)),
+        reason: 'Native decoder clock must progress after resuming a far seek');
+    } finally {
+      await player.stop();
+      container.dispose();
+      await engine.dispose();
+      if (await file.exists()) await file.delete();
+    }
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
   testWidgets('actual platform audio engine decodes app-owned PCM and obeys controls',
       (tester) async {
