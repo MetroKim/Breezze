@@ -25,6 +25,26 @@ describe('Official YouTube Data API metadata and transparent video fallback', ()
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('does not activate a staged or unrotated key in production by accident', async () => {
+    const oldEnv = process.env.NODE_ENV;
+    const oldEnabled = process.env.YOUTUBE_DATA_API_ENABLED;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.YOUTUBE_DATA_API_ENABLED;
+      expect(service.configured).toBe(false);
+      await expect(service.searchMusicVideos('public music')).resolves.toMatchObject({
+        kind: 'unsupported', reason: 'YOUTUBE_DATA_KEY_NOT_CONFIGURED',
+      });
+      process.env.YOUTUBE_DATA_API_ENABLED = 'true';
+      expect(service.configured).toBe(true);
+    } finally {
+      if (oldEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = oldEnv;
+      if (oldEnabled === undefined) delete process.env.YOUTUBE_DATA_API_ENABLED;
+      else process.env.YOUTUBE_DATA_API_ENABLED = oldEnabled;
+    }
+  });
+
   it('rejects invalid queries and limit before quota-consuming network access', async () => {
     const fetchMock = jest.spyOn(global, 'fetch');
     await expect(service.searchMusicVideos('x')).resolves.toMatchObject({
