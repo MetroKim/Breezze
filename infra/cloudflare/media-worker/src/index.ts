@@ -44,7 +44,10 @@ async function validSignature(
   supplied: string | null,
   expires: number,
 ): Promise<boolean> {
-  if (!secret || !supplied || !Number.isSafeInteger(expires) || Date.now() >= expires) {
+  // Playback grants are at most six hours; do not accept an accidentally
+  // long-lived capability even when the HMAC is otherwise valid.
+  if (!secret || !supplied || !Number.isSafeInteger(expires) ||
+      Date.now() >= expires || expires > Date.now() + 6 * 60 * 60 * 1000 + 60_000) {
     return false;
   }
   try {
@@ -318,6 +321,19 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!env.MEDIA_SIGNING_KEY || !env.MEDIA_BUCKET) return error(503, 'MEDIA_STORAGE_NOT_CONFIGURED');
     const url = new URL(request.url);
+    // Configuration health, not an assertion that any recording is ingested.
+    // This endpoint never reports or probes private object keys or secrets.
+    if (url.pathname === '/health') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return error(405, 'METHOD_NOT_ALLOWED');
+      }
+      return new Response(request.method === 'HEAD' ? null : JSON.stringify({
+        status: 'configured', service: 'breezze-media',
+      }), {
+        status: 200,
+        headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json' },
+      });
+    }
     if (url.pathname.startsWith('/ingest/video/')) {
       return ingestVideo(request, url, env);
     }
