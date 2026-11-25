@@ -10,6 +10,7 @@ import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
+import '../video/open_youtube_player.dart';
 
 /// A guest playlist is local; a private playlist belongs only to the active
 /// signed-in account. Transitional auth states expose neither owner's data.
@@ -132,14 +133,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   Future<void> _playAll(UserPlaylist playlist) async {
     if (!_ownerStillActive() || playlist.tracks.isEmpty) return;
-    final nativeIndex = playlist.tracks.indexWhere((item) => canQueueTrackId(item.id));
-    if (nativeIndex >= 0) {
-      if (playlist.tracks.any((item) => !canQueueTrackId(item.id)) && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Catalogue-only tracks are excluded from native playback; only playable tracks enter the queue.')),
-        );
-      }
-      await _playTrack(playlist, nativeIndex);
+    final index = playlist.tracks.indexWhere((item) =>
+        canQueueTrackId(item.id) || isYouTubeSongId(item.id));
+    if (index >= 0) {
+      // A visible YouTube watch queue cannot be combined with native audio.
+      await _playTrack(playlist, index);
       return;
     }
     if (mounted) {
@@ -152,6 +150,28 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
     if (!_ownerStillActive()) return;
     final track = playlist.tracks[index];
+    if (isYouTubeSongId(track.id)) {
+      final visibleQueue = [
+        for (final song in playlist.tracks)
+          if (isYouTubeSongId(song.id))
+            <String, String?>{
+              'videoId': song.id.substring('bz:youtube_music:'.length),
+              'title': song.title,
+              'artist': song.artist,
+              'artworkUrl': song.artworkUrl,
+            },
+      ];
+      await openYouTubePlayer(
+        context: context,
+        ref: ref,
+        videoId: track.id.substring('bz:youtube_music:'.length),
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl,
+        visibleQueue: visibleQueue,
+      );
+      return;
+    }
     if (!canQueueTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
