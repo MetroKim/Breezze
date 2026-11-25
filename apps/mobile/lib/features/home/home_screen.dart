@@ -213,6 +213,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _play(TrackInfo track, List<TrackInfo> queue, int index) async {
     if (isYouTubeSongId(track.id)) {
+      final visibleQueue = [
+        for (final song in queue)
+          if (isYouTubeSongId(song.id))
+            <String, String?>{
+              'videoId': song.id.substring('bz:youtube_music:'.length),
+              'title': song.title,
+              'artist': song.artist,
+              'artworkUrl': song.artworkUrl,
+            },
+      ];
       await openYouTubePlayer(
         context: context,
         ref: ref,
@@ -220,6 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: track.title ?? 'YouTube Music',
         artist: track.artist ?? 'Unknown artist',
         artworkUrl: track.artworkUrl,
+        visibleQueue: visibleQueue,
       );
       return;
     }
