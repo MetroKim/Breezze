@@ -85,7 +85,11 @@ export class ProviderRegistry {
     // No Spotify credentials? Do not show a fake or permanently empty
     // Spotify shelf. Deezer still serves real catalog results immediately.
     const supported = ['spotify', 'deezer'] as const;
-    const shelves = await Promise.all(supported.filter(id => this.get(id)).map(async (id) => {
+    const shelves: Array<{
+      providerId: string;
+      displayName: string;
+      result: ProviderResult<ProviderTrack[]>;
+    }> = await Promise.all(supported.filter(id => this.get(id)).map(async (id) => {
       const adapter = this.get(id);
       const displayName = id === 'spotify' ? 'Spotify' : 'Deezer';
       if (!adapter) {
