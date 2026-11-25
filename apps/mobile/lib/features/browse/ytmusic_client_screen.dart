@@ -220,6 +220,9 @@ class _YouTubeMusicClientScreenState
     try {
       final flow = await ref.read(authSessionProvider.notifier).api
           .youtubeAccountStart();
+      final latest = ref.read(authSessionProvider);
+      if (!mounted || latest is! AuthSignedIn ||
+          latest.userId != current.userId) return;
       final raw = flow['authorizationUrl'];
       final uri = raw is String ? Uri.tryParse(raw) : null;
       if (uri == null || uri.scheme != 'https' ||
@@ -268,11 +271,15 @@ class _YouTubeMusicClientScreenState
         ],
       ),
     );
-    if (approve != true || !mounted) return;
+    final approvedOwner = ref.read(authSessionProvider);
+    if (approve != true || !mounted || approvedOwner is! AuthSignedIn ||
+        approvedOwner.userId != current.userId) return;
     setState(() => _accountBusy = true);
     try {
       await ref.read(authSessionProvider.notifier).api.youtubeAccountDisconnect();
-      if (!mounted) return;
+      final latest = ref.read(authSessionProvider);
+      if (!mounted || latest is! AuthSignedIn ||
+          latest.userId != current.userId) return;
       setState(() {
         _account = {'available': true, 'connected': false};
         _accountPlaylists = [];
@@ -445,6 +452,7 @@ class _YouTubeMusicClientScreenState
         _accountPlaylists = [];
         _accountError = null;
         _accountLoading = true;
+        _accountBusy = false;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _loadConnection();
