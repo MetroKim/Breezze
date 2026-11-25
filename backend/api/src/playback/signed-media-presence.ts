@@ -59,7 +59,7 @@ export async function verifySignedMediaObject(
       method: 'HEAD',
       signal: AbortSignal.timeout(4_000),
       redirect: 'error',
-      cache: 'no-store',
+      // CDN response is private/no-store; signed capabilities are never shared.
     });
   } catch {
     throw new ServiceUnavailableException('MEDIA_CDN_HEAD_UNAVAILABLE');

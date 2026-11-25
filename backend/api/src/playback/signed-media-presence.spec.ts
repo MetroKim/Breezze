@@ -15,7 +15,7 @@ describe('signed native media R2 existence guard', () => {
     await expect(verifySignedMediaObject(mediaUrl, { ...base, request }))
       .resolves.toBeUndefined();
     expect(request).toHaveBeenCalledWith(mediaUrl, expect.objectContaining({
-      method: 'HEAD', redirect: 'error', cache: 'no-store',
+      method: 'HEAD', redirect: 'error',
     }));
   });
 
