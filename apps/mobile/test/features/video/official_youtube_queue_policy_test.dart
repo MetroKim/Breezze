@@ -2,6 +2,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:breezze/features/video/official_youtube_queue_policy.dart';
 
 void main() {
+  test('saved YouTube queue preserves song order and selected index', () {
+    const a = OfficialYouTubeQueueEntry(
+      videoId: 'dQw4w9WgXcQ', title: 'First', artist: 'Artist');
+    const b = OfficialYouTubeQueueEntry(
+      videoId: 'abcdefghijk', title: 'Second', artist: 'Artist');
+    const invalid = OfficialYouTubeQueueEntry(
+      videoId: 'invalid', title: 'Bad', artist: 'Unknown');
+    final result = normalizedOfficialYouTubeQueue(
+      [a, invalid, b, a], selectedVideoId: b.videoId);
+    expect(result.map((e) => e.videoId).toList(), [a.videoId, b.videoId]);
+    expect(result.indexWhere((e) => e.videoId == b.videoId), 1);
+  });
+
+  test('rejects an unrelated playlist that lacks the opened recording', () {
+    final result = normalizedOfficialYouTubeQueue(
+      [const OfficialYouTubeQueueEntry(
+        videoId: 'dQw4w9WgXcQ', title: 'First', artist: 'Artist')],
+      selectedVideoId: 'abcdefghijk');
+    expect(result, isEmpty);
+  });
+
   const videoId = 'dQw4w9WgXcQ';
 
   test('advances a completed visible official YouTube queue item', () {

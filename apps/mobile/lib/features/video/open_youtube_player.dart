@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../player/player_controller.dart';
 import 'official_music_video_screen.dart';
+import 'official_youtube_queue_policy.dart';
 
 /// Opens YouTube's visible player without putting a metadata ID in the native queue.
 Future<void> openYouTubePlayer({
@@ -13,9 +14,11 @@ Future<void> openYouTubePlayer({
   required String title,
   required String artist,
   String? artworkUrl,
+  List<OfficialYouTubeQueueEntry> foregroundQueue = const [],
 }) async {
   await openVideoSurface(context, (_) => OfficialMusicVideoScreen(
     videoId: videoId, title: title, artist: artist, artworkUrl: artworkUrl,
+    foregroundQueue: foregroundQueue,
   ));
 }
 

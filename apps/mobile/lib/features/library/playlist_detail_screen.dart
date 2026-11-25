@@ -11,6 +11,7 @@ import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 import '../video/open_youtube_player.dart';
+import '../video/official_youtube_queue_policy.dart';
 
 /// A guest playlist is local; a private playlist belongs only to the active
 /// signed-in account. Transitional auth states expose neither owner's data.
@@ -172,6 +173,19 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         title: track.title,
         artist: track.artist,
         artworkUrl: track.artworkUrl,
+        foregroundQueue: [
+          for (final saved in playlist.tracks)
+            if (isYouTubeSongId(saved.id) ||
+                (saved.id.startsWith('bzv:') && canOfferPlaybackAction(saved.id)))
+              OfficialYouTubeQueueEntry(
+                videoId: isYouTubeSongId(saved.id)
+                    ? saved.id.substring('bz:youtube_music:'.length)
+                    : saved.id.substring(4),
+                title: saved.title,
+                artist: saved.artist,
+                artworkUrl: saved.artworkUrl,
+              ),
+        ],
       );
       return;
     }

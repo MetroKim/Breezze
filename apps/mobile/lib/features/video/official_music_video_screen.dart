@@ -21,6 +21,7 @@ class OfficialMusicVideoScreen extends ConsumerStatefulWidget {
   final String title;
   final String artist;
   final String? artworkUrl;
+  final List<OfficialYouTubeQueueEntry> foregroundQueue;
 
   const OfficialMusicVideoScreen({
     super.key,
@@ -28,6 +29,7 @@ class OfficialMusicVideoScreen extends ConsumerStatefulWidget {
     required this.title,
     required this.artist,
     this.artworkUrl,
+    this.foregroundQueue = const [],
   });
 
   @override
@@ -54,6 +56,27 @@ class _OfficialMusicVideoScreenState
 
   Future<void> _loadWatchQueue() async {
     if (!_valid) return;
+    if (widget.foregroundQueue.isNotEmpty) {
+      final owned = normalizedOfficialYouTubeQueue(
+        widget.foregroundQueue, selectedVideoId: widget.videoId,
+      );
+      if (owned.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _watchQueue = [
+            for (final item in owned)
+              {
+                'videoId': item.videoId,
+                'title': item.title,
+                'artist': item.artist,
+                'artworkUrl': item.artworkUrl,
+              },
+          ];
+          _queuePosition = owned.indexWhere((item) => item.videoId == widget.videoId);
+        });
+        return;
+      }
+    }
     try {
       final result = await ref.read(authSessionProvider.notifier).api
           .ytMusicWatchQueue(widget.videoId);
