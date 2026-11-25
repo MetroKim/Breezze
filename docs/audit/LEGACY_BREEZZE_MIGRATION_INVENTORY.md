@@ -19,7 +19,13 @@ Evidence checkpoint: 2026-11-25. This file records **source code and assets actu
 
 ## Supplied additional visuals — distinct from the older Git fork
 
-The user-provided `Breezze_Frontend_Figma_Import_Pack.zip` contains **16 screen SVGs**, one overview board SVG and PNG plus README. The `breezze_flutter(1).zip` file contains UI mock/reference code, not a licensed backend, usable audio source or real album art. This source is not interchangeable with production widgets; **migrate its reusable layout semantics rather than replacing real Riverpod/auth/audio code with mocks**. The independent app's `docs/design/BREEZZE_UNIFIED_FRONTEND_HANDOFF.md` already describes the corresponding runtime architecture. The external archives themselves have **not** yet been committed to this GitHub repository at this checkpoint.
+The user-provided `Breezze_Frontend_Figma_Import_Pack.zip` contains **16 screen SVGs**, one overview board SVG and PNG plus README. The `breezze_flutter(1).zip` file contains UI mock/reference code, not a licensed backend, usable audio source or real album art. This source is not interchangeable with production widgets; **migrate its reusable layout semantics rather than replacing real Riverpod/auth/audio code with mocks**. The independent app's `docs/design/BREEZZE_UNIFIED_FRONTEND_HANDOFF.md` already describes the corresponding runtime architecture. The **exact original source archives have now been transferred** to `docs/design/reference/`, with independently checked byte-for-byte Git blob hashes:
+
+- `Breezze_Frontend_Figma_Import_Pack.zip`: 19 entries (16 screen SVGs, a board SVG and PNG, and the original README). SHA-256 `6a9fdb04a023ef99c074d23a3deef98b67935067f6df85734603509a7afe5435`. Contains visual mockups only, not deployable production interfaces.
+- `breezze_flutter_ui_reference.zip`: the preserved original 14,743-byte user-supplied Flutter visual reference archive `breezze_flutter(1).zip`. SHA-256 `140eafd2a95cc9edacd20816861eccd94a28acad1c7ab3d09647ff92af831c40`. Its mock player/catalog are not part of the runtime.
+- `tools/verify_design_handoff_archives.py` validates both archives, CRC integrity, SVG structure, exact expected screen inventory, and archive safety in CI.
+
+No ZIP contents are automatically extracted into Flutter `lib/` or `assets/`; this preserves the working Supabase-first authenticated API, signed player, and app branding.
 
 Other design references in the personal file library specify multiple competing concept variants; actual source SVG artwork for all requested historical alternatives is not present as files in either Git main. Do not invent matching assets and claim the original pack was copied.
 
