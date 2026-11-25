@@ -4,6 +4,7 @@ import {
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { Response } from 'express';
 import { SocialAuthService } from './social-auth.service';
+import { assertLegacyAuthAllowed } from './legacy-auth-policy';
 
 class PollSocialFlowDto {
   @IsString()
@@ -55,6 +56,7 @@ export class SocialAuthController {
   @Post(':provider/start')
   @HttpCode(HttpStatus.OK)
   start(@Param('provider') provider: string) {
+    assertLegacyAuthAllowed();
     return this.social.start(provider);
   }
 
@@ -62,6 +64,7 @@ export class SocialAuthController {
   @Post('poll')
   @HttpCode(HttpStatus.OK)
   poll(@Body() body: PollSocialFlowDto) {
+    assertLegacyAuthAllowed();
     return this.social.poll(body.id, body.secret);
   }
 
@@ -73,6 +76,7 @@ export class SocialAuthController {
     @Query('error') error: string | undefined,
     @Res() res: Response,
   ) {
+    assertLegacyAuthAllowed();
     const ok = await this.social.callback('google', state, code, error);
     this.respond(res, ok);
   }
@@ -80,6 +84,7 @@ export class SocialAuthController {
   @Header('Cache-Control', 'no-store')
   @Post('callback/apple')
   async appleCallback(@Body() body: AppleCallbackDto, @Res() res: Response) {
+    assertLegacyAuthAllowed();
     const ok = await this.social.callback('apple', body.state ?? '',
       body.code, body.error);
     this.respond(res, ok);

@@ -10,6 +10,7 @@ import {
   Param,
   UseGuards,
 } from '@nestjs/common';
+import { assertLegacyAuthAllowed } from './legacy-auth-policy';
 import { IsEmail, IsString, IsOptional, Matches, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { SupabaseExchangeService } from './supabase-exchange.service';
@@ -121,12 +122,14 @@ export class AuthController {
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
+    assertLegacyAuthAllowed();
     return this.auth.register(dto.email, dto.password, dto.displayName);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
+    assertLegacyAuthAllowed();
     return this.auth.login(dto.email, dto.password);
   }
 

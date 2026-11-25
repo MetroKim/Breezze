@@ -8,12 +8,13 @@ import { SocialAuthService } from './social-auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { SupabaseExchangeService } from './supabase-exchange.service';
+import { jwtSecretForEnvironment } from './legacy-auth-policy';
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'dev-only-secret-change-me',
+      secret: jwtSecretForEnvironment(process.env.NODE_ENV, process.env.JWT_SECRET),
     }),
   ],
   controllers: [AuthController, SocialAuthController],
