@@ -218,7 +218,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         if (!mounted || generation != _searchGeneration) return;
         setState(() {
           _loading = false;
-          _results = videos.where((item) => RegExp(r'^[A-Za-z0-9_-]{11}
+          _results = videos.where((item) =>
+              RegExp(r'^[A-Za-z0-9_-]{11}$')
+                  .hasMatch(item['id'] as String? ?? '')).map((item) {
+            final id = item['id'] as String;
             final duration = item['durationSec'];
             return BzTrack(
               id: 'bzv:$id',
@@ -227,7 +230,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               artworkUrl: item['artworkUrl'] as String?,
               duration: Duration(seconds: duration is num ? duration.toInt() : 0),
             );
-          }).where((track) => track.id.length > 9).toList();
+          }).toList();
         });
       } else {
         final op = await ref.read(catalogSourceProvider).search(normalized);
