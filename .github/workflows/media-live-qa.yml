@@ -1,0 +1,85 @@
+name: Breezze Live QA Media Delivery (No Production Deployment)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/cloudflare/media-worker/**'
+      - '.github/workflows/media-live-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: breezze-live-media-qa
+  cancel-in-progress: false
+
+jobs:
+  qa-deploy:
+    name: Deploy isolated QA Worker and verify signed AAC streaming
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: infra/cloudflare/media-worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check isolated QA deployment access
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Cloudflare GitHub Actions token/account secrets are not configured. QA has NOT been deployed."
+            exit 1
+          fi
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify Worker type safety and private R2 unit tests
+        run: npm run check && npm test
+      - name: Deploy QA Worker (never breezze-media)
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --env qa
+          # This private testing secret is never published, checked in or
+          # reused as MEDIA_SIGNING_KEY in the production API/Worker.
+          secret="$(openssl rand -hex 48)"
+          printf '%s' "$secret" | npx wrangler secret put MEDIA_SIGNING_KEY --env qa
+          printf '%s' "$secret" > "$RUNNER_TEMP/breezze-qa-media-secret"
+          chmod 600 "$RUNNER_TEMP/breezze-qa-media-secret"
+      - name: Test real Cloudflare Worker and isolated R2 bytes
+        run: |
+          set -euo pipefail
+          QA_HOST="https://breezze-media-qa.ykw8vmq7ph.workers.dev"
+          test "$(curl -fsS --retry 5 --retry-delay 3 --max-time 15 "$QA_HOST/health" | node -e "let s='';process.stdin.on('data',x=>s+=x).on('end',()=>process.stdout.write(JSON.parse(s).status))")" = configured
+          QA_ID="$(node -e "console.log(require('node:crypto').randomUUID())")"
+          QA_OBJECT="audio/$QA_ID/AAC_256"
+          cleanup() {
+            npx wrangler r2 object delete "breezze-media-qa/$QA_OBJECT" --remote >/dev/null 2>&1 || true
+            rm -f "$RUNNER_TEMP/breezze-qa-media-secret"
+          }
+          trap cleanup EXIT
+          ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i 'sine=frequency=440:duration=5' -c:a aac -b:a 128k -movflags +faststart -y "$RUNNER_TEMP/breezze-qa.m4a"
+          QA_BYTES="$(stat -c%s "$RUNNER_TEMP/breezze-qa.m4a")"
+          QA_EXPIRES="$(node -e 'process.stdout.write(String(Date.now()+120000))')"
+          export QA_ID QA_BYTES QA_EXPIRES
+          export QA_SECRET="$(cat "$RUNNER_TEMP/breezze-qa-media-secret")"
+          QA_UPLOAD_SIG="$(node -e 'const {createHmac}=require("node:crypto");const p=`ingest:${process.env.QA_ID}:AAC_256:audio/mp4:${process.env.QA_BYTES}:${process.env.QA_EXPIRES}`;process.stdout.write(createHmac("sha256",process.env.QA_SECRET).update(p).digest("base64url"))')"
+          QA_PLAY_SIG="$(node -e 'const {createHmac}=require("node:crypto");const p=`${process.env.QA_ID}:AAC_256:${process.env.QA_EXPIRES}`;process.stdout.write(createHmac("sha256",process.env.QA_SECRET).update(p).digest("base64url"))')"
+          QA_UPLOAD_URL="$QA_HOST/ingest/audio/$QA_ID/AAC_256?b=$QA_BYTES&m=audio%2Fmp4&e=$QA_EXPIRES&s=$QA_UPLOAD_SIG"
+          QA_PLAY_URL="$QA_HOST/audio/$QA_ID/AAC_256?e=$QA_EXPIRES&s=$QA_PLAY_SIG"
+          [ "$(curl -sS --retry 3 --max-time 30 -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Type: audio/mp4' --data-binary "@$RUNNER_TEMP/breezze-qa.m4a" "$QA_UPLOAD_URL")" = 201 ]
+          HEADERS="$(curl -fsSI --max-time 20 "$QA_PLAY_URL")"
+          printf '%s' "$HEADERS" | grep -qi '^content-type: audio/mp4'
+          [ "$(curl -sS --max-time 20 -o "$RUNNER_TEMP/breezze-range.bin" -w '%{http_code}' -H 'Range: bytes=0-1023' "$QA_PLAY_URL")" = 206 ]
+          [ "$(wc -c < "$RUNNER_TEMP/breezze-range.bin" | tr -d ' ')" = 1024 ]
+          [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$QA_HOST/audio/$QA_ID/AAC_256?e=$QA_EXPIRES&s=forged")" = 403 ]
+          # This does NOT prove native mobile decoding or copyrighted
+          # YouTube streams. It proves current deployed Worker+R2 bytes.
+          echo 'PASS: isolated live QA R2 AAC upload, signed HEAD, byte-range, signature-denial'
