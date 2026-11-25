@@ -2,9 +2,14 @@ import { ProviderRegistry } from './provider-registry.service';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
 import { DeezerAdapter } from './deezer.adapter';
+import { MusicBrainzAdapter } from './musicbrainz.adapter';
 
 describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    musicbrainz.enabled = false;
+    spotify.enabled = true;
+  });
   const makeAdapter = (providerId: string, priority: number, playback = false, availability = false) => ({
     providerId, displayName: providerId, adapterVersion: '1.0.0', priority, enabled: true,
     capabilities: { search: true, metadata: true, availability, playback, download: false },
@@ -13,10 +18,13 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
   const internal = makeAdapter('breezze_internal', 50, false, true);
   const spotify = makeAdapter('spotify', 220);
   const deezer = makeAdapter('deezer', 110);
+  const musicbrainz = makeAdapter('musicbrainz', 70);
+  musicbrainz.enabled = false;
   const registry = () => new ProviderRegistry(
     internal as unknown as InternalCatalogAdapter,
     spotify as unknown as SpotifyAdapter,
     deezer as unknown as DeezerAdapter,
+    musicbrainz as unknown as MusicBrainzAdapter,
   );
 
   it('searches Spotify and Deezer independently; YouTube stays video-only', async () => {
@@ -77,6 +85,45 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
     const result = await first;
     expect(result.partial).toBe(false);
     expect(result.query).toBe('Jazz Trio');
+  });
+
+  it('serves Deezer immediately when no Spotify credentials are configured', async () => {
+    spotify.enabled = false;
+    deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: '3135556' }] });
+    const result = await registry().searchMusic('Bongo Flava');
+    expect(result.partial).toBe(false);
+    expect(result.providers.map(shelf => shelf.providerId)).toEqual(['deezer']);
+    expect(result.providers[0].result).toMatchObject({
+      kind: 'ok', value: [{ providerTrackId: '3135556' }],
+    });
+    expect(spotify.search).not.toHaveBeenCalled();
+  });
+
+  it('uses clearly attributed keyless MusicBrainz fallback only if catalogs find nothing', async () => {
+    spotify.enabled = false;
+    musicbrainz.enabled = true;
+    deezer.search.mockResolvedValue({ kind: 'ok', value: [] });
+    musicbrainz.search.mockResolvedValue({ kind: 'ok', value: [{
+      providerTrackId: '26c1620c-fd33-4414-a202-6aabbe2303be',
+      title: 'Demo Track', artist: 'Demo Artist',
+    }] });
+    const result = await registry().searchMusic('Demo Track');
+    expect(result.partial).toBe(false);
+    expect(result.providers.map(shelf => shelf.providerId))
+      .toEqual(['deezer', 'musicbrainz']);
+    expect(result.providers[1].result).toMatchObject({
+      kind: 'ok', value: [{ title: 'Demo Track' }],
+    });
+    expect(spotify.search).not.toHaveBeenCalled();
+  });
+
+  it('never uses backup catalog when Deezer already has matching songs', async () => {
+    spotify.enabled = false;
+    musicbrainz.enabled = true;
+    deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: '42' }] });
+    const result = await registry().searchMusic('Music');
+    expect(result.providers.map(shelf => shelf.providerId)).toEqual(['deezer']);
+    expect(musicbrainz.search).not.toHaveBeenCalled();
   });
 
   it('does not spend upstream search quota for invalid music queries', async () => {
