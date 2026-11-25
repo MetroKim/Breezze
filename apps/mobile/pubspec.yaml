@@ -26,8 +26,6 @@ dependencies:
 
   # Audio engine (native ExoPlayer / AVFoundation wrappers)
   just_audio: ^0.9.39
-  # On-device YouTube audio-only stream resolution; no backend media proxy.
-  youtube_explode_dart: 3.1.0
   audio_session: ^0.1.21
   # Native desktop implementations for the shared just_audio engine.
   just_audio_media_kit: ^2.1.0
