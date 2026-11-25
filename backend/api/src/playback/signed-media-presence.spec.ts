@@ -19,6 +19,26 @@ describe('signed native media R2 existence guard', () => {
     }));
   });
 
+  it('binds each signed R2 variant to its actual AAC/FLAC MIME', async () => {
+    const flacUrl = mediaUrl.replace('AAC_256', 'LOSSLESS');
+    const flacResponse = new Response(null, {
+      status: 200,
+      headers: { 'content-type': 'audio/flac', 'content-length': '150000' },
+    });
+    await expect(verifySignedMediaObject(flacUrl, {
+      ...base, request: jest.fn().mockResolvedValue(flacResponse),
+    })).resolves.toBeUndefined();
+    await expect(verifySignedMediaObject(mediaUrl, {
+      ...base, request: jest.fn().mockResolvedValue(flacResponse),
+    })).rejects.toThrow('MEDIA_CDN_INVALID_AUDIO_OBJECT');
+    await expect(verifySignedMediaObject(flacUrl, {
+      ...base, request: jest.fn().mockResolvedValue(ok()),
+    })).rejects.toThrow('MEDIA_CDN_INVALID_AUDIO_OBJECT');
+    await expect(verifySignedMediaObject(mediaUrl.replace('AAC_256', 'unknown'), {
+      ...base, request: jest.fn().mockResolvedValue(ok()),
+    })).rejects.toThrow('MEDIA_CDN_INVALID_AUDIO_OBJECT');
+  });
+
   it('fails before network access for foreign, local or unsigned URLs', async () => {
     const request = jest.fn();
     for (const url of [
