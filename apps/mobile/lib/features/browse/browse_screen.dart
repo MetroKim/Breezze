@@ -109,7 +109,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   void _openCollection(_BrowseDestination destination) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => destination.title == 'Spotify Music'
+        builder: (_) => destination.title == 'Music'
             ? const SearchScreen()
             : _BrowseCollectionScreen(destination: destination),
       ),
@@ -453,7 +453,7 @@ class _BrowseDestination {
 }
 
 const _browseDestinations = <_BrowseDestination>[
-  _BrowseDestination('Spotify Music', 'Discover tracks from Spotify and listen using the official Spotify app.', 'music-note'),
+  _BrowseDestination('Music', 'Discover Spotify and Deezer tracks. Playback stays inside Breezze when authorized.', 'music-note'),
   _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
   _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
   _BrowseDestination('Trending Songs', 'Tracks trending in a defined region and time window.', 'refresh'),
