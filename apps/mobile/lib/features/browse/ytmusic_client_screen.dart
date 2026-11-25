@@ -773,6 +773,18 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
   Future<void> _watch(Map<String, dynamic> item) async {
     final id = item['providerTrackId'];
     if (!_ytVideoId(id)) return;
+    // Preserve this album/playlist's actual published order, not an unrelated
+    // YouTube Music radio queue. The iframe stays visible for every song.
+    final visibleQueue = _ytRows(_collection?['tracks']).map((row) =>
+      <String, String?>{
+        'videoId': row['providerTrackId'] is String
+            ? row['providerTrackId'] as String : null,
+        'title': row['title'] is String ? row['title'] as String : null,
+        'artist': _ytArtist(row),
+        'artworkUrl': row['artworkUrl'] is String
+            ? row['artworkUrl'] as String : null,
+      },
+    ).toList();
     await openYouTubePlayer(
       context: context,
       ref: ref,
@@ -780,6 +792,7 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
       title: item['title'] as String? ?? 'YouTube Music',
       artist: _ytArtist(item),
       artworkUrl: item['artworkUrl'] as String?,
+      visibleQueue: visibleQueue,
     );
   }
 
@@ -882,6 +895,16 @@ class _YtConnectedPlaylistScreenState
   Future<void> _watch(Map<String, dynamic> item) async {
     final videoId = item['videoId'];
     if (!_ytVideoId(videoId)) return;
+    // These are the read-only connected YouTube playlist items already
+    // returned for this owner; never treat them as downloadable audio.
+    final visibleQueue = (_items ?? const <Map<String, dynamic>>[])
+        .map((row) => <String, String?>{
+          'videoId': row['videoId'] is String ? row['videoId'] as String : null,
+          'title': row['title'] is String ? row['title'] as String : null,
+          'artist': _ytArtist(row),
+          'artworkUrl': row['artworkUrl'] is String
+              ? row['artworkUrl'] as String : null,
+        }).toList();
     await openYouTubePlayer(
       context: context,
       ref: ref,
@@ -889,6 +912,7 @@ class _YtConnectedPlaylistScreenState
       title: item['title'] as String? ?? 'YouTube video',
       artist: _ytArtist(item),
       artworkUrl: item['artworkUrl'] as String?,
+      visibleQueue: visibleQueue,
     );
   }
 
