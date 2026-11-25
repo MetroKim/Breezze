@@ -27,7 +27,7 @@ void main() {
       for (final foreground in entry.value.$1) {
         for (final surface in entry.value.$2) {
           expect(_contrast(foreground, surface), greaterThanOrEqualTo(threshold),
-              reason: '${entry.key}: text ${foreground.value} on surface ${surface.value}');
+              reason: '${entry.key}: text $foreground on surface $surface');
         }
       }
     }
