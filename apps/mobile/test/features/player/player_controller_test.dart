@@ -285,6 +285,36 @@ void main() {
   });
 
 
+
+  test('YouTube Music full-song source preserves next-track queue order', () async {
+    final resolver = _FakeResolver();
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+    ]);
+    addTearDown(() async { container.dispose(); await engine.dispose(); });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    const queue = [
+      TrackInfo(id: 'bz:youtube_music:abcdefghijk', title: 'First'),
+      TrackInfo(id: 'bz:youtube_music:lmnopqrstuv', title: 'Second'),
+    ];
+
+    await player.playTrack(trackId: queue.first.id, queue: queue, startIndex: 0);
+    expect(player.state.currentTrack?.id, queue.first.id);
+    expect(player.state.playbackState, PlaybackState.playing);
+
+    engine.emit(PlaybackState.ended);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.state.currentTrack?.id, queue.last.id);
+    expect(player.state.playbackState, PlaybackState.playing);
+    expect(resolver.calls, 2);
+    expect(engine.prepareCount, 2);
+  });
+
   test('restored queue is paused and must resolve a new authorized URL', () async {
     final originalResolver = _FakeResolver();
     final originalEngine = _FakeAudioEngine();

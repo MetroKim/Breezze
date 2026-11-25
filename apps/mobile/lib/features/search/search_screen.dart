@@ -487,16 +487,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
     if (isYouTubeSongId(track.id)) {
-      // Native player only for a verified, rights-approved recording
-      // returned by the server. Otherwise use the official visible player.
+      // Prefer a fresh native audio source, then the official visible player.
+      // Keep every YouTube Music result in order for native Next/Previous.
+      final youtubeTracks =
+          _results.where((item) => isYouTubeSongId(item.id)).toList();
+      final queue = [
+        for (final item in youtubeTracks)
+          TrackInfo(
+            id: item.id, title: item.title, artist: item.artist,
+            artworkUrl: item.artworkUrl, duration: item.duration,
+          ),
+      ];
+      final startIndex = youtubeTracks.indexWhere((item) => item.id == track.id);
+      if (startIndex < 0) return;
       final player = ref.read(playerControllerProvider.notifier);
       await player.playTrack(
-        trackId: track.id,
-        queue: [TrackInfo(
-          id: track.id, title: track.title, artist: track.artist,
-          artworkUrl: track.artworkUrl, duration: track.duration,
-        )],
-        origin: 'search', sourceContext: 'YouTube Music catalog match',
+        trackId: track.id, queue: queue,
+        startIndex: startIndex,
+        origin: 'search', sourceContext: 'YouTube Music',
       );
       if (!mounted) return;
       final playback = ref.read(playerControllerProvider);

@@ -161,9 +161,16 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     if (!_ownerStillActive()) return;
     final track = playlist.tracks[index];
     if (isYouTubeSongId(track.id)) {
+      final nativeQueue = [
+        for (final saved in playlist.tracks)
+          if (isYouTubeSongId(saved.id)) saved.toTrackInfo(),
+      ];
+      final startIndex = nativeQueue.indexWhere((item) => item.id == track.id);
+      if (startIndex < 0) return;
       final player = ref.read(playerControllerProvider.notifier);
       await player.playTrack(
-        trackId: track.id, queue: [track.toTrackInfo()],
+        trackId: track.id, queue: nativeQueue,
+        startIndex: startIndex,
         origin: 'playlist', sourceContext: playlist.name,
       );
       if (!mounted || !_ownerStillActive()) return;
