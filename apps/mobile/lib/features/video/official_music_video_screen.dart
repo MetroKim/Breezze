@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../core/audio/youtube_player_handoff.dart';
+import 'youtube_visible_queue.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 
@@ -18,6 +21,8 @@ class OfficialMusicVideoScreen extends ConsumerStatefulWidget {
   final String title;
   final String artist;
   final String? artworkUrl;
+  /// Explicit selected album or playlist order for the visible YouTube iframe.
+  final List<Map<String, String?>>? visibleQueue;
 
   const OfficialMusicVideoScreen({
     super.key,
@@ -25,6 +30,7 @@ class OfficialMusicVideoScreen extends ConsumerStatefulWidget {
     required this.title,
     required this.artist,
     this.artworkUrl,
+    this.visibleQueue,
   });
 
   @override
@@ -35,6 +41,10 @@ class OfficialMusicVideoScreen extends ConsumerStatefulWidget {
 class _OfficialMusicVideoScreenState
     extends ConsumerState<OfficialMusicVideoScreen> with WidgetsBindingObserver {
   YoutubePlayerController? _controller;
+  StreamSubscription<YoutubePlayerValue>? _playerSubscription;
+  bool _foreground = true;
+  bool _seenPlaying = false;
+  bool _advancePending = false;
   late String _currentVideoId;
   late String _currentTitle;
   late String _currentArtist;
@@ -48,7 +58,8 @@ class _OfficialMusicVideoScreenState
       YoutubePlayerHandoff.isValidProviderTrackId(_currentVideoId);
 
   Future<void> _loadWatchQueue() async {
-    if (!_valid) return;
+    // A chosen album/playlist must not be replaced by unrelated suggestions.
+    if (!_valid || widget.visibleQueue != null) return;
     try {
       final result = await ref.read(authSessionProvider.notifier).api
           .ytMusicWatchQueue(widget.videoId);
@@ -104,6 +115,7 @@ class _OfficialMusicVideoScreenState
       }
       if (!mounted) return;
       setState(() {
+        _seenPlaying = false;
         _queuePosition = position;
         _currentVideoId = id;
         _currentTitle = item['title'] ?? _currentTitle;
@@ -119,6 +131,28 @@ class _OfficialMusicVideoScreenState
     }
   }
 
+  void _onPlayerValue(YoutubePlayerValue value) {
+    if (!mounted) return;
+    if (value.playerState == PlayerState.playing) {
+      _seenPlaying = true;
+      return;
+    }
+    if (value.playerState != PlayerState.ended ||
+        !_seenPlaying || _advancePending) return;
+    final next = YoutubeVisibleQueue.nextAfterEnded(
+      position: _queuePosition,
+      length: _watchQueue.length,
+      foreground: _foreground,
+      routeVisible: ModalRoute.of(context)?.isCurrent == true,
+    );
+    if (next == null) return;
+    _seenPlaying = false;
+    _advancePending = true;
+    // A foreground, displayed iframe advances the selected video playlist.
+    // This is NOT background/audio-only playback or an offline download.
+    _jumpToQueueItem(next).whenComplete(() => _advancePending = false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -127,6 +161,16 @@ class _OfficialMusicVideoScreenState
     _currentTitle = widget.title;
     _currentArtist = widget.artist;
     _currentArtworkUrl = widget.artworkUrl;
+    _watchQueue = YoutubeVisibleQueue.prepare(
+      selectedVideoId: widget.videoId,
+      selectedTitle: widget.title,
+      selectedArtist: widget.artist,
+      selectedArtworkUrl: widget.artworkUrl,
+      entries: widget.visibleQueue ?? const [],
+    );
+    _queuePosition = _watchQueue.indexWhere(
+      (entry) => entry['videoId'] == widget.videoId,
+    );
     if (_valid &&
         YoutubePlayerHandoff.supportsEmbeddedPlayer(
           platform: defaultTargetPlatform,
@@ -143,6 +187,7 @@ class _OfficialMusicVideoScreenState
           showFullscreenButton: true,
         ),
       );
+      _playerSubscription = _controller!.stream.listen(_onPlayerValue);
     }
     // Queue metadata is optional; it never holds up the first video.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -152,12 +197,14 @@ class _OfficialMusicVideoScreenState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) _controller?.pauseVideo();
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) _controller?.pauseVideo();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _playerSubscription?.cancel();
     _controller?.close();
     super.dispose();
   }
@@ -312,6 +359,23 @@ class _OfficialMusicVideoScreenState
                       ),
                     ],
                   ),
+                ],
+                if (_watchQueue.length > 1) ...[
+                  const SizedBox(height: 8),
+                  Text('Playlist queue',
+                    style: theme.textTheme.titleMedium),
+                  for (final entry in _watchQueue.asMap().entries)
+                    ListTile(
+                      dense: true,
+                      selected: entry.key == _queuePosition,
+                      leading: Text('${entry.key + 1}'),
+                      title: Text(entry.value['title'] ?? 'YouTube video',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(entry.value['artist'] ?? 'YouTube Music',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      onTap: entry.key == _queuePosition
+                          ? null : () => _jumpToQueueItem(entry.key),
+                    ),
                 ],
                 const SizedBox(height: 16),
                 Row(
