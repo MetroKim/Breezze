@@ -26,7 +26,7 @@ class SpotifyPlaybackHandoff {
     if (q.isEmpty || q.length > 120) {
       throw ArgumentError.value(query, 'query', 'Invalid Spotify search');
     }
-    return Uri.https('open.spotify.com', '/search/${Uri.encodeComponent(q)}');
+    return Uri.https('open.spotify.com', '/search/$q');
   }
 
   /// Spotify's installed app can take this HTTPS universal/app link.
