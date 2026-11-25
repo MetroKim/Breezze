@@ -24,12 +24,7 @@ export class ProvidersController {
     return this.registry.searchAll(q ?? '');
   }
 
-  // YouTube Music is a supplementary artist/chart metadata source, not an audio stream proxy.
-  // Restricted to authenticated users and an explicit non-production feature flag.
-  // This is a feasibility POC, not an approved streaming or download grant.
-  // Official YouTube Data API: public music-video discovery only.
-  // Auth-gated to limit scraping and prevent exhausting the project's quota.
-  // Never returns separable audio bytes or streaming/download capabilities.
+  // Google official video discovery. No YouTube audio extraction endpoint.
   @Get('youtube/videos/search')
   @UseGuards(JwtAuthGuard)
   searchOfficialYouTubeVideos(@Query('q') q: string, @Query('limit') limit?: string) {
@@ -40,13 +35,6 @@ export class ProvidersController {
   @UseGuards(JwtAuthGuard)
   officialYouTubeVideoDetails(@Param('videoId') videoId: string) {
     return this.officialYouTube.getVideo(videoId);
-  }
-
-  @Get('youtube_music/audio-candidate/:videoId')
-  @UseGuards(JwtAuthGuard)
-  getYoutubeMusicAudioCandidate(@Param('videoId') videoId: string) {
-    if (!this.youtubeMusic.enabled) return { kind: 'unsupported', reason: 'PROVIDER_NOT_FOUND' };
-    return this.youtubeMusic.getAudioCandidate(videoId);
   }
 
   @Get('youtube_music/artists/search')
