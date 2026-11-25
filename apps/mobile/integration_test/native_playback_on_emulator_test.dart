@@ -86,7 +86,7 @@ Uint8List _testStereoWav({int sampleRate = 44100, int seconds = 3}) {
   const channels = 2;
   const bytesPerSample = 2;
   const header = 44;
-  const dataSize = sampleRate * seconds * channels * bytesPerSample;
+  final dataSize = sampleRate * seconds * channels * bytesPerSample;
   final data = ByteData(header + dataSize);
   void tag(int offset, String text) {
     for (var i = 0; i < text.length; i++) {
