@@ -65,12 +65,12 @@ export class DeezerAdapter implements ProviderAdapter {
   async search(query: string): Promise<ProviderResult<ProviderTrack[]>> {
     const q = query.trim();
     if (q.length < 2 || q.length > 120) return providerOk([]);
-    const key = `provider:deezer:search:v1:${encodeURIComponent(q.toLowerCase())}`;
+    const key = `provider:deezer:search:v2:${encodeURIComponent(q.toLowerCase())}`;
     const cached = await this.cache.get<ProviderResult<ProviderTrack[]>>(key);
     if (cached) return cached;
     try {
       const payload = await this.request<DeezerEnvelope<DeezerTrack>>(
-        this.url('/search/track', { q, limit: '25' }),
+        this.url('/search/track', { q, limit: '50' }),
       );
       if (!Array.isArray(payload.data)) return providerError('DEEZER_INVALID_RESPONSE', 'Deezer returned an invalid catalogue response', false);
       const tracks = payload.data
