@@ -227,15 +227,15 @@ void main() {
     expect(find.textContaining('Catalog metadata only'), findsOneWidget);
     expect(find.textContaining('Deezer'), findsWidgets);
   });
-  testWidgets('Browse opens Spotify song search while YouTube stays video-only',
+  testWidgets('Browse opens in-app Spotify and Deezer search while YouTube stays video-only',
       (tester) async {
     final source = _BrowseSource();
     await _mountBrowse(tester, source);
     source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
 
-    await tester.ensureVisible(find.text('Spotify Music'));
-    await tester.tap(find.text('Spotify Music'));
+    await tester.ensureVisible(find.text('Music'));
+    await tester.tap(find.text('Music'));
     await tester.pumpAndSettle();
 
     expect(find.text('Search'), findsOneWidget);
