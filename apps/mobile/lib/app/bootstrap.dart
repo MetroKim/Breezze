@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -211,10 +212,12 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
-    // Prefer our own, separately ingested and rights-approved recording.
-    // When none is present, resolve a transient audio URL on the listener's
-    // device (Liner-like architecture). No URL is sent to our database or
-    // media worker, nor stored in queue/cache snapshots.
+    // Prefer a real rights-approved full recording. The official YouTube
+    // Data API cannot authorize an audio-only stream. If no approved native
+    // asset exists, return null promptly so the source-aware coordinator
+    // opens the official VISIBLE YouTube player, not a stalled native spinner.
+    // Keep unsupported on-device extraction only behind an explicit,
+    // non-release feasibility flag, never as a production fallback.
     if (isYouTubeSongId(track.id)) {
       try {
         final preferences = await DownloadPreferencesStore().load();
@@ -230,7 +233,13 @@ class LiveResolver implements PlaybackResolver {
       } catch (_) {
         // No matched licensed asset: attempt direct on-device resolution.
       }
-      return _ref.read(deviceYouTubeAudioResolverProvider).resolve(track.id);
+      const experimentalProbe = bool.fromEnvironment(
+        'BREEZZE_EXPERIMENTAL_DEVICE_YOUTUBE_AUDIO', defaultValue: false,
+      );
+      if (experimentalProbe && !kReleaseMode) {
+        return _ref.read(deviceYouTubeAudioResolverProvider).resolve(track.id);
+      }
+      return null;
     }
 
     try {
