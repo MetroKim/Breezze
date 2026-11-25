@@ -17,6 +17,7 @@ on:
       - 'apps/mobile/lib/features/browse/browse_screen.dart'
       - 'apps/mobile/test/browse_screen_test.dart'
       - 'apps/mobile/test/search_typeahead_test.dart'
+      - 'apps/mobile/test/music_catalog_search_api_test.dart'
       - 'apps/mobile/test/music_in_app_policy_test.dart'
       - 'apps/mobile/test/home_screen_test.dart'
       - 'apps/mobile/test/catalog_detail_screens_test.dart'
@@ -38,6 +39,7 @@ on:
       - 'apps/mobile/lib/features/browse/browse_screen.dart'
       - 'apps/mobile/test/browse_screen_test.dart'
       - 'apps/mobile/test/search_typeahead_test.dart'
+      - 'apps/mobile/test/music_catalog_search_api_test.dart'
       - 'apps/mobile/test/spotify_playback_handoff_test.dart'
       - 'apps/mobile/test/deezer_playback_handoff_test.dart'
       - 'apps/mobile/test/home_screen_test.dart'
@@ -103,4 +105,4 @@ jobs:
             exit 1
           fi
       - name: Validate music rights, video-only routing and full-song action policy
-        run: flutter test --reporter expanded test/music_in_app_policy_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart test/browse_screen_test.dart test/search_typeahead_test.dart test/home_screen_test.dart test/catalog_detail_screens_test.dart
+        run: flutter test --reporter expanded test/music_catalog_search_api_test.dart test/music_in_app_policy_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart test/browse_screen_test.dart test/search_typeahead_test.dart test/home_screen_test.dart test/catalog_detail_screens_test.dart
