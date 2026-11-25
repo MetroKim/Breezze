@@ -177,4 +177,31 @@ void main() {
     expect(find.byType(BackdropFilter), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('shared glass container becomes solid with reduced motion',
+      (tester) async {
+    await tester.pumpWidget(
+      _host(
+        const BzGlassContainer(radius: 20, child: _glassChild),
+        media: MediaQueryData(disableAnimations: true),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(find.byType(SizedBox), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shared glass container becomes solid in high contrast',
+      (tester) async {
+    await tester.pumpWidget(
+      _host(
+        const BzGlassContainer(radius: 20, child: _glassChild),
+        media: MediaQueryData(highContrast: true),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
 }
