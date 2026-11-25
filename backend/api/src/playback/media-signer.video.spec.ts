@@ -32,4 +32,19 @@ describe('MediaSigner video contract', () => {
       .toThrow('VIDEO_ASSET_ID_INVALID');
     expect(signer.verifyVideo(id, 'stream', Date.now() - 1, 'expired')).toBe(false);
   });
+  it('creates a bounded, purpose-specific upload grant only for internal MP4 assets', () => {
+    const issued = signer.createVideoIngestUrl(id, 1024);
+    const url = new URL(issued.url);
+    expect(url.pathname).toBe('/ingest/video/' + id);
+    expect(url.searchParams.get('b')).toBe('1024');
+    expect(url.searchParams.get('s')).toBeTruthy();
+    expect(issued.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 600_000);
+    expect(() => signer.createVideoIngestUrl('dQw4w9WgXcQ', 1024))
+      .toThrow('VIDEO_INGEST_METADATA_INVALID');
+    expect(() => signer.createVideoIngestUrl(id, 95_000_001))
+      .toThrow('VIDEO_INGEST_METADATA_INVALID');
+    expect(signer.verifyVideo(
+      id, 'stream', Number(url.searchParams.get('e')), url.searchParams.get('s')!,
+    )).toBe(false);
+  });
 });

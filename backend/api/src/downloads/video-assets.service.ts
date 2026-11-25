@@ -2,6 +2,7 @@ import { Injectable, NotAcceptableException, NotFoundException } from '@nestjs/c
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from '../playback/media-signer.service';
+import { inspectSignedVideoObject } from '../playback/signed-media-presence';
 
 /**
  * Signed R2 MP4 delivery for explicitly imported Breezze-owned video assets.
@@ -98,6 +99,9 @@ export class VideoAssetsService {
       throw new NotAcceptableException(decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason);
     }
     const signed = this.signer.createVideoUrl(asset.id, 'stream', decision.expiresAt);
+    // A database row is not proof that the MP4 is present in R2. In
+    // production, verify the actual private edge object before granting it.
+    await inspectSignedVideoObject(signed.url);
     return {
       videoAssetId: asset.id,
       streamUrl: signed.url,
@@ -127,6 +131,7 @@ export class VideoAssetsService {
       return { allowed: false, reason: 'RIGHTS_EXPIRED', url: null };
     }
     const signed = this.signer.createVideoUrl(asset.id, 'download', decision.expiresAt);
+    await inspectSignedVideoObject(signed.url);
     const record = await this.prisma.videoDownloadRecord.upsert({
       where: { userId_videoAssetId: { userId, videoAssetId: asset.id } },
       create: {
