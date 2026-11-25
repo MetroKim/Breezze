@@ -107,6 +107,8 @@ jobs:
     # the Google Console Android package + SHA-1 registration is verified.
     env:
       BREEZZE_GOOGLE_ANDROID_VERIFIED: ${{ vars.BREEZZE_GOOGLE_ANDROID_VERIFIED }}
+      BREEZZE_GOOGLE_ANDROID_DEBUG_SHA1: ${{ vars.BREEZZE_GOOGLE_ANDROID_DEBUG_SHA1 }}
+      BREEZZE_GOOGLE_ANDROID_RELEASE_SHA1: ${{ vars.BREEZZE_GOOGLE_ANDROID_RELEASE_SHA1 }}
       BREEZZE_GOOGLE_WEB_CLIENT_ID: ${{ vars.BREEZZE_GOOGLE_ANDROID_VERIFIED == 'true' && (vars.BREEZZE_GOOGLE_WEB_CLIENT_ID || '524100653326-8i401dbgt8h33fjp5qjdnjkrtnuqmdis.apps.googleusercontent.com') || '' }}
     steps:
       - name: Checkout
@@ -176,6 +178,38 @@ jobs:
       - name: Build Android release APK
         working-directory: apps/mobile
         run: flutter build apk --release --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }} --dart-define=BREEZZE_GOOGLE_WEB_CLIENT_ID="$BREEZZE_GOOGLE_WEB_CLIENT_ID"
+
+      - name: Verify Android Google OAuth app signing certificate identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BREEZZE_GOOGLE_ANDROID_VERIFIED" != "true" ]]; then
+            echo "Android Google login remains disabled; no signing identity is claimed"
+            exit 0
+          fi
+          sdk_tools="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}/build-tools"
+          signer=$(find "$sdk_tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          if [[ -z "$signer" ]]; then
+            echo "Android SDK apksigner not available for fingerprint verification" >&2
+            exit 1
+          fi
+          check_apk() {
+            local variant="$1" expected="$2" apk="$3"
+            expected=$(printf '%s' "$expected" | tr -d ':' | tr '[:lower:]' '[:upper:]')
+            if [[ ! "$expected" =~ ^[A-F0-9]{40}$ ]]; then
+              echo "Missing valid registered Android ${variant} SHA-1 GitHub variable" >&2
+              exit 1
+            fi
+            local actual
+            actual=$("$signer" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | head -n 1 | tr '[:lower:]' '[:upper:]')
+            if [[ -z "$actual" || "$actual" != "$expected" ]]; then
+              echo "Android ${variant} APK signing SHA-1 does not match the approved Google Cloud registration" >&2
+              exit 1
+            fi
+            echo "Android ${variant} Google OAuth signing SHA-1 verified against the actual built APK"
+          }
+          check_apk debug "$BREEZZE_GOOGLE_ANDROID_DEBUG_SHA1" apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          check_apk release "$BREEZZE_GOOGLE_ANDROID_RELEASE_SHA1" apps/mobile/build/app/outputs/flutter-apk/app-release.apk
 
       - name: Prepare Drift WebAssembly database assets
         working-directory: apps/mobile
