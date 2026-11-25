@@ -304,7 +304,8 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                   // Capsule pill genre rail — spec §2.3 tab indicators use
                   // --radius-pill. Same treatment as Library and Search.
                   SizedBox(
-                    height: 52,
+                    height: MediaQuery.textScalerOf(context).scale(16) > 24
+                        ? 80 : 52,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _genres.length,
@@ -332,7 +333,10 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.crossAxisExtent;
-                final columns = width >= 1080 ? 4 : width >= 620 ? 3 : 2;
+                // Preserve readable card content at 200% text scale: phone-sized
+                // layouts use a single column instead of clipped tiny tiles.
+                final columns = width >= 1100 ? 4 : width >= 810 ? 3
+                    : width >= 540 ? 2 : 1;
                 return SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
