@@ -47,6 +47,22 @@ class _DiagnosticAudioEngine extends JustAudioEngineAdapter {
   }
 }
 
+
+class _CreativeCommonsDirectAudioResolver implements PlaybackResolver {
+  int requests = 0;
+
+  @override
+  Future<PlayableSource?> resolve(TrackInfo track) async {
+    requests++;
+    return PlayableSource(
+      trackId: track.id,
+      streamUrl: 'https://commons.wikimedia.org/wiki/Special:Redirect/file/BigBuckBunny-stereo.ogg',
+      expiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+      codec: 'vorbis',
+    );
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -117,4 +133,73 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 4)),
   );
+
+
+  testWidgets(
+    'E2E control: native decoder streams a full-length Creative Commons '
+    'audio file without the unofficial YouTube manifest',
+    (tester) async {
+      // Separate CONTROL test. This is the public, licensed standalone
+      // 9m56s Ogg Vorbis soundtrack—not media extracted from YouTube.
+      // Attribution: Blender Foundation, Big Buck Bunny, CC BY 3.0.
+      // Source: https://commons.wikimedia.org/wiki/File:BigBuckBunny-stereo.ogg
+      // Test must never be mistaken for YouTube Music native playback.
+      const track = TrackInfo(
+        id: 'catalog-qa:cc-bbb-audio',
+        title: 'Big Buck Bunny original soundtrack',
+        artist: 'Blender Foundation (CC BY 3.0)',
+        duration: Duration(minutes: 9, seconds: 56),
+      );
+      final source = _CreativeCommonsDirectAudioResolver();
+      final engine = _DiagnosticAudioEngine();
+      final container = ProviderContainer(overrides: [
+        playbackResolverProvider.overrideWithValue(source),
+      ]);
+      final player = container.read(playerControllerProvider.notifier);
+      player.attachEngine(engine);
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(body: Text('Authorized full-track streaming QA')),
+      ));
+      try {
+        await tester.runAsync(() async {
+          await player.playTrack(
+            trackId: track.id,
+            queue: const [track],
+            origin: 'creative-commons-native-control',
+          ).timeout(const Duration(seconds: 35));
+        });
+        expect(source.requests, 1);
+        expect(player.state.playbackState, PlaybackState.playing,
+          reason: 'Full-length Creative Commons media failed in native engine. '
+              'Decoder prepare exception: ${engine.prepareFailureType ?? "none"}');
+        expect(engine.duration, greaterThan(const Duration(minutes: 8)),
+          reason: 'Must decode full-length audio, not a 30-second preview');
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(seconds: 2));
+        });
+        expect(engine.position, greaterThan(const Duration(milliseconds: 250)),
+          reason: 'The native audio clock must actually advance');
+        await player.pause();
+        expect(player.state.playbackState, PlaybackState.paused);
+        await player.seekTo(const Duration(minutes: 2));
+        expect(engine.position, greaterThanOrEqualTo(
+          const Duration(minutes: 1, seconds: 58)));
+        await player.resume();
+        expect(player.state.playbackState, PlaybackState.playing);
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 950));
+        });
+        expect(engine.position, greaterThan(const Duration(minutes: 2)),
+          reason: 'Native decoder must resume beyond the seek position');
+        await player.stop();
+        expect(player.state.playbackState, PlaybackState.idle);
+      } finally {
+        await player.stop();
+        container.dispose();
+        await engine.dispose();
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
 }
