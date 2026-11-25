@@ -196,7 +196,7 @@ async function ingestAudio(request: Request, url: URL, env: Env): Promise<Respon
   const expectedSize = Number(url.searchParams.get('b'));
   const expires = Number(url.searchParams.get('e'));
   if (!Number.isSafeInteger(expectedSize) || expectedSize < 12 ||
-      expectedSize > 500 * 1024 * 1024 ||
+      expectedSize > 95_000_000 ||
       !((variant === 'LOSSLESS' || variant === 'HI_RES')
         ? ['audio/flac', 'audio/x-flac'].includes(mime)
         : ['audio/mp4', 'audio/aac'].includes(mime))) {

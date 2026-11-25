@@ -15,7 +15,7 @@ export class IssueAudioIngestDto {
   @IsUUID() trackId!: string;
   @IsIn(['AAC_128', 'AAC_256', 'LOSSLESS', 'HI_RES']) quality!: string;
   @IsIn(['audio/mp4', 'audio/aac', 'audio/flac', 'audio/x-flac']) mimeType!: string;
-  @IsInt() @Min(12) @Max(500 * 1024 * 1024) sizeBytes!: number;
+  @IsInt() @Min(12) @Max(95_000_000) sizeBytes!: number;
 }
 
 export class ApproveCatalogMatchDto {

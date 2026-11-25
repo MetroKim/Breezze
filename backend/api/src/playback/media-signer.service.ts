@@ -80,7 +80,7 @@ export class MediaSigner {
   ): { url: string; expiresAt: Date } {
     if (!/^[0-9a-fA-F-]{36}$/.test(trackId) ||
         !['AAC_128','AAC_256','LOSSLESS','HI_RES'].includes(variant) ||
-        !Number.isSafeInteger(sizeBytes) || sizeBytes < 12 || sizeBytes > 500 * 1024 * 1024 ||
+        !Number.isSafeInteger(sizeBytes) || sizeBytes < 12 || sizeBytes > 95_000_000 ||
         !((variant === 'LOSSLESS' || variant === 'HI_RES')
           ? ['audio/flac', 'audio/x-flac'].includes(mimeType)
           : ['audio/mp4','audio/aac'].includes(mimeType))) {
