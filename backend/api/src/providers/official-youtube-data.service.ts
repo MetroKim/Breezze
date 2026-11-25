@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { ProviderCacheService } from './provider-cache.service';
 import { ProviderTrack } from './provider-adapter.interface';
 import { ProviderResult, providerError, providerOk, providerUnsupported } from './provider-result';
 
@@ -37,6 +39,7 @@ interface YoutubeVideoEnvelope {
  */
 @Injectable()
 export class OfficialYouTubeDataService {
+  constructor(@Optional() private readonly cache?: ProviderCacheService) {}
   get configured(): boolean {
     return Boolean((process.env.YOUTUBE_DATA_API_KEY ?? '').trim());
   }
@@ -81,6 +84,16 @@ export class OfficialYouTubeDataService {
         !Number.isInteger(limit) || limit < 1 || limit > MAX_RESULTS) {
       return providerError('INVALID_YOUTUBE_VIDEO_SEARCH', 'Invalid video search input');
     }
+    // Search has its own 100-calls/day Google quota as of 2026. Cache each
+    // query across replicas and preserve a reserved margin for other clients.
+    const queryKey = createHash('sha256').update(q.toLowerCase()).digest('hex');
+    const cacheKey = 'provider:youtube:official-search:v1:' + queryKey + ':' + limit;
+    const cached = await this.cache?.get<ProviderResult<ProviderTrack[]>>(cacheKey);
+    if (cached) return cached;
+    if (this.cache && !await this.cache.reserveDailyProviderRequest(
+      'youtube-search', 80,
+    )) return providerUnsupported('YOUTUBE_SEARCH_DAILY_BUDGET_EXHAUSTED');
+
     const url = this.requestUrl('search');
     url.searchParams.set('part', 'snippet');
     url.searchParams.set('type', 'video');
@@ -116,8 +129,10 @@ export class OfficialYouTubeDataService {
         artworkUrl: artworkUrl?.startsWith('https://') ? artworkUrl : undefined,
       });
     }
-    return providerOk(tracks,
+    const ready = providerOk(tracks,
       'Official YouTube Data API music videos; open only in visible official YouTube player');
+    await this.cache?.set(cacheKey, ready, 15 * 60);
+    return ready;
   }
 
   async getVideo(videoId: string): Promise<ProviderResult<{
@@ -132,6 +147,12 @@ export class OfficialYouTubeDataService {
       return providerError('INVALID_YOUTUBE_VIDEO_ID', 'Invalid video ID');
     }
     if (!this.configured) return providerUnsupported('YOUTUBE_DATA_KEY_NOT_CONFIGURED');
+    const cacheKey = 'provider:youtube:official-video:v1:' + videoId;
+    const cached = await this.cache?.get<ProviderResult<{
+      videoId: string; title: string; channel: string; embeddable: boolean;
+      watchUrl: string; playbackAvailable: false;
+    }>>(cacheKey);
+    if (cached) return cached;
     const url = this.requestUrl('videos');
     url.searchParams.set('part', 'snippet,status');
     url.searchParams.set('id', videoId);
@@ -141,7 +162,7 @@ export class OfficialYouTubeDataService {
     if (!video || typeof video.snippet?.title !== 'string') {
       return providerError('YOUTUBE_VIDEO_NOT_FOUND', 'YouTube video not available');
     }
-    return providerOk({
+    const ready = providerOk({
       videoId,
       title: video.snippet.title,
       channel: video.snippet.channelTitle ?? '',
@@ -149,5 +170,7 @@ export class OfficialYouTubeDataService {
       watchUrl: 'https://www.youtube.com/watch?v=' + videoId,
       playbackAvailable: false,
     }, 'Official YouTube metadata; never a native audio playback entitlement');
+    await this.cache?.set(cacheKey, ready, 60 * 60);
+    return ready;
   }
 }
