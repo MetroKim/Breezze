@@ -48,9 +48,10 @@ void main() {
       expect(canOfferPlaybackAction(youtube), isTrue);
       expect(canQueueTrackId(youtube), isFalse);
       expect(canOfferPlaybackAction('bzv:dQw4w9WgXcQ'), isTrue);
-      expect(canOfferPlaybackAction('bzv:not-valid'), isTrue);
+      expect(canOfferPlaybackAction('bzv:not-valid'), isFalse);
       expect(canOfferPlaybackAction('bz:deezer:123'), isFalse);
       expect(canOfferPlaybackAction('bz:deezer:123', hasPreview: true), isTrue);
+      expect(canOfferPlaybackAction('bz:deezer:invalid', hasPreview: true), isFalse);
       expect(canOfferPlaybackAction('bz:deezer_preview:123'), isTrue);
       expect(canOfferPlaybackAction('bz:apple_catalog:123'), isFalse);
       expect(canOfferPlaybackAction(''), isFalse);
