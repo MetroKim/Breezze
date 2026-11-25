@@ -6,11 +6,13 @@ class AuthorizedDownloadGrant {
   const AuthorizedDownloadGrant({
     required this.downloadUrl,
     required this.offlineLeaseExpiresAtUtc,
+    required this.assetVariant,
     this.assetVersion,
   });
 
   final Uri downloadUrl;
   final DateTime offlineLeaseExpiresAtUtc;
+  final String assetVariant;
 
   /// Stable, server-issued version of the *exact encoded media asset*.
   /// Null means a partial download cannot be safely resumed.
@@ -31,6 +33,19 @@ class AuthorizedDownloadGrant {
         url.userInfo.isNotEmpty || url.fragment.isNotEmpty) {
       return null;
     }
+    // The CDN path and MIME must describe the exact AAC object signed for
+    // offline transfer; a stream URL, preview URL, or metadata link is not
+    // proof of download entitlement.
+    final variant = response['assetVariant'];
+    if ((variant != 'AAC_128' && variant != 'AAC_256') ||
+        response['mimeType'] != 'audio/mp4' ||
+        url.pathSegments.length != 3 ||
+        url.pathSegments[0] != 'audio' ||
+        url.pathSegments[2] != variant ||
+        url.queryParameters['mode'] != 'download' ||
+        url.queryParameters['s']?.isNotEmpty != true) {
+      return null;
+    }
 
     final now = (nowUtc ?? DateTime.now().toUtc()).toUtc();
     DateTime? parseExpiry(Object? value) =>
@@ -46,9 +61,12 @@ class AuthorizedDownloadGrant {
     }
 
     final signedUrlExpiryValue = response['expiresAt'];
-    if (signedUrlExpiryValue != null) {
-      final signedUrlExpiry = parseExpiry(signedUrlExpiryValue);
-      if (signedUrlExpiry == null || !signedUrlExpiry.isAfter(now)) return null;
+    if (signedUrlExpiryValue == null) return null;
+    final signedUrlExpiry = parseExpiry(signedUrlExpiryValue);
+    if (signedUrlExpiry == null || !signedUrlExpiry.isAfter(now) ||
+        signedUrlExpiry.millisecondsSinceEpoch.toString() !=
+            url.queryParameters['e']) {
+      return null;
     }
 
     final rightsExpiryValue = response['rightsExpiresAt'];
@@ -71,6 +89,7 @@ class AuthorizedDownloadGrant {
     return AuthorizedDownloadGrant(
       downloadUrl: url,
       offlineLeaseExpiresAtUtc: lease,
+      assetVariant: variant as String,
       assetVersion: assetVersion,
     );
   }

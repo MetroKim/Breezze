@@ -44,6 +44,7 @@ void main() {
       receivedRange = request.headers.value('range') ?? '';
       request.response.statusCode = HttpStatus.partialContent;
       request.response.headers
+        ..set('content-type', 'audio/mp4')
         ..set('content-range', 'bytes 3-5/6')
         ..contentLength = 3;
       request.response.add(utf8.encode('def'));
@@ -58,12 +59,44 @@ void main() {
       downloadUrl: 'http://${server.address.address}:${server.port}/audio',
       ownerId: 'user-1',
       catalogTrackId: 'catalog-resume',
+      rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
     );
 
     expect(ok, isTrue);
     expect(receivedRange, 'bytes=3-');
     expect(await File('${trackDir.path}/audio.m4a').readAsString(), 'abcdef');
     expect(await partial.exists(), isFalse);
+  });
+
+
+  test('expired grant or non-audio HTTP response cannot create offline music', () async {
+    final track = BzTrack(
+      id: 'licensed-aac',
+      title: 'Licensed track',
+      artist: 'Breezze Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.html;
+      request.response.write('<h1>not licensed audio</h1>');
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final url = 'http://${server.address.address}:${server.port}/audio';
+
+    expect(await library.download(
+      track, downloadUrl: url, ownerId: 'owner-1',
+      catalogTrackId: track.id,
+      rightsExpiresAtUtc: DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
+    ), isFalse);
+    expect(await library.download(
+      track, downloadUrl: url, ownerId: 'owner-1',
+      catalogTrackId: track.id,
+      rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+    ), isFalse);
+    expect(await library.list(ownerId: 'owner-1'), isEmpty);
+    expect(await File('${root.path}/licensed-aac/audio.m4a').exists(), isFalse);
   });
 
   test('lists only assets owned by the requested account', () async {

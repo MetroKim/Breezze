@@ -9,7 +9,10 @@ void main() {
 
   Map<String, dynamic> grant() => {
     'allowed': true,
-    'url': 'https://media.example.org/download?sig=redacted',
+    'url': 'https://media.example.org/audio/catalog-track-id/AAC_256'
+        '?mode=download&e=${signedExpiry.millisecondsSinceEpoch}&s=redacted',
+    'assetVariant': 'AAC_256',
+    'mimeType': 'audio/mp4',
     'expiresAt': signedExpiry.toIso8601String(),
     'offlineLeaseExpiresAt': leaseExpiry.toIso8601String(),
     'rightsExpiresAt': rightsExpiry.toIso8601String(),
@@ -23,6 +26,7 @@ void main() {
     expect(result, isNotNull);
     expect(result!.offlineLeaseExpiresAtUtc, leaseExpiry);
     expect(result.assetVersion, 'master-42:aac256');
+    expect(result.assetVariant, 'AAC_256');
   });
 
   test('rejects missing, expired or overly long offline lease', () {
@@ -60,6 +64,20 @@ void main() {
         grant()..['url'] = url, nowUtc: now,
       ), isNull, reason: url);
     }
+  });
+
+  test('rejects stream and preview URLs even when rights response says allowed', () {
+    final streaming = grant()
+      ..['url'] = 'https://media.example.org/audio/catalog-track-id/AAC_256'
+          '?e=${signedExpiry.millisecondsSinceEpoch}&s=redacted';
+    expect(AuthorizedDownloadGrant.fromResponse(streaming, nowUtc: now), isNull);
+    final wrongCodec = grant()..['assetVariant'] = 'LOSSLESS';
+    expect(AuthorizedDownloadGrant.fromResponse(wrongCodec, nowUtc: now), isNull);
+    final wrongMime = grant()..['mimeType'] = 'text/html';
+    expect(AuthorizedDownloadGrant.fromResponse(wrongMime, nowUtc: now), isNull);
+    final wrongExpiry = grant()..['expiresAt'] =
+        signedExpiry.add(const Duration(seconds: 1)).toIso8601String();
+    expect(AuthorizedDownloadGrant.fromResponse(wrongExpiry, nowUtc: now), isNull);
   });
 
   test('untrusted asset version does not enable partial resume', () {

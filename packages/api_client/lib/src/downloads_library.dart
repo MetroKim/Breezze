@@ -46,10 +46,13 @@ class DownloadsLibrary {
     required String downloadUrl,
     required String ownerId,
     required String catalogTrackId,
-    DateTime? rightsExpiresAtUtc,
+    required DateTime rightsExpiresAtUtc,
     void Function(double progress)? onProgress,
     DownloadCancellation? cancellation,
   }) async {
+    if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc())) {
+      return false;
+    }
     final dir = _dirFor(track.id);
     try {
       await dir.create(recursive: true);
@@ -63,7 +66,11 @@ class DownloadsLibrary {
         partial: File('${dir.path}/audio.part'),
         cancellation: cancellation,
         onProgress: onProgress,
+        requiredMimeType: 'audio/mp4',
       );
+      if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc())) {
+        return false;
+      }
       onProgress?.call(1.0);
 
       // 2. Cover art is optional. A CDN/network failure must not turn a
