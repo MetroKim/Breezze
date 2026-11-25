@@ -1,4 +1,4 @@
-name: Breezze Spotify Deezer Audio and YouTube Video Isolation
+name: Breezze In-App Music Policy and YouTube Video Isolation
 
 on:
   push:
@@ -17,8 +17,7 @@ on:
       - 'apps/mobile/lib/features/browse/browse_screen.dart'
       - 'apps/mobile/test/browse_screen_test.dart'
       - 'apps/mobile/test/search_typeahead_test.dart'
-      - 'apps/mobile/test/spotify_playback_handoff_test.dart'
-      - 'apps/mobile/test/deezer_playback_handoff_test.dart'
+      - 'apps/mobile/test/music_in_app_policy_test.dart'
       - 'apps/mobile/test/home_screen_test.dart'
       - 'apps/mobile/test/catalog_detail_screens_test.dart'
       - 'apps/mobile/test/deezer_playback_handoff_test.dart'
@@ -75,7 +74,7 @@ jobs:
         run: npx jest --runInBand src/providers/spotify.adapter.spec.ts src/providers/deezer.adapter.spec.ts src/providers/provider-registry.service.spec.ts
 
   mobile:
-    name: Flutter Spotify Deezer handoffs and no-native-YouTube guard
+    name: Flutter in-app-only playback and no-native-YouTube guards
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -96,5 +95,12 @@ jobs:
             echo 'Unsupported YouTube native-audio resolution remains in Flutter production source' >&2
             exit 1
           fi
-      - name: Validate official Spotify and Deezer routing, previews and playback policy
-        run: flutter test --reporter expanded test/spotify_playback_handoff_test.dart test/deezer_playback_handoff_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart test/browse_screen_test.dart test/search_typeahead_test.dart test/home_screen_test.dart test/catalog_detail_screens_test.dart
+      - name: Block external music-app launches and unsupported native extraction
+        run: |
+          set -euo pipefail
+          if grep -R -n -E 'SpotifyPlaybackHandoff|DeezerPlaybackHandoff|OfficialMusicPlayback|Open in Spotify|Open in Deezer|Listen in Spotify|Listen in Deezer|open\.spotify\.com/track|www\.deezer\.com/track' lib; then
+            echo 'External Spotify/Deezer playback path detected in Breezze UI' >&2
+            exit 1
+          fi
+      - name: Validate music rights, video-only routing and full-song action policy
+        run: flutter test --reporter expanded test/music_in_app_policy_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart test/browse_screen_test.dart test/search_typeahead_test.dart test/home_screen_test.dart test/catalog_detail_screens_test.dart
