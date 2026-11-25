@@ -9,6 +9,7 @@ on:
       - 'backend/api/prisma/**'
       - 'backend/api/src/main.ts'
       - 'backend/api/src/playback/**'
+      - 'backend/api/src/providers/**'
       - 'infra/cloudflare/media-worker/**'
       - '.github/workflows/media-delivery-verify.yml'
   pull_request:
@@ -18,6 +19,7 @@ on:
       - 'backend/api/prisma/**'
       - 'backend/api/src/main.ts'
       - 'backend/api/src/playback/**'
+      - 'backend/api/src/providers/**'
       - 'infra/cloudflare/media-worker/**'
       - '.github/workflows/media-delivery-verify.yml'
   workflow_dispatch:
@@ -50,6 +52,8 @@ jobs:
         run: npm run typecheck
       - name: Test download grants, audio-ingest rights and offline lease revocation
         run: npx jest --runInBand src/downloads/downloads.service.spec.ts src/admin/audio-catalog.service.spec.ts src/playback/playback-resolve.service.spec.ts
+      - name: Test official YouTube video discovery and outage fallback
+        run: npx jest --runInBand src/providers/official-youtube-data.service.spec.ts src/providers/ytmusic.adapter.spec.ts
 
   worker:
     name: Private R2 signed-byte delivery
