@@ -27,8 +27,9 @@ bool canQueueTrackId(String id) =>
 /// An available action may mean "open Spotify or official YouTube"; it does not
 /// imply that Breezze can play, cache, redistribute or download full audio.
 bool canOfferPlaybackAction(String id, {bool hasPreview = false}) =>
-    isSpotifyTrackId(id) ||
-    isDeezerTrackId(id) ||
+    // External catalogs cannot start a full song in Breezze without a
+    // separately authorized, in-app playback source.
+    isDeezerPreview(id) ||
     isYouTubeSongId(id) ||
     _youtubeVideoId.hasMatch(id) ||
     canQueueTrackId(id);
