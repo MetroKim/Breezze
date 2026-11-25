@@ -90,30 +90,52 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
 
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
-    // Spotify is the only *music playback* discovery source. Deezer records
-    // remain readable via dedicated legacy metadata APIs, never as playback.
-    final q = query.trim();
-    if (q.length < 2 || q.length > 120) return ProviderOk(<ProviderTrack>[]);
+    // One Breezze request fans out concurrently to Spotify and Deezer.
+    // Preserve each provider's ranking, identity and attribution. YouTube
+    // tracks never enter the music search or native audio queue.
+    final normalized = query.trim();
+    if (normalized.length < 2 || normalized.length > 120) {
+      return ProviderOk(<ProviderTrack>[]);
+    }
     try {
-      final result = await _ref.read(authSessionProvider.notifier).api
-          .searchSpotify(q);
-      if (result['kind'] != 'ok' || result['value'] is! List) {
-        return ProviderError('spotify_unavailable');
+      final response = await _ref.read(authSessionProvider.notifier).api
+          .searchMusicCatalogs(normalized);
+      final shelves = response['providers'];
+      if (shelves is! List) {
+        return ProviderError('invalid_music_catalog_response');
       }
-      final seen = <String>{};
       final tracks = <ProviderTrack>[];
-      for (final raw in (result['value'] as List).whereType<Map>()) {
-        final id = raw['providerTrackId'];
-        if (id is! String || !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
-        final track = _trackFromJson(raw, providerId: 'spotify');
-        if (track.title.trim().isNotEmpty &&
-            track.artist.trim().isNotEmpty && seen.add(track.breezzeTrackId)) {
-          tracks.add(track);
+      final seen = <String>{};
+      var successful = 0;
+      // Spotify and Deezer results are independent catalog shelves, not
+      // interchangeable full-audio URLs or downloadable files.
+      for (final name in const ['spotify', 'deezer']) {
+        for (final shelf in shelves.whereType<Map>()) {
+          if (shelf['providerId'] != name) continue;
+          final payload = shelf['result'];
+          if (payload is! Map || payload['kind'] != 'ok' ||
+              payload['value'] is! List) continue;
+          successful++;
+          for (final row in (payload['value'] as List).whereType<Map>()) {
+            final id = row['providerTrackId'];
+            if (id is! String) continue;
+            if (name == 'spotify' &&
+                !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
+            if (name == 'deezer' &&
+                !RegExp(r'^[0-9]{1,20}$').hasMatch(id)) continue;
+            final track = _trackFromJson(row, providerId: name);
+            if (track.title.isNotEmpty && track.artist.isNotEmpty &&
+                seen.add(track.breezzeTrackId)) {
+              tracks.add(track);
+            }
+          }
         }
       }
-      return ProviderOk(tracks);
+      return successful == 0
+          ? ProviderError('spotify_and_deezer_unavailable')
+          : ProviderOk(tracks);
     } catch (_) {
-      return ProviderError('spotify_network_error');
+      return ProviderError('music_catalog_network_error');
     }
   }
 
