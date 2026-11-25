@@ -11,9 +11,12 @@ concurrency:
   group: breezze-api-edge-deploy
   cancel-in-progress: false
 
+# Absolute production freeze. Remove this guard only by reviewed change after
+# every Breezze acceptance gate and explicit owner release authorization.
 jobs:
   deploy:
-    name: Deploy Cloudflare API Worker
+    if: ${{ false }}
+    name: Deploy Cloudflare API Worker (BLOCKED: full-app release freeze)
     runs-on: ubuntu-latest
     environment: production
     steps:
