@@ -121,7 +121,7 @@ class _BrowseSession extends AuthSessionController {
   BreezzeApi get api => catalogApi;
 }
 
-Widget _browseApp(_BrowseSource source, {BreezzeApi? api}) => ProviderScope(
+Widget _browseApp(_BrowseSource source, {BreezzeApi? api, double textScale = 1.0}) => ProviderScope(
       overrides: [
         catalogSourceProvider.overrideWithValue(source),
         if (api != null)
@@ -129,6 +129,12 @@ Widget _browseApp(_BrowseSource source, {BreezzeApi? api}) => ProviderScope(
       ],
       child: MaterialApp(
         theme: bzLightTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: const Scaffold(body: BrowseScreen()),
       ),
     );
@@ -149,6 +155,26 @@ Future<void> _mountBrowse(
 }
 
 void main() {
+  testWidgets('Browse remains legible at 320px with 200% text and one column',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = _BrowseSource();
+    await tester.pumpWidget(_browseApp(source, textScale: 2.0));
+    await tester.pump();
+
+    expect(find.text('Browse'), findsOneWidget);
+    expect(find.byKey(const ValueKey('browse-youtube-hero')), findsOneWidget);
+    await tester.ensureVisible(find.text('Catalog and collections'));
+    await tester.pump();
+    final sliver = tester.widget<SliverGrid>(find.byType(SliverGrid).first);
+    final grid = sliver.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(grid.crossAxisCount, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Browse genre switching ignores older provider responses',
       (tester) async {
     final source = _BrowseSource();
