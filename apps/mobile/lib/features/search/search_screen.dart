@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../video/open_youtube_player.dart';
 import '../../core/audio/playback_source_policy.dart';
+import '../../core/audio/spotify_playback_handoff.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
@@ -243,7 +244,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ))
                   ];
           if (_results.isEmpty && op is! ProviderOk<List<ProviderTrack>>) {
-            _error = 'Search could not be completed. Try again in a moment.';
+            _error = 'Spotify music search is unavailable. '
+                'You can still open the search in Spotify.';
           }
         });
       }
@@ -513,6 +515,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
       return;
     }
+    final spotifyId = SpotifyPlaybackHandoff.spotifyIdFromBreezze(track.id);
+    if (spotifyId != null) {
+      // Spotify performs actual full-track streaming in its own application.
+      // Stop the native Breezze player to avoid two concurrent audio sessions.
+      try {
+        await ref.read(playerControllerProvider.notifier).stop();
+        final opened = await SpotifyPlaybackHandoff.openTrack(spotifyId);
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'Spotify could not open. Install Spotify or use its website.',
+            )),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'Spotify playback is unavailable on this device.',
+            )),
+          );
+        }
+      }
+      return;
+    }
     if (isYouTubeSongId(track.id)) {
       await playYoutubeMusicWithVideoFallback(
         context: context,
@@ -529,7 +556,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
         ],
         origin: 'search',
-        sourceContext: 'YouTube Music',
+        sourceContext: 'YouTube videos',
         openNowPlaying: true,
       );
       return;
@@ -746,6 +773,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             ),
                                     child: const Text('Try again'),
                                   ),
+                                  if (!_searchVideos && !_searchLibrary) ...[
+                                    const SizedBox(height: 10),
+                                    TextButton(
+                                      onPressed: () async {
+                                        try {
+                                          await SpotifyPlaybackHandoff.openSearch(
+                                            _controller.text,
+                                          );
+                                        } catch (_) {
+                                          // External Spotify search is optional.
+                                        }
+                                      },
+                                      child: const Text('Search in Spotify'),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
