@@ -10,6 +10,9 @@ on:
       - 'apps/mobile/lib/core/api/breezze_api.dart'
       - 'apps/mobile/lib/features/player/unified_media_handoff.dart'
       - 'apps/mobile/lib/features/search/search_screen.dart'
+      - 'apps/mobile/lib/features/browse/browse_screen.dart'
+      - 'apps/mobile/test/browse_screen_test.dart'
+      - 'apps/mobile/test/search_typeahead_test.dart'
       - 'apps/mobile/test/spotify_playback_handoff_test.dart'
       - 'apps/mobile/pubspec.yaml'
       - '.github/workflows/spotify-integration-verify.yml'
@@ -21,6 +24,9 @@ on:
       - 'apps/mobile/lib/core/api/breezze_api.dart'
       - 'apps/mobile/lib/features/player/unified_media_handoff.dart'
       - 'apps/mobile/lib/features/search/search_screen.dart'
+      - 'apps/mobile/lib/features/browse/browse_screen.dart'
+      - 'apps/mobile/test/browse_screen_test.dart'
+      - 'apps/mobile/test/search_typeahead_test.dart'
       - 'apps/mobile/test/spotify_playback_handoff_test.dart'
       - 'apps/mobile/pubspec.yaml'
       - '.github/workflows/spotify-integration-verify.yml'
@@ -76,4 +82,4 @@ jobs:
             exit 1
           fi
       - name: Validate Spotify URI routing and playback policy
-        run: flutter test --reporter expanded test/spotify_playback_handoff_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart
+        run: flutter test --reporter expanded test/spotify_playback_handoff_test.dart test/core/audio/playback_source_policy_test.dart test/features/player/unified_media_handoff_test.dart test/browse_screen_test.dart test/search_typeahead_test.dart
