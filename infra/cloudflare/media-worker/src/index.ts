@@ -222,10 +222,13 @@ async function ingestAudio(request: Request, url: URL, env: Env): Promise<Respon
   if (await env.MEDIA_BUCKET.head(key)) return error(409, 'MEDIA_VARIANT_ALREADY_EXISTS');
   let created: R2Object | null = null;
   try {
+    // Enforce write-once semantics atomically at R2, not with a racy HEAD.
     created = await env.MEDIA_BUCKET.put(key, request.body, {
       httpMetadata: { contentType: mime },
+      onlyIf: new Headers({ 'If-None-Match': '*' }),
     });
-    if (!created || created.size !== expectedSize) {
+    if (!created) return error(409, 'MEDIA_VARIANT_ALREADY_EXISTS');
+    if (created.size !== expectedSize) {
       await env.MEDIA_BUCKET.delete(key);
       return error(422, 'MEDIA_UPLOAD_SIZE_INVALID');
     }
@@ -290,8 +293,10 @@ async function ingestVideo(request: Request, url: URL, env: Env): Promise<Respon
   try {
     const created = await env.MEDIA_BUCKET.put(key, request.body, {
       httpMetadata: { contentType: mime },
+      onlyIf: new Headers({ 'If-None-Match': '*' }),
     });
-    if (!created || created.size !== size) {
+    if (!created) return error(409, 'VIDEO_ALREADY_INGESTED');
+    if (created.size !== size) {
       await env.MEDIA_BUCKET.delete(key);
       return error(422, 'VIDEO_SIZE_MISMATCH');
     }
