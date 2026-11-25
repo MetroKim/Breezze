@@ -10,8 +10,6 @@ import '../video/official_music_video_screen.dart';
 import '../video/device_video.dart';
 import '../video/open_youtube_player.dart';
 import '../search/search_screen.dart';
-import '../../core/audio/spotify_playback_handoff.dart';
-import '../player/official_music_playback.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -19,28 +17,19 @@ import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
-/// A single audio handoff for official Spotify and Deezer songs.
-/// A successful launch does not imply entitlement to stream in Breezze.
-Future<void> _openMusicFromBrowse(
-  BuildContext context, WidgetRef ref, String trackId,
+/// Provider metadata is not a playable full recording. Until Breezze
+/// receives licensed in-app stream grants, never launch another music app
+/// or enqueue provider IDs into the native decoder.
+Future<void> _unavailableInAppMusic(
+  BuildContext context, String providerTrackId,
 ) async {
-  try {
-    final opened = await OfficialMusicPlayback.open(ref, trackId);
-    if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Open ${OfficialMusicPlayback.providerName(trackId)} '
-            'to listen to this full song.'),
-      ));
-    }
-  } catch (_) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(
-          'Unable to open your official music provider.',
-        )),
-      );
-    }
-  }
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text(
+      'Full-song playback is unavailable inside Breezze until an '
+      'authorized provider audio stream is connected.',
+    )),
+  );
 }
 
 /// Browse uses live source search for genre discovery. It does not label
@@ -132,8 +121,8 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    if (OfficialMusicPlayback.canOpen(selected.id)) {
-      await _openMusicFromBrowse(context, ref, selected.id);
+    if (isSpotifyTrackId(selected.id) || isDeezerTrackId(selected.id)) {
+      await _unavailableInAppMusic(context, selected.id);
       return;
     }
     if (isYouTubeSongId(selected.id)) {
@@ -592,24 +581,6 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     }
   }
 
-  Future<void> _findOnSpotify(Map<String, dynamic> item) async {
-    // Historic Deezer charts remain read-only metadata. Never play Deezer
-    // preview bytes after switching the music provider to Spotify. Spotify's
-    // own search handles matching availability, territory and authorization.
-    final title = item['title'] is String ? (item['title'] as String).trim() : '';
-    final artist = item['artist'] is String ? (item['artist'] as String).trim() : '';
-    if (title.isEmpty) return;
-    try {
-      await SpotifyPlaybackHandoff.openSearch('$title $artist');
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Spotify search could not be opened.')),
-        );
-      }
-    }
-  }
-
   Future<void> _openCatalogItem(Map<String, dynamic> item) async {
     final itemId = item['id']?.toString();
     final title = item['title'] as String? ?? 'Untitled';
@@ -762,8 +733,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    if (OfficialMusicPlayback.canOpen(selected.id)) {
-      await _openMusicFromBrowse(context, ref, selected.id);
+    if (isSpotifyTrackId(selected.id) || isDeezerTrackId(selected.id)) {
+      await _unavailableInAppMusic(context, selected.id);
       return;
     }
     if (isYouTubeSongId(selected.id)) {
@@ -1093,7 +1064,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                     )
                                   : IconButton(
                                 tooltip: !isVideoFeed && !isConcertFeed
-                                    ? 'Find this song on Spotify'
+                                    ? 'View song details inside Breezze'
                                     : isVideoFeed
                                     ? 'Watch official video'
                                     : isConcertFeed
@@ -1105,8 +1076,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                                       ? 'play' : 'arrow-up-right',
                                   size: 19,
                                 ),
-                                onPressed: () => !isVideoFeed && !isConcertFeed
-                                    ? _findOnSpotify(item) : _openCatalogItem(item),
+                                onPressed: () => _openCatalogItem(item),
                               ),
                               onTap: () => _openCatalogItem(item),
                             );
