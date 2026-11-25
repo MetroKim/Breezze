@@ -67,6 +67,23 @@ export class AudioCatalogAdminService {
       throw new NotAcceptableException('AUDIO_ASSET_REQUIRES_INTERNAL_RECORDING');
     }
 
+    // A real object is necessary but not sufficient for promotion: rights
+    // can expire or a takedown can arrive between ingest and verification.
+    const [permission, takedown] = await Promise.all([
+      this.prisma.rightsUsagePermission.findUnique({
+        where: { trackId_action: { trackId, action: 'stream.full' } },
+      }),
+      this.prisma.contentTakedownCase.findFirst({
+        where: { trackId, status: 'active' }, select: { id: true },
+      }),
+    ]);
+    const now = new Date();
+    if (!permission || takedown ||
+        (permission.startAt && permission.startAt > now) ||
+        (permission.endAt && permission.endAt <= now)) {
+      throw new NotAcceptableException('AUDIO_ASSET_RIGHTS_UNAVAILABLE');
+    }
+
     const signed = this.signer.createPlaybackUrl(trackId, quality);
     // Force HEAD in staging and production: no false "ready" flags in QA.
     const scanned = await inspectSignedMediaObject(signed.url, { force: true });
