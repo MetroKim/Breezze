@@ -234,6 +234,11 @@ void main() {
     source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
 
+    expect(find.text('Browse'), findsOneWidget);
+    expect(find.byKey(const ValueKey('browse-youtube-hero')), findsOneWidget);
+    expect(find.text('PUBLIC MUSIC DISCOVERY'), findsOneWidget);
+    // A promoted discovery surface replaces, rather than duplicates, its tile.
+    expect(find.text('YouTube Music'), findsOneWidget);
     await tester.ensureVisible(find.text('YouTube Music'));
     await tester.tap(find.text('YouTube Music'));
     await tester.pumpAndSettle();
