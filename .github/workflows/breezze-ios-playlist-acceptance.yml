@@ -107,8 +107,46 @@ jobs:
           print(phones[0]["udid"])
           ')
           echo "id=$simulator" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$simulator" || true
-          xcrun simctl bootstatus "$simulator" -b
+          # Bootstatus can stall forever on a congested hosted macOS runner.
+          # Put a strict cap on initialization and retry the simulator once;
+          # never count a timeout as a passing test.
+          SIMULATOR_ID="$simulator" python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          simulator = os.environ["SIMULATOR_ID"]
+
+          def ensure_booted():
+              result = subprocess.run(
+                  ["xcrun", "simctl", "list", "devices", "-j"],
+                  check=True, capture_output=True, text=True, timeout=30,
+              )
+              import json
+              devices = json.loads(result.stdout)["devices"]
+              found = [d for group in devices.values() for d in group
+                       if d["udid"] == simulator]
+              if not found:
+                  raise SystemExit("Selected iPhone simulator disappeared")
+              if found[0]["state"] != "Booted":
+                  subprocess.run(["xcrun", "simctl", "boot", simulator],
+                                 check=True, timeout=60)
+              subprocess.run(["xcrun", "simctl", "bootstatus", simulator, "-b"],
+                             check=True, timeout=240)
+
+          for attempt in (1, 2):
+              try:
+                  ensure_booted()
+                  print("iPhone simulator boot verified", flush=True)
+                  break
+              except (subprocess.SubprocessError, OSError) as error:
+                  print(f"iPhone simulator boot attempt {attempt} failed: {type(error).__name__}",
+                        flush=True)
+                  subprocess.run(["xcrun", "simctl", "shutdown", simulator],
+                                 check=False, timeout=40)
+                  if attempt == 2:
+                      raise SystemExit("iOS simulator failed to boot after bounded retry")
+          PY
       - name: Verify real iOS app storage and production playlist sync
         working-directory: apps/mobile
         timeout-minutes: 55
