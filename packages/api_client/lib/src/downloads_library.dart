@@ -46,13 +46,37 @@ class DownloadsLibrary {
     required String downloadUrl,
     required String ownerId,
     required String catalogTrackId,
-    DateTime? rightsExpiresAtUtc,
+    required DateTime rightsExpiresAtUtc,
+    String assetVariant = 'AAC_256',
     void Function(double progress)? onProgress,
     DownloadCancellation? cancellation,
   }) async {
+    if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc()) ||
+        (assetVariant != 'AAC_128' && assetVariant != 'AAC_256')) {
+      return false;
+    }
     final dir = _dirFor(track.id);
     try {
       await dir.create(recursive: true);
+      final audioFile = File('${dir.path}/audio.m4a');
+      final metadataFile = File('${dir.path}/meta.json');
+      // A pre-existing file is NOT automatically proof of this listener's
+      // ownership, source track, rendition or an authorized complete transfer.
+      // Do not overwrite metadata to make somebody else's cached bytes appear
+      // licensed. Unknown legacy files are preserved but unavailable pending
+      // an explicit remove/redownload.
+      if (await audioFile.exists()) {
+        if (!await metadataFile.exists() || await audioFile.length() == 0) {
+          return false;
+        }
+        final prior = jsonDecode(await metadataFile.readAsString());
+        if (prior is! Map<String, dynamic> ||
+            prior['ownerId'] != ownerId ||
+            prior['catalogTrackId'] != catalogTrackId ||
+            prior['assetVariant'] != assetVariant) {
+          return false;
+        }
+      }
 
       // 1. Fetch only the short-lived URL issued by the backend after its
       // download-rights decision. Never extract media directly from a
@@ -63,7 +87,11 @@ class DownloadsLibrary {
         partial: File('${dir.path}/audio.part'),
         cancellation: cancellation,
         onProgress: onProgress,
+        requiredMimeType: 'audio/mp4',
       );
+      if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc())) {
+        return false;
+      }
       onProgress?.call(1.0);
 
       // 2. Cover art is optional. A CDN/network failure must not turn a
@@ -108,7 +136,8 @@ class DownloadsLibrary {
         'artist': track.artist,
         'ownerId': ownerId,
         'catalogTrackId': catalogTrackId,
-        'rightsExpiresAtUtc': rightsExpiresAtUtc?.toUtc().toIso8601String(),
+        'assetVariant': assetVariant,
+        'rightsExpiresAtUtc': rightsExpiresAtUtc.toUtc().toIso8601String(),
       }));
 
       return true;
@@ -139,11 +168,25 @@ class DownloadsLibrary {
     }
     await partial.parent.create(recursive: true);
     final client = HttpClient();
+    final validatorFile = File('${partial.path}.etag');
     try {
-      final existingBytes = await partial.exists() ? await partial.length() : 0;
+      var existingBytes = await partial.exists() ? await partial.length() : 0;
+      String? storedEtag;
+      if (existingBytes > 0 && await validatorFile.exists()) {
+        storedEtag = (await validatorFile.readAsString()).trim();
+        // Only a strong matching validator authorizes reusing partial bytes.
+        if (!RegExp(r'^"[^"]{1,256}"$').hasMatch(storedEtag)) {
+          storedEtag = null;
+        }
+      }
+      if (existingBytes > 0 && storedEtag == null) {
+        await partial.delete();
+        existingBytes = 0;
+      }
       final request = await client.getUrl(source);
       if (existingBytes > 0) {
         request.headers.set('range', 'bytes=$existingBytes-');
+        request.headers.set('if-range', storedEtag!);
       }
       final response = await request.close();
       final resumes = existingBytes > 0 &&
@@ -156,12 +199,23 @@ class DownloadsLibrary {
         await response.drain<void>();
         throw const HttpException('authorized_media_type_mismatch');
       }
+      final serverEtag = response.headers.value('etag');
       if (resumes) {
         final contentRange = response.headers.value('content-range');
         if (contentRange == null ||
-            !contentRange.startsWith('bytes $existingBytes-')) {
+            !contentRange.startsWith('bytes $existingBytes-') ||
+            serverEtag != storedEtag) {
           await response.drain<void>();
-          throw const HttpException('invalid_resume_content_range');
+          throw const HttpException('invalid_resume_content_or_etag');
+        }
+      } else {
+        // A 200 response after If-Range means the media changed. Discard
+        // old partial bytes and save a fresh strong validator for retry.
+        if (serverEtag != null &&
+            RegExp(r'^"[^"]{1,256}"$').hasMatch(serverEtag)) {
+          await validatorFile.writeAsString(serverEtag, flush: true);
+        } else if (await validatorFile.exists()) {
+          await validatorFile.delete();
         }
       }
       final sink = partial.openWrite(mode: resumes ? FileMode.append : FileMode.write);
@@ -187,6 +241,7 @@ class DownloadsLibrary {
       }
       if (cancellation?.isCancelled == true) throw DownloadCancelledException();
       await partial.rename(output.path);
+      if (await validatorFile.exists()) await validatorFile.delete();
       onProgress?.call(1.0);
     } finally {
       client.close(force: true);

@@ -10,15 +10,24 @@ describe('DownloadsService tenant isolation', () => {
     },
   };
   const rights = { decide: jest.fn() };
-  const signer = { createPlaybackUrl: jest.fn() };
+  const signer = { createDownloadUrl: jest.fn() };
   const providers = { get: jest.fn() };
   let service: DownloadsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true, status: 200,
+      headers: new Headers({
+        'content-type': 'audio/mp4',
+        'content-length': '1200000',
+      }),
+    } as Response);
     prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source: null, externalId: null });
     service = new DownloadsService(prisma as any, rights as any, signer as any, providers as any);
   });
+
+  afterEach(() => jest.restoreAllMocks());
 
   it('lists only the current user download records', async () => {
     prisma.downloadRecord.findMany.mockResolvedValue([]);

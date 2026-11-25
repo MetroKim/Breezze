@@ -33,10 +33,15 @@ export class PlaybackResolveService {
     // not proof that any audio bytes exist in Breezze's media storage.
     const track = await this.prisma.track.findUnique({
       where: { id: dto.trackId },
-      select: { source: true },
+      select: { source: true, externalId: true },
     });
     if (!track) throw new NotFoundException('TRACK_NOT_FOUND');
-    if (track.source === 'youtube_music' || track.source === 'deezer') {
+    // Only Breezze-owned media may be signed with Breezze's R2 key.
+    // All external catalogues, including legacy provider-bound rows with no
+    // source value, must resolve playback through their authorized adapter.
+    const internallyOwned = track.source === 'breezze_internal' ||
+      (track.source == null && track.externalId == null);
+    if (!internallyOwned) {
       throw new NotAcceptableException('USE_PROVIDER_PLAYBACK_RESOLVER');
     }
 

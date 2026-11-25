@@ -37,13 +37,18 @@ void main() {
     await trackDir.create();
     final partial = File('${trackDir.path}/audio.part');
     await partial.writeAsBytes(utf8.encode('abc'));
+    await File('${partial.path}.etag').writeAsString('"fixture-etag"');
 
     var receivedRange = '';
+    var receivedIfRange = '';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       receivedRange = request.headers.value('range') ?? '';
+      receivedIfRange = request.headers.value('if-range') ?? '';
       request.response.statusCode = HttpStatus.partialContent;
       request.response.headers
+        ..set('content-type', 'audio/mp4')
+        ..set('etag', '"fixture-etag"')
         ..set('content-range', 'bytes 3-5/6')
         ..contentLength = 3;
       request.response.add(utf8.encode('def'));
@@ -58,12 +63,143 @@ void main() {
       downloadUrl: 'http://${server.address.address}:${server.port}/audio',
       ownerId: 'user-1',
       catalogTrackId: 'catalog-resume',
+      rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
     );
 
     expect(ok, isTrue);
     expect(receivedRange, 'bytes=3-');
+    expect(receivedIfRange, '"fixture-etag"');
     expect(await File('${trackDir.path}/audio.m4a').readAsString(), 'abcdef');
+    expect(await File('${partial.path}.etag').exists(), isFalse);
     expect(await partial.exists(), isFalse);
+  });
+
+
+  test('partial audio without an ETag restarts from byte zero', () async {
+    final track = BzTrack(
+      id: 'restart-safe',
+      title: 'Restart-safe track',
+      artist: 'Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final directory = Directory('${root.path}/restart-safe');
+    await directory.create(recursive: true);
+    await File('${directory.path}/audio.part').writeAsBytes([1, 2, 3, 4]);
+
+    String? range;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      range = request.headers.value('range');
+      request.response.headers
+        ..set('content-type', 'audio/mp4')
+        ..set('etag', '"new-rendition"')
+        ..contentLength = 6;
+      request.response.add(utf8.encode('abcdef'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final ok = await library.download(
+      track,
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: track.id,
+      rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+    );
+    expect(ok, isTrue);
+    expect(range, isNull);
+    expect(await File('${directory.path}/audio.m4a').readAsString(), 'abcdef');
+  });
+
+  test('expired grant or non-audio HTTP response cannot create offline music', () async {
+    final track = BzTrack(
+      id: 'licensed-aac',
+      title: 'Licensed track',
+      artist: 'Breezze Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.html;
+      request.response.write('<h1>not licensed audio</h1>');
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final url = 'http://${server.address.address}:${server.port}/audio';
+
+    expect(await library.download(
+      track, downloadUrl: url, ownerId: 'owner-1',
+      catalogTrackId: track.id,
+      rightsExpiresAtUtc: DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
+    ), isFalse);
+    expect(await library.download(
+      track, downloadUrl: url, ownerId: 'owner-1',
+      catalogTrackId: track.id,
+      rightsExpiresAtUtc: DateTime.now().toUtc().add(const Duration(hours: 1)),
+    ), isFalse);
+    expect(await library.list(ownerId: 'owner-1'), isEmpty);
+    expect(await File('${root.path}/licensed-aac/audio.m4a').exists(), isFalse);
+  });
+
+  test('cannot relabel somebody else\'s existing audio as a new user\'s license', () async {
+    final track = BzTrack(
+      id: 'owned-music',
+      title: 'Owned song',
+      artist: 'Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final dir = Directory('${root.path}/owned-music');
+    await dir.create(recursive: true);
+    final file = File('${dir.path}/audio.m4a');
+    await file.writeAsBytes([1, 2, 3, 4]);
+    final meta = File('${dir.path}/meta.json');
+    await meta.writeAsString(jsonEncode({
+      'title': track.title,
+      'ownerId': 'alice',
+      'catalogTrackId': 'catalog-alice',
+      'assetVariant': 'AAC_256',
+      'rightsExpiresAtUtc': DateTime.now().toUtc()
+          .add(const Duration(hours: 1)).toIso8601String(),
+    }));
+
+    final ok = await library.download(
+      track,
+      downloadUrl: 'https://media.example.invalid/unreachable',
+      ownerId: 'bob',
+      catalogTrackId: 'catalog-bob',
+      assetVariant: 'AAC_256',
+      rightsExpiresAtUtc: DateTime.now().toUtc()
+          .add(const Duration(hours: 1)),
+    );
+    expect(ok, isFalse);
+    expect(await file.readAsBytes(), [1, 2, 3, 4]);
+    expect((jsonDecode(await meta.readAsString()) as Map)['ownerId'], 'alice');
+    expect((await library.list(ownerId: 'bob')), isEmpty);
+  });
+
+  test('existing AAC quality cannot be silently relabelled as a higher variant', () async {
+    final track = BzTrack(
+      id: 'quality-locked',
+      title: 'Quality locked',
+      artist: 'Artist',
+      duration: const Duration(minutes: 3),
+    );
+    final dir = Directory('${root.path}/quality-locked');
+    await dir.create(recursive: true);
+    await File('${dir.path}/audio.m4a').writeAsBytes([5, 6, 7]);
+    await File('${dir.path}/meta.json').writeAsString(jsonEncode({
+      'ownerId': 'alice',
+      'catalogTrackId': 'same-catalog',
+      'assetVariant': 'AAC_128',
+    }));
+    expect(await library.download(
+      track,
+      downloadUrl: 'https://media.example.invalid/unreachable',
+      ownerId: 'alice',
+      catalogTrackId: 'same-catalog',
+      assetVariant: 'AAC_256',
+      rightsExpiresAtUtc: DateTime.now().toUtc()
+          .add(const Duration(hours: 1)),
+    ), isFalse);
   });
 
   test('lists only assets owned by the requested account', () async {
@@ -121,6 +257,7 @@ void main() {
     final folder = Directory('${root.path}/videos/$assetId');
     await folder.create(recursive: true);
     await File('${folder.path}/video.part').writeAsBytes(utf8.encode('abc'));
+    await File('${folder.path}/video.part.etag').writeAsString('"video-v1"');
     var range = '';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
@@ -128,6 +265,7 @@ void main() {
       request.response.statusCode = HttpStatus.partialContent;
       request.response.headers
         ..set('content-type', 'video/mp4')
+        ..set('etag', '"video-v1"')
         ..set('content-range', 'bytes 3-5/6')
         ..contentLength = 3;
       request.response.add(utf8.encode('def'));

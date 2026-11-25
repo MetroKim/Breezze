@@ -62,7 +62,7 @@ describe('PlaybackResolveService', () => {
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 
-  it.each(['youtube_music', 'deezer'])(
+  it.each(['youtube_music', 'deezer', 'audius', 'jamendo', 'soundcloud', 'licensed_partner'])(
     'does not self-grant native audio for metadata-only %s catalog assets',
     async (source) => {
       prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source });
@@ -74,6 +74,18 @@ describe('PlaybackResolveService', () => {
       expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
     },
   );
+
+  it('rejects external provider IDs even when legacy source is missing', async () => {
+    prisma.track.findUnique.mockResolvedValue({
+      id: 'track-1',
+      source: null,
+      externalId: 'bz:youtube_music:dQw4w9WgXcQ',
+    });
+    await expect(service.resolve('user-1', request, 'TZ'))
+      .rejects.toThrow('USE_PROVIDER_PLAYBACK_RESOLVER');
+    expect(rights.decide).not.toHaveBeenCalled();
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+  });
 
   it('never signs a full playback URL for a preview-only grant', async () => {
     rights.decide.mockResolvedValue({

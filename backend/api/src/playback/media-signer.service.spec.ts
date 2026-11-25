@@ -51,6 +51,22 @@ describe('MediaSigner', () => {
     ).toThrow('MEDIA_URL_EXPIRY_INVALID');
   });
 
+  it('issues a purpose-bound offline grant for the actual R2 AAC rendition', () => {
+    const signer = new MediaSigner('test-signing-key', 'https://cdn.example');
+    const signed = signer.createDownloadUrl('track-1', 'AAC_256');
+    const uri = new URL(signed.url);
+    expect(uri.pathname).toBe('/audio/track-1/AAC_256');
+    expect(uri.searchParams.get('mode')).toBe('download');
+    expect(uri.searchParams.get('s')).toBeTruthy();
+    expect(signed.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 15 * 60_000);
+    expect(signer.verify('track-1', 'AAC_256',
+      Number(uri.searchParams.get('e')), uri.searchParams.get('s')!)).toBe(false);
+    expect(() => signer.createDownloadUrl('track-1', 'download'))
+      .toThrow('DOWNLOAD_RENDITION_UNSUPPORTED');
+    expect(() => signer.createDownloadUrl('track-1', 'AAC_256',
+      new Date(Date.now() - 1))).toThrow('MEDIA_URL_EXPIRY_INVALID');
+  });
+
   it('creates short-lived R2 quarantine upload URLs with an exact object key', () => {
     const signer = new MediaSigner('test-signing-key', 'https://media.breezze.app');
     const upload = signer.createUploadUrl('user-1', 'job-1', 'mix final.wav', 1024);

@@ -2,6 +2,37 @@ import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('downloaded local audio expires at the server offline lease', () {
+    final expired = PlayableSource(
+      trackId: 'licensed-track',
+      streamUrl: '/private/downloads/track.m4a',
+      expiresAtUtc: DateTime.utc(9999),
+      offlineLeaseExpiresAtUtc: DateTime.now().toUtc()
+          .subtract(const Duration(seconds: 1)),
+      isLocal: true,
+    );
+    expect(expired.isExpired, isTrue);
+    final valid = PlayableSource(
+      trackId: 'licensed-track',
+      streamUrl: '/private/downloads/track.m4a',
+      expiresAtUtc: DateTime.utc(9999),
+      offlineLeaseExpiresAtUtc: DateTime.now().toUtc()
+          .add(const Duration(hours: 1)),
+      isLocal: true,
+    );
+    expect(valid.isExpired, isFalse);
+  });
+
+  test('user-owned device files remain playable without a download lease', () {
+    final source = PlayableSource(
+      trackId: 'device:local',
+      streamUrl: '/home/user/music/song.flac',
+      expiresAtUtc: DateTime.utc(2000),
+      isLocal: true,
+    );
+    expect(source.isExpired, isFalse);
+  });
+
   group('PlaybackStateMachine (§53.2)', () {
     test('idle → resolving → loading → buffering → playing', () {
       final m = PlaybackStateMachine();

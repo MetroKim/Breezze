@@ -147,6 +147,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           title: track.title,
           artist: track.artist,
           localFilePath: track.audioPath,
+          offlineLeaseExpiresAtUtc: expiry,
           origin: 'downloads',
           sourceContext: 'Downloads',
         );
@@ -263,7 +264,12 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final progress = ref.watch(downloadProgressProvider);
     final jobStatuses = ref.watch(downloadJobStatusProvider);
     final downloadController = ref.read(downloadProgressProvider.notifier);
-    final inProgress = jobStatuses.entries.where((entry) => ['downloading', 'paused', 'failed', 'waiting_for_wifi', 'waiting_for_network'].contains(entry.value)).map((entry) => MapEntry(entry.key, progress[entry.key] ?? 0.0)).toList();
+    final inProgress = jobStatuses.entries.where((entry) =>
+        ['downloading', 'paused', 'failed', 'media_unavailable',
+         'format_unavailable', 'not_licensed',
+         'waiting_for_wifi', 'waiting_for_network'].contains(entry.value))
+        .map((entry) => MapEntry(entry.key, progress[entry.key] ?? 0.0))
+        .toList();
 
     // Refresh the completed list when the last in-flight download ends.
     if (inProgress.isEmpty && (_tracks.isNotEmpty || _videos.isNotEmpty)) {
@@ -347,7 +353,21 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                             ),
                           ),
                           title: Text(
-                              jobStatuses[entry.key] == 'failed' ? 'Download failed' : jobStatuses[entry.key] == 'waiting_for_wifi' ? 'Waiting for Wi-Fi' : jobStatuses[entry.key] == 'waiting_for_network' ? 'Waiting for network' : jobStatuses[entry.key] == 'paused' ? 'Paused · ${(entry.value * 100).round()}%' : 'Downloading… ${(entry.value * 100).round()}%',
+                              jobStatuses[entry.key] == 'media_unavailable'
+                                  ? 'Full-length audio not available yet'
+                                  : jobStatuses[entry.key] == 'format_unavailable'
+                                      ? 'Offline audio format not supported'
+                                      : jobStatuses[entry.key] == 'not_licensed'
+                                          ? 'Not licensed for offline listening'
+                                          : jobStatuses[entry.key] == 'failed'
+                                              ? 'Download failed'
+                                              : jobStatuses[entry.key] == 'waiting_for_wifi'
+                                                  ? 'Waiting for Wi-Fi'
+                                                  : jobStatuses[entry.key] == 'waiting_for_network'
+                                                      ? 'Waiting for network'
+                                                      : jobStatuses[entry.key] == 'paused'
+                                                          ? 'Paused · ${(entry.value * 100).round()}%'
+                                                          : 'Downloading… ${(entry.value * 100).round()}%',
                               style: theme.textTheme.titleMedium),
                           subtitle: ClipRRect(
                             borderRadius: BorderRadius.circular(2),
@@ -362,7 +382,9 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               TextButton(
-                                onPressed: () {
+                                onPressed: ['media_unavailable', 'format_unavailable', 'not_licensed']
+                                        .contains(jobStatuses[entry.key])
+                                    ? null : () {
                                   if (['failed', 'waiting_for_wifi', 'waiting_for_network'].contains(jobStatuses[entry.key])) {
                                     downloadController.retry(entry.key);
                                   } else if (jobStatuses[entry.key] == 'paused') {
@@ -371,7 +393,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                                     downloadController.pause(entry.key);
                                   }
                                 },
-                                child: Text(['failed', 'waiting_for_wifi', 'waiting_for_network'].contains(jobStatuses[entry.key]) ? 'Retry' : jobStatuses[entry.key] == 'paused' ? 'Resume' : 'Pause'),
+                                child: Text(['media_unavailable', 'format_unavailable', 'not_licensed']
+                                      .contains(jobStatuses[entry.key])
+                                  ? 'Unavailable'
+                                  : ['failed', 'waiting_for_wifi', 'waiting_for_network']
+                                      .contains(jobStatuses[entry.key])
+                                  ? 'Retry'
+                                  : jobStatuses[entry.key] == 'paused'
+                                  ? 'Resume' : 'Pause'),
                               ),
                               IconButton(
                                 tooltip: 'Cancel download',

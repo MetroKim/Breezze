@@ -43,6 +43,7 @@ class PlayerController extends Notifier<PlayerState> {
   String? _playbackSessionId;
   PlaybackSessionClient? _activeSessionClient;
   Timer? _heartbeatTimer;
+  Timer? _offlineLeaseTimer;
   int _heartbeatSequence = 1;
   String? _pendingHeartbeatEventId;
   bool _heartbeatInFlight = false;
@@ -74,6 +75,23 @@ class PlayerController extends Notifier<PlayerState> {
         }
       },
     );
+  }
+
+  /// A downloaded recording must stop as soon as its licensed offline
+  /// window closes, even if playback is still running in the background.
+  void _watchOfflineLease(PlayableSource source) {
+    _offlineLeaseTimer?.cancel();
+    _offlineLeaseTimer = null;
+    final expiresAt = source.offlineLeaseExpiresAtUtc;
+    if (expiresAt == null) return;
+    final remaining = expiresAt.toUtc().difference(DateTime.now().toUtc());
+    if (remaining <= Duration.zero) {
+      unawaited(stop());
+      return;
+    }
+    _offlineLeaseTimer = Timer(remaining, () {
+      if (identical(_activeSource, source)) unawaited(stop());
+    });
   }
 
   void _pauseHeartbeatTimer() {
@@ -256,6 +274,7 @@ class PlayerController extends Notifier<PlayerState> {
     }
     ref.onDispose(() {
       _requestGeneration++;
+      _offlineLeaseTimer?.cancel();
       unawaited(_closePlaybackSession());
       final currentTrackId = state.currentTrack?.id;
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
@@ -347,6 +366,7 @@ class PlayerController extends Notifier<PlayerState> {
     _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
+    _offlineLeaseTimer?.cancel();
     _positionSub = null;
     _engineStateSub = null;
     _engine = null;
@@ -364,6 +384,7 @@ class PlayerController extends Notifier<PlayerState> {
     String? artist,
     String? artworkUrl,
     String? localFilePath,
+    DateTime? offlineLeaseExpiresAtUtc,
     Duration duration = Duration.zero,
     List<TrackInfo> queue = const [],
     int startIndex = 0,
@@ -409,6 +430,7 @@ class PlayerController extends Notifier<PlayerState> {
             artist: artist,
             artworkUrl: artworkUrl,
             localFilePath: localFilePath,
+            offlineLeaseExpiresAtUtc: offlineLeaseExpiresAtUtc,
             duration: duration,
           )
         : queue[startIndex.clamp(0, queue.length - 1)];
@@ -420,6 +442,8 @@ class PlayerController extends Notifier<PlayerState> {
   /// and account sign-out so one user's media cannot continue into another
   /// account session.
   Future<void> stop() async {
+    _offlineLeaseTimer?.cancel();
+    _offlineLeaseTimer = null;
     final requestId = ++_requestGeneration;
     final engine = _engine;
     final currentTrackId = state.currentTrack?.id;
@@ -464,6 +488,11 @@ class PlayerController extends Notifier<PlayerState> {
     final activeSource = _activeSource;
     final currentTrack = state.currentTrack;
     if (activeSource != null && activeSource.isExpired && currentTrack != null) {
+      // An offline lease cannot be renewed by replaying stale local bytes.
+      if (activeSource.isLocal) {
+        await stop();
+        return;
+      }
       // Provider grants are short-lived. Resolve a fresh grant instead of
       // attempting to resume a stale URL after a long pause/background.
       await _resolveAndPlay(currentTrack, initialPosition: state.position);
@@ -832,6 +861,9 @@ class PlayerController extends Notifier<PlayerState> {
     _machine.dispatch(StartRequested(info.id, requestId: requestId));
 
     try {
+      // Detach any prior offline-license watchdog before switching tracks.
+      _offlineLeaseTimer?.cancel();
+      _offlineLeaseTimer = null;
       // Detach the old session immediately. Source lookup and stopping the
       // previous item can proceed together. The engine queue orders prepare
       // after pause, including when two selections arrive back to back.
@@ -847,6 +879,7 @@ class PlayerController extends Notifier<PlayerState> {
               trackId: info.id,
               streamUrl: info.localFilePath!,
               expiresAtUtc: DateTime.utc(9999),
+              offlineLeaseExpiresAtUtc: info.offlineLeaseExpiresAtUtc,
               isLocal: true,
             )
           : await ref.read(playbackResolverProvider).resolve(info);
@@ -867,8 +900,16 @@ class PlayerController extends Notifier<PlayerState> {
         return;
       }
 
+      if (source.isExpired) {
+        _machine.dispatch(SourceResolutionFailed(
+          'OFFLINE_LEASE_OR_SOURCE_EXPIRED',
+          requestId: requestId,
+        ));
+        return;
+      }
       _activeSource = source;
       _adoptPlaybackSession(source);
+      _watchOfflineLease(source);
       _machine.dispatch(SourceResolved(
         info.id,
         source.streamUrl,
@@ -977,6 +1018,7 @@ class TrackInfo {
   final String? artist;
   final String? artworkUrl;
   final String? localFilePath;
+  final DateTime? offlineLeaseExpiresAtUtc;
   final Duration duration;
 
   const TrackInfo({
@@ -985,6 +1027,7 @@ class TrackInfo {
     this.artist,
     this.artworkUrl,
     this.localFilePath,
+    this.offlineLeaseExpiresAtUtc,
     this.duration = Duration.zero,
   });
 }
