@@ -330,6 +330,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Playlist Song'), findsOneWidget);
+    expect(find.text('Play playlist'), findsOneWidget);
+    final play = find.ancestor(
+      of: find.text('Play playlist'), matching: find.byType(ListTile));
+    expect(tester.widget<ListTile>(play).onTap, isNotNull);
     expect(find.textContaining('visible YouTube player'), findsOneWidget);
     expect(api.playlistCalls, 1);
   });
@@ -341,6 +345,10 @@ void main() {
     await tester.tap(find.text('Featured Album'));
     await tester.pumpAndSettle();
     expect(find.text('Album Song'), findsOneWidget);
+    expect(find.text('Play album'), findsOneWidget);
+    final play = find.ancestor(
+      of: find.text('Play album'), matching: find.byType(ListTile));
+    expect(tester.widget<ListTile>(play).onTap, isNotNull);
     expect(find.textContaining('offline downloads are not available'),
         findsOneWidget);
   });
@@ -409,6 +417,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Connected Playlist Song'), findsOneWidget);
+    expect(find.text('Play playlist'), findsOneWidget);
+    final play = find.ancestor(
+      of: find.text('Play playlist'), matching: find.byType(ListTile));
+    expect(tester.widget<ListTile>(play).onTap, isNotNull);
     expect(find.textContaining('videos use the official YouTube player'),
         findsOneWidget);
     expect(api.accountItemCalls, 1);
