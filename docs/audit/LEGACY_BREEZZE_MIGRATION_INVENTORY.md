@@ -27,7 +27,9 @@ The user-provided `Breezze_Frontend_Figma_Import_Pack.zip` contains **16 screen 
 
 No ZIP contents are automatically extracted into Flutter `lib/` or `assets/`; this preserves the working Supabase-first authenticated API, signed player, and app branding.
 
-Other design references in the personal file library specify multiple competing concept variants; actual source SVG artwork for all requested historical alternatives is not present as files in either Git main. Do not invent matching assets and claim the original pack was copied.
+**Additional historical brand sources now preserved byte-for-byte** in `docs/design/reference/historical-brand/`: all three existing user-created Breezze brand-board PNGs (Branding Collection, Brand Styleboard and Brand Guideline Board). Both exact historical text export specifications (Glass Disc and Concept C / Drift) are in `docs/design/reference/historical-concepts/`. Their original image, Markdown and archive SHA-256 digests are recorded in `docs/design/reference/README.md` and enforced by the same CI integrity checker.
+
+**Important incomplete artwork distinction:** the visual boards and export specifications do not include all individual alternate-variant SVGs described in the export lists. Those actual SVG files were not present in the accessible old Git trees or uploaded design Library. The shipping monochrome Breezze icon sources remain authoritative; never describe reference images as an imported SVG pack or silently switch the app to an alternate logo.
 
 ## Branch triage and deliberately excluded historical code
 

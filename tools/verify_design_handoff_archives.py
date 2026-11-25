@@ -46,6 +46,28 @@ def verify_zip(path: Path, expected_hash: str) -> ZipFile:
     return archive
 
 
+HISTORICAL_BRAND_CHECKSUMS = {
+    "Breezze Music Brand Guideline Board.png": "393b6cf6572ed03051e329b87b067e1070b95d684308547b642593c51e4ba231",
+    "Breezze Music Brand Styleboard.png": "d8e02e118262add42e598892bfcd2fef0239d07d6d7df5a53f92c9a2b6a0887c",
+    "Breezze Music Branding Collection.png": "92c76ef08b277acd5f38d191f0148d9d76977cf12c9e485d60098f0f39427eb0",
+}
+HISTORICAL_SPEC_CHECKSUMS = {
+    "GLASS_DISC_EXPORT_SPEC.md": "929503b0aeebf95a12af121c7a192d606a206fc95d13e53413bc08e11dec2314",
+    "DRIFT_EXPORT_SPEC.md": "fe8d213a9d5c83d4bfd53abaebc2f5135aa59dc3ebc243e2468797acd9a00aee",
+}
+
+
+def verify_earlier_brand_art() -> None:
+    for filename, digest in HISTORICAL_BRAND_CHECKSUMS.items():
+        path = REF / "historical-brand" / filename
+        payload = path.read_bytes()
+        if sha256(payload).hexdigest() != digest or not payload.startswith(bytes.fromhex("89504e470d0a1a0a")):
+            raise AssertionError(f"Historical brand image integrity mismatch: {filename}")
+    for filename, digest in HISTORICAL_SPEC_CHECKSUMS.items():
+        path = REF / "historical-concepts" / filename
+        if sha256(path.read_bytes()).hexdigest() != digest:
+            raise AssertionError(f"Historical brand specification integrity mismatch: {filename}")
+
 def main() -> None:
     try:
         with verify_zip(DESIGN, CHECKSUMS[DESIGN.name]) as design:
@@ -76,7 +98,8 @@ def main() -> None:
             ):
                 if path not in original:
                     raise AssertionError(f"Missing historical UI reference: {path}")
-        print("Breezze design handoff verified: 16 SVG screens, board SVG/PNG and Flutter reference")
+        verify_earlier_brand_art()
+        print("Breezze sources verified: 16 SVG screens, board, Flutter reference, 3 brand PNGs and 2 specs")
     except (AssertionError, BadZipFile, ValueError) as exc:
         print(f"Design source verification failed: {exc}", file=sys.stderr)
         sys.exit(1)
