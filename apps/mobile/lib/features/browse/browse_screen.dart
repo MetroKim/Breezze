@@ -11,6 +11,7 @@ import '../video/device_video.dart';
 import '../video/open_youtube_player.dart';
 import '../search/search_screen.dart';
 import '../../core/audio/spotify_playback_handoff.dart';
+import '../player/official_music_playback.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -18,21 +19,25 @@ import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 
-/// Spotify owns its audio session. Never feed Spotify tracks into Breezze's
-/// native queue or mix Spotify playback with a YouTube video.
-Future<void> _openSpotifyFromBrowse(BuildContext context, WidgetRef ref, String id) async {
+/// A single audio handoff for official Spotify and Deezer songs.
+/// A successful launch does not imply entitlement to stream in Breezze.
+Future<void> _openMusicFromBrowse(
+  BuildContext context, WidgetRef ref, String trackId,
+) async {
   try {
-    await ref.read(playerControllerProvider.notifier).stop();
-    final opened = await SpotifyPlaybackHandoff.openTrack(id);
+    final opened = await OfficialMusicPlayback.open(ref, trackId);
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Install Spotify to listen to this track.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Open ${OfficialMusicPlayback.providerName(trackId)} '
+            'to listen to this full song.'),
+      ));
     }
   } catch (_) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to open official Spotify playback.')),
+        const SnackBar(content: Text(
+          'Unable to open your official music provider.',
+        )),
       );
     }
   }
@@ -127,9 +132,8 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    final spotifyId = SpotifyPlaybackHandoff.spotifyIdFromBreezze(selected.id);
-    if (spotifyId != null) {
-      await _openSpotifyFromBrowse(context, ref, spotifyId);
+    if (OfficialMusicPlayback.canOpen(selected.id)) {
+      await _openMusicFromBrowse(context, ref, selected.id);
       return;
     }
     if (isYouTubeSongId(selected.id)) {
@@ -758,9 +762,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   Future<void> _play(int index) async {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
-    final spotifyId = SpotifyPlaybackHandoff.spotifyIdFromBreezze(selected.id);
-    if (spotifyId != null) {
-      await _openSpotifyFromBrowse(context, ref, spotifyId);
+    if (OfficialMusicPlayback.canOpen(selected.id)) {
+      await _openMusicFromBrowse(context, ref, selected.id);
       return;
     }
     if (isYouTubeSongId(selected.id)) {
