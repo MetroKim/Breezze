@@ -5,6 +5,7 @@ import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
 import { ProviderCacheService } from './provider-cache.service';
+import { OfficialYouTubeDataService } from './official-youtube-data.service';
 
 @Module({
   controllers: [ProvidersController],
@@ -14,6 +15,7 @@ import { ProviderCacheService } from './provider-cache.service';
     YtMusicAdapter,
     DeezerAdapter,
     ProviderCacheService,
+    OfficialYouTubeDataService,
   ],
   exports: [ProviderRegistry],
 })
