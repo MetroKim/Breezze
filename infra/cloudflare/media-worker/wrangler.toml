@@ -5,3 +5,12 @@ compatibility_date = "2026-11-21"
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "breezze-media"
+
+# QA is deliberately isolated from the production private R2 bucket and
+# deployed Worker. Do not point its binding at breezze-media.
+[env.qa]
+name = "breezze-media-qa"
+
+[[env.qa.r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "breezze-media-qa"
