@@ -23,8 +23,10 @@ class PlayableSource {
   final int? sampleRateHz;
   final int? bitDepth;
 
-  /// Local app-private media is exempt from signed-URL expiry checks.
+  /// A user-owned device file has no server license. An app-downloaded
+  /// file carries an explicit offline lease that must expire even offline.
   final bool isLocal;
+  final DateTime? offlineLeaseExpiresAtUtc;
 
   PlayableSource({
     required this.trackId,
@@ -35,10 +37,15 @@ class PlayableSource {
     this.sampleRateHz,
     this.bitDepth,
     this.isLocal = false,
+    this.offlineLeaseExpiresAtUtc,
   });
 
-  bool get isExpired =>
-      !isLocal && DateTime.now().toUtc().isAfter(expiresAtUtc);
+  bool get isExpired {
+    final now = DateTime.now().toUtc();
+    final lease = offlineLeaseExpiresAtUtc;
+    if (lease != null && !now.isBefore(lease.toUtc())) return true;
+    return !isLocal && !now.isBefore(expiresAtUtc.toUtc());
+  }
 }
 
 /// Commands the global PlayerController can issue to the engine.

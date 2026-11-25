@@ -147,6 +147,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           title: track.title,
           artist: track.artist,
           localFilePath: track.audioPath,
+          offlineLeaseExpiresAtUtc: expiry,
           origin: 'downloads',
           sourceContext: 'Downloads',
         );
