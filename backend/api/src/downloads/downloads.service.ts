@@ -2,6 +2,7 @@ import {
   Injectable,
   NotAcceptableException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
@@ -96,6 +97,30 @@ export class DownloadsService {
       variant,
       decision.expiresAt,
     );
+    // Signed transport alone is not proof that media was ingested. Do a
+    // bounded HEAD against the same CDN object before creating an offline
+    // record, so an empty R2 bucket returns a clear denial, not broken audio.
+    let head: Response;
+    try {
+      head = await fetch(signed.url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(5_000),
+      });
+    } catch {
+      throw new ServiceUnavailableException('LICENSED_MEDIA_CHECK_UNAVAILABLE');
+    }
+    if (head.status === 404) {
+      return { allowed: false, reason: 'LICENSED_AUDIO_NOT_INGESTED', url: null };
+    }
+    if (!head.ok) {
+      throw new ServiceUnavailableException('LICENSED_MEDIA_CHECK_UNAVAILABLE');
+    }
+    const contentLength = Number(head.headers.get('content-length'));
+    const mime = head.headers.get('content-type')?.split(';', 1)[0].trim();
+    if (mime !== 'audio/mp4' || !Number.isSafeInteger(contentLength) ||
+        contentLength <= 0) {
+      return { allowed: false, reason: 'LICENSED_AUDIO_FORMAT_INVALID', url: null };
+    }
     const record = await this.prisma.downloadRecord.upsert({
       where: { userId_trackId: { userId, trackId: dto.trackId } },
       create: {

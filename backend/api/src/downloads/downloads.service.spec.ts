@@ -20,6 +20,14 @@ describe('DownloadsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'content-type': 'audio/mp4',
+        'content-length': '1200000',
+      }),
+    } as Response);
     prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source: null, externalId: null });
     service = new DownloadsService(
       prisma as unknown as PrismaService,
@@ -27,6 +35,68 @@ describe('DownloadsService', () => {
       signer as unknown as MediaSigner,
       providers as unknown as ProviderRegistry,
     );
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('refuses to authorize offline bytes not yet ingested to private R2', async () => {
+    rights.decide.mockResolvedValue({
+      allowed: true, previewOnly: false, reason: 'OK',
+      qualityRestriction: null, expiresAt: null, attribution: null,
+    });
+    signer.createDownloadUrl.mockReturnValue({
+      url: 'https://cdn.example/audio/track-1/AAC_256?mode=download&e=1&s=opaque',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false, status: 404, headers: new Headers(),
+    });
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1', territory: 'TZ',
+    })).resolves.toEqual({
+      allowed: false, reason: 'LICENSED_AUDIO_NOT_INGESTED', url: null,
+    });
+    expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
+  });
+
+  it('does not mistake an HTML error page for licensed audio', async () => {
+    rights.decide.mockResolvedValue({
+      allowed: true, previewOnly: false, reason: 'OK',
+      qualityRestriction: null, expiresAt: null, attribution: null,
+    });
+    signer.createDownloadUrl.mockReturnValue({
+      url: 'https://cdn.example/audio/track-1/AAC_256?mode=download&e=1&s=opaque',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true, status: 200,
+      headers: new Headers({
+        'content-type': 'text/html',
+        'content-length': '200',
+      }),
+    });
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1', territory: 'TZ',
+    })).resolves.toEqual({
+      allowed: false, reason: 'LICENSED_AUDIO_FORMAT_INVALID', url: null,
+    });
+    expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on CDN probe outages instead of bypassing availability', async () => {
+    rights.decide.mockResolvedValue({
+      allowed: true, previewOnly: false, reason: 'OK',
+      qualityRestriction: null, expiresAt: null, attribution: null,
+    });
+    signer.createDownloadUrl.mockReturnValue({
+      url: 'https://cdn.example/audio/track-1/AAC_256?mode=download&e=1&s=opaque',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('CDN unavailable'));
+    await expect(service.authorizeAndRecord('user-1', {
+      trackId: 'track-1', territory: 'TZ',
+    })).rejects.toThrow('LICENSED_MEDIA_CHECK_UNAVAILABLE');
+    expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
   });
 
   it('fails closed when trusted edge territory is missing or invalid', async () => {
