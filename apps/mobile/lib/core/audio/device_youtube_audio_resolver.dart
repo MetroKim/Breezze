@@ -114,7 +114,7 @@ Future<PlayableSource?> findReachableYouTubeAudio(
         return source;
       }
       diagnostic?.call('STREAM_PROBE_REJECTED');
-    } catch (Object _) {
+    } catch (_) {
       diagnostic?.call('STREAM_PROBE_EXCEPTION');
       // A single failing CDN URL must not block the next audio format.
     }
@@ -167,7 +167,7 @@ class DeviceYouTubeAudioResolver {
         probe: _probe,
         diagnostic: _diagnostic,
       );
-    } catch (Object error) {
+    } on Object catch (error) {
       // Exception messages can include signed URLs. Expose TYPE only.
       _diagnostic?.call('SOURCE_EXCEPTION_${error.runtimeType}');
       // Caller retains the official visible video player fallback.

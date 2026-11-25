@@ -40,7 +40,7 @@ class _DiagnosticAudioEngine extends JustAudioEngineAdapter {
   Future<void> prepare(PlayableSource source) async {
     try {
       await super.prepare(source);
-    } catch (Object error) {
+    } on Object catch (error) {
       prepareFailureType = error.runtimeType.toString();
       rethrow;
     }
