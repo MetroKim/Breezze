@@ -79,7 +79,7 @@ export class DeezerAdapter implements ProviderAdapter {
       // The public Deezer endpoint can return a few unrelated promoted tracks
       // before genuinely matching results. Rank literal title/artist matches
       // ahead of those entries, retaining Deezer's ordering within each band.
-      const words = q.toLocaleLowerCase().match(/[\\p{L}\\p{N}]+/gu) ?? [];
+      const words = q.toLocaleLowerCase().split(/\s+/).filter(Boolean);
       const relevance = (track: ProviderTrack): number => {
         const searchable = (track.title + ' ' + track.artist).toLocaleLowerCase();
         return words.filter(word => searchable.includes(word)).length;
