@@ -85,9 +85,15 @@ export class DownloadsService {
       decision.expiresAt?.getTime() ?? Number.POSITIVE_INFINITY,
     ));
 
-    const signed = this.signer.createPlaybackUrl(
+    // Only real, encoded AAC renditions can enter the current .m4a offline
+    // pipeline. Streaming rights, metadata, and previews do not grant it.
+    const variant = decision.qualityRestriction ?? 'AAC_256';
+    if (variant !== 'AAC_128' && variant !== 'AAC_256') {
+      return { allowed: false, reason: 'DOWNLOAD_RENDITION_UNSUPPORTED', url: null };
+    }
+    const signed = this.signer.createDownloadUrl(
       dto.trackId,
-      'download',
+      variant,
       decision.expiresAt,
     );
     const record = await this.prisma.downloadRecord.upsert({
@@ -107,6 +113,8 @@ export class DownloadsService {
       allowed: true,
       reason: 'OK',
       url: signed.url,
+      assetVariant: variant,
+      mimeType: 'audio/mp4',
       recordId: record.id,
       expiresAt: signed.expiresAt,
       rightsExpiresAt: decision.expiresAt,

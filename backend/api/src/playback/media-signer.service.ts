@@ -38,6 +38,35 @@ export class MediaSigner {
   }
 
   /**
+   * Signed short-lived offline transfer for the actual stored AAC rendition.
+   * Stream and download links have different HMAC purposes.
+   */
+  createDownloadUrl(
+    trackId: string,
+    variant: string,
+    rightsExpiresAt: Date | null = null,
+  ): { url: string; expiresAt: Date } {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(trackId) ||
+        !['AAC_128', 'AAC_256'].includes(variant)) {
+      throw new Error('DOWNLOAD_RENDITION_UNSUPPORTED');
+    }
+    const now = Date.now();
+    const expires = Math.min(
+      now + 15 * 60 * 1000,
+      rightsExpiresAt?.getTime() ?? Number.POSITIVE_INFINITY,
+    );
+    if (!Number.isFinite(expires) || expires <= now) {
+      throw new Error('MEDIA_URL_EXPIRY_INVALID');
+    }
+    const signature = this.sign(`download:${trackId}:${variant}:${expires}`);
+    const path = `/audio/${encodeURIComponent(trackId)}/${encodeURIComponent(variant)}`;
+    return {
+      url: `${this.edgeUrl(path)}?mode=download&e=${expires}&s=${signature}`,
+      expiresAt: new Date(expires),
+    };
+  }
+
+  /**
    * R2 only: signed delivery for explicitly ingested and rights-authorized
    * Breezze-controlled video assets. Never feed this a YouTube video ID.
    */

@@ -14,7 +14,7 @@ describe('DownloadsService', () => {
     },
   };
   const rights = { decide: jest.fn() };
-  const signer = { createPlaybackUrl: jest.fn() };
+  const signer = { createDownloadUrl: jest.fn() };
   const providers = { get: jest.fn() };
   let service: DownloadsService;
 
@@ -93,7 +93,7 @@ describe('DownloadsService', () => {
     });
 
     expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
-    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    expect(signer.createDownloadUrl).not.toHaveBeenCalled();
   });
 
   it('bounds offline authorization to 72 hours when rights have no end date', async () => {
@@ -102,7 +102,7 @@ describe('DownloadsService', () => {
       qualityRestriction: null, expiresAt: null, attribution: null,
     });
     prisma.downloadRecord.upsert.mockResolvedValue({ id: 'download-lease' });
-    signer.createPlaybackUrl.mockReturnValue({
+    signer.createDownloadUrl.mockReturnValue({
       url: 'https://cdn.example/download', expiresAt: new Date(Date.now() + 60_000),
     });
     const before = Date.now();
@@ -125,7 +125,7 @@ describe('DownloadsService', () => {
       attribution: 'Licensed via label',
     });
     prisma.downloadRecord.upsert.mockResolvedValue({ id: 'download-1' });
-    signer.createPlaybackUrl.mockReturnValue({
+    signer.createDownloadUrl.mockReturnValue({
       url: 'https://cdn.example/download',
       expiresAt: new Date(Date.now() + 60_000),
     });
@@ -141,7 +141,7 @@ describe('DownloadsService', () => {
       recordId: 'download-1',
     });
 
-    expect(signer.createPlaybackUrl).toHaveBeenCalledWith('track-1', 'download', null);
+    expect(signer.createDownloadUrl).toHaveBeenCalledWith('track-1', 'AAC_256', null);
     expect(prisma.downloadRecord.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { userId_trackId: { userId: 'user-1', trackId: 'track-1' } },
       update: { status: 'active', expiresAt: expect.any(Date) },
@@ -169,7 +169,7 @@ describe('DownloadsService', () => {
     });
     expect(rights.decide).not.toHaveBeenCalled();
     expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
-    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    expect(signer.createDownloadUrl).not.toHaveBeenCalled();
   });
 
   it('does not sign Breezze storage URLs for external providers even if download is advertised', async () => {
@@ -192,7 +192,7 @@ describe('DownloadsService', () => {
       url: null,
     });
     expect(rights.decide).not.toHaveBeenCalled();
-    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    expect(signer.createDownloadUrl).not.toHaveBeenCalled();
   });
 
   it('revokes existing external downloads when provider capability is removed', async () => {

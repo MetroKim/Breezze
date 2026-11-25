@@ -10,7 +10,7 @@ describe('DownloadsService tenant isolation', () => {
     },
   };
   const rights = { decide: jest.fn() };
-  const signer = { createPlaybackUrl: jest.fn() };
+  const signer = { createDownloadUrl: jest.fn() };
   const providers = { get: jest.fn() };
   let service: DownloadsService;
 
