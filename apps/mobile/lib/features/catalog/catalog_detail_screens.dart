@@ -13,6 +13,7 @@ import '../video/open_youtube_player.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
+import '../../features/player/official_music_playback.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 final _artistFollowing =
@@ -216,9 +217,30 @@ class TrackDetailScreen extends ConsumerWidget {
                   runSpacing: 10,
                   children: [
                     FilledButton.icon(
-                      onPressed: isMetadataOnlyTrackId(track.id)
+                      onPressed: !canOfferPlaybackAction(track.id)
                           ? null
                           : () async {
+                        if (OfficialMusicPlayback.canOpen(track.id)) {
+                          try {
+                            final opened = await OfficialMusicPlayback.open(ref, track.id);
+                            if (!opened && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text(
+                                  'Open Spotify or Deezer to listen.',
+                                )),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text(
+                                  'Music provider could not be opened.',
+                                )),
+                              );
+                            }
+                          }
+                          return;
+                        }
                         if (isYouTubeSongId(track.id)) {
                           await openYouTubePlayer(
                             context: context,
@@ -239,9 +261,13 @@ class TrackDetailScreen extends ConsumerWidget {
                         );
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
-                      label: Text(isMetadataOnlyTrackId(track.id)
-                          ? 'Playback unavailable'
-                          : isYouTubeSongId(track.id) ? 'Play on YouTube' : 'Play'),
+                      label: Text(OfficialMusicPlayback.canOpen(track.id)
+                          ? 'Listen in ' + OfficialMusicPlayback.providerName(track.id)
+                          : isYouTubeSongId(track.id)
+                              ? 'Watch on YouTube'
+                              : !canOfferPlaybackAction(track.id)
+                                  ? 'Playback unavailable'
+                                  : 'Play'),
                     ),
                     OutlinedButton.icon(
                       // Never display an actionable-looking "Add" state
