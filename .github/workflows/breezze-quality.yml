@@ -117,6 +117,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Reclaim disk space for combined desktop and Android toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Disk space before build preparation:"
+          df -h .
+          # These preinstalled SDKs are unused by Flutter Linux/Android/Web.
+          # Android SDK, NDK, CMake and Flutter SDK remain available.
+          for unused in /usr/share/dotnet /usr/local/share/powershell /opt/ghc; do
+            if [[ -d "$unused" ]]; then
+              sudo rm -rf -- "$unused"
+            fi
+          done
+          if [[ -n "${ANDROID_HOME:-}" && -d "$ANDROID_HOME/system-images" ]]; then
+            sudo rm -rf -- "$ANDROID_HOME/system-images"
+          fi
+          echo "Disk space available for Android NDK and APK packaging:"
+          df -h .
+
       - name: P0 native PCM DSP feasibility (host synthetic benchmark)
         shell: bash
         run: |
@@ -171,9 +190,16 @@ jobs:
         working-directory: apps/mobile
         run: flutter build linux --debug --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
 
-      - name: Package Linux desktop build
+      - name: Package Linux desktop build and free compiled intermediates
         working-directory: apps/mobile
-        run: tar -C build/linux/x64/debug -czf build/breezze-linux-debug.tar.gz bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C build/linux/x64/debug -czf build/breezze-linux-debug.tar.gz bundle
+          # The compressed bundle is the only Linux build artifact consumed
+          # downstream. Free debug intermediates before the Android NDK runs.
+          rm -rf build/linux
+          df -h .
 
       - name: Build Android APK
         working-directory: apps/mobile
