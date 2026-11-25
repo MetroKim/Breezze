@@ -73,8 +73,23 @@ export class DeezerAdapter implements ProviderAdapter {
         this.url('/search/track', { q, limit: '25' }),
       );
       if (!Array.isArray(payload.data)) return providerError('DEEZER_INVALID_RESPONSE', 'Deezer returned an invalid catalogue response', false);
+      const tracks = payload.data
+        .map((item) => this.mapTrack(item))
+        .filter((item): item is ProviderTrack => item !== null);
+      // The public Deezer endpoint can return a few unrelated promoted tracks
+      // before genuinely matching results. Rank literal title/artist matches
+      // ahead of those entries, retaining Deezer's ordering within each band.
+      const words = q.toLocaleLowerCase().match(/[\\p{L}\\p{N}]+/gu) ?? [];
+      const relevance = (track: ProviderTrack): number => {
+        const searchable = (track.title + ' ' + track.artist).toLocaleLowerCase();
+        return words.filter(word => searchable.includes(word)).length;
+      };
+      const indexed = tracks.map((track, index) => ({
+        track, index, score: relevance(track),
+      }));
+      indexed.sort((a, b) => b.score - a.score || a.index - b.index);
       const result = providerOk(
-        payload.data.map((item) => this.mapTrack(item)).filter((item): item is ProviderTrack => item !== null),
+        indexed.map(item => item.track),
         'Track metadata supplied by Deezer; full-track playback is not granted by this API.',
       );
       await this.cache.set(key, result, 90);
