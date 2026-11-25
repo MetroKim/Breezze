@@ -1,6 +1,7 @@
 export interface Env {
   MEDIA_BUCKET: R2Bucket;
   MEDIA_SIGNING_KEY: string;
+  MEDIA_CORS_ORIGINS?: string;
 }
 
 const encoder = new TextEncoder();
@@ -317,6 +318,24 @@ async function ingestVideo(request: Request, url: URL, env: Env): Promise<Respon
   }
 }
 
+/** Browser origin allowlisting is not media authorization; the HMAC still is. */
+function allowedMediaOrigin(request: Request, env: Env): string | null {
+  const origin = request.headers.get('origin');
+  if (!origin || origin === 'null') return null;
+  const listed = (env.MEDIA_CORS_ORIGINS ?? '').split(',').map(v => v.trim());
+  return listed.includes(origin) ? origin : null;
+}
+
+function withPlaybackCors(response: Response, origin: string | null): Response {
+  if (!origin) return response;
+  const headers = new Headers(response.headers);
+  headers.set('Access-Control-Allow-Origin', origin);
+  headers.set('Access-Control-Expose-Headers',
+    'Accept-Ranges, Content-Range, Content-Length, Content-Type, ETag');
+  headers.append('Vary', 'Origin');
+  return new Response(response.body, { status: response.status, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!env.MEDIA_SIGNING_KEY || !env.MEDIA_BUCKET) return error(503, 'MEDIA_STORAGE_NOT_CONFIGURED');
@@ -341,7 +360,19 @@ export default {
       return ingestAudio(request, url, env);
     }
     if (url.pathname.startsWith('/audio/') || url.pathname.startsWith('/video/')) {
-      return playback(request, url, env);
+      const origin = allowedMediaOrigin(request, env);
+      if (request.method === 'OPTIONS') {
+        if (!origin) return error(403, 'MEDIA_CORS_ORIGIN_DENIED');
+        return new Response(null, { status: 204, headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Access-Control-Allow-Headers': 'Range',
+          'Access-Control-Max-Age': '600',
+          'Cache-Control': 'no-store',
+          'Vary': 'Origin',
+        } });
+      }
+      return withPlaybackCors(await playback(request, url, env), origin);
     }
     return error(404, 'NOT_FOUND');
   },
