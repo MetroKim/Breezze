@@ -215,6 +215,11 @@ class BreezzeApi {
   // These endpoints proxy the private ytmusicapi service through Breezze's
   // normal API. The provider result has an explicit kind (ok/error/unsupported);
   // never interpret it as an audio stream or offline-download grant.
+  /// Public YouTube Music song metadata, not native audio authorization.
+  /// Uses the existing provider route; no second provider or proxy is added.
+  Future<Map<String, dynamic>> ytMusicSearchSongs(String query) =>
+      _get('/providers/youtube_music/search?q=${Uri.encodeQueryComponent(query)}');
+
   Future<Map<String, dynamic>> ytMusicSearchArtists(String query) =>
       _get('/providers/youtube_music/artists/search?q=${Uri.encodeQueryComponent(query)}');
 
