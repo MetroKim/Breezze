@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
+import { DeezerAdapter } from './deezer.adapter';
 import { ProviderAdapter } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
 
@@ -14,9 +15,11 @@ export class ProviderRegistry {
   constructor(
     internal: InternalCatalogAdapter,
     spotify: SpotifyAdapter,
+    deezer: DeezerAdapter,
   ) {
     this.register(internal);
     this.register(spotify);
+    this.register(deezer);
   }
 
   register(adapter: ProviderAdapter) {
@@ -47,8 +50,9 @@ export class ProviderRegistry {
     if (normalized.length < 2 || normalized.length > 120) {
       return { query: normalized, providers: [] };
     }
-    // Spotify is the only external MUSIC catalog. YouTube is videos only.
-    // Keep Breezze's own local/rights-cleared library independent.
+    // Spotify and Deezer are the only external MUSIC catalogs.
+    // YouTube is reserved for visible music videos. Provider metadata is
+    // never permission to download or decode a protected full recording.
     const adapters = [...this.adapters.values()].filter(
       (adapter) => adapter.enabled !== false && adapter.capabilities.search,
     ).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
