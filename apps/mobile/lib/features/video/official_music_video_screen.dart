@@ -105,17 +105,20 @@ class _OfficialMusicVideoScreenState
     final id = item['videoId'];
     if (id == null || !YoutubePlayerHandoff.isValidProviderTrackId(id)) return;
     try {
+      // Clear the prior video's state BEFORE starting the new iframe item.
+      // Otherwise a fast playing event could be overwritten after await and
+      // automatic next-track would silently stop after one transition.
+      _seenPlaying = false;
       if (_controller == null) {
         final opened = await YoutubePlayerHandoff.openProviderTrackId(id);
         if (!opened) return;
       } else {
-        // This user-initiated action uses the official visible iframe,
-        // never a detached, audio-only or background media URL.
+        // The official iframe owns media playback. Do not extract audio,
+        // prefetch provider bytes or start a background-only player.
         await _controller!.loadVideoById(videoId: id);
       }
       if (!mounted) return;
       setState(() {
-        _seenPlaying = false;
         _queuePosition = position;
         _currentVideoId = id;
         _currentTitle = item['title'] ?? _currentTitle;
