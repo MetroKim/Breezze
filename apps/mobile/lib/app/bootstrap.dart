@@ -19,7 +19,9 @@ import '../features/player/player_controller.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// Resolve full recordings through backend sessions and label Deezer previews.
+/// Spotify and Deezer handle music through provider-authorized playback.
+/// Deezer previews are 30-second samples; streaming full provider tracks
+/// is exclusively the responsibility of their official applications.
 /// Downloads remain rights-gated. Lyrics
 /// lookup remains keyless through LRCLIB.
 
@@ -58,14 +60,15 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
         value['previewUrl'] is String &&
         (value['previewUrl'] as String).isNotEmpty;
     return ProviderTrack(
-      breezzeTrackId: isPreview
-          ? 'bz:deezer_preview:$trackId' : 'bz:$providerId:$trackId',
+      // Deezer song identity stays stable when a preview is available;
+      // previews are a separate explicit short-form action, never full songs.
+      breezzeTrackId: 'bz:$providerId:$trackId',
       hasPreview: isPreview,
       providerTrackId: '$providerId:$trackId',
       title: value['title'] as String? ?? '',
       artist: value['artist'] as String? ?? 'Unknown artist',
       artworkUrl: value['artworkUrl'] as String?,
-      duration: Duration(seconds: isPreview ? 30 : duration is num ? duration.toInt() : 0),
+      duration: Duration(seconds: duration is num ? duration.toInt() : 0),
     );
   }
 
@@ -88,35 +91,48 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
 
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
-    // Spotify is the *only* music-discovery provider. Do not mix Spotify
-    // results with Deezer previews, YouTube videos or native media queues.
+    // Spotify and Deezer are independent music catalogs; Google/YouTube
+    // results are confined to the separate visible Music Videos experience.
     final q = query.trim();
     if (q.length < 2 || q.length > 120) return ProviderOk(<ProviderTrack>[]);
     try {
       final result = await _ref.read(authSessionProvider.notifier).api
-          .searchSpotify(q);
-      if (result['kind'] != 'ok' || result['value'] is! List) {
-        return ProviderError(
-          result['reason'] is String
-              ? result['reason'] as String
-              : 'spotify_unavailable',
-        );
-      }
-      final unique = <String>{};
+          .searchAllProviders(q);
+      final providers = result['providers'];
+      if (providers is! List) return ProviderError('invalid_music_search');
       final tracks = <ProviderTrack>[];
-      for (final raw in (result['value'] as List).whereType<Map>()) {
-        final id = raw['providerTrackId'];
-        if (id is! String || !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
-        final track = _trackFromJson(raw, providerId: 'spotify');
-        if (track.title.trim().isNotEmpty &&
-            track.artist.trim().isNotEmpty &&
-            unique.add(track.breezzeTrackId)) {
-          tracks.add(track);
+      final seen = <String>{};
+      var sourcesResponded = 0;
+      for (final entry in providers.whereType<Map>()) {
+        final source = entry['providerId'];
+        // Reject legacy YouTube Music, Audius and other provider IDs even
+        // if an old backend revision accidentally includes their results.
+        if (source != 'spotify' && source != 'deezer') continue;
+        final envelope = entry['result'];
+        if (envelope is! Map || envelope['kind'] != 'ok' ||
+            envelope['value'] is! List) continue;
+        sourcesResponded++;
+        for (final raw in (envelope['value'] as List).whereType<Map>()) {
+          final id = raw['providerTrackId'];
+          if (id is! String) continue;
+          if (source == 'spotify' &&
+              !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
+          if (source == 'deezer' &&
+              !RegExp(r'^[0-9]{1,20}$').hasMatch(id)) continue;
+          final track = _trackFromJson(raw, providerId: source as String);
+          if (track.title.trim().isNotEmpty &&
+              track.artist.trim().isNotEmpty &&
+              seen.add(track.breezzeTrackId)) {
+            tracks.add(track);
+          }
         }
+      }
+      if (sourcesResponded == 0) {
+        return ProviderError('spotify_and_deezer_unavailable');
       }
       return ProviderOk(tracks);
     } catch (_) {
-      return ProviderError('spotify_network_error');
+      return ProviderError('music_sources_network_error');
     }
   }
 
