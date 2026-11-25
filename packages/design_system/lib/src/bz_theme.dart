@@ -138,10 +138,54 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
   }
 }
 
-/// The light theme, §21.2.
-ThemeData bzLightTheme() {
-  final base = ThemeData.light(useMaterial3: true);
-  final c = BzThemeColors.light;
+/// One authoritative component theme for every Breezze screen.
+///
+/// Keeping control geometry and focus cues here prevents authentication,
+/// discovery, library, search, settings and player sheets from drifting apart.
+/// Semantic colors come from [BzThemeColors]; no duplicated screen palettes.
+ThemeData _bzTheme({required bool dark}) {
+  final base = dark
+      ? ThemeData.dark(useMaterial3: true)
+      : ThemeData.light(useMaterial3: true);
+  final c = dark ? BzThemeColors.dark : BzThemeColors.light;
+  final typography = base.textTheme.copyWith(
+    displayMedium: base.textTheme.displayMedium?.copyWith(
+      fontSize: BzType.display,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -1.2,
+      height: 1.10,
+    ),
+    headlineLarge: base.textTheme.headlineLarge?.copyWith(
+      fontSize: BzType.largeTitle,
+      fontWeight: FontWeight.w750,
+      letterSpacing: -0.9,
+      height: 1.15,
+    ),
+    titleLarge: base.textTheme.titleLarge?.copyWith(
+      fontSize: BzType.title2,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.4,
+    ),
+    titleMedium: base.textTheme.titleMedium?.copyWith(
+      fontSize: BzType.headline,
+      fontWeight: FontWeight.w650,
+    ),
+    bodyLarge: base.textTheme.bodyLarge?.copyWith(
+      fontSize: BzType.body,
+      height: 1.35,
+    ),
+    bodyMedium: base.textTheme.bodyMedium?.copyWith(
+      fontSize: BzType.subheadline,
+      height: 1.35,
+    ),
+  ).apply(bodyColor: c.text1, displayColor: c.text1);
+
+  const minimumTapTarget = Size(44, 48);
+  final inputShape = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(BzRadius.input),
+    borderSide: BorderSide(color: c.separator),
+  );
+
   return base.copyWith(
     extensions: [c],
     scaffoldBackgroundColor: c.background,
@@ -154,37 +198,114 @@ ThemeData bzLightTheme() {
       surface: c.surface1,
       error: c.error,
     ),
-    textTheme: base.textTheme.apply(
-      bodyColor: c.text1,
-      displayColor: c.text1,
-    ),
+    textTheme: typography,
     dividerColor: c.separator,
+    iconTheme: IconThemeData(color: c.text1),
+    appBarTheme: AppBarThemeData(
+      backgroundColor: c.background,
+      foregroundColor: c.text1,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: typography.titleLarge?.copyWith(color: c.text1),
+    ),
+    inputDecorationTheme: InputDecorationThemeData(
+      filled: true,
+      fillColor: c.surface1,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: inputShape,
+      enabledBorder: inputShape,
+      focusedBorder: inputShape.copyWith(
+        borderSide: BorderSide(color: c.accent, width: 2),
+      ),
+      errorBorder: inputShape.copyWith(
+        borderSide: BorderSide(color: c.error),
+      ),
+      focusedErrorBorder: inputShape.copyWith(
+        borderSide: BorderSide(color: c.error, width: 2),
+      ),
+      hintStyle: TextStyle(color: c.text2),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: c.accent,
+        foregroundColor: c.background,
+        minimumSize: minimumTapTarget,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(BzRadius.input),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: c.text1,
+        minimumSize: minimumTapTarget,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        side: BorderSide(color: c.separator),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(BzRadius.input),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: c.text1,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(BzRadius.button),
+        ),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: const Size(44, 44),
+        foregroundColor: c.text1,
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: c.surface1,
+      surfaceTintColor: Colors.transparent,
+      elevation: BzElevation.level0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(BzRadius.card),
+        side: BorderSide(color: c.separator, width: 0.5),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: c.elevated,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(BzRadius.sheet),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: c.surface1,
+      modalBackgroundColor: c.elevated,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(BzRadius.sheet),
+        ),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: c.elevated,
+      contentTextStyle: TextStyle(color: c.text1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(BzRadius.input),
+      ),
+    ),
   );
 }
 
-/// The dark theme, §21.2.
-ThemeData bzDarkTheme() {
-  final base = ThemeData.dark(useMaterial3: true);
-  final c = BzThemeColors.dark;
-  return base.copyWith(
-    extensions: [c],
-    scaffoldBackgroundColor: c.background,
-    colorScheme: base.colorScheme.copyWith(
-      primary: c.text1,
-      onPrimary: c.background,
-      secondary: c.accent,
-      onSurface: c.text1,
-      onSurfaceVariant: c.text2,
-      surface: c.surface1,
-      error: c.error,
-    ),
-    textTheme: base.textTheme.apply(
-      bodyColor: c.text1,
-      displayColor: c.text1,
-    ),
-    dividerColor: c.separator,
-  );
-}
+/// Semantic light and dark modes share identical component geometry.
+ThemeData bzLightTheme() => _bzTheme(dark: false);
+ThemeData bzDarkTheme() => _bzTheme(dark: true);
 
 /// Reads the Breezze colors off any BuildContext — the one accessor every
 /// screen uses.
