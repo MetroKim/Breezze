@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../video/open_youtube_player.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../core/audio/spotify_playback_handoff.dart';
+import '../../core/audio/deezer_playback_handoff.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
@@ -498,6 +499,48 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
   }
 
+  Future<void> _playDeezerPreview(BzTrack track) async {
+    final id = DeezerPlaybackHandoff.deezerIdFromBreezze(track.id);
+    if (id == null || (!track.hasPreview && !isDeezerPreview(track.id))) {
+      return;
+    }
+    final previewId = 'bz:deezer_preview:$id';
+    final sample = TrackInfo(
+      id: previewId,
+      title: track.title,
+      artist: track.artist,
+      artworkUrl: track.artworkUrl,
+      duration: const Duration(seconds: 30),
+    );
+    try {
+      await ref.read(playerControllerProvider.notifier).playTrack(
+        trackId: previewId,
+        queue: [sample],
+        startIndex: 0,
+        origin: 'deezer-sample',
+        sourceContext: 'Deezer preview (30 seconds)',
+      );
+      if (!mounted) return;
+      final state = ref.read(playerControllerProvider);
+      if (state.playbackState == PlaybackState.playing) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => const NowPlayingScreen(),
+        ));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'Deezer preview unavailable. Open Deezer for the full song.',
+          )),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Deezer preview could not start.')),
+      );
+    }
+  }
+
   Future<void> _play(BzTrack track) async {
     final embeddedId = track.id.startsWith('bzv:')
         ? track.id.substring(4)
@@ -540,6 +583,30 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
       return;
     }
+    final deezerId = DeezerPlaybackHandoff.deezerIdFromBreezze(track.id);
+    if (deezerId != null) {
+      // The official Deezer app owns full-length audio and account rights.
+      try {
+        await ref.read(playerControllerProvider.notifier).stop();
+        final opened = await DeezerPlaybackHandoff.openTrack(deezerId);
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'Deezer could not open. Install Deezer or use its website.',
+            )),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'Deezer playback is unavailable on this device.',
+            )),
+          );
+        }
+      }
+      return;
+    }
     if (isYouTubeSongId(track.id)) {
       await playYoutubeMusicWithVideoFallback(
         context: context,
@@ -564,7 +631,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (isMetadataOnlyTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This source has no approved Breezze audio stream. Search on Spotify to listen.')),
+          const SnackBar(content: Text('This recording requires Spotify or Deezer playback.')),
         );
       }
       return;
