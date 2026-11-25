@@ -1,7 +1,6 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/bootstrap.dart';
 import '../../app/saved_album_store.dart';
@@ -13,7 +12,6 @@ import '../video/open_youtube_player.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
-import '../../features/player/official_music_playback.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 final _artistFollowing =
@@ -220,27 +218,6 @@ class TrackDetailScreen extends ConsumerWidget {
                       onPressed: !canOfferPlaybackAction(track.id)
                           ? null
                           : () async {
-                        if (OfficialMusicPlayback.canOpen(track.id)) {
-                          try {
-                            final opened = await OfficialMusicPlayback.open(ref, track.id);
-                            if (!opened && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text(
-                                  'Open Spotify or Deezer to listen.',
-                                )),
-                              );
-                            }
-                          } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text(
-                                  'Music provider could not be opened.',
-                                )),
-                              );
-                            }
-                          }
-                          return;
-                        }
                         if (isYouTubeSongId(track.id)) {
                           await openYouTubePlayer(
                             context: context,
@@ -261,13 +238,11 @@ class TrackDetailScreen extends ConsumerWidget {
                         );
                       },
                       icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
-                      label: Text(OfficialMusicPlayback.canOpen(track.id)
-                          ? 'Listen in ' + OfficialMusicPlayback.providerName(track.id)
-                          : isYouTubeSongId(track.id)
-                              ? 'Watch on YouTube'
-                              : !canOfferPlaybackAction(track.id)
-                                  ? 'Playback unavailable'
-                                  : 'Play'),
+                      label: Text(isYouTubeSongId(track.id)
+                          ? 'Watch on YouTube'
+                          : !canOfferPlaybackAction(track.id)
+                              ? 'Full audio unavailable in Breezze'
+                              : 'Play'),
                     ),
                     OutlinedButton.icon(
                       // Never display an actionable-looking "Add" state
@@ -510,14 +485,7 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
     }
   }
 
-  Future<void> _openDeezerAlbum(Map<String, dynamic> album) async {
-    final rawUrl = album['url'];
-    final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
-    if (uri == null || uri.scheme != 'https') return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
-    Future<void> _changeArtistMembership(
+  Future<void> _changeArtistMembership(
     String key, {
     bool? follow,
     bool? pinned,
@@ -852,11 +820,6 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: IconButton(
-                              tooltip: 'Open release in Deezer Music',
-                              icon: const BzSvgIcon(name: 'arrow-up-right', size: 19),
-                              onPressed: () => _openDeezerAlbum(album),
-                            ),
                             onTap: () {
                               final albumId = album['id'];
                               if (albumId == null) return;
@@ -967,13 +930,6 @@ class DeezerAlbumCatalogScreen extends ConsumerWidget {
     this.artworkUrl,
     this.deezerUrl,
   });
-
-  Future<void> _open(String? rawUrl) async {
-    if (rawUrl == null) return;
-    final uri = Uri.tryParse(rawUrl);
-    if (uri == null || uri.scheme != 'https') return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1203,12 +1159,6 @@ class DeezerAlbumCatalogScreen extends ConsumerWidget {
                         ),
                       ],
                       const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: deezerUrl == null ? null : () => _open(deezerUrl),
-                        icon: const BzSvgIcon(name: 'arrow-up-right'),
-                        label: const Text('Open album on Deezer'),
-                      ),
-                      const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -1245,9 +1195,9 @@ class DeezerAlbumCatalogScreen extends ConsumerWidget {
                             ),
                             trailing: IconButton(
                               tooltip: items[i]['previewUrl'] is String
-                                  ? 'Play Deezer preview (30 seconds)' : 'Open track on Deezer',
+                                  ? 'Play 30-second sample in Breezze' : 'Full audio unavailable in Breezze',
                               icon: BzSvgIcon(name: items[i]['previewUrl'] is String
-                                  ? 'play' : 'arrow-up-right', size: 18),
+                                  ? 'play' : 'info', size: 18),
                               onPressed: () async {
                                 final item = items[i];
                                 final trackId = item['id']?.toString() ?? '';
@@ -1267,8 +1217,12 @@ class DeezerAlbumCatalogScreen extends ConsumerWidget {
                                     origin: 'album',
                                     sourceContext: 'Deezer preview (up to 30 seconds)',
                                   );
-                                } else {
-                                  await _open(item['url'] as String?);
+                                } else if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text(
+                                      'Full audio is unavailable in Breezze until a licensed stream is connected.',
+                                    )),
+                                  );
                                 }
                               },
                             ),
