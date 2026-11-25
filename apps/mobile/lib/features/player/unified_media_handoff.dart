@@ -5,15 +5,12 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../video/open_youtube_player.dart';
 import '../video/official_youtube_queue_policy.dart';
-import 'now_playing_screen.dart';
-import 'player_controller.dart';
 
-/// One source-aware handoff for Search and Library. A YouTube Music catalog
-/// identity is metadata, not a full-track entitlement or a download license.
-/// This coordinator never turns provider video URLs into audio-only URLs.
-enum BreezzePlaybackRoute { nativeAudio, officialYouTubeVideo, superseded }
+/// YouTube is video-only in Breezze. No native audio stream, no extraction,
+/// no offline download, and no hidden player, even if the metadata resembles
+/// a music recording.
+enum BreezzePlaybackRoute { officialYouTubeVideo, superseded }
 
-/// Validates IDs and deduplicates without reordering the user's queue.
 List<TrackInfo> youtubeMusicQueue(Iterable<TrackInfo> candidates) {
   final seen = <String>{};
   return [
@@ -22,9 +19,9 @@ List<TrackInfo> youtubeMusicQueue(Iterable<TrackInfo> candidates) {
   ];
 }
 
-/// A native source is preferred only when the existing resolver successfully
-/// establishes a real playable session. When it cannot, hand off to the
-/// foreground official YouTube video player, never a hidden player.
+/// Legacy entrypoint used by Search and Library; the method name is retained
+/// for source compatibility, but it exclusively opens visible official video.
+/// Spotify music takes a separate Spotify app playback route.
 Future<BreezzePlaybackRoute> playYoutubeMusicWithVideoFallback({
   required BuildContext context,
   required WidgetRef ref,
@@ -35,38 +32,16 @@ Future<BreezzePlaybackRoute> playYoutubeMusicWithVideoFallback({
   bool openNowPlaying = false,
 }) async {
   if (!isYouTubeSongId(selected.id)) {
-    throw ArgumentError.value(selected.id, 'selected.id', 'Not a YouTube Music track');
+    throw ArgumentError.value(
+      selected.id, 'selected.id', 'Not a YouTube video',
+    );
   }
   final tracks = youtubeMusicQueue(candidates);
-  final position = tracks.indexWhere((item) => item.id == selected.id);
-  if (position < 0) {
+  if (!tracks.any((track) => track.id == selected.id)) {
     return BreezzePlaybackRoute.superseded;
   }
-  final player = ref.read(playerControllerProvider.notifier);
-  await player.playTrack(
-    trackId: selected.id,
-    queue: tracks,
-    startIndex: position,
-    origin: origin,
-    sourceContext: sourceContext,
-  );
   if (!context.mounted) return BreezzePlaybackRoute.superseded;
-  final playback = ref.read(playerControllerProvider);
-  // A newer user selection always wins; never open the previous recording
-  // merely because its resolver failed after a later tap.
-  if (playback.currentTrack?.id != selected.id) {
-    return BreezzePlaybackRoute.superseded;
-  }
-  if (playback.playbackState == PlaybackState.playing) {
-    if (openNowPlaying) {
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => const NowPlayingScreen(),
-      ));
-    }
-    return BreezzePlaybackRoute.nativeAudio;
-  }
-  await player.stop();
-  if (!context.mounted) return BreezzePlaybackRoute.superseded;
+
   await openYouTubePlayer(
     context: context,
     ref: ref,
