@@ -6,9 +6,12 @@ void main() {
   final now = DateTime.utc(2026, 11, 25);
   final deadline = now.add(const Duration(minutes: 5))
       .millisecondsSinceEpoch ~/ 1000;
-  DeviceYouTubeAudioCandidate candidate(String url, {int bitrate = 128000}) =>
+  DeviceYouTubeAudioCandidate candidate(String url, {
+    int bitrate = 128000, String container = 'mp4', String codec = 'mp4a.40.2',
+  }) =>
       DeviceYouTubeAudioCandidate(
-        url: Uri.parse(url), bitrate: bitrate, audioCodec: 'mp4a.40.2',
+        url: Uri.parse(url), bitrate: bitrate,
+        audioCodec: codec, container: container,
       );
 
   test('picks highest bitrate direct valid on-device audio stream', () {
@@ -23,6 +26,34 @@ void main() {
     expect(source?.sessionId, isNull);
     expect(source?.isLocal, isFalse);
     expect(source?.trackId, id);
+  });
+
+  test('iOS-compatible MP4/AAC selection ignores higher bitrate WebM/Opus', () {
+    final streams = [
+      candidate('https://rr1.googlevideo.com/videoplayback?expire=$deadline',
+        bitrate: 128000),
+      candidate('https://rr2.googlevideo.com/videoplayback?expire=$deadline',
+        bitrate: 160000, container: 'webm', codec: 'opus'),
+    ];
+    final apple = selectDeviceYouTubeAudio(id, streams, nowUtc: now);
+    expect(apple?.streamUrl, contains('rr1.googlevideo.com'));
+    final android = selectDeviceYouTubeAudio(id, streams, nowUtc: now,
+      supportedContainers: const {'mp4', 'webm'});
+    expect(android?.streamUrl, contains('rr2.googlevideo.com'));
+  });
+
+  test('rejects mismatched codecs, unknown containers and extreme expirations', () {
+    final good = 'https://rr1.googlevideo.com/videoplayback?expire=$deadline';
+    for (final entry in [
+      candidate(good, container: 'webm', codec: 'mp4a.40.2'),
+      candidate(good, container: 'mp4', codec: 'opus'),
+      candidate(good, container: 'flv'),
+      candidate('https://rr1.googlevideo.com/video?expire=$deadline'),
+      candidate('https://rr1.googlevideo.com/videoplayback?expire=999999999999999999999'),
+    ]) {
+      expect(selectDeviceYouTubeAudio(id, [entry], nowUtc: now,
+        supportedContainers: const {'mp4', 'webm'}), isNull);
+    }
   });
 
   test('blocks forged, expired, local and non-HTTPS media URLs', () {

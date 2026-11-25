@@ -1,5 +1,5 @@
 import 'package:breezze_audio_contracts/audio_contracts.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
@@ -12,10 +12,12 @@ class DeviceYouTubeAudioCandidate {
     required this.url,
     required this.bitrate,
     required this.audioCodec,
+    required this.container,
   });
   final Uri url;
   final int bitrate;
   final String audioCodec;
+  final String container;
 }
 
 /// Validate the exact video identifier and a short-lived, direct, audio-only
@@ -24,6 +26,7 @@ PlayableSource? selectDeviceYouTubeAudio(
   String trackId,
   Iterable<DeviceYouTubeAudioCandidate> candidates, {
   DateTime? nowUtc,
+  Set<String> supportedContainers = const {'mp4'},
 }) {
   if (!isYouTubeSongId(trackId)) return null;
   final now = (nowUtc ?? DateTime.now()).toUtc();
@@ -31,18 +34,25 @@ PlayableSource? selectDeviceYouTubeAudio(
     final uri = candidate.url;
     final host = uri.host.toLowerCase();
     final expiresEpoch = int.tryParse(uri.queryParameters['expire'] ?? '');
-    if (expiresEpoch == null || expiresEpoch < 1 ||
+    final container = candidate.container.toLowerCase();
+    final codec = candidate.audioCodec.toLowerCase();
+    final compatibleCodec = (container == 'mp4' &&
+        (codec.startsWith('mp4a') || codec.contains('aac'))) ||
+        (container == 'webm' &&
+        (codec.contains('opus') || codec.contains('vorbis')));
+    if (expiresEpoch == null ||
+        expiresEpoch <= now.millisecondsSinceEpoch ~/ 1000 + 75 ||
+        expiresEpoch > now.millisecondsSinceEpoch ~/ 1000 + 86400 ||
         candidate.bitrate < 16000 ||
-        candidate.audioCodec.trim().isEmpty ||
+        !supportedContainers.contains(container) ||
+        !compatibleCodec ||
+        uri.path != '/videoplayback' ||
         uri.scheme != 'https' ||
         uri.userInfo.isNotEmpty || uri.hasFragment ||
         !(host == 'googlevideo.com' || host.endsWith('.googlevideo.com'))) {
       return false;
     }
-    final expiresAt = DateTime.fromMillisecondsSinceEpoch(
-      expiresEpoch * 1000, isUtc: true,
-    );
-    return expiresAt.isAfter(now.add(const Duration(seconds: 75)));
+    return true;
   }).toList()
     ..sort((a, b) => b.bitrate.compareTo(a.bitrate));
   if (eligible.isEmpty) return null;
@@ -71,13 +81,21 @@ class DeviceYouTubeAudioResolver {
       final manifest = await client.videos.streams
           .getManifest(videoId)
           .timeout(const Duration(seconds: 12));
+      // AVFoundation on iOS/macOS needs an MP4/AAC source. ExoPlayer and
+      // media_kit can also decode WebM/Opus on supported Android/Linux builds.
+      final platforms = switch (defaultTargetPlatform) {
+        TargetPlatform.android || TargetPlatform.linux => const {'mp4', 'webm'},
+        _ => const {'mp4'},
+      };
       return selectDeviceYouTubeAudio(
         trackId,
         manifest.audioOnly.map((stream) => DeviceYouTubeAudioCandidate(
           url: stream.url,
           bitrate: stream.bitrate.bitsPerSecond,
           audioCodec: stream.audioCodec,
+          container: stream.container.name,
         )),
+        supportedContainers: platforms,
       );
     } catch (_) {
       // This source is not guaranteed available in every region or network.
