@@ -561,22 +561,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
       return;
     }
-    if (isDeezerPreview(track.id) ||
-        (track.id.startsWith('bz:deezer:') && track.hasPreview)) {
-      final id = track.id.replaceFirst('bz:deezer:', 'bz:deezer_preview:');
-      final preview = TrackInfo(id: id, title: track.title, artist: track.artist,
-          artworkUrl: track.artworkUrl, duration: const Duration(seconds: 30));
-      ref.read(playerControllerProvider.notifier).playTrack(
-        trackId: id, queue: [preview], startIndex: 0, origin: 'search',
-        sourceContext: 'Deezer preview (up to 30 seconds)',
-      );
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()));
-      return;
-    }
     if (isMetadataOnlyTrackId(track.id)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This result is catalogue metadata only. Native playback is not available from this source.')),
+          const SnackBar(content: Text('This source has no approved Breezze audio stream. Search on Spotify to listen.')),
         );
       }
       return;
