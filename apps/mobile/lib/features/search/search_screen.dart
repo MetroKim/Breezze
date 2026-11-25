@@ -109,7 +109,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       _error = null;
     });
     if (normalized.length < 2) return;
-    _typeaheadTimer = Timer(const Duration(milliseconds: 500), () {
+    _typeaheadTimer = Timer(const Duration(milliseconds: 300), () {
       _search(normalized, recordHistory: false);
     });
   }
@@ -820,7 +820,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 itemBuilder: (context, index) {
                                   final track = _results[index];
                                   final value = progress[track.id];
-                                  return ListTile(
+                                  final musicSearch = !_searchVideos && !_searchLibrary;
+                                  final shelf = isSpotifyTrackId(track.id)
+                                      ? 'Spotify'
+                                      : isDeezerTrackId(track.id) ? 'Deezer' : null;
+                                  final previous = index == 0 ? null : _results[index - 1];
+                                  final previousShelf = previous == null
+                                      ? null
+                                      : isSpotifyTrackId(previous.id)
+                                          ? 'Spotify'
+                                          : isDeezerTrackId(previous.id)
+                                              ? 'Deezer'
+                                              : null;
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (musicSearch && shelf != null &&
+                                          shelf != previousShelf)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                                          child: Text(shelf,
+                                              style: theme.textTheme.titleMedium),
+                                        ),
+                                      ListTile(
                                     leading: track.artworkUrl != null
                                         ? ClipRRect(
                                             borderRadius:
@@ -995,6 +1017,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             canQueueTrackId(track.id)
                                         ? _play(track)
                                         : _openTrack(track),
+                                      ),
+                                    ],
                                   );
                                 },
                               ),
