@@ -49,20 +49,55 @@ export class DeezerAdapter implements ProviderAdapter {
     return payload as T;
   }
 
-  private mapTrack(track: DeezerTrack): ProviderTrack | null {
-    if (!track.id || !track.title?.trim() || !track.artist?.name?.trim()) return null;
+  /**
+   * Treat catalog JSON as untrusted data. One malformed Deezer record must
+   * never erase the other valid results or expose arbitrary external links.
+   */
+  private mapTrack(item: unknown): ProviderTrack | null {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const track = item as DeezerTrack;
+    if (typeof track.id !== 'number' || !Number.isSafeInteger(track.id) ||
+        track.id <= 0 || typeof track.title !== 'string' ||
+        !track.title.trim() || typeof track.artist?.name !== 'string' ||
+        !track.artist.name.trim()) {
+      return null;
+    }
+
+    const secureUrl = (value: unknown): URL | null => {
+      if (typeof value !== 'string') return null;
+      try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && url.hostname.length > 0 &&
+          !url.username && !url.password && !url.port ? url : null;
+      } catch {
+        return null;
+      }
+    };
+    const artwork = secureUrl(track.album?.cover_big) ??
+      secureUrl(track.album?.cover_medium);
+    const deezerLink = secureUrl(track.link);
+    const sourceUrl = deezerLink &&
+      (deezerLink.hostname === 'deezer.com' ||
+       deezerLink.hostname.endsWith('.deezer.com'))
+      ? deezerLink.toString() : undefined;
+    const clip = secureUrl(track.preview);
+    const previewUrl = clip && clip.hostname.endsWith('.dzcdn.net')
+      ? clip.toString() : undefined;
     return {
       providerTrackId: String(track.id),
       title: track.title.trim(),
       artist: track.artist.name.trim(),
-      artworkUrl: track.album?.cover_big ?? track.album?.cover_medium,
-      durationSec: typeof track.duration === 'number' && track.duration > 0 ? track.duration : undefined,
-      sourceUrl: track.link,
-      previewUrl: track.preview && /^https:\/\/[a-z0-9.-]+\.dzcdn\.net\//i.test(track.preview) ? track.preview : undefined,
+      artworkUrl: artwork?.toString(),
+      durationSec: typeof track.duration === 'number' &&
+        Number.isFinite(track.duration) && track.duration > 0 &&
+        track.duration < 24 * 3600 ? track.duration : undefined,
+      sourceUrl,
+      previewUrl,
     };
   }
 
   async search(query: string): Promise<ProviderResult<ProviderTrack[]>> {
+    if (!this.enabled) return providerUnsupported('Deezer metadata provider is disabled');
     const q = query.trim();
     if (q.length < 2 || q.length > 120) return providerOk([]);
     const key = `provider:deezer:search:v1:${encodeURIComponent(q.toLowerCase())}`;
@@ -85,6 +120,7 @@ export class DeezerAdapter implements ProviderAdapter {
   }
 
   async getTrack(providerTrackId: string): Promise<ProviderResult<ProviderTrack>> {
+    if (!this.enabled) return providerUnsupported('Deezer metadata provider is disabled');
     if (!/^\d{1,20}$/.test(providerTrackId)) return providerError('INVALID_DEEZER_TRACK_ID', 'Invalid Deezer track identifier', false);
     const key = `provider:deezer:track:v1:${providerTrackId}`;
     const cached = await this.cache.get<ProviderResult<ProviderTrack>>(key);
