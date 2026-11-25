@@ -16,7 +16,7 @@ concurrency:
 jobs:
   deploy:
     if: ${{ false }}
-    name: Deploy Cloudflare API Worker (BLOCKED: full-app release freeze)
+    name: "Deploy Cloudflare API Worker (BLOCKED: full-app release freeze)"
     runs-on: ubuntu-latest
     environment: production
     steps:
