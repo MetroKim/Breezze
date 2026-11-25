@@ -15,7 +15,10 @@ VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
 PROVIDER_SLOTS = BoundedSemaphore(8)
 
 
-def normalize_track(item: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_track(item: Any) -> dict[str, Any] | None:
+    # Skip one malformed upstream record rather than failing the whole search.
+    if not isinstance(item, dict):
+        return None
     video_id = item.get("videoId")
     title = item.get("title")
     if not isinstance(video_id, str) or not VIDEO_ID.fullmatch(video_id):
@@ -23,13 +26,17 @@ def normalize_track(item: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(title, str) or not title.strip():
         return None
 
-    artists = item.get("artists") or []
+    artists = item.get("artists")
+    if not isinstance(artists, list):
+        artists = []
     artist_names = [
         artist.get("name", "").strip()
         for artist in artists
         if isinstance(artist, dict) and isinstance(artist.get("name"), str)
     ]
-    thumbnails = item.get("thumbnails") or []
+    thumbnails = item.get("thumbnails")
+    if not isinstance(thumbnails, list):
+        thumbnails = []
     artwork_url = None
     if thumbnails and isinstance(thumbnails[-1], dict):
         candidate = thumbnails[-1].get("url")
@@ -69,6 +76,8 @@ def search(
         )
     try:
         results = YTMusic().search(q.strip(), filter="songs", limit=limit)
+        if not isinstance(results, list):
+            raise ValueError("Unexpected YouTube Music song search response")
         tracks = [track for item in results if (track := normalize_track(item))]
         return {"tracks": tracks}
     except Exception as exc:
@@ -79,7 +88,9 @@ def search(
 
 
 
-def normalize_video(item: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_video(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
     video_id = item.get("videoId")
     title = item.get("title")
     video_type = item.get("videoType")
@@ -92,13 +103,17 @@ def normalize_video(item: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(title, str) or not title.strip():
         return None
 
-    artists = item.get("artists") or []
+    artists = item.get("artists")
+    if not isinstance(artists, list):
+        artists = []
     artist_names = [
         artist.get("name", "").strip()
         for artist in artists
         if isinstance(artist, dict) and isinstance(artist.get("name"), str)
     ]
-    thumbnails = item.get("thumbnails") or []
+    thumbnails = item.get("thumbnails")
+    if not isinstance(thumbnails, list):
+        thumbnails = []
     artwork_url = None
     if thumbnails and isinstance(thumbnails[-1], dict):
         candidate = thumbnails[-1].get("url")
@@ -135,6 +150,8 @@ def search_videos(
         )
     try:
         results = YTMusic().search(q.strip(), filter="videos", limit=limit)
+        if not isinstance(results, list):
+            raise ValueError("Unexpected YouTube Music video search response")
         videos = [video for item in results if (video := normalize_video(item))]
         return {
             "source": "YouTube Music via ytmusicapi",
