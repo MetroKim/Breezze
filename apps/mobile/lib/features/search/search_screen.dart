@@ -21,6 +21,7 @@ import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../player/player_controller.dart';
+import '../player/unified_media_handoff.dart';
 import '../../widgets/bz_brand_icons.dart';
 
 /// Search screen — real results from the live source, with local recent
@@ -487,42 +488,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
     if (isYouTubeSongId(track.id)) {
-      // Prefer a fresh native audio source, then the official visible player.
-      // Keep every YouTube Music result in order for native Next/Previous.
-      final youtubeTracks =
-          _results.where((item) => isYouTubeSongId(item.id)).toList();
-      final queue = [
-        for (final item in youtubeTracks)
-          TrackInfo(
-            id: item.id, title: item.title, artist: item.artist,
-            artworkUrl: item.artworkUrl, duration: item.duration,
-          ),
-      ];
-      final startIndex = youtubeTracks.indexWhere((item) => item.id == track.id);
-      if (startIndex < 0) return;
-      final player = ref.read(playerControllerProvider.notifier);
-      await player.playTrack(
-        trackId: track.id, queue: queue,
-        startIndex: startIndex,
-        origin: 'search', sourceContext: 'YouTube Music',
-      );
-      if (!mounted) return;
-      final playback = ref.read(playerControllerProvider);
-      if (playback.currentTrack?.id != track.id) return;
-      if (playback.playbackState == PlaybackState.playing) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => const NowPlayingScreen()));
-        return;
-      }
-      await player.stop();
-      if (!mounted) return;
-      await openYouTubePlayer(
+      await playYoutubeMusicWithVideoFallback(
         context: context,
         ref: ref,
-        videoId: track.id.substring('bz:youtube_music:'.length),
-        title: track.title,
-        artist: track.artist,
-        artworkUrl: track.artworkUrl,
+        selected: TrackInfo(
+          id: track.id, title: track.title, artist: track.artist,
+          artworkUrl: track.artworkUrl, duration: track.duration,
+        ),
+        candidates: [
+          for (final item in _results.where((item) => isYouTubeSongId(item.id)))
+            TrackInfo(
+              id: item.id, title: item.title, artist: item.artist,
+              artworkUrl: item.artworkUrl, duration: item.duration,
+            ),
+        ],
+        origin: 'search',
+        sourceContext: 'YouTube Music',
+        openNowPlaying: true,
       );
       return;
     }

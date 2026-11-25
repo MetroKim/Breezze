@@ -4,7 +4,6 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:breezze_audio_contracts/audio_contracts.dart' show PlaybackState;
 
 import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
@@ -21,7 +20,7 @@ import 'add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
 import '../video/open_youtube_player.dart';
-import '../video/official_youtube_queue_policy.dart';
+import '../player/unified_media_handoff.dart';
 
 /// Library navigation follows the user's requested section order. Only
 /// Songs/Favorites and Downloaded currently have live local data; the other
@@ -332,41 +331,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
     if (isYouTubeSongId(track.id)) {
-      // Saved YouTube Music tracks are actionable, but metadata alone is
-      // not an audio grant. Match Search's native-first / official-video
-      // fallback without substituting a different recording or 30s preview.
-      final youtubeTracks =
-          _favorites.where((item) => isYouTubeSongId(item.id)).toList();
-      final queueIndex = youtubeTracks.indexWhere((item) => item.id == track.id);
-      if (queueIndex < 0) return;
-      final player = ref.read(playerControllerProvider.notifier);
-      await player.playTrack(
-        trackId: track.id,
-        queue: [for (final item in youtubeTracks) item.toTrackInfo()],
-        startIndex: queueIndex,
-        origin: 'library',
-        sourceContext: 'Saved YouTube Music songs',
-      );
-      if (!mounted) return;
-      final playback = ref.read(playerControllerProvider);
-      if (playback.currentTrack?.id != track.id) return;
-      if (playback.playbackState == PlaybackState.playing) return;
-      await player.stop();
-      if (!mounted) return;
-      await openYouTubePlayer(
+      await playYoutubeMusicWithVideoFallback(
         context: context,
         ref: ref,
-        videoId: track.id.substring('bz:youtube_music:'.length),
-        title: track.title,
-        artist: track.artist,
-        foregroundQueue: [
-          for (final item in youtubeTracks)
-            OfficialYouTubeQueueEntry(
-              videoId: item.id.substring('bz:youtube_music:'.length),
-              title: item.title,
-              artist: item.artist,
-            ),
+        selected: track.toTrackInfo(),
+        candidates: [
+          for (final favorite in _favorites.where(
+            (item) => isYouTubeSongId(item.id),
+          )) favorite.toTrackInfo(),
         ],
+        origin: 'library',
+        sourceContext: 'Saved YouTube Music songs',
       );
       return;
     }
