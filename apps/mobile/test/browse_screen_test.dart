@@ -33,13 +33,17 @@ class _BrowseSource implements ProviderAdapter {
       ProviderUnsupported('Not used in Browse tests');
 }
 
-ProviderOp<List<ProviderTrack>> _tracks(String title, {String id = 'bz:youtube_music:abcdefghijk'}) =>
+ProviderOp<List<ProviderTrack>> _tracks(String title, {
+  String id = 'bz:youtube_music:abcdefghijk',
+  String? artworkUrl,
+}) =>
     ProviderOk([
       ProviderTrack(
         breezzeTrackId: id,
         providerTrackId: 'abcdefghijk',
         title: title,
         artist: 'Browse QA',
+        artworkUrl: artworkUrl,
         duration: const Duration(minutes: 3),
       ),
     ]);
@@ -206,6 +210,25 @@ void main() {
       find.textContaining('Native playback is not available'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Browse uses an offline fallback for insecure artwork URLs',
+      (tester) async {
+    final source = _BrowseSource();
+    await _mountBrowse(tester, source);
+    source.requests[0].complete(
+      _tracks('Insecure artwork', artworkUrl: 'http://untrusted.example/art.png'),
+    );
+    await tester.pump();
+
+    final row = find.ancestor(
+      of: find.text('Insecure artwork'),
+      matching: find.byType(ListTile),
+    );
+    expect(row, findsOneWidget);
+    expect(find.descendant(of: row, matching: find.byType(Image)), findsNothing);
+    expect(find.descendant(of: row, matching: find.byType(BzBnoteMark)),
+      findsOneWidget);
   });
 
   testWidgets('Browse labels the Deezer global chart fallback, not Daily Top 100',
