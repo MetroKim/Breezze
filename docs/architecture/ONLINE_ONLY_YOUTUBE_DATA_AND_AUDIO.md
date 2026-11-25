@@ -15,7 +15,7 @@
 
 1. In <https://console.cloud.google.com/apis/credentials>, **rotate the previously pasted key** and, preferably, create a **dedicated new key** for Breezze YouTube Data API. Do not reuse it for unrelated Google services.
 2. Enable `YouTube Data API v3` in the intended Breezze Google Cloud project. Under API restrictions, allow **only YouTube Data API v3** for the dedicated key. Add an application restriction appropriate for the actual egress platform; if server egress IPs are not stable, do not guess fake IP ranges. Use restricted quota, alerting, backend request gating and consider stable egress infrastructure.
-3. Place the replacement key in the Railway NestJS API service variable `YOUTUBE_DATA_API_KEY`. **Never** put it in Flutter `--dart-define`, `pubspec.yaml`, a repository file, GitHub Actions output, source maps or `CLOUDFLARE_API_TOKEN`.
+3. Place the replacement key in the Railway NestJS API service variable `YOUTUBE_DATA_API_KEY`. Keep `YOUTUBE_DATA_API_ENABLED=false` (or unset) until the key has been rotated, API restrictions and backend deployment are verified; afterward explicitly set `YOUTUBE_DATA_API_ENABLED=true` for production. **Never** put it in Flutter `--dart-define`, `pubspec.yaml`, a repository file, GitHub Actions output, source maps or `CLOUDFLARE_API_TOKEN`.
 4. The current Railway deployment is older than GitHub `main`. A **staged** variable alone does not activate the new provider. Only a reviewed, backed-up backend deployment with working auth, migrations, /health/ready and rollback may do so.
 5. Validate the protected endpoints through the Cloudflare API edge with a real signed-in user:
     - `GET /api/v1/providers/youtube/videos/search?q=beethoven&limit=5`
