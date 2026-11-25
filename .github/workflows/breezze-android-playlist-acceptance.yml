@@ -5,6 +5,11 @@ on:
   push:
     paths:
       - .github/workflows/breezze-android-playlist-acceptance.yml
+      - apps/mobile/assets/icons/**
+      - apps/mobile/tool/native_icon_gen.py
+      - apps/mobile/tool/test_native_icons.py
+      - apps/mobile/android/app/src/main/res/**
+      - apps/mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/**
       - apps/mobile/integration_test/playlist_sync_on_emulator_test.dart
       - apps/mobile/lib/core/api/breezze_api.dart
       - apps/mobile/integration_test/artist_pin_on_emulator_test.dart
