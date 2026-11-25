@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/api/breezze_api.dart';
 import '../core/audio/playback_source_policy.dart';
+import '../core/audio/remote_audio_grant.dart';
 import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
@@ -230,7 +231,8 @@ class LiveResolver implements PlaybackResolver {
         final expiresAt = playback is Map
             ? DateTime.tryParse(playback['expiresAt'] as String? ?? '')
             : null;
-        if (streamUrl == null || expiresAt == null || sessionId == null) {
+        if (streamUrl == null || expiresAt == null || sessionId == null ||
+            !isUsableRemoteAudioGrant(streamUrl, expiresAt)) {
           if (sessionId != null) {
             try { await api.stopPlaybackSession(sessionId); } catch (_) {}
           }
@@ -256,7 +258,8 @@ class LiveResolver implements PlaybackResolver {
       final expiresAt = playback is Map
           ? DateTime.tryParse(playback['expiresAt'] as String? ?? '')
           : null;
-      if (streamUrl == null || expiresAt == null || sessionId == null) {
+      if (streamUrl == null || expiresAt == null || sessionId == null ||
+            !isUsableRemoteAudioGrant(streamUrl, expiresAt)) {
         if (sessionId != null) {
           try { await api.stopPlaybackSession(sessionId); } catch (_) {}
         }
