@@ -4,7 +4,9 @@ Breezze targets the breadth, navigation quality and polish of a mature music ser
 
 ## Global experience
 
-- **Five primary destinations:** Home, New, Radio, Library, Search. Persistent compact navigation; an adaptive sidebar on tablet/desktop; mini-player never hides actions or navigation.
+The four-tab shell is the current product contract in `docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md` and `tools/check_independent_identity.py`. Earlier five-tab/Radio drafts are superseded; optional station content must remain behind verified licensed playback support and must not create a fifth tab.
+
+- **Four primary destinations:** Home, Browse, Library, Search. Persistent compact navigation; an adaptive sidebar on tablet/desktop; mini-player never hides actions or navigation.
 - **Secondary destinations:** Now Playing, Playing Next, Album, Artist, Song, Playlist, Music Video, Downloads, Account, Settings, Notifications, Support, Onboarding.
 - **Content structure:** consistent screen headline, optional account action, summary/featured rail if genuine data exists, track/album grids, empty/loading/error states, contextual menus, responsive safe area and 44pt minimum interactive targets.
 - **Player:** persistent across tab changes and account-aware; seek, shuffle, repeat, queues, lyric focus, sleep timer, artwork atmosphere and visible unavailable-source states. No metadata-only media IDs in the native audio queue.
@@ -16,8 +18,7 @@ Breezze targets the breadth, navigation quality and polish of a mature music ser
 | Area | User-facing sections | Current source-level state | Still required for product acceptance |
 | --- | --- | --- | --- |
 | Home | Personalized picks, Recently Played, mixes, Favorites, Replay, account | Real saved history/favorites, personalized home feed when supplied, replay summary, honest empty states | Personalized quality evaluation, social sharing feed, real-device QA |
-| New | New Releases, Charts, Daily Top 100, Latest/Trending, Genres, Moods, Music Videos, Concerts, upcoming and editorial | Genre/mood discovery search, provider-supplied releases/charts/videos/concert metadata for supported routes; album/chart details now navigate inside Breezze | Verified feeds for remaining headings, no fake ranking, editorial source, concert regional coverage |
-| Radio | Station directory, show schedule | API-backed information and schedule | Licensed station stream resolver, media-session and interruption QA, live indicators from actual stream |
+| Browse | New Releases, Charts, Daily Top 100, Latest/Trending, Genres, Moods, Music Videos, Concerts, upcoming and editorial | Genre/mood discovery search, provider-supplied releases/charts/videos/concert metadata for supported routes; album/chart details now navigate inside Breezze | Verified feeds for remaining headings, no fake ranking, editorial source, concert regional coverage |
 | Library | Playlists, Artists, Albums, Songs, Genres, Compilations, Downloaded | Account-scoped favorites/playlists, artist grouping, save/remove album metadata, verified-source genre grouping/compilation filtering, cloud saved-album bookmarks with durable per-owner offline retries and one-time local migration, user section preferences, download library | Real-device two-account/cloud sync testing, large catalog stress and conflict testing, offline entitlement validation across devices |
 | Search | Song/artist/catalog discovery, search history, Saved Library scope, official Music Videos | Federated song search, local saved-track search, explicit video mode with user query, account-scoped history | Artist/album type tabs; better result grouping and personalized ranking; embedded official video where platform allows |
 | Player | Artwork, lyrics, queue, transport, sleep timer | Native transport, synced/plain lyrics, focus mode, artwork, background-media bridge, queue mechanics | Real-device audible QA, resilient URL renewal, platform audio focus, advanced audio formats |
@@ -38,7 +39,7 @@ Breezze targets the breadth, navigation quality and polish of a mature music ser
 
 ## This implementation slice
 
-- Standardized Home / New / Radio / Library / Search navigation.
+- Standardized Home / Browse / Library / Search navigation.
 - Desktop sidebar now offers Account and Settings.
 - Search Songs vs Music Videos is explicit; the video query is no longer hard-coded to one exact phrase.
 - Album and chart discovery opens Breezze metadata details rather than auto-handing-off to another music app. Music video results now open a Breezze route with the official YouTube IFrame player on Android/iOS/macOS/web; Windows/Linux present an explicit official watch-page fallback. Upstream embed restrictions remain enforced. The video player is not a licensed native audio stream.
