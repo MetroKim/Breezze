@@ -258,6 +258,8 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     if (_ownerId == null) return;
     if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(videoAssetId)) return;
     final key = 'video:$videoAssetId';
+    final ownerId = _ownerId;
+    if (ownerId == null) return;
     if (state.containsKey(key) ||
         ref.read(downloadJobStatusProvider)[key] == 'downloaded') return;
     _videoTitles[videoAssetId] = title;
@@ -274,7 +276,10 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         return;
       }
       final auth = ref.read(authSessionProvider);
-      if (auth is! AuthSignedIn) { _setStatus(key, 'failed'); return; }
+      if (auth is! AuthSignedIn || auth.userId != ownerId ||
+          cancellation.isCancelled) {
+        return;
+      }
       final api = ref.read(authSessionProvider.notifier).api;
       if (api.accessToken == null) { _setStatus(key, 'failed'); return; }
       final result = await api.authorizeVideoDownload(videoAssetId);
@@ -307,10 +312,12 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         rightsExpiresAtUtc: lease,
         cancellation: cancellation,
         onProgress: (value) {
-          if (mounted) state = {...state, key: value};
+          if (mounted && !cancellation.isCancelled && _ownerId == ownerId) {
+            state = {...state, key: value};
+          }
         },
       );
-      if (cancellation.isCancelled) return;
+      if (cancellation.isCancelled || _ownerId != ownerId) return;
       _setStatus(key, ok ? 'downloaded' : 'failed');
     } catch (_) {
       if (!cancellation.isCancelled) _setStatus(key, 'failed');
@@ -323,7 +330,8 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   }
 
   Future<void> download(BzTrack track) async {
-    if (_ownerId == null) return;
+    final ownerId = _ownerId;
+    if (ownerId == null) return;
     if (state.containsKey(track.id) || ['downloading', 'downloaded'].contains(ref.read(downloadJobStatusProvider)[track.id])) return;
     _tracks[track.id] = track;
     final cancellation = DownloadCancellation();
@@ -341,8 +349,8 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       }
 
       final auth = ref.read(authSessionProvider);
-      if (auth is! AuthSignedIn) {
-        _setStatus(track.id, 'failed');
+      if (auth is! AuthSignedIn || auth.userId != ownerId ||
+          cancellation.isCancelled) {
         return;
       }
 
@@ -390,10 +398,13 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         rightsExpiresAtUtc: rightsExpiry,
         cancellation: cancellation,
         onProgress: (progress) {
-          if (mounted) state = {...state, track.id: progress};
+          if (mounted && !cancellation.isCancelled && _ownerId == ownerId) {
+            state = {...state, track.id: progress};
+          }
         },
       );
 
+      if (cancellation.isCancelled || _ownerId != ownerId) return;
       if (ok) {
         _setStatus(track.id, 'downloaded');
       } else if (!cancellation.isCancelled) {
