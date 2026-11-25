@@ -14,6 +14,22 @@ import '../core/database/outbox_sync_service.dart';
 import 'bootstrap.dart';
 import 'download_preferences.dart';
 
+/// User-facing status for a deliberately denied offline grant. The app does
+/// not retry missing masters or absent licensing as if they were Wi-Fi errors.
+String downloadDenialStatus(Object? reason) => switch (reason) {
+  'LICENSED_AUDIO_NOT_INGESTED' ||
+  'LICENSED_AUDIO_FORMAT_INVALID' => 'media_unavailable',
+  'DOWNLOAD_RENDITION_UNSUPPORTED' => 'format_unavailable',
+  'PROVIDER_DOWNLOAD_UNSUPPORTED' ||
+  'NO_EXPLICIT_AUTHORIZATION' ||
+  'PREVIEW_ONLY' ||
+  'NOT_AVAILABLE_IN_TERRITORY' ||
+  'RIGHTS_WINDOW_NOT_OPEN' ||
+  'RIGHTS_EXPIRED' ||
+  'TAKEDOWN_ACTIVE' => 'not_licensed',
+  _ => 'failed',
+};
+
 /// Live transfer progress and queue state, keyed by track ID.
 final downloadJobStatusProvider = StateProvider<Map<String, String>>((ref) => {});
 
@@ -294,9 +310,9 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       );
       if (cancellation.isCancelled) return;
       if (authorization['allowed'] != true) {
-        _setStatus(track.id, 'failed');
-        // ignore: avoid_print
-        print('download_not_authorized: ${authorization['reason']}');
+        _setStatus(track.id,
+            downloadDenialStatus(authorization['reason']));
+        // Do not log signed URLs or provider credentials.
         return;
       }
 
