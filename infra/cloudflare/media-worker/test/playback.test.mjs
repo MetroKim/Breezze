@@ -137,6 +137,27 @@ test('byte-range seek and suffix requests return precise RFC 9110 ranges', async
   assert.equal(invalid.headers.get('Content-Range'), `bytes */${bytes.length}`);
 });
 
+test('If-Range resumes only when a strong ETag identifies the same rendition', async () => {
+  const url = await audioDownloadUrlFor();
+  const validator = '"synthetic-qa-fixture"';
+  const matching = await worker.fetch(new Request(url, {
+    headers: { Range: 'bytes=4-', 'If-Range': validator },
+  }), env());
+  assert.equal(matching.status, 206);
+  assert.equal(matching.headers.get('Content-Range'), `bytes 4-${bytes.length - 1}/${bytes.length}`);
+  assert.deepEqual(new Uint8Array(await matching.arrayBuffer()), bytes.slice(4));
+
+  for (const changedValidator of ['"previous-master"', 'W/' + validator, 'Wed, 21 Oct 2015 07:28:00 GMT']) {
+    const response = await worker.fetch(new Request(url, {
+      headers: { Range: 'bytes=4-', 'If-Range': changedValidator },
+    }), env());
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Content-Range'), null);
+    assert.equal(response.headers.get('ETag'), validator);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+  }
+});
+
 test('rejects a forged track, signature or expired capability', async () => {
   const valid = await urlFor();
   for (const requestUrl of [
