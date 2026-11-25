@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:breezze/features/player/player_controller.dart';
+import 'package:breezze/core/audio/playback_recovery_policy.dart';
 import 'package:breezze/features/player/playback_session_client.dart';
 
 void main() {
@@ -405,6 +406,91 @@ void main() {
     await player.stop();
     expect(client.stopped, contains('fresh-server-session'));
   });
+
+  test('stream failure refreshes the authorized URL and preserves seek position', () async {
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'licensed-reconnect',
+          streamUrl: 'https://cdn.example/old.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+        ),
+        PlayableSource(
+          trackId: 'licensed-reconnect',
+          streamUrl: 'https://cdn.example/fresh.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+        ),
+      ];
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackRecoveryDelaysProvider.overrideWithValue([
+        const Duration(milliseconds: 1),
+      ]),
+    ]);
+    addTearDown(() async { container.dispose(); await engine.dispose(); });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await player.playTrack(trackId: 'licensed-reconnect',
+        title: 'Full song');
+    await player.seekTo(const Duration(seconds: 47));
+    engine.emit(PlaybackState.failed);
+    await Future<void>.delayed(const Duration(milliseconds: 35));
+
+    expect(resolver.calls, 2);
+    expect(engine.prepareCount, 2);
+    expect(engine.lastSeekPosition, const Duration(seconds: 47));
+    expect(player.state.currentTrack?.id, 'licensed-reconnect');
+    expect(player.state.playbackState, PlaybackState.playing);
+  });
+
+  test('stream recovery stops after the bounded retry budget', () async {
+    final resolver = _FakeResolver();
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackRecoveryDelaysProvider.overrideWithValue([
+        const Duration(milliseconds: 1),
+        const Duration(milliseconds: 1),
+      ]),
+    ]);
+    addTearDown(() async { container.dispose(); await engine.dispose(); });
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await player.playTrack(trackId: 'licensed-retry-limit');
+
+    for (var i = 0; i < 3; i++) {
+      engine.emit(PlaybackState.failed);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
+    expect(resolver.calls, 3);
+    expect(player.state.playbackState, PlaybackState.failed);
+  });
+
+  test('explicit stop cancels a pending live stream recovery', () async {
+    final resolver = _FakeResolver();
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackRecoveryDelaysProvider.overrideWithValue([
+        const Duration(milliseconds: 50),
+      ]),
+    ]);
+    addTearDown(() async { container.dispose(); await engine.dispose(); });
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await player.playTrack(trackId: 'licensed-stop');
+    engine.emit(PlaybackState.failed);
+    await Future<void>.delayed(Duration.zero);
+    await player.stop();
+    await Future<void>.delayed(const Duration(milliseconds: 65));
+
+    expect(resolver.calls, 1);
+    expect(player.state.playbackState, PlaybackState.idle);
+  });
+
 
 }
 

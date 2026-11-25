@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/recent_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/audio/playback_source_policy.dart';
+import '../../core/audio/playback_recovery_policy.dart';
 import '../../core/database/database_providers.dart';
 import '../../core/database/playback_heartbeat_outbox_dao.dart';
 import 'playback_session_client.dart';
@@ -38,6 +39,64 @@ class PlayerController extends Notifier<PlayerState> {
   StreamSubscription<PlaybackState>? _engineStateSub;
   int _requestGeneration = 0;
   String? _autoAdvancedTrackId;
+  Timer? _streamRecoveryTimer;
+  int _streamRecoveryAttempts = 0;
+  int _streamRecoveryToken = 0;
+  DateTime? _lastConfirmedPlaybackAt;
+
+  /// Local/authorized remote sources only. Never retries a denied grant or
+  /// substitutes a preview, another recording, or an unofficial provider.
+  void _cancelStreamRecovery({bool resetBudget = true}) {
+    _streamRecoveryTimer?.cancel();
+    _streamRecoveryTimer = null;
+    _streamRecoveryToken++;
+    if (resetBudget) {
+      _streamRecoveryAttempts = 0;
+      _lastConfirmedPlaybackAt = null;
+    }
+  }
+
+  void _scheduleStreamRecovery(int requestId) {
+    if (_streamRecoveryTimer != null ||
+        requestId != _requestGeneration ||
+        state.playbackState != PlaybackState.failed) return;
+    final selected = state.currentTrack;
+    final source = _activeSource;
+    final engine = _engine;
+    if (selected == null || source == null || source.trackId != selected.id ||
+        engine == null) return;
+
+    // A healthy playback period replenishes the bounded retry budget.
+    // Rapid failures consume it rather than looping indefinitely.
+    final lastStartedAt = _lastConfirmedPlaybackAt;
+    if (lastStartedAt != null &&
+        DateTime.now().difference(lastStartedAt) >
+            const Duration(minutes: 1)) {
+      _streamRecoveryAttempts = 0;
+    }
+    final delay = nextStreamRecoveryDelay(
+      source: source,
+      state: state.playbackState,
+      attempt: _streamRecoveryAttempts,
+      delays: ref.read(playbackRecoveryDelaysProvider),
+    );
+    if (delay == null) return;
+
+    _streamRecoveryAttempts++;
+    final token = ++_streamRecoveryToken;
+    final position = state.position;
+    _streamRecoveryTimer = Timer(delay, () {
+      _streamRecoveryTimer = null;
+      if (token != _streamRecoveryToken ||
+          requestId != _requestGeneration ||
+          !identical(_engine, engine) ||
+          state.playbackState != PlaybackState.failed ||
+          state.currentTrack?.id != selected.id) return;
+      // New resolver call obtains a fresh URL and a new authorized server
+      // session. Never replay an expired bearer URL.
+      unawaited(_resolveAndPlay(selected, initialPosition: position));
+    });
+  }
   Future<void> _engineOperations = Future<void>.value();
 
   String? _playbackSessionId;
@@ -255,6 +314,7 @@ class PlayerController extends Notifier<PlayerState> {
       unawaited(_recoverPendingHeartbeats(auth.userId));
     }
     ref.onDispose(() {
+      _cancelStreamRecovery();
       _requestGeneration++;
       unawaited(_closePlaybackSession());
       final currentTrackId = state.currentTrack?.id;
@@ -270,6 +330,7 @@ class PlayerController extends Notifier<PlayerState> {
   QueueManager get queue => _queue;
 
   void attachEngine(AudioEngineAdapter engine) {
+    _cancelStreamRecovery();
     _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
@@ -317,19 +378,30 @@ class PlayerController extends Notifier<PlayerState> {
         unawaited(_pauseServerSession());
         return;
       }
+      if (engineState == PlaybackState.failed) {
+        _machine.dispatch(SourceResolutionFailed(
+          'STREAM_FAILED',
+          requestId: _machine.activeRequestId,
+        ));
+        final currentTrackId = state.currentTrack?.id;
+        if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
+        unawaited(_closePlaybackSession());
+        _scheduleStreamRecovery(_requestGeneration);
+        return;
+      }
       state = state.copyWith(playbackState: engineState);
-      if (engineState == PlaybackState.ended ||
-          engineState == PlaybackState.failed) {
+      if (engineState == PlaybackState.playing &&
+          _lastConfirmedPlaybackAt == null) {
+        _lastConfirmedPlaybackAt = DateTime.now();
+      }
+      if (engineState == PlaybackState.ended) {
         final currentTrackId = state.currentTrack?.id;
         if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
         // just_audio reports completion on the engine stream. Advance the
         // single app-wide queue here so playback continues without requiring
         // the user to tap Next. The guard prevents duplicate completed events
         // from advancing more than once for the same item.
-        if (engineState == PlaybackState.ended ||
-            engineState == PlaybackState.failed) {
-          unawaited(_closePlaybackSession());
-        }
+        unawaited(_closePlaybackSession());
         if (engineState == PlaybackState.ended &&
             currentTrackId != null &&
             _autoAdvancedTrackId != currentTrackId) {
@@ -341,6 +413,7 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   void detachEngine() {
+    _cancelStreamRecovery();
     final currentTrackId = state.currentTrack?.id;
     if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
     unawaited(_closePlaybackSession());
@@ -374,6 +447,7 @@ class PlayerController extends Notifier<PlayerState> {
         queue.any((item) => isMetadataOnlyTrackId(item.id) && item.localFilePath == null)) {
       return;
     }
+    _cancelStreamRecovery();
     if (queue.isNotEmpty) {
       final entries = [
         for (var i = 0; i < queue.length; i++)
@@ -420,6 +494,7 @@ class PlayerController extends Notifier<PlayerState> {
   /// and account sign-out so one user's media cannot continue into another
   /// account session.
   Future<void> stop() async {
+    _cancelStreamRecovery();
     final requestId = ++_requestGeneration;
     final engine = _engine;
     final currentTrackId = state.currentTrack?.id;
@@ -443,6 +518,7 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> pause() async {
+    _cancelStreamRecovery();
     final engine = _engine;
     if (engine == null || state.playbackState != PlaybackState.playing) return;
     _machine.dispatch(PausePressed());
@@ -459,6 +535,7 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> resume() async {
+    _cancelStreamRecovery();
     final engine = _engine;
     if (engine == null || state.playbackState != PlaybackState.paused) return;
     final activeSource = _activeSource;
@@ -559,6 +636,7 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> next() async {
+    _cancelStreamRecovery();
     final entry = _queue.advance();
     if (entry == null) return;
     final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
@@ -566,6 +644,7 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> previous() async {
+    _cancelStreamRecovery();
     final entry = _queue.previous();
     if (entry == null) return;
     final info = _trackInfoFor(entry.trackId) ?? TrackInfo(id: entry.trackId);
@@ -921,6 +1000,7 @@ class PlayerController extends Notifier<PlayerState> {
                 'PLAYBACK_FAILED',
                 requestId: requestId,
               ));
+              _scheduleStreamRecovery(requestId);
             }
           },
         ));
@@ -965,6 +1045,7 @@ class PlayerController extends Notifier<PlayerState> {
           'PLAYBACK_SETUP_FAILED',
           requestId: requestId,
         ));
+        _scheduleStreamRecovery(requestId);
       }
     }
   }
