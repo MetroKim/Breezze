@@ -229,6 +229,24 @@ class _OfficialMusicVideoScreenState
     }
   }
 
+  Future<void> _openInYouTubeMusic() async {
+    try {
+      final opened = await YoutubePlayerHandoff
+          .openInYouTubeMusic(_currentVideoId);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('YouTube Music could not be opened.'),
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Invalid or unavailable YouTube Music track.'),
+        ));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -403,6 +421,15 @@ class _OfficialMusicVideoScreenState
                       size: 18,
                     ),
                     label: const Text('Open official YouTube page'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _valid ? _openInYouTubeMusic : null,
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('Listen in YouTube Music'),
                   ),
                 ),
               ],
