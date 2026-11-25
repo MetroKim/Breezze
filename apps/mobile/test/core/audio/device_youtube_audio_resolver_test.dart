@@ -88,6 +88,7 @@ void main() {
   });
   test('falls back to the next source when the preferred media URL refuses', () async {
     final attempts = <String>[];
+    final diagnostics = <String>[];
     final available = [
       candidate('https://rr1.googlevideo.com/videoplayback?expire=$deadline',
         bitrate: 160000, container: 'webm', codec: 'opus'),
@@ -96,6 +97,7 @@ void main() {
     ];
     final chosen = await findReachableYouTubeAudio(
       id, available, nowUtc: now, supportedContainers: const {'webm', 'mp4'},
+      diagnostic: diagnostics.add,
       probe: (url) async {
         attempts.add(url.host);
         return url.host == 'rr2.googlevideo.com';
@@ -103,6 +105,8 @@ void main() {
     );
     expect(attempts, ['rr1.googlevideo.com', 'rr2.googlevideo.com']);
     expect(chosen?.streamUrl, contains('rr2.googlevideo.com'));
+    expect(diagnostics, ['AUDIO_CANDIDATES_2',
+      'STREAM_PROBE_REJECTED', 'STREAM_PROBE_OK']);
   });
 
   test('rejects invalid URLs without any network calls and bounds fallbacks', () async {

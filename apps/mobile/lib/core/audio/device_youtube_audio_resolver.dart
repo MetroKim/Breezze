@@ -73,6 +73,9 @@ PlayableSource? selectDeviceYouTubeAudio(
 
 typedef DeviceAudioProbe = Future<bool> Function(Uri url);
 
+/// Emits stage codes only, never sensitive signed URLs or exception messages.
+typedef DeviceAudioDiagnostic = void Function(String stage);
+
 /// Find a compatible URL that actually responds to a media-range request.
 /// A revoked/blocked candidate cannot consume the whole playback attempt:
 /// try the next eligible encoding, up to a strict network budget. This is
@@ -81,12 +84,17 @@ Future<PlayableSource?> findReachableYouTubeAudio(
   String trackId,
   Iterable<DeviceYouTubeAudioCandidate> candidates, {
   required DeviceAudioProbe probe,
+  DeviceAudioDiagnostic? diagnostic,
   DateTime? nowUtc,
   Set<String> supportedContainers = const {'mp4'},
   int maxProbeAttempts = 4,
 }) async {
-  if (!isYouTubeSongId(trackId) || maxProbeAttempts <= 0) return null;
+  if (!isYouTubeSongId(trackId) || maxProbeAttempts <= 0) {
+    diagnostic?.call('INVALID_TRACK_OR_RETRY_BUDGET');
+    return null;
+  }
   final available = candidates.toList(growable: false);
+  diagnostic?.call('AUDIO_CANDIDATES_${available.length}');
   final rejected = <String>{};
   for (var attempt = 0; attempt < maxProbeAttempts && attempt < 4; attempt++) {
     final source = selectDeviceYouTubeAudio(
@@ -95,14 +103,23 @@ Future<PlayableSource?> findReachableYouTubeAudio(
       nowUtc: nowUtc,
       supportedContainers: supportedContainers,
     );
-    if (source == null) return null;
+    if (source == null) {
+      diagnostic?.call('NO_COMPATIBLE_CANDIDATE');
+      return null;
+    }
     rejected.add(source.streamUrl);
     try {
-      if (await probe(Uri.parse(source.streamUrl))) return source;
-    } catch (_) {
+      if (await probe(Uri.parse(source.streamUrl))) {
+        diagnostic?.call('STREAM_PROBE_OK');
+        return source;
+      }
+      diagnostic?.call('STREAM_PROBE_REJECTED');
+    } catch (Object _) {
+      diagnostic?.call('STREAM_PROBE_EXCEPTION');
       // A single failing CDN URL must not block the next audio format.
     }
   }
+  diagnostic?.call('STREAM_PROBES_EXHAUSTED');
   return null;
 }
 
@@ -110,19 +127,28 @@ Future<PlayableSource?> findReachableYouTubeAudio(
 /// proxy, persist, or download YouTube media. The native engine independently
 /// streams the selected URL, and recovers by re-resolving after expiry.
 class DeviceYouTubeAudioResolver {
-  DeviceYouTubeAudioResolver({DeviceAudioProbe? probe})
-      : _probe = probe ?? probeYouTubeAudioStream;
+  DeviceYouTubeAudioResolver({
+    DeviceAudioProbe? probe,
+    DeviceAudioDiagnostic? diagnostic,
+  }) : _probe = probe ?? probeYouTubeAudioStream,
+       _diagnostic = diagnostic;
 
   final DeviceAudioProbe _probe;
+  final DeviceAudioDiagnostic? _diagnostic;
 
   Future<PlayableSource?> resolve(String trackId) async {
-    if (kIsWeb || !isYouTubeSongId(trackId)) return null;
+    if (kIsWeb || !isYouTubeSongId(trackId)) {
+      _diagnostic?.call('NOT_NATIVE_YOUTUBE_TRACK');
+      return null;
+    }
     final videoId = trackId.substring('bz:youtube_music:'.length);
     final client = YoutubeExplode();
     try {
+      _diagnostic?.call('MANIFEST_REQUESTED');
       final manifest = await client.videos.streams
           .getManifest(videoId)
           .timeout(const Duration(seconds: 12));
+      _diagnostic?.call('MANIFEST_RECEIVED');
       // AVFoundation on iOS/macOS needs an MP4/AAC source. ExoPlayer and
       // media_kit can also decode WebM/Opus on supported Android/Linux builds.
       final platforms = switch (defaultTargetPlatform) {
@@ -139,10 +165,12 @@ class DeviceYouTubeAudioResolver {
         )),
         supportedContainers: platforms,
         probe: _probe,
+        diagnostic: _diagnostic,
       );
-    } catch (_) {
-      // This source is not guaranteed available in every region or network.
-      // Caller retains the visible official YouTube player fallback.
+    } catch (Object error) {
+      // Exception messages can include signed URLs. Expose TYPE only.
+      _diagnostic?.call('SOURCE_EXCEPTION_${error.runtimeType}');
+      // Caller retains the official visible video player fallback.
       return null;
     } finally {
       client.close();

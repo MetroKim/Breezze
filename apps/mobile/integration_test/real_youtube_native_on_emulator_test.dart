@@ -20,13 +20,30 @@ const _creativeCommonsSample = TrackInfo(
 );
 
 class _LiveDeviceYouTubeResolver implements PlaybackResolver {
-  final DeviceYouTubeAudioResolver resolver = DeviceYouTubeAudioResolver();
+  final List<String> stages = [];
+  late final DeviceYouTubeAudioResolver resolver =
+      DeviceYouTubeAudioResolver(diagnostic: stages.add);
   int requests = 0;
 
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
     requests++;
     return resolver.resolve(track.id);
+  }
+}
+
+/// Records only the native decoder failure type. No source URI is logged.
+class _DiagnosticAudioEngine extends JustAudioEngineAdapter {
+  String? prepareFailureType;
+
+  @override
+  Future<void> prepare(PlayableSource source) async {
+    try {
+      await super.prepare(source);
+    } catch (Object error) {
+      prepareFailureType = error.runtimeType.toString();
+      rethrow;
+    }
   }
 }
 
@@ -38,7 +55,7 @@ void main() {
     'audio progress, seek, pause and resume',
     (tester) async {
       final source = _LiveDeviceYouTubeResolver();
-      final engine = JustAudioEngineAdapter();
+      final engine = _DiagnosticAudioEngine();
       final container = ProviderContainer(overrides: [
         playbackResolverProvider.overrideWithValue(source),
       ]);
@@ -60,8 +77,10 @@ void main() {
         expect(source.requests, 1,
           reason: 'The real on-device manifest resolver must be invoked');
         expect(player.state.playbackState, PlaybackState.playing,
-          reason: 'YouTube manifest/probe/ExoPlayer failed to play a full-length '
-              'Creative Commons recording. This is a real E2E failure, not a mock.');
+          reason: 'Real native media did not start. Safe stage diagnostics: '
+              '${source.stages.join(" > ")}; '
+              'native_prepare_failure=${engine.prepareFailureType ?? "none"}. '
+              'No signed URLs or provider tokens are logged.');
         expect(engine.duration, greaterThan(const Duration(minutes: 2)),
           reason: 'The native engine must decode a real full-length track');
 
