@@ -89,6 +89,24 @@ describe('privileged audio catalogue provisioning', () => {
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
   });
 
+  it('rejects audio promotion after the full-stream licence expires', async () => {
+    prisma.rightsUsagePermission.findUnique.mockResolvedValue({
+      startAt: null, endAt: new Date(Date.now() - 60_000),
+    });
+    await expect(service.verifyAsset('admin', 'recording', 'AAC_256'))
+      .rejects.toThrow('AUDIO_ASSET_RIGHTS_UNAVAILABLE');
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    expect(tx.audioAssetVariant.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects audio promotion during an active takedown', async () => {
+    prisma.contentTakedownCase.findFirst.mockResolvedValue({ id: 'takedown' });
+    await expect(service.verifyAsset('admin', 'recording', 'AAC_256'))
+      .rejects.toThrow('AUDIO_ASSET_RIGHTS_UNAVAILABLE');
+    expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    expect(tx.audioAssetVariant.upsert).not.toHaveBeenCalled();
+  });
+
   it('accepts a verified CDN HEAD for an internal audio asset', async () => {
     const scan = jest.spyOn(presence, 'inspectSignedMediaObject')
       .mockResolvedValue({ mimeType: 'audio/mp4', sizeBytes: 2048 });
