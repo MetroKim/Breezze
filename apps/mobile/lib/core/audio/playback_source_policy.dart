@@ -1,4 +1,4 @@
-/// Spotify and Deezer are the only music providers in Breezze.
+/// Spotify is the music playback provider; Deezer is legacy catalog metadata.
 /// YouTube is strictly for visible video playback. Provider IDs must never
 /// be mistaken for licensed, downloadable media URLs.
 final _spotifyTrackId = RegExp(r'^bz:spotify:[A-Za-z0-9]{22}$');
@@ -17,19 +17,18 @@ bool isYouTubeSongId(String id) => _youtubeSongId.hasMatch(id);
 /// audio action. Other external provider IDs and all videos are metadata.
 bool isMetadataOnlyTrackId(String id) =>
     id.startsWith('bzv:') ||
-    (id.startsWith('bz:') && !isDeezerPreview(id));
+    id.startsWith('bz:');
 
 bool canQueueTrackId(String id) =>
     id.trim().isNotEmpty &&
     !isYouTubeSongId(id) &&
     !isMetadataOnlyTrackId(id);
 
-/// An available action may mean "open in Spotify/Deezer/YouTube"; it does not
+/// An available action may mean "open Spotify or official YouTube"; it does not
 /// imply that Breezze can play, cache, redistribute or download full audio.
 bool canOfferPlaybackAction(String id, {bool hasPreview = false}) =>
     isSpotifyTrackId(id) ||
     isDeezerTrackId(id) ||
-    isDeezerPreview(id) ||
     isYouTubeSongId(id) ||
     _youtubeVideoId.hasMatch(id) ||
     canQueueTrackId(id);
