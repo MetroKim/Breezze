@@ -15,6 +15,7 @@ describe('privileged audio catalogue provisioning', () => {
     audioAssetVariant: { count: jest.fn() },
     rightsUsagePermission: { findUnique: jest.fn() },
     contentTakedownCase: { findFirst: jest.fn() },
+    adminAuditEvent: { create: jest.fn() },
     $transaction: jest.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
   };
   const signer = { createAudioIngestUrl: jest.fn().mockReturnValue({
