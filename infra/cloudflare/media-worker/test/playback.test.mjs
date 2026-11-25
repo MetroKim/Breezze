@@ -274,3 +274,89 @@ test('invalid audio signature cannot be saved as a playable variant', async () =
   assert.equal(response.status, 422);
   assert.equal(uploaded.size, 0);
 });
+
+async function videoIngestUrlFor(assetId, size, expiry = Date.now() + 60_000) {
+  const payload = `ingest:video:${assetId}:video/mp4:${size}:${expiry}`;
+  const signingKey = await webcrypto.subtle.importKey(
+    'raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign'],
+  );
+  const signature = Buffer.from(await webcrypto.subtle.sign(
+    'HMAC', signingKey, new TextEncoder().encode(payload),
+  )).toString('base64url');
+  return `https://media.breezze.test/ingest/video/${assetId}?b=${size}&e=${expiry}&s=${signature}`;
+}
+
+function ingestVideoBucket() {
+  const stored = new Map();
+  return {
+    stored,
+    async head(path) {
+      const value = stored.get(path);
+      return value ? { size: value.length } : null;
+    },
+    async put(path, body, options) {
+      const value = new Uint8Array(await new Response(body).arrayBuffer());
+      stored.set(path, value);
+      return {
+        size: value.length,
+        httpMetadata: options.httpMetadata,
+      };
+    },
+    async get(path, options = {}) {
+      const value = stored.get(path);
+      if (!value) return null;
+      const selection = options.range
+        ? value.slice(options.range.offset, options.range.offset + options.range.length)
+        : value;
+      return {
+        size: value.length,
+        httpEtag: '"video-test-etag"',
+        httpMetadata: { contentType: 'video/mp4' },
+        body: new Blob([selection]).stream(),
+      };
+    },
+    async delete(path) { stored.delete(path); },
+  };
+}
+
+test('video ingest requires signed PUT, validates MP4 magic and serves the same object', async () => {
+  const bucket = ingestVideoBucket();
+  const environment = { MEDIA_BUCKET: bucket, MEDIA_SIGNING_KEY: key };
+  const data = new Uint8Array([
+    0,0,0,16,102,116,121,112,105,115,111,109,0,0,0,0,1,2,3,4,
+  ]);
+  const ingestUrl = await videoIngestUrlFor(mediaId, data.length);
+  const put = (url = ingestUrl, body = data, mime = 'video/mp4') =>
+    new Request(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': mime, 'Content-Length': String(body.length) },
+      body,
+    });
+  assert.equal((await worker.fetch(put(), environment)).status, 201);
+  const objectKey = `video/${mediaId}/original.mp4`;
+  assert.deepEqual(bucket.stored.get(objectKey), data);
+  assert.equal((await worker.fetch(put(), environment)).status, 409);
+  const response = await worker.fetch(new Request(await videoUrlFor()), environment);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'video/mp4');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), data);
+  assert.equal((await worker.fetch(put(ingestUrl.replace(/s=[^&]+/, 's=bad')), environment)).status, 403);
+  assert.equal((await worker.fetch(put(ingestUrl.replace(mediaId, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')), environment)).status, 403);
+  assert.equal((await worker.fetch(put(await videoIngestUrlFor(mediaId, data.length, Date.now() - 5000)), environment)).status, 403);
+  assert.equal((await worker.fetch(put(ingestUrl, data, 'audio/mp4'), environment)).status, 400);
+});
+
+test('video ingest rejects malformed bytes without leaving any R2 object', async () => {
+  const bucket = ingestVideoBucket();
+  const environment = { MEDIA_BUCKET: bucket, MEDIA_SIGNING_KEY: key };
+  const fake = new Uint8Array(24).fill(17);
+  const url = await videoIngestUrlFor(mediaId, fake.length);
+  const result = await worker.fetch(new Request(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(fake.length) },
+    body: fake,
+  }), environment);
+  assert.equal(result.status, 422);
+  assert.equal(bucket.stored.size, 0);
+});
