@@ -5,6 +5,7 @@ import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { DeezerAdapter } from './deezer.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
+import { MusicBrainzAdapter } from './musicbrainz.adapter';
 import { ProviderCacheService } from './provider-cache.service';
 import { OfficialYouTubeDataService } from './official-youtube-data.service';
 
@@ -16,6 +17,7 @@ import { OfficialYouTubeDataService } from './official-youtube-data.service';
     YtMusicAdapter,
     DeezerAdapter,
     SpotifyAdapter,
+    MusicBrainzAdapter,
     ProviderCacheService,
     OfficialYouTubeDataService,
   ],
