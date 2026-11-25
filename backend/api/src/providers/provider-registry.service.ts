@@ -45,6 +45,87 @@ export class ProviderRegistry {
       }));
   }
 
+  private readonly musicSearchInFlight = new Map<string, Promise<{
+    query: string;
+    providers: Array<{
+      providerId: string;
+      displayName: string;
+      result: ProviderResult<import('./provider-adapter.interface').ProviderTrack[]>;
+    }>;
+    partial: boolean;
+  }>>();
+
+  /**
+   * Two independent music shelves for Breezze Search. Query Spotify and
+   * Deezer concurrently, isolate provider failures, and dedupe simultaneous
+   * typeahead requests (without storing cross-provider Spotify metadata).
+   *
+   * Spotify's catalog must stay in its own visibly attributed section rather
+   * than being blended into Deezer rows; neither source authorizes playback.
+   */
+  searchMusic(query: string) {
+    const normalized = (query ?? '').trim().replace(/\\s+/g, ' ');
+    if (normalized.length < 2 || normalized.length > 120) {
+      return Promise.resolve({ query: normalized, providers: [], partial: false });
+    }
+    const key = normalized.toLowerCase();
+    const current = this.musicSearchInFlight.get(key);
+    if (current) return current;
+    const request = this.performMusicSearch(normalized).finally(() => {
+      this.musicSearchInFlight.delete(key);
+    });
+    this.musicSearchInFlight.set(key, request);
+    return request;
+  }
+
+  private async performMusicSearch(query: string) {
+    const supported = ['spotify', 'deezer'] as const;
+    const shelves = await Promise.all(supported.map(async (id) => {
+      const adapter = this.get(id);
+      const displayName = id === 'spotify' ? 'Spotify' : 'Deezer';
+      if (!adapter) {
+        return {
+          providerId: id, displayName,
+          result: { kind: 'unsupported' as const, reason: 'PROVIDER_NOT_CONFIGURED' },
+        };
+      }
+
+      // A slow provider must not hold back the fast provider. Time-box
+      // discovery, not playback. Spotify and Deezer clients impose their
+      // own network abort deadlines and can finish cleanup after this bound.
+      const result = await new Promise<ProviderResult<
+        import('./provider-adapter.interface').ProviderTrack[]
+      >>(resolve => {
+        let finished = false;
+        const complete = (value: ProviderResult<
+          import('./provider-adapter.interface').ProviderTrack[]
+        >) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          resolve(value);
+        };
+        const timer = setTimeout(() => complete({
+          kind: 'error', code: 'MUSIC_PROVIDER_TIMEOUT',
+          retryable: true, message: 'Music catalog provider timed out',
+        }), 3800);
+        Promise.resolve().then(() => adapter.search(query)).then(
+          complete,
+          () => complete({
+            kind: 'error', code: 'MUSIC_PROVIDER_UNAVAILABLE',
+            retryable: true, message: 'Music catalog provider unavailable',
+          }),
+        );
+      });
+      return { providerId: id, displayName, result };
+    }));
+    return {
+      query,
+      providers: shelves,
+      partial: shelves.some(shelf => shelf.result.kind !== 'ok'),
+    };
+  }
+
   async searchAll(query: string) {
     const normalized = query.trim();
     if (normalized.length < 2 || normalized.length > 120) {
