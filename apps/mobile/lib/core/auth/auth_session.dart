@@ -99,9 +99,11 @@ class AuthSessionController extends Notifier<AuthState> {
      // Tokens can rotate without changing listeners. Read the live owner
      // each time so any earlier request fails closed on account switches.
      final active = state;
-     if (active is AuthSignedIn) return active.userId;
-     if (active is AuthMfaRequired) return active.userId;
-     if (active is AuthMfaRecoveryCodes) return active.userId;
+     // Include the sign-in/sign-out generation: logging out and signing back
+     // into the same account must not resurrect an earlier HTTP request.
+     if (active is AuthSignedIn) return '${_socialAttempt}:${active.userId}';
+     if (active is AuthMfaRequired) return '${_socialAttempt}:${active.userId}';
+     if (active is AuthMfaRecoveryCodes) return '${_socialAttempt}:${active.userId}';
      return null;
    };
 
