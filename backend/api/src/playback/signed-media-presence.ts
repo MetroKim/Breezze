@@ -15,10 +15,10 @@ export interface MediaProbeOptions {
  * Production always fails closed. No third-party URL or untrusted redirect
  * is followed and signed bearer URLs never appear in error messages/logs.
  */
-export async function verifySignedMediaObject(
+export async function inspectSignedMediaObject(
   signedUrl: string,
   options: MediaProbeOptions = {},
-): Promise<void> {
+): Promise<{ mimeType: string; sizeBytes: number } | null> {
   if (process.env.NODE_ENV !== 'production' && options.force !== true) return;
 
   const base = options.expectedOrigin ?? process.env.CDN_BASE_URL;
@@ -82,4 +82,13 @@ export async function verifySignedMediaObject(
   )) {
     throw new ServiceUnavailableException('MEDIA_CDN_INVALID_AUDIO_OBJECT');
   }
+  return { mimeType: mime, sizeBytes: length };
+}
+
+/** Legacy no-metadata wrapper used by playback grants and existing tests. */
+export async function verifySignedMediaObject(
+  signedUrl: string,
+  options: MediaProbeOptions = {},
+): Promise<void> {
+  await inspectSignedMediaObject(signedUrl, options);
 }
