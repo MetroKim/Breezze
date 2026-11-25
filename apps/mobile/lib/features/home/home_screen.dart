@@ -314,7 +314,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 label: 'Account and profile',
                 child: Tooltip(
                   message: 'Open account',
-                  Material(
+                  child: Material(
                     color: Colors.transparent,
                     child: InkWell(
                       customBorder: const CircleBorder(),
