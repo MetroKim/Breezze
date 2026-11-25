@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import 'playback_source_policy.dart';
+import 'youtube_stream_probe.dart';
 
 /// The media URL exists only in this request and in the native audio engine.
 /// Never persist this record in Redis, PostgreSQL, Drift, or app preferences.
@@ -69,10 +70,51 @@ PlayableSource? selectDeviceYouTubeAudio(
   );
 }
 
+
+typedef DeviceAudioProbe = Future<bool> Function(Uri url);
+
+/// Find a compatible URL that actually responds to a media-range request.
+/// A revoked/blocked candidate cannot consume the whole playback attempt:
+/// try the next eligible encoding, up to a strict network budget. This is
+/// an in-memory decision; signed URLs are never retained on disk.
+Future<PlayableSource?> findReachableYouTubeAudio(
+  String trackId,
+  Iterable<DeviceYouTubeAudioCandidate> candidates, {
+  required DeviceAudioProbe probe,
+  DateTime? nowUtc,
+  Set<String> supportedContainers = const {'mp4'},
+  int maxProbeAttempts = 4,
+}) async {
+  if (!isYouTubeSongId(trackId) || maxProbeAttempts <= 0) return null;
+  final available = candidates.toList(growable: false);
+  final rejected = <String>{};
+  for (var attempt = 0; attempt < maxProbeAttempts && attempt < 4; attempt++) {
+    final source = selectDeviceYouTubeAudio(
+      trackId,
+      available.where((candidate) => !rejected.contains(candidate.url.toString())),
+      nowUtc: nowUtc,
+      supportedContainers: supportedContainers,
+    );
+    if (source == null) return null;
+    rejected.add(source.streamUrl);
+    try {
+      if (await probe(Uri.parse(source.streamUrl))) return source;
+    } catch (_) {
+      // A single failing CDN URL must not block the next audio format.
+    }
+  }
+  return null;
+}
+
 /// Device-local resolver for Android/iOS/desktop native playback. It does not
 /// proxy, persist, or download YouTube media. The native engine independently
 /// streams the selected URL, and recovers by re-resolving after expiry.
 class DeviceYouTubeAudioResolver {
+  DeviceYouTubeAudioResolver({DeviceAudioProbe? probe})
+      : _probe = probe ?? probeYouTubeAudioStream;
+
+  final DeviceAudioProbe _probe;
+
   Future<PlayableSource?> resolve(String trackId) async {
     if (kIsWeb || !isYouTubeSongId(trackId)) return null;
     final videoId = trackId.substring('bz:youtube_music:'.length);
@@ -87,7 +129,7 @@ class DeviceYouTubeAudioResolver {
         TargetPlatform.android || TargetPlatform.linux => const {'mp4', 'webm'},
         _ => const {'mp4'},
       };
-      return selectDeviceYouTubeAudio(
+      return await findReachableYouTubeAudio(
         trackId,
         manifest.audioOnly.map((stream) => DeviceYouTubeAudioCandidate(
           url: stream.url,
@@ -96,6 +138,7 @@ class DeviceYouTubeAudioResolver {
           container: stream.container.name,
         )),
         supportedContainers: platforms,
+        probe: _probe,
       );
     } catch (_) {
       // This source is not guaranteed available in every region or network.
