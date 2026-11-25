@@ -37,8 +37,13 @@ class PlayableSource {
     this.isLocal = false,
   });
 
+  // Refresh near expiry so a resumed stream has time to initialize.
+  // Local audio remains independent of provider URL leases.
   bool get isExpired =>
-      !isLocal && DateTime.now().toUtc().isAfter(expiresAtUtc);
+      !isLocal &&
+      !expiresAtUtc.isAfter(
+        DateTime.now().toUtc().add(const Duration(seconds: 15)),
+      );
 }
 
 /// Commands the global PlayerController can issue to the engine.
