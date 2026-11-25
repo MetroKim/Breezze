@@ -552,6 +552,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       if (previousOwner != nextOwner) {
         _typeaheadTimer?.cancel();
         _searchGeneration++;
+        // A new listener must never inherit the previous account's query.
+        // Results/history are already owner-scoped; clear the visible field too.
+        _controller.clear();
         setState(() {
           _recentSearches = [];
           _results = [];
