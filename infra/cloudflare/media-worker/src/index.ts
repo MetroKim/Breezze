@@ -100,7 +100,20 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
   // object that was never ingested by the media pipeline.
   const storageVariant = !video && variant === 'download' ? 'AAC_256' : variant;
   const key = video ? `video/${trackId}/original.mp4` : `audio/${trackId}/${storageVariant}`;
-  const rangeHeader = request.headers.get('range');
+  // HTTP resume: If-Range must match the current *strong* object ETag.
+  // A stale validator forces a complete 200 response, never bytes from a
+  // different recording version. Signed authorization is checked above.
+  let rangeHeader: string | null = request.headers.get('range');
+  let rangeHead: R2Object | null = null;
+  if (rangeHeader && request.headers.has('if-range')) {
+    rangeHead = await env.MEDIA_BUCKET.head(key);
+    if (!rangeHead) return error(404, 'MEDIA_NOT_FOUND');
+    const validator = request.headers.get('if-range');
+    if (!validator || !validator.startsWith('"') ||
+        validator !== rangeHead.httpEtag) {
+      rangeHeader = null;
+    }
+  }
   let object: R2ObjectBody | R2Object | null;
   let status = 200;
   let rangeStart: number | null = null;
@@ -111,7 +124,7 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
     if (!match) return error(416, 'INVALID_RANGE');
     const start = match[1] ? Number(match[1]) : null;
     const end = match[2] ? Number(match[2]) : null;
-    const head = await env.MEDIA_BUCKET.head(key);
+    const head = rangeHead ?? await env.MEDIA_BUCKET.head(key);
     if (!head) return error(404, 'MEDIA_NOT_FOUND');
     if (
       (start === null && (end === null || end <= 0)) ||
@@ -152,6 +165,26 @@ async function playback(request: Request, url: URL, env: Env): Promise<Response>
       : await env.MEDIA_BUCKET.get(key);
   }
   if (!object) return error(404, 'MEDIA_NOT_FOUND');
+
+  // Conditional requests are evaluated AFTER validating the signed bearer
+  // URL. A 304 must neither disclose an object to an unauthorized client nor
+  // be cached by a shared intermediary.
+  const ifNoneMatch = request.headers.get('if-none-match');
+  if (ifNoneMatch && (ifNoneMatch === '*' ||
+      ifNoneMatch.split(',').some(value => {
+        const tag = value.trim();
+        return tag === object!.httpEtag ||
+          (tag.startsWith('W/') && tag.slice(2) === object!.httpEtag);
+      }))) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        'Cache-Control': 'private, no-store',
+        'ETag': object.httpEtag,
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
 
   // Video mode serves only MP4 originals already ingested to Breezze R2.
   // Metadata must never cause a YouTube URL to become an R2 media grant.
