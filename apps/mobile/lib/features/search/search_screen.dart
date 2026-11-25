@@ -4,6 +4,7 @@ import '../player/now_playing_screen.dart';
 import 'dart:async';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
+import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -486,8 +487,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
     if (isYouTubeSongId(track.id)) {
-      // Foreground playback uses YouTube's visible player, not extracted
-      // audio or a native Breezze stream/background playback entitlement.
+      // Native player only for a verified, rights-approved recording
+      // returned by the server. Otherwise use the official visible player.
+      final player = ref.read(playerControllerProvider.notifier);
+      await player.playTrack(
+        trackId: track.id,
+        queue: [TrackInfo(
+          id: track.id, title: track.title, artist: track.artist,
+          artworkUrl: track.artworkUrl, duration: track.duration,
+        )],
+        origin: 'search', sourceContext: 'YouTube Music catalog match',
+      );
+      if (!mounted) return;
+      final playback = ref.read(playerControllerProvider);
+      if (playback.currentTrack?.id != track.id) return;
+      if (playback.playbackState == PlaybackState.playing) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => const NowPlayingScreen()));
+        return;
+      }
+      await player.stop();
+      if (!mounted) return;
       await openYouTubePlayer(
         context: context,
         ref: ref,
@@ -787,7 +807,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             tooltip: track.id.startsWith('bzv:')
                                                 ? 'Watch music video'
                                                 : isYouTubeSongId(track.id)
-                                                    ? 'Play on YouTube'
+                                                    ? 'Play song or watch on YouTube'
                                                     : track.hasPreview ? 'Play preview' : 'Play',
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
@@ -874,7 +894,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       ],
                                     ),
                                     onTap: () => track.id.startsWith('bzv:') ||
-                                            (canQueueTrackId(track.id) || track.hasPreview)
+                                            isYouTubeSongId(track.id) ||
+                                            canQueueTrackId(track.id) || track.hasPreview
                                         ? _play(track)
                                         : _openTrack(track),
                                   );

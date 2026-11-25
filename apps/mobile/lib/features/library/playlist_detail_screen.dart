@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:breezze_design_system/breezze_design_system.dart';
+import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -144,12 +145,14 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       await _playTrack(playlist, nativeIndex);
       return;
     }
+    final youtubeIndex = playlist.tracks.indexWhere((item) => isYouTubeSongId(item.id));
+    if (youtubeIndex >= 0) {
+      await _playTrack(playlist, youtubeIndex);
+      return;
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(playlist.tracks.any((item) =>
-              isYouTubeSongId(item.id) || item.id.startsWith('bzv:'))
-              ? 'Tap a YouTube song to watch it in the official player. Native Play All is unavailable for these tracks.'
-              : 'This playlist contains no currently playable songs.')),
+        const SnackBar(content: Text('This playlist contains no currently playable songs.')),
       );
     }
   }
@@ -157,9 +160,19 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   Future<void> _playTrack(UserPlaylist playlist, int index) async {
     if (!_ownerStillActive()) return;
     final track = playlist.tracks[index];
-    // The saved playlist can keep YouTube Music tracks as library entries,
-    // but their playback is through the official foreground video surface.
-    // They must never enter the native audio queue or offline download path.
+    if (isYouTubeSongId(track.id)) {
+      final player = ref.read(playerControllerProvider.notifier);
+      await player.playTrack(
+        trackId: track.id, queue: [track.toTrackInfo()],
+        origin: 'playlist', sourceContext: playlist.name,
+      );
+      if (!mounted || !_ownerStillActive()) return;
+      final playback = ref.read(playerControllerProvider);
+      if (playback.currentTrack?.id != track.id) return;
+      if (playback.playbackState == PlaybackState.playing) return;
+      await player.stop();
+      if (!mounted || !_ownerStillActive()) return;
+    }
     final youtubeVideoId = isYouTubeSongId(track.id)
         ? track.id.substring('bz:youtube_music:'.length)
         : track.id.startsWith('bzv:')

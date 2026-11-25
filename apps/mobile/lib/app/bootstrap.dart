@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../core/api/breezze_api.dart';
 import '../core/audio/playback_source_policy.dart';
 import '../core/audio/remote_audio_grant.dart';
+import '../core/audio/authorized_youtube_music_source.dart';
 import 'download_preferences.dart';
 import '../core/auth/auth_session.dart';
 import '../core/database/database_providers.dart';
@@ -209,10 +210,24 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
-    // YouTube Music is discovery/official video only in the Deezer-first
-    // player configuration. Never resolve an unofficial media URL in the
-    // native audio engine, including for previously saved YouTube items.
-    if (isYouTubeSongId(track.id)) return null;
+    // A verified internal recording can match a public YouTube Music
+    // catalog ID, but metadata itself never becomes an audio grant.
+    if (isYouTubeSongId(track.id)) {
+      try {
+        final preferences = await DownloadPreferencesStore().load();
+        final session = await api.startPlaybackSession(
+          externalTrackId: track.id,
+          requestedQuality: preferences.streamingQuality,
+        );
+        final source = authorizedYouTubeMusicPlayback(track.id, session);
+        if (source == null && session['id'] is String) {
+          try { await api.stopPlaybackSession(session['id'] as String); } catch (_) {}
+        }
+        return source;
+      } catch (_) {
+        return null;
+      }
+    }
 
     try {
       final catalogId = await _resolveCatalogId(api, track);
