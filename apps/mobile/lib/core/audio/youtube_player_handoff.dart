@@ -23,6 +23,22 @@ class YoutubePlayerHandoff {
       platform == TargetPlatform.iOS ||
       platform == TargetPlatform.macOS;
 
+  static Uri officialMusicUri(String providerTrackId) {
+    if (!isValidProviderTrackId(providerTrackId)) {
+      throw ArgumentError.value(
+        providerTrackId, 'providerTrackId', 'Invalid YouTube Music video ID',
+      );
+    }
+    return Uri.https('music.youtube.com', '/watch', {'v': providerTrackId});
+  }
+
+  /// Explicit handoff to the official YouTube Music app/site for provider
+  /// features such as account entitlements and allowed offline playback.
+  /// Nothing is downloaded, embedded, or played via Breezze's native engine.
+  static Future<bool> openInYouTubeMusic(String providerTrackId) =>
+      launchUrl(officialMusicUri(providerTrackId),
+        mode: LaunchMode.externalApplication);
+
   static Future<bool> openProviderTrackId(String providerTrackId) async {
     if (!isValidProviderTrackId(providerTrackId)) {
       throw ArgumentError.value(
