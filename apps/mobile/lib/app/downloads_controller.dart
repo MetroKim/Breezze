@@ -166,9 +166,17 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       }
       // Discard async restore results if this session is no longer the owner.
       if (!mounted || _ownerId != ownerId) return;
-      _tracks.addAll(tracks);
-      _videoTitles.addAll(videos);
-      ref.read(downloadJobStatusProvider.notifier).state = statuses;
+      for (final item in tracks.entries) {
+        _tracks.putIfAbsent(item.key, () => item.value);
+      }
+      for (final item in videos.entries) {
+        _videoTitles.putIfAbsent(item.key, () => item.value);
+      }
+      // Prefer freshly created jobs over any stale persisted snapshot.
+      ref.read(downloadJobStatusProvider.notifier).state = {
+        ...statuses,
+        ...ref.read(downloadJobStatusProvider),
+      };
     } catch (_) {
       // A bad jobs.json cannot authorize or expose any audio.
     }
@@ -323,7 +331,8 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       if (!cancellation.isCancelled) _setStatus(key, 'failed');
     } finally {
       if (identical(_cancellations[key], cancellation)) _cancellations.remove(key);
-      if (mounted && ref.read(downloadJobStatusProvider)[key] != 'paused') {
+      if (mounted && _ownerId == ownerId &&
+          ref.read(downloadJobStatusProvider)[key] != 'paused') {
         state = Map<String, double>.of(state)..remove(key);
       }
     }
@@ -414,11 +423,9 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       if (!cancellation.isCancelled) _setStatus(track.id, 'failed');
     } finally {
       if (identical(_cancellations[track.id], cancellation)) _cancellations.remove(track.id);
-      if (mounted) {
-        if (ref.read(downloadJobStatusProvider)[track.id] != 'paused') {
-          final next = Map<String, double>.of(state)..remove(track.id);
-          state = next;
-        }
+      if (mounted && _ownerId == ownerId &&
+          ref.read(downloadJobStatusProvider)[track.id] != 'paused') {
+        state = Map<String, double>.of(state)..remove(track.id);
       }
     }
   }
