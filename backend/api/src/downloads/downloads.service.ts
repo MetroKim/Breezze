@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma.service';
 import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from '../playback/media-signer.service';
+import { verifySignedMediaObject } from '../playback/signed-media-presence';
 import { ProviderRegistry } from '../providers/provider-registry.service';
 
 @Injectable()
@@ -49,6 +50,17 @@ export class DownloadsService {
     return false;
   }
 
+  /** Do not mint R2 download capabilities for missing, unverified or wrong-codec media. */
+  private async hasReadyDownloadAsset(trackId: string): Promise<boolean> {
+    const asset = await this.prisma.audioAssetVariant.findUnique({
+      where: { trackId_quality: { trackId, quality: 'AAC_256' } },
+      select: { status: true, verifiedAt: true, sizeBytes: true, mimeType: true },
+    });
+    return asset?.status === 'ready' && asset.verifiedAt !== null &&
+      asset.sizeBytes !== null && asset.sizeBytes > 0n &&
+      ['audio/mp4', 'audio/aac'].includes(asset.mimeType);
+  }
+
   async authorizeAndRecord(
     userId: string,
     dto: { trackId: string; territory: string },
@@ -78,6 +90,10 @@ export class DownloadsService {
       };
     }
 
+    if (!await this.hasReadyDownloadAsset(dto.trackId)) {
+      return { allowed: false, reason: 'LICENSED_DOWNLOAD_VARIANT_NOT_READY', url: null };
+    }
+
     // Offline downloads receive a bounded lease even when the underlying
     // catalogue grant has no explicit end date. Rights expiry always wins.
     const offlineLeaseExpiresAt = new Date(Math.min(
@@ -90,6 +106,9 @@ export class DownloadsService {
       'download',
       decision.expiresAt,
     );
+    // A ready database row alone does not prove the bytes exist at the CDN.
+    // Production probes the signed private R2 object before persisting a lease.
+    await verifySignedMediaObject(signed.url);
     const record = await this.prisma.downloadRecord.upsert({
       where: { userId_trackId: { userId, trackId: dto.trackId } },
       create: {
@@ -144,6 +163,14 @@ export class DownloadsService {
         allowed: false,
         reason: decision.previewOnly ? 'PREVIEW_ONLY' : decision.reason,
       };
+    }
+
+    if (!await this.hasReadyDownloadAsset(trackId)) {
+      await this.prisma.downloadRecord.updateMany({
+        where: { userId, trackId, status: 'active' },
+        data: { status: 'revoked', expiresAt: new Date() },
+      });
+      return { allowed: false, reason: 'LICENSED_DOWNLOAD_VARIANT_NOT_READY' };
     }
 
     const offlineLeaseExpiresAt = new Date(Math.min(
