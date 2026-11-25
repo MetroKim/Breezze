@@ -20,9 +20,7 @@ import '../../widgets/bz_brand_icons.dart';
 /// Provider metadata is not a playable full recording. Until Breezze
 /// receives licensed in-app stream grants, never launch another music app
 /// or enqueue provider IDs into the native decoder.
-Future<void> _unavailableInAppMusic(
-  BuildContext context, String providerTrackId,
-) async {
+Future<void> _unavailableInAppMusic(BuildContext context) async {
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(content: Text(
@@ -122,7 +120,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
     if (isSpotifyTrackId(selected.id) || isDeezerTrackId(selected.id)) {
-      await _unavailableInAppMusic(context, selected.id);
+      await _unavailableInAppMusic(context);
       return;
     }
     if (isYouTubeSongId(selected.id)) {
@@ -734,7 +732,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     if (_tracks.isEmpty) return;
     final selected = _tracks[index];
     if (isSpotifyTrackId(selected.id) || isDeezerTrackId(selected.id)) {
-      await _unavailableInAppMusic(context, selected.id);
+      await _unavailableInAppMusic(context);
       return;
     }
     if (isYouTubeSongId(selected.id)) {
