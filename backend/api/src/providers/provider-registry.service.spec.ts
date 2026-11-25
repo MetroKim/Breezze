@@ -43,7 +43,7 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
 
   it('allows no YouTube, Spotify or Deezer unauthorized native full-track grants', () => {
     const instance = registry();
-    expect(instance.list().map(item => item.providerId)).toEqual(['spotify', 'breezze_internal']);
+    expect(instance.list().map(item => item.providerId)).toEqual(['spotify', 'deezer', 'breezze_internal']);
     expect(instance.get('youtube_music')).toBeUndefined();
     expect(instance.get('deezer')?.capabilities).toMatchObject({
       search: true, metadata: true, playback: false, download: false,
@@ -58,11 +58,11 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
   it('isolates an external provider outage while preserving internal music', async () => {
     spotify.search.mockRejectedValue(new Error('SPOTIFY_UNAVAILABLE'));
     internal.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: 'licensed-1' }] });
+    deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: '3135556' }] });
     const result = await registry().searchAll('piano');
     expect(result.providers[0].result).toMatchObject({
       kind: 'error', code: 'PROVIDER_SEARCH_FAILED',
     });
-    deezer.search.mockResolvedValue({ kind: 'ok', value: [{ providerTrackId: '3135556' }] });
     expect(result.providers[1].result).toMatchObject({ kind: 'ok' });
   });
 
