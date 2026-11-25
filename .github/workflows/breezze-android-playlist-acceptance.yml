@@ -42,6 +42,9 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Reclaim unused hosted runner toolchains for Android emulator
+        run: bash tools/ci/prepare_android_disk.sh
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
