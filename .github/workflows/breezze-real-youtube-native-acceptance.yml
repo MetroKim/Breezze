@@ -80,5 +80,4 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           script: |
-            cd apps/mobile
-            flutter test integration_test/real_youtube_native_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
+            cd apps/mobile && flutter test integration_test/real_youtube_native_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_API_URL=https://breezze-api-edge.ykw8vmq7ph.workers.dev
