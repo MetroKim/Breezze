@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: breezze-release-freeze-cleanup
@@ -67,3 +68,31 @@ jobs:
             exit 1
           fi
           echo "PASS: no releases remain and repository is private."
+
+      - name: Purge previously published CI artifacts while repository is public
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          visibility="$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')"
+          if [[ "$visibility" == "private" ]]; then
+            echo "Repository private; preserve internal verification artifacts."
+            exit 0
+          fi
+          # Source and installable APK artifact exposure must not continue on
+          # a public repository, even after GitHub Releases are deleted.
+          mapfile -t artifact_ids < <(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[].id')
+          failures=0
+          for id in "${artifact_ids[@]}"; do
+            [[ "$id" =~ ^[0-9]+$ ]] || continue
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; then
+              echo "Removed public downloadable CI artifact $id"
+            else
+              echo "::error::Could not remove public CI artifact $id"
+              failures=$((failures+1))
+            fi
+          done
+          echo "Processed ${#artifact_ids[@]} public CI artifacts."
+          if (( failures > 0 )); then exit 1; fi

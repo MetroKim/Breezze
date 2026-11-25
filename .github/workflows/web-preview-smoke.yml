@@ -68,8 +68,8 @@ jobs:
           echo "Verified Breezze Flutter web-server is running and serving bootstrap assets"
           tail -n 30 "$RUNNER_TEMP/breezze-web.log"
 
-      - name: Publish startup logs on failure
-        if: failure()
+      - name: Publish startup logs on failure (private development only)
+        if: failure() && github.event.repository.private == true
         uses: actions/upload-artifact@v4
         with:
           name: breezze-web-preview-failure-${{ github.run_id }}
