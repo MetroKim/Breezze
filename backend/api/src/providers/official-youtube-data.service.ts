@@ -168,7 +168,7 @@ export class OfficialYouTubeDataService {
       channel: video.snippet.channelTitle ?? '',
       embeddable: video.status?.embeddable === true && video.status?.privacyStatus === 'public',
       watchUrl: 'https://www.youtube.com/watch?v=' + videoId,
-      playbackAvailable: false,
+      playbackAvailable: false as const,
     }, 'Official YouTube metadata; never a native audio playback entitlement');
     await this.cache?.set(cacheKey, ready, 60 * 60);
     return ready;
