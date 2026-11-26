@@ -15,6 +15,7 @@ export interface ArtistPageWithFallback extends SpotifyArtistPage {
     url: string;
   }>;
   relatedStatus: 'ok' | 'unavailable' | 'disabled';
+  artistExtra?: { fans?: number; albumCount?: number; url: string };
   sourceMatch: 'spotify_only' | 'unique_exact_name';
 }
 
@@ -84,6 +85,7 @@ export class ArtistCatalogService {
       relatedArtists: deezer.relatedArtists,
       relatedStatus: deezer.relatedStatus,
       sourceMatch: 'unique_exact_name',
+      artistExtra: deezer.artistExtra,
     }, upstream.attribution);
   }
 }
