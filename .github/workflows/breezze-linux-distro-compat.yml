@@ -98,6 +98,7 @@ jobs:
             docker run --rm -v "$bundle:/bundle:ro" "$image" sh -ec "
               $install
               test -x /bundle/breezze
+              export LD_LIBRARY_PATH=/bundle/lib
               for object in /bundle/breezze /bundle/lib/*.so; do
                 echo checking \$object
                 ldd \$object > /tmp/breezze-ldd

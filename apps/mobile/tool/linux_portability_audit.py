@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import struct
 import subprocess
 import sys
@@ -75,8 +76,15 @@ def audit_bundle(bundle: Path, arch: str, check_linker: bool = False) -> dict:
 
     if check_linker:
         for path in elf_paths:
+            # Shared-library checks need the exact Flutter bundle lib dir,
+            # just as the installed executable would supply it via RPATH.
+            env = dict(os.environ)
+            env["LD_LIBRARY_PATH"] = (
+                str(bundle / "lib") + ":" + env.get("LD_LIBRARY_PATH", "")
+            )
             result = subprocess.run(
-                ["ldd", str(path)], text=True, capture_output=True, check=False
+                ["ldd", str(path)], text=True, capture_output=True,
+                check=False, env=env,
             )
             output = result.stdout + result.stderr
             if result.returncode != 0 or "not found" in output:
