@@ -39,6 +39,9 @@ jobs:
       - name: Install isolated experimental client
         working-directory: backend/unofficial-youtube
         run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify sidecar authorization and streaming safety contracts
+        working-directory: backend/unofficial-youtube
+        run: npm run test:contract
       - name: Probe audio response on CC-BY source video
         working-directory: backend/unofficial-youtube
         env:
