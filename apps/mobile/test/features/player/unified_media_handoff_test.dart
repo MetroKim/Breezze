@@ -1,4 +1,4 @@
-import 'package:breezze_audio_contracts/audio_contracts.dart';
+import 'package:breezze/features/player/player_controller.dart' show TrackInfo;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:breezze/features/player/unified_media_handoff.dart';
 
