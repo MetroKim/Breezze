@@ -47,8 +47,10 @@ export class ArtistCatalogService {
       relatedStatus: 'disabled',
       sourceMatch: 'spotify_only',
     };
-    const permitted = process.env.NODE_ENV !== 'production' ||
-      process.env.ARTIST_DEEZER_FALLBACK_APPROVED === 'true';
+    // Fail CLOSED in unknown deployment environments. Only explicit
+    // development/test or a documented production approval may enable this.
+    const permitted = process.env.ARTIST_DEEZER_FALLBACK_APPROVED === 'true' ||
+      process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
     if (!permitted) return providerOk(base, upstream.attribution);
 
     // Get artist-related suggestions that Spotify's development API does not
