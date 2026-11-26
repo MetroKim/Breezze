@@ -29,15 +29,15 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.DEVICE_VIDEO,
                    "BzBrandedAppBar setLooping(next) if (!_repeat && !_closing "
                    "_fillVideo ? BoxFit.cover : BoxFit.contain")
-        self.write(guard.OFFICIAL_VIDEO,
-                   "BzBrandedAppBar BzSvgIcon(name: 'skip-previous' "
-                   "BzSvgIcon(name: 'skip-next'")
         for page in guard.PRIMARY_PAGES:
             self.write(page, "BzMorphingBrandHeader(")
         self.write(guard.PRIMARY_PAGES[0], "BzMorphingBrandHeader( BzPinnedMoodRail(")
         self.write(guard.BROWSE, "BzMorphingBrandHeader( YouTubeMusicClientScreen( featuredDestinations otherDestinations")
         for page in guard.SECONDARY_PAGES:
             self.write(page, "appBar: BzBrandedAppBar(")
+        self.write(guard.OFFICIAL_VIDEO,
+                   "BzBrandedAppBar BzSvgIcon(name: 'skip-previous' "
+                   "BzSvgIcon(name: 'skip-next'")
 
     def write(self, name, value):
         file = self.root / name
