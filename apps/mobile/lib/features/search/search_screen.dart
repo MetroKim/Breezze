@@ -28,10 +28,18 @@ import '../../widgets/bz_morphing_brand_header.dart';
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key, this.initialQuery});
+  const SearchScreen({
+    super.key,
+    this.initialQuery,
+    this.initialVideoSearch = false,
+  });
 
   /// Optional query from an artist's related-search suggestion.
   final String? initialQuery;
+
+  /// Opens a search directly in official-video mode without rendering a
+  /// misleading audio-result page first.
+  final bool initialVideoSearch;
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -83,6 +91,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    _searchVideos = widget.initialVideoSearch;
     _loadHistory();
     final initial = widget.initialQuery?.trim();
     if (initial != null && initial.length >= 2) {
