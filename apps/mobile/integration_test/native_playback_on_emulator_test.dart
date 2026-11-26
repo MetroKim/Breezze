@@ -149,7 +149,10 @@ void main() {
     await bridge.play();
     expect(player.state.playbackState, PlaybackState.playing);
 
-    // A phone call/audio-focus interruption must not silently auto-resume.
+    // This mock engine emits interruption states but does not implement the
+    // native call-restoration capability. Manual resume remains available;
+    // V8 auto-resume is tested with a capable engine in controller unit tests
+    // and still requires real OS focus-release acceptance.
     engine.events.add(PlaybackState.interrupted);
     await tester.pump();
     expect(player.state.playbackState, PlaybackState.interrupted);
