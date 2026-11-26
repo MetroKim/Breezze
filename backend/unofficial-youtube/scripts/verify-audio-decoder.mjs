@@ -46,7 +46,7 @@ const handler = createExperimentHandler({
     }),
   }),
   fetchAudio: async (_url, options) => {
-    const match = /^bytes=(\\d+)-(\\d*)$/.exec(options.headers.Range || '');
+    const match = /^bytes=(\d+)-(\d*)$/.exec(options.headers.Range || '');
     if (!match) {
       return new Response(wav, {
         status: 200,
@@ -80,7 +80,7 @@ try {
   const url = `http://127.0.0.1:${server.address().port}/v1/audio/${id}`;
   const ffmpeg = spawn('ffmpeg', [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
-    '-headers', `Authorization: Bearer ${token}\\r\\n`,
+    '-headers', `Authorization: Bearer ${token}\r\n`,
     '-i', url,
     '-map', '0:a:0',
     '-f', 's16le', '-ac', '1', '-ar', String(sampleRate), '-',
