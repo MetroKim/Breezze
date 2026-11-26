@@ -1,8 +1,8 @@
 /// Breezze metadata source chain.
 ///
-/// Provider selection and playback resolution are server-side concerns.
-/// This client-side chain only merges normalized catalogue search results
-/// returned through Breezze's API.
+/// The server is authoritative for commercial catalog matching and playback
+/// permissions. This client fallback never treats matching titles as media
+/// grants and preserves each surviving track's original provider identity.
 library;
 
 import 'bz_track.dart';
@@ -13,24 +13,35 @@ class SourceChain {
 
   SourceChain(this.sources);
 
-  /// Searches registered metadata adapters and de-duplicates by title+artist.
+  static String _normalize(String text) =>
+      text.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  static bool _sameRecording(BzTrack a, ProviderTrack b) =>
+      _normalize(a.title) == _normalize(b.title) &&
+      _normalize(a.artist) == _normalize(b.artist) &&
+      a.duration > Duration.zero && b.duration > Duration.zero &&
+      (a.duration.inSeconds - b.duration.inSeconds).abs() <= 3;
+
+  /// Metadata-only fallback. Keep distinct edits, remixes, covers and
+  /// unknown-duration recordings separate; the first matching source wins.
   Future<List<BzTrack>> searchAll(String query) async {
     final results = <BzTrack>[];
-    final seen = <String>{};
+    final seenIds = <String>{};
     for (final source in sources) {
       final op = await source.search(query);
       if (op is ProviderOk<List<ProviderTrack>>) {
         for (final track in op.value) {
-          final key = '${track.title}|${track.artist}'.toLowerCase();
-          if (seen.add(key)) {
-            results.add(BzTrack(
-              id: track.breezzeTrackId,
-              title: track.title,
-              artist: track.artist,
-              artworkUrl: track.artworkUrl,
-              duration: track.duration,
-            ));
+          if (!seenIds.add(track.breezzeTrackId) ||
+              results.any((current) => _sameRecording(current, track))) {
+            continue;
           }
+          results.add(BzTrack(
+            id: track.breezzeTrackId,
+            title: track.title,
+            artist: track.artist,
+            artworkUrl: track.artworkUrl,
+            duration: track.duration,
+          ));
         }
       }
     }
