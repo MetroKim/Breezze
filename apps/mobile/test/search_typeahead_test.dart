@@ -4,6 +4,7 @@ import 'package:breezze/app/bootstrap.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/features/search/search_screen.dart';
+import 'package:breezze/features/catalog/spotify_artist_screen.dart';
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -439,7 +440,14 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('Test Singer'), findsWidgets);
-    expect(find.text('Songs'), findsOneWidget);
+    // The underlying Search route also has a Songs section. Assert the
+    // opened artist page has its own heading, not that the whole Navigator
+    // contains only one matching heading across distinct routes.
+    expect(find.byType(SpotifyArtistScreen), findsOneWidget);
+    expect(find.descendant(
+      of: find.byType(SpotifyArtistScreen),
+      matching: find.text('Songs'),
+    ), findsOneWidget);
   });
 
   testWidgets('Music Videos filter renders external video action and honest empty state',
