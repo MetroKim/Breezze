@@ -1,0 +1,132 @@
+import 'package:breezze_audio_contracts/audio_contracts.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class _Deck implements OnlineAutomixDeck {
+  final levels = <double>[];
+  var plays = 0;
+  var stops = 0;
+  bool failVolume = false;
+
+  @override
+  Future<void> setVolume(double value) async {
+    if (failVolume) throw StateError('decoder failed');
+    levels.add(value);
+  }
+
+  @override
+  Future<void> play() async => plays++;
+
+  @override
+  Future<void> stop() async => stops++;
+}
+
+const _transition = MixTransition(
+  beatMatched: false,
+  tempoFactor: 1,
+  transitionMs: 1000,
+  doubleTimeFold: false,
+);
+
+void main() {
+  test('two decks overlap with a bounded equal-power transition', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    final waits = <Duration>[];
+    await const OnlineAutomixRenderer().render(
+      outgoing: outgoing,
+      incoming: incoming,
+      plan: _transition,
+      bothSourcesAuthorized: () => true,
+      steps: 4,
+      delay: (d) async { waits.add(d); },
+    );
+    expect(incoming.plays, 1);
+    expect(outgoing.stops, 1);
+    expect(incoming.stops, 0);
+    expect(waits, List.filled(4, const Duration(milliseconds: 250)));
+    expect(outgoing.levels.last, closeTo(0, 0.00001));
+    expect(incoming.levels.first, 0);
+    expect(incoming.levels.last, 1);
+    expect(outgoing.levels[0], closeTo(0.923879, 0.001));
+    expect(incoming.levels[1], closeTo(0.382683, 0.001));
+  });
+
+  test('revoked rights stop both decks before leaked audio', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    var authorized = true;
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () => authorized,
+        steps: 4,
+        delay: (_) async { authorized = false; },
+      ),
+      throwsA(isA<AutomixAuthorizationLost>()),
+    );
+    expect(outgoing.stops, 1);
+    expect(incoming.stops, 1);
+  });
+
+  test('decoder failure silences incoming and restores licensed outgoing', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    var ticks = 0;
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () => true,
+        steps: 4,
+        delay: (_) async {
+          if (++ticks == 2) incoming.failVolume = true;
+        },
+      ),
+      throwsStateError,
+    );
+    expect(incoming.stops, 1);
+    expect(outgoing.stops, 0);
+    expect(outgoing.levels.last, 1);
+  });
+
+  test('a transition cannot play without permission', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () => false,
+      ),
+      throwsA(isA<AutomixAuthorizationLost>()),
+    );
+    expect(incoming.plays, 0);
+  });
+
+  test('identical decks or unreasonable fade envelopes fail closed', () async {
+    final same = _Deck();
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: same,
+        incoming: same,
+        plan: _transition,
+        bothSourcesAuthorized: () => true,
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: _Deck(),
+        incoming: _Deck(),
+        plan: _transition,
+        bothSourcesAuthorized: () => true,
+        steps: 0,
+      ),
+      throwsArgumentError,
+    );
+  });
+}
