@@ -75,6 +75,47 @@ describe('DownloadsService', () => {
     expect(renewedExpiry.getTime()).toBeLessThanOrEqual(Date.now() + 72 * 60 * 60 * 1000);
   });
 
+  it('returns a verified encoded-media SHA256 for safe byte-range resume', async () => {
+    const digest = '0123456789abcdef'.repeat(4);
+    prisma.audioAssetVariant.findUnique.mockResolvedValue({
+      status: 'ready', verifiedAt: new Date(), sizeBytes: 1024n,
+      mimeType: 'audio/mp4', sha256: digest.toUpperCase(),
+    });
+    rights.decide.mockResolvedValue({
+      allowed: true, previewOnly: false, expiresAt: null,
+      attribution: null,
+    });
+    prisma.downloadRecord.upsert.mockResolvedValue({ id: 'download-1' });
+    signer.createPlaybackUrl.mockReturnValue({
+      url: 'https://cdn.example/download',
+      expiresAt: new Date(Date.now() + 60000),
+    });
+    const result = await service.authorizeAndRecord('user-1', {
+      trackId: 'track-1', territory: 'TZ',
+    });
+    expect(result.assetVersion).toEqual(digest);
+  });
+
+  it('does not treat a missing or invalid media digest as a resume identity', async () => {
+    prisma.audioAssetVariant.findUnique.mockResolvedValue({
+      status: 'ready', verifiedAt: new Date(), sizeBytes: 1024n,
+      mimeType: 'audio/mp4', sha256: 'not-a-real-digest',
+    });
+    rights.decide.mockResolvedValue({
+      allowed: true, previewOnly: false, expiresAt: null,
+      attribution: null,
+    });
+    prisma.downloadRecord.upsert.mockResolvedValue({ id: 'download-1' });
+    signer.createPlaybackUrl.mockReturnValue({
+      url: 'https://cdn.example/download',
+      expiresAt: new Date(Date.now() + 60000),
+    });
+    const result = await service.authorizeAndRecord('user-1', {
+      trackId: 'track-1', territory: 'TZ',
+    });
+    expect(result.assetVersion).toBeNull();
+  });
+
   it('does not create a download for a preview-only decision', async () => {
     rights.decide.mockResolvedValue({
       allowed: true,
@@ -112,7 +153,7 @@ describe('DownloadsService', () => {
     });
     expect(prisma.audioAssetVariant.findUnique).toHaveBeenCalledWith({
       where: { trackId_quality: { trackId: 'track-1', quality: 'AAC_256' } },
-      select: { status: true, verifiedAt: true, sizeBytes: true, mimeType: true },
+      select: { status: true, verifiedAt: true, sizeBytes: true, mimeType: true, sha256: true },
     });
     expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
     expect(prisma.downloadRecord.upsert).not.toHaveBeenCalled();
