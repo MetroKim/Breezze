@@ -2,6 +2,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/breezze_navigation.dart';
 import '../../app/bootstrap.dart';
 import '../search/search_screen.dart';
 import 'spotify_artist_screen.dart';
@@ -393,19 +394,22 @@ class ArtistDetailScreen extends ConsumerWidget {
           artworkUrl: row['artworkUrl'] as String?,
           duration: Duration(seconds: duration is num ? duration.toInt() : 0),
         );
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: track),
         ));
       },
       onDeezerAlbumSelected: (release) {
         final id = release['id'];
         if (id is! String || !RegExp(r'^[0-9]{1,20}
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
         ));
       },
       onSuggestedSearch: (query) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => SearchScreen(initialQuery: query),
         ));
       },
@@ -1042,17 +1046,20 @@ class _TrackArtwork extends StatelessWidget {
           artworkUrl: row['artworkUrl'] as String?,
           duration: Duration(seconds: duration is num ? duration.toInt() : 0),
         );
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: track),
         ));
       },
       onSavedTrackSelected: (favorite) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
         ));
       },
       onSuggestedSearch: (query) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => SearchScreen(initialQuery: query),
         ));
       },
@@ -1691,17 +1698,20 @@ class _TrackArtwork extends StatelessWidget {
           artworkUrl: row['artworkUrl'] as String?,
           duration: Duration(seconds: duration is num ? duration.toInt() : 0),
         );
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: track),
         ));
       },
       onSavedTrackSelected: (favorite) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
         ));
       },
       onSuggestedSearch: (query) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => SearchScreen(initialQuery: query),
         ));
       },
@@ -2332,7 +2342,8 @@ class _TrackArtwork extends StatelessWidget {
   }
 }
 ).hasMatch(id)) return;
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => DeezerAlbumCatalogScreen(
             albumId: id,
             title: release['title'] as String? ?? 'Album',
@@ -2343,12 +2354,14 @@ class _TrackArtwork extends StatelessWidget {
         ));
       },
       onSavedTrackSelected: (favorite) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
         ));
       },
       onSuggestedSearch: (query) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => SearchScreen(initialQuery: query),
         ));
       },
@@ -2985,17 +2998,20 @@ class _TrackArtwork extends StatelessWidget {
           artworkUrl: row['artworkUrl'] as String?,
           duration: Duration(seconds: duration is num ? duration.toInt() : 0),
         );
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: track),
         ));
       },
       onSavedTrackSelected: (favorite) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
         ));
       },
       onSuggestedSearch: (query) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => SearchScreen(initialQuery: query),
         ));
       },
@@ -3634,17 +3650,20 @@ class _TrackArtwork extends StatelessWidget {
           artworkUrl: row['artworkUrl'] as String?,
           duration: Duration(seconds: duration is num ? duration.toInt() : 0),
         );
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: track),
         ));
       },
       onSavedTrackSelected: (favorite) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
         ));
       },
       onSuggestedSearch: (query) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+          context: context,
           builder: (_) => SearchScreen(initialQuery: query),
         ));
       },
