@@ -2,7 +2,36 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
+double _contrastRatio(Color a, Color b) {
+  final light = a.computeLuminance() > b.computeLuminance()
+      ? a.computeLuminance() : b.computeLuminance();
+  final dark = a.computeLuminance() < b.computeLuminance()
+      ? a.computeLuminance() : b.computeLuminance();
+  return (light + 0.05) / (dark + 0.05);
+}
+
 void main() {
+  test('Breezze original light/dark palette clears WCAG AA body text contrast', () {
+    for (final theme in [bzLightTheme(), bzDarkTheme()]) {
+      final palette = theme.bz;
+      for (final surface in [
+        palette.background, palette.surface1, palette.surface2,
+        palette.elevated,
+      ]) {
+        expect(_contrastRatio(palette.text1, surface), greaterThanOrEqualTo(4.5),
+            reason: 'Primary text on Breezze surface must stay readable');
+        expect(_contrastRatio(palette.text2, surface), greaterThanOrEqualTo(4.5),
+            reason: 'Secondary text on Breezze surface must stay readable');
+      }
+      // Focus borders are the existing neutral Breezze accent, not green.
+      expect(_contrastRatio(palette.accent, palette.surface1),
+          greaterThanOrEqualTo(3.0));
+      expect(_contrastRatio(palette.accent, palette.background),
+          greaterThanOrEqualTo(3.0));
+    }
+  });
+
+
   test('light and dark Breezze themes share consistent component geometry', () {
     for (final theme in [bzLightTheme(), bzDarkTheme()]) {
       final colors = theme.bz;
