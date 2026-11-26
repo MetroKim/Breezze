@@ -108,8 +108,16 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   Future<void> play() async {
     await _sessionReady;
     if (_disposed) throw StateError('Breezze audio engine is disposed');
-    // just_audio activates the OS audio session here, not on app startup.
-    await _player.play();
+    // just_audio.play() returns a Future that completes on TRACK END/PAUSE,
+    // NOT when playback starts. Awaiting it here deadlocks the caller's
+    // playTrack() command for the full song and breaks native acceptance.
+    // Start the native player once; follow state/error events separately.
+    // Playback completion belongs to the engineStateStream, not this command.
+    unawaited(_player.play().catchError((Object error, StackTrace trace) {
+      if (!_disposed && !_states.isClosed) {
+        _states.add(PlaybackState.failed);
+      }
+    }));
   }
 
   @override
