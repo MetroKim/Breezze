@@ -20,6 +20,7 @@ import '../../features/player/player_controller.dart';
 import '../../features/authentication/auth_screen.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import 'bz_shell.dart';
+import 'bz_brand_icons.dart';
 
 /// Auth gate: auth screen until signed in, then the shell. On
 /// sign-in, queued offline ops drain to the backend. First-time
@@ -246,14 +247,41 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     return MaterialApp(
       title: 'Breezze',
       debugShowCheckedModeBanner: false,
-      themeMode: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.system,
+      themeMode: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.dark,
       theme: bzLightTheme(),
       darkTheme: bzDarkTheme(),
       home: Builder(
         builder: (context) {
           if (auth is AuthUninitialized) {
             return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+              backgroundColor: Colors.black,
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    BzBnoteMark(size: 92, color: Colors.white),
+                    SizedBox(height: 22),
+                    Text(
+                      'Breezze',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    SizedBox(height: 32),
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           }
 
