@@ -182,7 +182,10 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.text('Music videos'));
-    await tester.pump();
+    // A real page route requires the transition to settle before its child
+    // becomes the active route. One pump is not enough across platforms.
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchScreen), findsOneWidget);
     final search = tester.widget<SearchScreen>(find.byType(SearchScreen));
     expect(search.initialVideoSearch, isTrue);
     expect(search.initialQuery, contains('official music video'));
