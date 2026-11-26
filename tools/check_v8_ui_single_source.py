@@ -22,6 +22,8 @@ MOOD = "apps/mobile/lib/widgets/bz_pinned_mood_rail.dart"
 DETAIL_BAR = "apps/mobile/lib/widgets/bz_branded_app_bar.dart"
 BROWSE = "apps/mobile/lib/features/browse/browse_screen.dart"
 PROVIDER = "apps/mobile/lib/features/browse/ytmusic_client_screen.dart"
+DEVICE_VIDEO = "apps/mobile/lib/features/video/device_video.dart"
+OFFICIAL_VIDEO = "apps/mobile/lib/features/video/official_music_video_screen.dart"
 PRIMARY_PAGES = (
     "apps/mobile/lib/features/home/home_screen.dart",
     "apps/mobile/lib/features/browse/browse_screen.dart",
@@ -42,7 +44,8 @@ def violations(root: Path = REPO) -> list[str]:
     issues: list[str] = []
     content: dict[str, str] = {}
     for name in (SHELL, TABS, THEME, GLASS_CORE, GLASS_ADAPTER, BRAND,
-                 MORPH, MOOD, DETAIL_BAR, BROWSE, PROVIDER, *PRIMARY_PAGES,
+                 MORPH, MOOD, DETAIL_BAR, BROWSE, PROVIDER, DEVICE_VIDEO, OFFICIAL_VIDEO,
+                 *PRIMARY_PAGES,
                  *SECONDARY_PAGES):
         p = root / name
         if not p.is_file():
@@ -73,6 +76,11 @@ def violations(root: Path = REPO) -> list[str]:
     has(DETAIL_BAR, r"BzCompactBrandMark", "UNIFIED_BRAND_MISSING")
     has(BROWSE, r"YouTubeMusicClientScreen\(", "YT_CATALOG_NOT_IN_NEW")
     has(PROVIDER, r"BzBrandedAppBar", "PROVIDER_OLD_BRANDING")
+    has(DEVICE_VIDEO, r"BzBrandedAppBar", "LOCAL_VIDEO_OLD_BRANDING")
+    has(DEVICE_VIDEO, r"setLooping\\(next\\)", "LOCAL_VIDEO_REPEAT_MISSING")
+    has(DEVICE_VIDEO, r"if \\(!_repeat && !_closing", "LOCAL_VIDEO_REPEAT_DEFAULT_MISSING")
+    has(OFFICIAL_VIDEO, r"BzSvgIcon\\(name: 'skip-previous'", "OFFICIAL_VIDEO_PREVIOUS_SVG_MISSING")
+    has(OFFICIAL_VIDEO, r"BzSvgIcon\\(name: 'skip-next'", "OFFICIAL_VIDEO_NEXT_SVG_MISSING")
 
     for page in PRIMARY_PAGES:
         source = content.get(page, "")
