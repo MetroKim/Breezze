@@ -24,11 +24,12 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.MORPH, "class BzMorphingBrandHeader BzBnoteMark")
         self.write(guard.MOOD, "class BzPinnedMoodRail")
         self.write(guard.DETAIL_BAR, "class BzBrandedAppBar BzCompactBrandMark")
-        self.write(guard.BROWSE, "YouTubeMusicClientScreen( featuredDestinations otherDestinations")
+
         self.write(guard.PROVIDER, "BzBrandedAppBar(")
         for page in guard.PRIMARY_PAGES:
             self.write(page, "BzMorphingBrandHeader(")
         self.write(guard.PRIMARY_PAGES[0], "BzMorphingBrandHeader( BzPinnedMoodRail(")
+        self.write(guard.BROWSE, "BzMorphingBrandHeader( YouTubeMusicClientScreen( featuredDestinations otherDestinations")
         for page in guard.SECONDARY_PAGES:
             self.write(page, "appBar: BzBrandedAppBar(")
 
