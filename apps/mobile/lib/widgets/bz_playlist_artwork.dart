@@ -26,10 +26,10 @@ class BzPlaylistArtwork extends StatelessWidget {
 
   Uint8List? get _localCover {
     final raw = customArtworkBase64;
-    if (raw == null || raw.length > 750000) return null;
+    if (raw == null || raw.length > 350000) return null;
     try {
       final bytes = base64Decode(raw);
-      return bytes.isNotEmpty && bytes.length <= 560000 ? bytes : null;
+      return bytes.isNotEmpty && bytes.length <= 256000 ? bytes : null;
     } catch (_) {
       return null;
     }
