@@ -78,6 +78,7 @@ def violations(root: Path = REPO) -> list[str]:
     has(PROVIDER, r"BzBrandedAppBar", "PROVIDER_OLD_BRANDING")
     has(DEVICE_VIDEO, r"BzBrandedAppBar", "LOCAL_VIDEO_OLD_BRANDING")
     has(DEVICE_VIDEO, r"setLooping\(next\)", "LOCAL_VIDEO_REPEAT_MISSING")
+    has(DEVICE_VIDEO, r"_fillVideo \? BoxFit.cover : BoxFit.contain", "LOCAL_VIDEO_FULLBLEED_MODE_MISSING")
     has(DEVICE_VIDEO, r"if \(!_repeat && !_closing", "LOCAL_VIDEO_REPEAT_DEFAULT_MISSING")
     has(OFFICIAL_VIDEO, r"BzSvgIcon\(name: 'skip-previous'", "OFFICIAL_VIDEO_PREVIOUS_SVG_MISSING")
     has(OFFICIAL_VIDEO, r"BzSvgIcon\(name: 'skip-next'", "OFFICIAL_VIDEO_NEXT_SVG_MISSING")
