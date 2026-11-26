@@ -362,8 +362,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               TextButton(
-                                onPressed: jobStatuses[entry.key] == 'rights_unavailable' || jobStatuses[entry.key] == 'invalid_grant' ? null : () {
-                                  if (['failed', 'waiting_for_wifi', 'waiting_for_network', 'login_required'].contains(jobStatuses[entry.key])) {
+                                onPressed: jobStatuses[entry.key] == 'rights_unavailable' ? null : () {
+                                  if (['failed', 'waiting_for_wifi', 'waiting_for_network', 'login_required', 'invalid_grant'].contains(jobStatuses[entry.key])) {
                                     downloadController.retry(entry.key);
                                   } else if (jobStatuses[entry.key] == 'paused') {
                                     downloadController.resume(entry.key);
@@ -371,7 +371,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                                     downloadController.pause(entry.key);
                                   }
                                 },
-                                child: Text(['rights_unavailable', 'invalid_grant'].contains(jobStatuses[entry.key]) ? 'Unavailable' : ['failed', 'waiting_for_wifi', 'waiting_for_network', 'login_required'].contains(jobStatuses[entry.key]) ? 'Retry' : jobStatuses[entry.key] == 'paused' ? 'Resume' : 'Pause'),
+                                child: Text(jobStatuses[entry.key] == 'rights_unavailable' ? 'Unavailable' : ['failed', 'waiting_for_wifi', 'waiting_for_network', 'login_required', 'invalid_grant'].contains(jobStatuses[entry.key]) ? 'Retry' : jobStatuses[entry.key] == 'paused' ? 'Resume' : 'Pause'),
                               ),
                               IconButton(
                                 tooltip: 'Cancel download',
