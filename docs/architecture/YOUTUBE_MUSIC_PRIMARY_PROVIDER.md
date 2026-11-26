@@ -43,4 +43,4 @@ This historical backend probe is **disabled unless** `BREEZZE_YTMUSIC_AUDIO_EXPE
 
 Confirm upstream permission, successful stream retrieval on Android/iOS emulators, seek and background behavior, expired URL renewal, source integrity, territory handling and takedown behavior. Until these pass, production YouTube `playback` and `download` remain `false`. Deezer metadata and preview access likewise do not grant full-song playback or offline downloads.
 
-See [provider contract](../providers/active-catalogue.md) and [Unified v6 architecture](./BREEZZE_V6_MAINLINE_INTEGRATION.md).
+See [provider contract](../providers/active-catalogue.md) and the sole [V8 implementation and acceptance plan](../BREEZZE_UNIFIED_ENGINE_V8_IMPLEMENTATION_PLAN.md).
