@@ -14,7 +14,6 @@ import '../../widgets/bz_brand_icons.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../video/open_youtube_player.dart';
 import '../player/player_controller.dart';
-import '../player/official_music_playback.dart';
 import '../settings/settings_screen.dart';
 import '../settings/account_screen.dart';
 
@@ -213,22 +212,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _play(TrackInfo track, List<TrackInfo> queue, int index) async {
-    if (OfficialMusicPlayback.canOpen(track.id) &&
-        !isDeezerPreview(track.id)) {
-      try {
-        final opened = await OfficialMusicPlayback.open(ref, track.id);
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Open ${OfficialMusicPlayback.providerName(track.id)} '
-                'to listen to this full song.'),
-          ));
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Music provider is unavailable.')),
-          );
-        }
+    if (isMetadataOnlyTrackId(track.id) && !isYouTubeSongId(track.id)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This catalog entry has no authorized in-app playback source.')),
+        );
       }
       return;
     }

@@ -20,7 +20,6 @@ import 'add_to_playlists_sheet.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../player/player_controller.dart';
 import '../player/unified_media_handoff.dart';
-import '../player/official_music_playback.dart';
 
 /// Library navigation follows the user's requested section order. Only
 /// Songs/Favorites and Downloaded currently have live local data; the other
@@ -310,12 +309,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Future<void> _playAll() async {
     if (_favorites.isEmpty) return;
     final nativeIndex = _favorites.indexWhere((item) =>
-        canQueueTrackId(item.id) || isYouTubeSongId(item.id) ||
-        OfficialMusicPlayback.canOpen(item.id));
+        canQueueTrackId(item.id) || isYouTubeSongId(item.id));
     if (nativeIndex >= 0) {
       if (_favorites.any((item) =>
-          !canQueueTrackId(item.id) && !isYouTubeSongId(item.id) &&
-          !OfficialMusicPlayback.canOpen(item.id)) && mounted) {
+          !canQueueTrackId(item.id) && !isYouTubeSongId(item.id)) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Tracks from different music providers cannot share a native audio queue.')),
         );
@@ -332,26 +329,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Future<void> _playOne(int index) async {
     final track = _favorites[index];
-    if (OfficialMusicPlayback.canOpen(track.id)) {
-      try {
-        final opened = await OfficialMusicPlayback.open(ref, track.id);
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Open ${OfficialMusicPlayback.providerName(track.id)} '
-                'to listen to the full song.'),
-          ));
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text(
-              'Music provider could not be opened on this device.',
-            )),
-          );
-        }
-      }
-      return;
-    }
     if (isYouTubeSongId(track.id)) {
       await playYoutubeMusicWithVideoFallback(
         context: context,
