@@ -50,15 +50,26 @@ export class DownloadsService {
     return false;
   }
 
-  /** Do not mint R2 download capabilities for missing, unverified or wrong-codec media. */
-  private async hasReadyDownloadAsset(trackId: string): Promise<boolean> {
+  /** Do not mint R2 download capabilities for missing, unverified or wrong-codec media.
+   * A verified SHA-256 also supplies an exact *encoded-byte* resume identity.
+   * Missing hashes stay downloadable but non-resumable across sessions.
+   */
+  private async readyDownloadAssetVersion(trackId: string): Promise<string | null | false> {
     const asset = await this.prisma.audioAssetVariant.findUnique({
       where: { trackId_quality: { trackId, quality: 'AAC_256' } },
-      select: { status: true, verifiedAt: true, sizeBytes: true, mimeType: true },
+      select: { status: true, verifiedAt: true, sizeBytes: true, mimeType: true, sha256: true },
     });
-    return asset?.status === 'ready' && asset.verifiedAt !== null &&
-      asset.sizeBytes !== null && asset.sizeBytes > 0n &&
-      ['audio/mp4', 'audio/aac'].includes(asset.mimeType);
+    if (!asset || asset.status !== 'ready' || asset.verifiedAt === null ||
+        asset.sizeBytes === null || asset.sizeBytes <= 0n ||
+        !['audio/mp4', 'audio/aac'].includes(asset.mimeType)) {
+      return false;
+    }
+    // SHA-256 must be an actual full-length hexadecimal digest. Other
+    // metadata must never be presented as an integrity-verified version.
+    const digest = asset.sha256;
+    return typeof digest === 'string' && /^[0-9a-f]{64}$/i.test(digest)
+      ? digest.toLowerCase()
+      : null;
   }
 
   async authorizeAndRecord(
@@ -90,7 +101,8 @@ export class DownloadsService {
       };
     }
 
-    if (!await this.hasReadyDownloadAsset(dto.trackId)) {
+    const assetVersion = await this.readyDownloadAssetVersion(dto.trackId);
+    if (assetVersion === false) {
       return { allowed: false, reason: 'LICENSED_DOWNLOAD_VARIANT_NOT_READY', url: null };
     }
 
@@ -130,6 +142,7 @@ export class DownloadsService {
       expiresAt: signed.expiresAt,
       rightsExpiresAt: decision.expiresAt,
       offlineLeaseExpiresAt,
+      assetVersion,
       attribution: decision.attribution,
     };
   }
@@ -165,7 +178,7 @@ export class DownloadsService {
       };
     }
 
-    if (!await this.hasReadyDownloadAsset(trackId)) {
+    if ((await this.readyDownloadAssetVersion(trackId)) === false) {
       await this.prisma.downloadRecord.updateMany({
         where: { userId, trackId, status: 'active' },
         data: { status: 'revoked', expiresAt: new Date() },
