@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/main_tab.dart';
 
@@ -19,6 +18,7 @@ import '../settings/settings_screen.dart';
 import '../settings/account_screen.dart';
 import '../search/search_screen.dart';
 import '../../widgets/bz_discovery_spotlight.dart';
+import '../../widgets/bz_morphing_brand_header.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
 ///
@@ -280,88 +280,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _refresh,
-        child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(16, 24, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
-        children: [
-          Row(
-            children: [
-              BzRibbonLogo(width: 96, color: theme.bzText1),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Create playlist',
-                onPressed: _createPlaylist,
-                icon: SvgPicture.asset(
-                  'assets/icons/plus.svg',
-                  width: 21,
-                  height: 21,
-                  colorFilter: ColorFilter.mode(
-                    theme.bzAccent,
-                    BlendMode.srcIn,
-                  ),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            BzMorphingBrandHeader(
+              actions: [
+                IconButton(
+                  tooltip: 'Create playlist',
+                  onPressed: _createPlaylist,
+                  icon: BzSvgIcon(name: 'plus', color: theme.bzAccent),
                 ),
-              ),
-              PopupMenuButton<String>(
-                tooltip: 'More options',
-                icon: BzSvgIcon(name: 'more-vertical', color: theme.bzText1),
-                onSelected: (value) {
-                  if (value == 'settings') {
-                    Navigator.of(context).push(
-                      breezzePageRoute<void>(
-              context: context,
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    );
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'settings',
-                    child: Text('Settings'),
-                  ),
-                ],
-              ),
-              Semantics(
-                button: true,
-                label: 'Account and profile',
-                child: Tooltip(
-                  message: 'Open account',
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => Navigator.of(context).push(
+                PopupMenuButton<String>(
+                  tooltip: 'More options',
+                  icon: BzSvgIcon(name: 'more-vertical', color: theme.bzText1),
+                  onSelected: (value) {
+                    if (value == 'settings') {
+                      Navigator.of(context).push(
                         breezzePageRoute<void>(
-              context: context,
-                          builder: (_) => const AccountScreen(),
+                          context: context,
+                          builder: (_) => const SettingsScreen(),
                         ),
-                      ),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: theme.bzSurface1,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: theme.bzSeparator),
-                        ),
-                        alignment: Alignment.center,
-                        child: SvgPicture.asset(
-                          'assets/icons/profile.svg',
-                          width: 20,
-                          height: 20,
-                          colorFilter: ColorFilter.mode(
-                            theme.bzText1,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                      ),
+                      );
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'settings', child: Text('Settings')),
+                  ],
+                ),
+                IconButton(
+                  tooltip: 'Account and profile',
+                  onPressed: () => Navigator.of(context).push(
+                    breezzePageRoute<void>(
+                      context: context,
+                      builder: (_) => const AccountScreen(),
                     ),
                   ),
+                  icon: BzSvgIcon(name: 'user-round', color: theme.bzText1),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
+              ],
+            ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                  16, 14, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
           // The Flutter discovery pattern is inspired by editorial music
           // browsers, not copied from the unlicensed reference source.
           Text(_greeting, style: theme.textTheme.displayMedium),
@@ -502,8 +464,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           if (_replay != null && ((_replay!['totalPlays'] as num?)?.toInt() ?? 0) > 0)
             _ReplayCard(summary: _replay!),
-        ],
-      ),
+                ]),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
