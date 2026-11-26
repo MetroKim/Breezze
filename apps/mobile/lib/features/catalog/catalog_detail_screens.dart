@@ -6,60 +6,12 @@ import '../../app/bootstrap.dart';
 import '../search/search_screen.dart';
 import 'spotify_artist_screen.dart';
 import '../../app/saved_album_store.dart';
-import '../../app/followed_artist_store.dart';
 import '../../core/audio/playback_source_policy.dart';
-import '../../core/audio/youtube_player_handoff.dart';
-import '../video/official_music_video_screen.dart';
 import '../video/open_youtube_player.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
-
-final _artistFollowing =
-    FutureProvider.autoDispose.family<FollowedArtist?, String>((ref, key) async {
-  final session = ref.watch(authSessionProvider);
-  if (session is! AuthSignedIn) return null;
-  final store = FollowedArtistStore();
-  try {
-    await store.syncWithCloud(
-      session.userId,
-      ref.read(authSessionProvider.notifier).api,
-      ownerStillActive: () {
-        final current = ref.read(authSessionProvider);
-        return current is AuthSignedIn && current.userId == session.userId;
-      },
-    );
-  } catch (_) {
-    // An offline library remains usable from the owner-scoped secure cache.
-  }
-  return store.find(session.userId, key);
-});
-
-final _artistVideos = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
-  final data = await ref.read(authSessionProvider.notifier).api
-      .discoveryMusicVideos(query: artist);
-  final name = artist.trim().toLowerCase();
-  return (data['items'] as List).whereType<Map>().where((item) {
-    final id = item['id'];
-    final credit = item['artist'];
-    return id is String && YoutubePlayerHandoff.isValidProviderTrackId(id) &&
-        credit is String && credit.trim().toLowerCase() == name;
-  }).take(8).toList();
-});
-
-final _artistConcerts = FutureProvider.autoDispose.family<List<Map>, String>((ref, artist) async {
-  final territory = ref.watch(outboxTerritoryProvider);
-  final data = await ref.read(authSessionProvider.notifier).api.discoveryConcerts(
-    country: territory.length == 2 && territory != 'WW' ? territory : 'US',
-  );
-  final name = artist.trim().toLowerCase();
-  return (data['items'] as List).whereType<Map>().where((event) {
-    final credit = event['artist'];
-    return credit is String &&
-        credit.split(', ').any((part) => part.trim().toLowerCase() == name);
-  }).toList();
-});
 
 final _deezerTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
