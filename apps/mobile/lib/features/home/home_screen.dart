@@ -17,6 +17,8 @@ import '../video/open_youtube_player.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_screen.dart';
 import '../settings/account_screen.dart';
+import '../search/search_screen.dart';
+import '../../widgets/bz_discovery_spotlight.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
 ///
@@ -360,8 +362,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          // Hero greeting (§4.1): time-based, local only.
+          // The Flutter discovery pattern is inspired by editorial music
+          // browsers, not copied from the unlicensed reference source.
           Text(_greeting, style: theme.textTheme.displayMedium),
+          const SizedBox(height: 16),
+          BzDiscoverySpotlight(
+            eyebrow: 'Breezze discovery',
+            title: 'Your next favorite starts here',
+            description: 'Explore music, artists and videos from real catalog results.',
+            actionLabel: 'Explore New',
+            onAction: () => ref.read(homeTabHintProvider.notifier).state =
+                MainTab.browse.index,
+          ),
+          const SizedBox(height: 24),
+          Text('Match your mood', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 52,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final mood in const <String>['Energy', 'Focus', 'Relax', 'Workout', 'Chill']) ...[
+                  BzFilterPill(
+                    label: mood,
+                    active: false,
+                    onTap: () => Navigator.of(context).push(
+                      breezzePageRoute<void>(
+                        context: context,
+                        builder: (_) => SearchScreen(
+                          initialQuery: '$mood music',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ),
           const SizedBox(height: 24),
           if (_loading) ...[
             const BzSkeleton(width: 172, height: 16, radius: 5),
