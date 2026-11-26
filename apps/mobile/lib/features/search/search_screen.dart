@@ -26,7 +26,10 @@ import '../../widgets/bz_brand_icons.dart';
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, this.initialQuery});
+
+  /// Optional query from an artist's related-search suggestion.
+  final String? initialQuery;
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -79,6 +82,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void initState() {
     super.initState();
     _loadHistory();
+    final initial = widget.initialQuery?.trim();
+    if (initial != null && initial.length >= 2) {
+      _controller.text = initial;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onQueryChanged(initial);
+      });
+    }
   }
 
   @override
