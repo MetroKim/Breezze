@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../video/open_youtube_player.dart';
 import '../../core/audio/playback_source_policy.dart';
 
+import '../../app/breezze_navigation.dart';
 import '../../app/bootstrap.dart';
 import '../../app/downloads_controller.dart';
 import '../../app/search_history_store.dart';
@@ -374,7 +375,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final id = record['id'];
     final name = record['name'];
     if (id is! String || name is! String) return;
-    Navigator.of(context).push(MaterialPageRoute<void>(
+    Navigator.of(context).push(breezzePageRoute<void>(
+      context: context,
       builder: (_) => ArtistDetailScreen(
         artist: name,
         spotifyArtistId: id,
@@ -652,7 +654,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _openTrack(BzTrack track) {
-    Navigator.of(context).push(MaterialPageRoute(
+    Navigator.of(context).push(breezzePageRoute<void>(
+      context: context,
       builder: (_) => TrackDetailScreen(
         track: TrackInfo(
           id: track.id,
@@ -724,7 +727,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       if (!mounted) return;
       final state = ref.read(playerControllerProvider);
       if (state.playbackState == PlaybackState.playing) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
+        Navigator.of(context).push(breezzePageRoute<void>(
+      context: context,
           builder: (_) => const NowPlayingScreen(),
         ));
       } else {
@@ -833,7 +837,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           origin: 'search',
           sourceContext: 'Search',
         );
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()));
+    Navigator.of(context).push(breezzePageRoute<void>(
+      context: context,builder: (_) => const NowPlayingScreen()));
   }
 
   @override
