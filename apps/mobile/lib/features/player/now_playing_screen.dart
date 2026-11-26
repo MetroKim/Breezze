@@ -601,6 +601,8 @@ class _LyricsView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final highContrast = MediaQuery.highContrastOf(context);
 
     if (mode == 'loading') {
       return const Column(
@@ -643,6 +645,11 @@ class _LyricsView extends ConsumerWidget {
         if (active) {
           lineColor = theme.bzText1;
           lineWeight = FontWeight.w700;
+        } else if (highContrast) {
+          // Preserve Apple's lyric hierarchy using weight, not low-
+          // contrast translucency, when the OS requests stronger contrast.
+          lineColor = theme.bzText2;
+          lineWeight = FontWeight.w500;
         } else if (distance <= 1) {
           lineColor = theme.bzText2;
           lineWeight = FontWeight.w600;
@@ -654,15 +661,27 @@ class _LyricsView extends ConsumerWidget {
           lineWeight = FontWeight.w400;
         }
 
-        Widget seekable(Widget child) => isSynced
-            ? InkWell(onTap: () => ref.read(playerControllerProvider.notifier).seekTo(line.start),
-                child: child)
-            : child;
+        Widget seekable(Widget child) {
+          if (!isSynced) return child;
+          void seek() {
+            ref.read(playerControllerProvider.notifier).seekTo(line.start);
+          }
+          return Semantics(
+            button: true,
+            label: 'Jump to lyric: ${line.text}',
+            onTap: seek,
+            child: InkWell(
+              onTap: seek,
+              excludeFromSemantics: true,
+              child: ExcludeSemantics(child: child),
+            ),
+          );
+        }
         if (line.words.isEmpty) {
           return seekable(Padding(
             padding: EdgeInsets.symmetric(vertical: focusMode ? 12 : 6),
             child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
+              duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
               style: TextStyle(
                 fontSize: focusMode ? BzType.title1 : BzType.headline,
                 fontWeight: lineWeight,
@@ -681,7 +700,7 @@ class _LyricsView extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 200),
+                    duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
                     style: TextStyle(
                       fontSize: focusMode ? BzType.title1 : BzType.headline,
                       fontWeight: lineWeight,
