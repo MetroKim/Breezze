@@ -231,15 +231,7 @@ class _DesktopNavigation extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 28),
                 child: Row(
                   children: [
-                    BzBnoteMark(size: 30, color: theme.bzText1),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Breezze',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.6,
-                      ),
-                    ),
+                    BzBrandLockup(markHeight: 34, color: theme.bzText1),
                   ],
                 ),
               ),
