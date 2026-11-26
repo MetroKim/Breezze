@@ -318,7 +318,10 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: 26),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: theme.textTheme.titleLarge),
+        Semantics(
+          header: true,
+          child: Text(title, style: theme.textTheme.titleLarge),
+        ),
         const SizedBox(height: 10),
         if (children.isEmpty)
           Padding(
@@ -420,10 +423,18 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
               children: [
-                Center(child: _SpotifyArtwork(url: photo, size: 152, circle: true)),
+                Center(child: _SpotifyArtwork(
+                  url: photo,
+                  size: 152,
+                  circle: true,
+                  semanticLabel: 'Artist portrait for $title',
+                )),
                 const SizedBox(height: 16),
-                Text(title, textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineMedium),
+                Semantics(
+                  header: true,
+                  child: Text(title, textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium),
+                ),
                 const SizedBox(height: 6),
                 Text(_data == null ? 'Artist' : 'Artist profile',
                   textAlign: TextAlign.center,
@@ -452,7 +463,10 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                 else if (_error != null)
                   Padding(padding: const EdgeInsets.only(top: 20), child: Column(
                     children: [
-                      Text(_error!, textAlign: TextAlign.center),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(_error!, textAlign: TextAlign.center),
+                      ),
                       TextButton(
                         onPressed: _loadArtist,
                         child: const Text('Retry artist lookup'),
@@ -674,10 +688,16 @@ class _SpotifyReleaseScreenState extends ConsumerState<SpotifyReleaseScreen> {
       appBar: AppBar(title: Text(widget.title)),
       body: ListView(padding: const EdgeInsets.all(20), children: [
         Center(child: _SpotifyArtwork(
-          url: detail['artworkUrl'] as String?, size: 180)),
+          url: detail['artworkUrl'] as String?,
+          size: 180,
+          semanticLabel: 'Cover artwork for ${widget.title}',
+        )),
         const SizedBox(height: 14),
-        Text(widget.title, textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineSmall),
+        Semantics(
+          header: true,
+          child: Text(widget.title, textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall),
+        ),
         if (detail['releaseDate'] is String)
           Text(detail['releaseDate'] as String, textAlign: TextAlign.center),
         if (_album == null && _error == null)
@@ -687,7 +707,10 @@ class _SpotifyReleaseScreenState extends ConsumerState<SpotifyReleaseScreen> {
           TextButton(onPressed: _load, child: Text('Retry: $_error')),
         if (_album != null) ...[
           const SizedBox(height: 18),
-          Text('Songs', style: Theme.of(context).textTheme.titleLarge),
+          Semantics(
+            header: true,
+            child: Text('Songs', style: Theme.of(context).textTheme.titleLarge),
+          ),
           if (tracks.isEmpty)
             Text(_album?['tracksStatus'] == 'unavailable'
                 ? 'Tracks temporarily unavailable.' : 'No tracks returned.'),
@@ -719,7 +742,15 @@ class _SpotifyArtwork extends StatelessWidget {
   final String? url;
   final double size;
   final bool circle;
-  const _SpotifyArtwork({required this.url, required this.size, this.circle = false});
+  /// Only hero artwork needs a separate image announcement; nearby text
+  /// already names the item represented by list-row thumbnails.
+  final String? semanticLabel;
+  const _SpotifyArtwork({
+    required this.url,
+    required this.size,
+    this.circle = false,
+    this.semanticLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -733,9 +764,17 @@ class _SpotifyArtwork extends StatelessWidget {
         ? Image.network(url!, width: size, height: size,
             fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback)
         : fallback;
-    return ClipRRect(
+    final visual = ClipRRect(
       borderRadius: BorderRadius.circular(circle ? size / 2 : 10),
       child: SizedBox(width: size, height: size, child: child),
+    );
+    if (semanticLabel == null) {
+      return ExcludeSemantics(child: visual);
+    }
+    return Semantics(
+      image: true,
+      label: semanticLabel!,
+      child: ExcludeSemantics(child: visual),
     );
   }
 }
