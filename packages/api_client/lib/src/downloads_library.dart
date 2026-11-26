@@ -408,9 +408,58 @@ class DownloadsLibrary {
     await metaFile.writeAsString(jsonEncode(raw));
   }
 
+  /// Upgrade historical app-private plaintext music to authenticated BZA8.
+  /// An in-progress migration never deletes its source before metadata is
+  /// atomically switched to the new encrypted rendition.
+  ///
+  /// Returns the number of successfully migrated recordings. Keystore
+  /// failures leave the legacy file intact but callers should display only
+  /// encrypted entries until the migration can be retried.
+  Future<int> protectLegacy({required String ownerId}) async {
+    final protector = protectAudio;
+    if (protector == null || !await root.exists()) return 0;
+    var migrated = 0;
+    await for (final entry in root.list()) {
+      if (entry is! Directory) continue;
+      final meta = File('${entry.path}/meta.json');
+      final original = File('${entry.path}/audio.m4a');
+      if (!await meta.exists() || !await original.exists()) continue;
+      try {
+        final raw = jsonDecode(await meta.readAsString());
+        if (raw is! Map<String, dynamic> ||
+            raw['ownerId'] != ownerId ||
+            raw['storageFormat'] == 'bza8') continue;
+        final catalogTrackId = raw['catalogTrackId'] as String?;
+        if (catalogTrackId == null || catalogTrackId.isEmpty) continue;
+        final assetVersion = raw['assetVersion'] as String?;
+        final target = File('${entry.path}/audio.bza');
+        await protector(
+          plaintextFile: original,
+          encryptedFile: target,
+          ownerId: ownerId,
+          catalogTrackId: catalogTrackId,
+          assetVersion: assetVersion,
+        );
+        final upgraded = Map<String, dynamic>.of(raw)
+          ..['storageFormat'] = 'bza8';
+        final pendingMeta = File('${meta.path}.tmp');
+        await pendingMeta.writeAsString(jsonEncode(upgraded), flush: true);
+        // The sealed asset and owner-bound metadata must both be in place
+        // before removing the last original bytes.
+        await pendingMeta.rename(meta.path);
+        await original.delete();
+        migrated++;
+      } catch (_) {
+        // Do not expose the legacy audio through the secure listing mode.
+        // Reattempt when the platform secure-key service is available.
+      }
+    }
+    return migrated;
+  }
+
   /// Lists only assets owned by [ownerId]. A legacy file without owner
   /// metadata is deliberately hidden rather than exposed across sessions.
-  Future<List<DownloadedTrack>> list({required String ownerId}) async {
+  Future<List<DownloadedTrack>> list({required String ownerId, bool encryptedOnly = false}) async {
     final tracks = <DownloadedTrack>[];
     if (!await root.exists()) return tracks;
     await for (final entry in root.list()) {
@@ -425,6 +474,7 @@ class DownloadsLibrary {
         final title = raw['title'] as String? ?? 'Unknown';
         final artist = raw['artist'] as String? ?? 'Unknown';
         final catalogTrackId = raw['catalogTrackId'] as String?;
+        if (encryptedOnly && raw['storageFormat'] != 'bza8') continue;
         final audioPath = raw['storageFormat'] == 'bza8'
             ? '${entry.path}/audio.bza'
             : '${entry.path}/audio.m4a';
