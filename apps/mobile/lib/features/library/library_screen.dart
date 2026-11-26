@@ -17,6 +17,7 @@ import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_morphing_brand_header.dart';
 import '../../widgets/bz_discovery_action_tile.dart';
+import '../../widgets/bz_playlist_artwork.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
 import 'add_to_playlists_sheet.dart';
@@ -724,30 +725,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       itemCount: _playlists.length,
       itemBuilder: (context, index) {
         final playlist = _playlists[index];
-        final artwork = playlist.tracks
-            .where((track) => track.artworkUrl != null)
-            .map((track) => track.artworkUrl!)
-            .toList();
+
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          leading: ClipRRect(
-            borderRadius: BorderRadius.circular(BzRadius.artwork),
-            child: artwork.isEmpty
-                ? Container(
-                    width: 54,
-                    height: 54,
-                    color: theme.bzSurface1,
-                    alignment: Alignment.center,
-                    child: BzBnoteMark(size: 28, color: theme.bzText2),
-                  )
-                : Image.network(
-                    artwork.first,
-                    width: 54,
-                    height: 54,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        BzBnoteMark(size: 54, color: theme.bzText2),
-                  ),
+          leading: BzPlaylistArtwork(
+            size: 54,
+            artworkUrls: [
+              for (final track in playlist.tracks) track.artworkUrl,
+            ],
           ),
           title: Text(playlist.name,
               maxLines: 1, overflow: TextOverflow.ellipsis),
