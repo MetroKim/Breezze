@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/auth/auth_session.dart';
 import '../core/audio/authorized_download_grant.dart';
-import '../core/audio/offline_device_key.dart';
+import '../core/audio/secure_downloads_library.dart';
 import '../core/audio/playback_source_policy.dart';
 import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
@@ -321,28 +321,9 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
 
       state = {...state, track.id: 0.0};
       final dir = await downloadsDirectory(userId: auth.userId);
-      final library = DownloadsLibrary(
+      final library = secureDownloadsLibrary(
         root: dir,
         lyrics: ref.read(lyricsProvider),
-        // New native downloads must never persist playable plaintext.
-        // Keychain/Keystore failure fails the job; no insecure fallback.
-        protectAudio: ({
-          required plaintextFile,
-          required encryptedFile,
-          required ownerId,
-          required catalogTrackId,
-          assetVersion,
-        }) async {
-          final secretKey = await OfflineDeviceKeyStore.shared
-              .forOwner(ownerId, create: true);
-          await BreezzeOfflineAudioCipher(secretKey).encryptFile(
-            input: plaintextFile,
-            output: encryptedFile,
-            ownerId: ownerId,
-            catalogTrackId: catalogTrackId,
-            assetVersion: assetVersion,
-          );
-        },
       );
       final ok = await library.download(
         track,
