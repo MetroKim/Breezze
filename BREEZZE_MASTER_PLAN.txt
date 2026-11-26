@@ -1,19 +1,25 @@
-BREEZZE — UNIFIED MASTER PLAN v7 (2026-11-26)
+BREEZZE — UNIFIED MASTER PLAN V8 (2026-11-26)
 
-Current authoritative completion plan, exact-SHA verification evidence,
-six-platform Flutter architecture and broad Linux distribution matrix:
-
-docs/BREEZZE_MASTER_PLAN_V7.md
+SINGLE CANONICAL PROJECT PLAN:
+docs/BREEZZE_UNIFIED_ENGINE_V8_IMPLEMENTATION_PLAN.md
 
 Repository: MetroKim/Breezze; default branch: main.
-Product: free, no ads/subscriptions, listener-first; four tabs:
-Home, Browse, Library, Search. One global player.
-STATUS: IN DEVELOPMENT / RELEASE FROZEN.
+Product: free, no ads or subscriptions; listener-first Flutter client.
+Four tabs: Home, New, Library, Search. One global player and queue.
+Stack: Flutter / NestJS+Prisma / Supabase Auth+Postgres /
+Cloudflare API+Media Workers / private R2 / Drift local storage.
 
-Older v5+v6 architecture decisions and implementation details remain in:
-docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md
-Older test checkmarks are historical and do NOT certify current main.
+STATUS: IN DEVELOPMENT — RELEASE AND NEW PRODUCTION DEPLOYMENTS FROZEN.
 
-Never mark functionality verified merely because code exists. All mandatory
-CI, device, rights, cross-OS and security gates must pass on the release
-candidate SHA. Do not publish source archives, installers or GitHub Releases.
+V8 is the only active architecture and delivery version. Earlier V6/V7
+plan files were retired from the working tree, with Git history preserved.
+Subsequent V8 checkpoint numbers identify implementation progress within
+V8, not new standalone versions.
+
+Every feature requires exact-commit CI, native accessibility/playback,
+rights, frontend/backend integration and real-device acceptance evidence.
+Neither source presence nor a historical test PASS proves readiness.
+
+No GitHub Releases, public code archives, signed installers, app-store
+submissions or new production deployment without final verification AND
+explicit owner authorization.
