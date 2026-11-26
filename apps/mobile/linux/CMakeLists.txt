@@ -82,6 +82,17 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# flutter_secure_storage_linux currently vendors an older nlohmann/json.hpp.
+# Clang 19+ treats its whitespace in literal-operator declarations as a
+# deprecated warning, and that plugin's apply_standard_settings() enables
+# -Werror. Keep all other warnings as errors; relax ONLY this third-party
+# diagnostic on the one affected plugin target (not the Breezze runner).
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+   TARGET flutter_secure_storage_linux_plugin)
+  target_compile_options(flutter_secure_storage_linux_plugin PRIVATE
+    -Wno-error=deprecated-literal-operator)
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
