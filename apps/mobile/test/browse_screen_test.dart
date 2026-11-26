@@ -295,7 +295,16 @@ void main() {
 
     expect(find.byType(YouTubeMusicClientScreen), findsOneWidget);
     expect(find.byType(BzBrandedAppBar), findsOneWidget);
-    expect(find.text('Breezze'), findsOneWidget);
+    // The app toolbar is unique, while the provider detail may also show
+    // Breezze's brand inside a section. Count the actual toolbar instead of
+    // enforcing an arbitrary global text occurrence after the brand refresh.
+    expect(
+      find.descendant(
+        of: find.byType(BzBrandedAppBar),
+        matching: find.text('Breezze'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Discover'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
