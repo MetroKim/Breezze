@@ -23,6 +23,8 @@ interface DeezerArtistRecord {
   picture_medium?: string;
   picture_big?: string;
   link?: string;
+  nb_fan?: number;
+  nb_album?: number;
 }
 interface DeezerAlbumRecord {
   id?: number;
@@ -39,6 +41,11 @@ interface DeezerAlbumRecord {
 export interface DeezerArtistSupplement {
   matchedArtistId: string;
   matchedName: string;
+  artistExtra: {
+    fans?: number;
+    albumCount?: number;
+    url: string;
+  };
   songs: (ProviderTrack & { providerId: 'deezer' })[];
   albums: Array<{
     providerId: 'deezer';
@@ -240,6 +247,13 @@ export class DeezerAdapter implements ProviderAdapter {
       const result = providerOk<DeezerArtistSupplement>({
         matchedArtistId: String(artistId),
         matchedName: exact[0].name!,
+        artistExtra: {
+          fans: Number.isSafeInteger(exact[0].nb_fan) && (exact[0].nb_fan ?? -1) >= 0
+            ? exact[0].nb_fan : undefined,
+          albumCount: Number.isSafeInteger(exact[0].nb_album) && (exact[0].nb_album ?? -1) >= 0
+            ? exact[0].nb_album : undefined,
+          url: 'https://www.deezer.com/artist/' + artistId,
+        },
         songs, albums, relatedArtists,
         songStatus: songsData === null ? 'unavailable' : 'ok',
         albumStatus: albumData === null ? 'unavailable' : 'ok',
