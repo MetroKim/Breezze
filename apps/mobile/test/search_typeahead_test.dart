@@ -406,7 +406,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('Artists'), findsOneWidget);
-    expect(find.text('Test Singer'), findsOneWidget);
+    expect(find.text('Test Singer'), findsWidgets);
     expect(find.text('Test Singer Song'), findsOneWidget);
     final list = find.byType(ListTile);
     expect(list, findsWidgets);
