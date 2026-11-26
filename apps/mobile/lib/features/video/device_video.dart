@@ -6,6 +6,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:video_player/video_player.dart';
 
 import 'open_youtube_player.dart';
+import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 
 bool get supportsDeviceVideo => kIsWeb ||
     [TargetPlatform.android, TargetPlatform.iOS, TargetPlatform.macOS].contains(defaultTargetPlatform);
@@ -82,6 +84,8 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
   late final VideoPlayerController _player;
   late final Future<void> _ready;
   bool _closing = false;
+  // User opt-in only; never repeat protected media automatically by default.
+  bool _repeat = false;
 
   @override
   void initState() {
@@ -99,8 +103,23 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
     _player.addListener(_onFrame);
   }
 
+  Future<void> _toggleRepeat() async {
+    final next = !_repeat;
+    try {
+      await _player.setLooping(next);
+      if (mounted) setState(() => _repeat = next);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not change video repeat mode.')),
+        );
+      }
+    }
+  }
+
   void _onFrame() {
-    if (!_closing && mounted && _player.value.isCompleted && ModalRoute.of(context)?.isCurrent == true) {
+    if (!_repeat && !_closing && mounted && _player.value.isCompleted &&
+        ModalRoute.of(context)?.isCurrent == true) {
       _closing = true;
       Navigator.of(context).pop();
     }
@@ -120,21 +139,86 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title ?? widget.file?.name ?? 'Video')),
-    body: Center(child: FutureBuilder<void>(future: _ready, builder: (context, snapshot) {
-      if (snapshot.hasError) return const Text('This video could not be played.');
-      if (snapshot.connectionState != ConnectionState.done) return const CircularProgressIndicator();
-      return ValueListenableBuilder<VideoPlayerValue>(valueListenable: _player, builder: (context, value, _) {
-        if (value.hasError) return const Text('Video playback failed.');
-        return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Flexible(child: AspectRatio(aspectRatio: value.aspectRatio, child: VideoPlayer(_player))),
-          VideoProgressIndicator(_player, allowScrubbing: true),
-          IconButton(tooltip: value.isPlaying ? 'Pause video' : 'Play video',
-            icon: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow),
-            onPressed: value.isPlaying ? _player.pause : _player.play),
-        ]);
-      });
-    })),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: BzBrandedAppBar(
+        title: widget.title ?? widget.file?.name ?? 'Video',
+        leading: IconButton(
+          tooltip: 'Back to music',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: FutureBuilder<void>(
+          future: _ready,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Center(child: Text('This video could not be played.'));
+            }
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: _player,
+              builder: (context, value, _) {
+                if (value.hasError) {
+                  return const Center(child: Text('Video playback failed.'));
+                }
+                return Column(
+                  children: [
+                    Expanded(
+                      child: ColoredBox(
+                        color: Colors.black,
+                        child: Center(
+                          child: AspectRatio(
+                            aspectRatio: value.aspectRatio > 0
+                                ? value.aspectRatio : 16 / 9,
+                            child: VideoPlayer(_player),
+                          ),
+                        ),
+                      ),
+                    ),
+                    VideoProgressIndicator(
+                      _player,
+                      allowScrubbing: true,
+                      colors: VideoProgressColors(
+                        playedColor: theme.colorScheme.onSurface,
+                        bufferedColor: theme.colorScheme.onSurface.withValues(alpha: 0.28),
+                        backgroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.10),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          tooltip: value.isPlaying ? 'Pause video' : 'Play video',
+                          icon: BzSvgIcon(
+                            name: value.isPlaying ? 'pause' : 'play',
+                            color: theme.colorScheme.onSurface,
+                            size: 28,
+                          ),
+                          onPressed: value.isPlaying ? _player.pause : _player.play,
+                        ),
+                        const SizedBox(width: 16),
+                        TextButton.icon(
+                          onPressed: _toggleRepeat,
+                          icon: const BzSvgIcon(name: 'repeat', size: 20),
+                          label: Text(_repeat ? 'Repeat on' : 'Repeat off'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
 }
