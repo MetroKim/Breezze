@@ -75,17 +75,22 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       _interruptionSubscription = session.interruptionEventStream.listen((event) {
         if (_disposed) return;
         if (event.begin) {
-          // Pause rather than duck for calls, navigation prompts and other
-          // exclusive audio interruptions. Never auto-resume after a call.
+          // The "interrupted" state MUST enter the controller before the
+          // just_audio pause event: otherwise the OS pause can win the race
+          // and look like a user-requested pause to session bookkeeping.
+          if (_player.playing) _states.add(PlaybackState.interrupted);
+          // Do not duck/auto-resume through calls, Siri or exclusive focus.
           unawaited(_player.pause().catchError((_) {}));
-          _states.add(PlaybackState.interrupted);
         } else {
+          // Session focus returning is NOT permission to resume playback.
           _states.add(PlaybackState.paused);
         }
       });
       _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
         if (_disposed) return;
-        // Headphones/Bluetooth route removed: pause to avoid speaker leakage.
+        // Headphones/Bluetooth route removed: interrupt BEFORE pause so
+        // a stale native "playing" event cannot expose audio on speakers.
+        if (_player.playing) _states.add(PlaybackState.interrupted);
         unawaited(_player.pause().catchError((_) {}));
       });
     } catch (_) {
