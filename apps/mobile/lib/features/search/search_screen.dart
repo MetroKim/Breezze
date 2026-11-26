@@ -24,6 +24,7 @@ import '../player/player_controller.dart';
 import '../player/unified_media_handoff.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_morphing_brand_header.dart';
+import '../../widgets/bz_discovery_action_tile.dart';
 
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
@@ -1370,38 +1371,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ],
         Text('Suggested searches', style: theme.textTheme.titleLarge),
         const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 2.35,
-          children: [
-            for (final item in _suggestedSearches.entries)
-              Material(
-                color: theme.bzSurface1,
-                borderRadius: BorderRadius.circular(BzRadius.card),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(BzRadius.card),
-                  onTap: () => _reuseSearch(item.value),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(BzRadius.card),
-                      border: Border.all(color: theme.bzSeparator),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      item.key,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 900
+                ? 4
+                : constraints.maxWidth >= 600
+                    ? 3
+                    : constraints.maxWidth >= 340
+                        ? 2
+                        : 1;
+            final width = (constraints.maxWidth - 10 * (columns - 1)) /
+                columns;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final item in _suggestedSearches.entries)
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: item.key,
+                      description: 'Find music in Breezze',
+                      iconName: 'search',
+                      onTap: () => _reuseSearch(item.value),
                     ),
                   ),
-                ),
-              ),
-          ],
+              ],
+            );
+          },
         ),
       ],
     );
