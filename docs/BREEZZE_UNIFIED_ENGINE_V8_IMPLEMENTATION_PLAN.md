@@ -32,6 +32,35 @@
 - **Next:** verify CI and repair any failures on the exact PR #83 head, finish interaction coverage across all remaining reference-derived sections (real data only), audit duplicate/obsolete YouTube branding and obtain native/accessibility screenshots. Maintain original licensing and release freeze. Revisit unsupported Cast/mic/artist chart/community playlist paths only after real integrations and rights are established; never render dead buttons.
 - **Completion:** V8 UI is not “100% complete” without checked branch CI, native app interactions and accessibility evidence. No release, deployment, public code archive or installer until owner explicitly approves the final verified build.
 
+## V8 UI single-design-system cutover and six-platform acceptance — 2026-11-26
+
+**Owner mandate:** remove duplicate/obsolete *visual implementations*, use the selected YTMusic-style **screen/section layout as an independently recreated UX reference**, and keep Breezze as the only app brand. Preserve and reconnect functionality rather than deleting working state management, authorization, account data, media players or provider APIs. Do not vendor the third-party Flutter repo because its license is unspecified. **No “100% finished” claim unless exact-head CI and native OS acceptance pass.**
+
+### One UI source of truth — enforced in V8 CI
+| Responsibility | Sole active implementation | Duplicate/retirement rule |
+|---|---|---|
+| Top navigation | `apps/mobile/lib/widgets/bz_shell.dart` | Exactly Home / New / Library / Search; no second shell, no new Radio/YTMusic tabs |
+| Theme + layout tokens | `packages/design_system/lib/src/bz_theme.dart`, `tokens.dart` | `lib/bz_theme.dart` stays a re-export, not a competing palette |
+| Glass rendering | `packages/design_system/lib/src/glass/bz_glass.dart` | **`BzGlassContainer` now delegates to `BzGlass`**, no separate blur/filter renderer; BzGlassBudgetScope in pages and player/tab chrome |
+| Main brand | `bz_brand_icons.dart` and `bz_morphing_brand_header.dart` | Upper-left Breezze wordmark collapses to black circular white B-note, not the YouTube Music mark |
+| Catalog/detail toolbar | `bz_branded_app_bar.dart` | Secondary/YouTube discovery screens use Breezze logo, secondary provider labels only |
+| Source-specific discovery | `features/browse/ytmusic_client_screen.dart` **reachable from New** | Preserve authorized YT metadata, video/account-playlist actions, replace nine old standalone AppBars with shared Breezze toolbar; not a top-level app or duplicate player |
+| Home/New sections | `features/home/home_screen.dart` and `features/browse/browse_screen.dart` | Original glass hero, context rails, genuine working mood/genre/catalog/video actions; no copied source or fake charts |
+| Saved library and search | `features/library/library_screen.dart`, `features/search/search_screen.dart` | Existing account-safe playlists, albums, follows, downloaded assets, artist and video search, never duplicate ownership or media engines |
+
+**CI prevention:** `tools/check_v8_ui_single_source.py` + 6 tests executed from `.github/workflows/breezze-quality.yml`. Reject extra provider tabs, stale duplicated glass filter, missing original logo, old YouTube-branded provider app bars or a vendored reference UI. `apps/mobile/test/v8_cross_device_layout_test.dart` covers responsive layouts for Android, iOS, Windows, macOS and Linux target themes plus 280dp foldable accessibility; **web requires the independent real Flutter web build/smoke workflow**. Static/widget evidence is not hardware certification.
+
+### Feature / interaction cutover acceptance
+- **Home:** real persisted recent plays, follows/favorites and personalized rails where backend source exists; Breezze expanding/collapsing masthead; functional mood searches, new-release and artist routes, official music-video search, actionable original glass hero.
+- **New:** live genre filters, backend-checked release/chart/video/concert collection screens, 100% original Breezze chrome, and linked YouTube Music *metadata* companion for public discovery + separately consented linked playlists. Provider names remain for lawful source attribution only.
+- **Library:** playlists, albums, followed artists, favorites, downloads, pin and edit workflows should stay backed by existing account-scoped stores; no duplicate data stack.
+- **Search:** real catalog/typeahead/history, songs/artists and official video scope, library and explicitly user-selected device audio; original Breezze header, disabled unsupported requests with explanation.
+- **Player:** exactly one native audio controller and Now Playing and official visible YouTube video route; no illegal audio extraction or ungranted offline claims.
+- **Responsive:** test widths 280, 320, 390, 768, 1024 and 1280 logical pixels; iOS/Android safe areas, large Dynamic Type, high contrast/Reduce Motion, Windows/macOS/Linux keyboard and hover, web loading and history. Keep current six-target build workflows; native OS emulator/hardware controls, screenshots and distribution signing are **NOT YET VERIFIED**.
+- **Release:** remains blocked until *all* V8 quality, rights, auth, security, true native interactions and platform packaging gates pass and owner explicitly approves. No new production deployment.
+
+**Working implementation:** Draft [PR #83](https://github.com/MetroKim/Breezze/pull/83) contains this cutover, replacement UI components, tests and CI guard. Separate [PR #82](https://github.com/MetroKim/Breezze/pull/82) retires the older V6/V7 master plans; reconcile both before merge. Historical source or brand reference archives are not permission to reintroduce old UI. Last known old PR #83 rights-test failure was a premature Flutter navigation assertion, patched and re-run; no green exact-head claim until the current run proves it.
+
 ## Product contract (single source of truth)
 - **Four top-level tabs in order:** **Home**, **New** (formerly Browse), **Library**, **Search**; no fifth Radio/Downloads/Settings tab.
 - **Home:** listener-scoped history, favorites, follows, personalized shelves with honest source metadata. Do not label algorithmic shelves or charts as official without a real dataset.
