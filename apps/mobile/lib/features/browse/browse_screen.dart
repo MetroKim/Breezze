@@ -63,12 +63,64 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   bool _loading = false;
   String? _error;
   int _requestId = 0;
+  final Map<String, String> _featuredArtwork = {};
+  int _featuredRequest = 0;
+
+  String? _firstRealArtwork(Map<String, dynamic> response) {
+    final rows = response['items'];
+    if (rows is! List) return null;
+    for (final row in rows) {
+      if (row is! Map) continue;
+      final artwork = row['artworkUrl'];
+      final uri = artwork is String ? Uri.tryParse(artwork) : null;
+      if (uri != null && uri.scheme == 'https' && uri.host.isNotEmpty) {
+        return artwork as String;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _loadFeaturedArtwork() async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return;
+    final owner = auth.userId;
+    final generation = ++_featuredRequest;
+    final territory = ref.read(outboxTerritoryProvider).toLowerCase();
+    final country = territory.length == 2 && territory != 'ww'
+        ? territory : 'us';
+    final api = ref.read(authSessionProvider.notifier).api;
+
+    Future<void> load(String label, Future<Map<String, dynamic>> response) async {
+      try {
+        final data = await response;
+        if (!mounted || generation != _featuredRequest) return;
+        final active = ref.read(authSessionProvider);
+        if (active is! AuthSignedIn || active.userId != owner) return;
+        final artwork = _firstRealArtwork(data);
+        if (artwork != null) {
+          setState(() => _featuredArtwork[label] = artwork);
+        }
+      } catch (_) {
+        // Never substitute made-up artwork when providers are unavailable.
+      }
+    }
+
+    await Future.wait([
+      load('New Releases', api.discoveryNewReleases(country: country)),
+      load('Charts', api.discoverySongsChart(country: country)),
+      load('Moods & Activities', api.discoveryArtistSearch(_selectedGenre)),
+    ]);
+  }
+
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadGenre(_selectedGenre);
+      if (mounted) {
+        _loadGenre(_selectedGenre);
+        _loadFeaturedArtwork();
+      }
     });
   }
 
@@ -97,6 +149,15 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                   ))
               .toList();
           _loading = false;
+          if (!_featuredArtwork.containsKey('Moods & Activities')) {
+            for (final track in _tracks) {
+              final url = track.artworkUrl;
+              if (url != null && Uri.tryParse(url)?.scheme == 'https') {
+                _featuredArtwork['Moods & Activities'] = url;
+                break;
+              }
+            }
+          }
         });
       } else {
         setState(() {
@@ -254,6 +315,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                                 label: destination.title,
                                 description: destination.description,
                                 iconName: destination.icon,
+                                artworkUrl: _featuredArtwork[destination.title],
                                 onTap: () => _openCollection(destination),
                               ),
                             ),
