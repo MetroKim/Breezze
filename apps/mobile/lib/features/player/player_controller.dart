@@ -37,6 +37,7 @@ class PlayerController extends Notifier<PlayerState> {
   PlayableSource? _activeSource;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlaybackState>? _engineStateSub;
+  StreamSubscription<bool>? _callResumeSub;
   int _requestGeneration = 0;
   String? _autoAdvancedTrackId;
   Timer? _streamRecoveryTimer;
@@ -321,6 +322,7 @@ class PlayerController extends Notifier<PlayerState> {
       if (currentTrackId != null) _scrobbles.onStop(currentTrackId);
       _positionSub?.cancel();
       _engineStateSub?.cancel();
+      _callResumeSub?.cancel();
       _engine = null;
       _activeSource = null;
     });
@@ -334,7 +336,25 @@ class PlayerController extends Notifier<PlayerState> {
     _requestGeneration++;
     _positionSub?.cancel();
     _engineStateSub?.cancel();
+    _callResumeSub?.cancel();
     _engine = engine;
+    if (engine is CallInterruptionResumeSource) {
+      _callResumeSub = engine.callResumeRequests.listen((shouldResume) {
+        if (!shouldResume || !identical(_engine, engine)) return;
+        final generation = _requestGeneration;
+        final trackId = state.currentTrack?.id;
+        if (trackId == null) return;
+        // OS events are asynchronous. Give interrupted -> paused a turn to
+        // settle, then use the controller's normal rights/session-aware resume.
+        unawaited(Future<void>.delayed(Duration.zero).then((_) async {
+          if (generation != _requestGeneration ||
+              !identical(_engine, engine) ||
+              state.currentTrack?.id != trackId ||
+              state.playbackState != PlaybackState.paused) return;
+          await resume();
+        }));
+      });
+    }
 
     _positionSub = engine.positionStream.listen((pos) {
       if (!identical(_engine, engine)) return;
@@ -494,6 +514,9 @@ class PlayerController extends Notifier<PlayerState> {
   /// and account sign-out so one user's media cannot continue into another
   /// account session.
   Future<void> stop() async {
+    if (_engine is CallInterruptionResumeSource) {
+      (_engine! as CallInterruptionResumeSource).cancelPendingCallResume();
+    }
     _cancelStreamRecovery();
     final requestId = ++_requestGeneration;
     final engine = _engine;
@@ -520,7 +543,15 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> pause() async {
     _cancelStreamRecovery();
     final engine = _engine;
-    if (engine == null || state.playbackState != PlaybackState.playing) return;
+    if (engine == null) return;
+    if (state.playbackState == PlaybackState.interrupted) {
+      // Explicit user/OS pause while the phone owns focus forbids auto resume.
+      if (engine is CallInterruptionResumeSource) {
+        engine.cancelPendingCallResume();
+      }
+      return;
+    }
+    if (state.playbackState != PlaybackState.playing) return;
     _machine.dispatch(PausePressed());
     _pauseHeartbeatTimer();
     try {
@@ -607,6 +638,9 @@ class PlayerController extends Notifier<PlayerState> {
       await pause();
     } else if (state.playbackState == PlaybackState.paused) {
       await resume();
+    } else if (state.playbackState == PlaybackState.interrupted) {
+      // A tap during a call is a manual decision: never auto resume.
+      await pause();
     } else if (state.playbackState == PlaybackState.failed ||
         state.playbackState == PlaybackState.ended) {
       final track = state.currentTrack;
@@ -867,6 +901,9 @@ class PlayerController extends Notifier<PlayerState> {
     Duration initialPosition = Duration.zero,
   }) async {
     if (isMetadataOnlyTrackId(info.id) && info.localFilePath == null) return;
+    if (_engine is CallInterruptionResumeSource) {
+      (_engine! as CallInterruptionResumeSource).cancelPendingCallResume();
+    }
     final requestId = ++_requestGeneration;
     final previousTrackId = state.currentTrack?.id;
     if (previousTrackId != null && previousTrackId != info.id) {
