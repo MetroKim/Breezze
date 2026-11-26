@@ -176,10 +176,6 @@ jobs:
         working-directory: apps/mobile
         run: python3 tool/verify_platform_network_permissions.py --android --macos
 
-      - name: Keep third-party JSON deprecation warning non-fatal
-        working-directory: apps/mobile
-        run: sed -i 's/target_compile_options(${TARGET} PRIVATE -Wall -Werror)/target_compile_options(${TARGET} PRIVATE -Wall -Werror -Wno-error=deprecated-literal-operator)/' linux/CMakeLists.txt
-
       - name: Resolve mobile dependencies
         working-directory: apps/mobile
         run: flutter pub get

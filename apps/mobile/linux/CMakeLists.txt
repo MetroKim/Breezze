@@ -41,7 +41,14 @@ endif()
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_14)
-  target_compile_options(${TARGET} PRIVATE -Wall -Werror -Wno-error=deprecated-literal-operator)
+  # Preserve strict diagnostics but only use compiler-specific relaxations
+  # on compilers that support them. Ubuntu's Clang rejects the GCC-only
+  # -Wno-error=deprecated-literal-operator as an unknown warning option.
+  target_compile_options(${TARGET} PRIVATE -Wall -Werror)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+     CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 14)
+    target_compile_options(${TARGET} PRIVATE -Wno-error=deprecated-literal-operator)
+  endif()
   target_compile_options(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O3>")
   target_compile_definitions(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:NDEBUG>")
 endfunction()
