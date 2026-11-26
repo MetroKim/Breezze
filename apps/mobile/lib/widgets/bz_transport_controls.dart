@@ -13,9 +13,6 @@ class BzTransportControls extends StatelessWidget {
   final bool playing;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
-  /// Seek back ten seconds in the current authorized track, not skip to a
-  /// different recording. Optional for callers without a seekable source.
-  final VoidCallback? onRewind;
   final VoidCallback onTogglePlayPause;
   final VoidCallback onShuffle;
   final VoidCallback onRepeat;
@@ -25,7 +22,6 @@ class BzTransportControls extends StatelessWidget {
     required this.playing,
     required this.onPrevious,
     required this.onNext,
-    this.onRewind,
     required this.onTogglePlayPause,
     required this.onShuffle,
     required this.onRepeat,
@@ -36,19 +32,13 @@ class BzTransportControls extends StatelessWidget {
     final theme = Theme.of(context);
     return LayoutBuilder(
       builder: (context, bounds) {
-        final compact = bounds.maxWidth < (onRewind == null ? 320 : 370) ||
+        final compact = bounds.maxWidth < 320 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.6;
         final shuffle = IconButton(
           tooltip: 'Shuffle',
           icon: const BzSvgIcon(name: 'shuffle'),
           onPressed: onShuffle,
           color: theme.bzText2,
-        );
-        final rewind = onRewind == null ? null : IconButton(
-          tooltip: 'Rewind 10 seconds',
-          icon: const BzSvgIcon(name: 'rewind-10', size: 26),
-          onPressed: onRewind,
-          color: theme.bzText1,
         );
         final repeat = IconButton(
           tooltip: 'Repeat',
@@ -71,10 +61,6 @@ class BzTransportControls extends StatelessWidget {
                     if (!compact) ...[
                       shuffle,
                       const SizedBox(width: 8),
-                      if (rewind != null) ...[
-                        rewind,
-                        const SizedBox(width: 8),
-                      ],
                     ],
                     IconButton(
                       tooltip: 'Previous track',
@@ -108,7 +94,7 @@ class BzTransportControls extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [if (rewind != null) rewind, shuffle, repeat],
+                  children: [shuffle, repeat],
                 ),
               ),
           ],
