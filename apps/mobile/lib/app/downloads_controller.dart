@@ -37,9 +37,18 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       if (before != after) _switchOwner(after);
     });
     final initialAuth = ref.read(authSessionProvider);
-    _switchOwner(
-      initialAuth is AuthSignedIn ? initialAuth.userId : null,
-    );
+    // Initializing a StateNotifierProvider must NOT write another provider.
+    // The jobs map is empty by default; restoring from disk happens after
+    // this provider's initialization completes.
+    _ownerId = initialAuth is AuthSignedIn ? initialAuth.userId : null;
+    if (_ownerId case final ownerId?) {
+      final generation = ++_ownerGeneration;
+      scheduleMicrotask(() {
+        if (mounted && _ownerId == ownerId) {
+          unawaited(_restoreJobs(ownerId, generation));
+        }
+      });
+    }
     unawaited(_deleteLegacySharedJobFile());
   }
 
@@ -61,14 +70,18 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     _cancellations.clear();
     _tracks.clear();
     _videoTitles.clear();
-    if (mounted) {
-      state = const <String, double>{};
+    if (mounted) state = const <String, double>{};
+    // Clear external provider asynchronously, never while another provider
+    // is in build(). The auth listener already revoked every old transfer
+    // synchronously; this microtask runs before the next rendered frame.
+    scheduleMicrotask(() {
+      if (!mounted || generation != _ownerGeneration) return;
       ref.read(downloadJobStatusProvider.notifier).state =
           const <String, String>{};
-    }
-    if (nextOwner != null) {
-      unawaited(_restoreJobs(nextOwner, generation));
-    }
+      if (nextOwner != null) {
+        unawaited(_restoreJobs(nextOwner, generation));
+      }
+    });
   }
 
   Future<void> _deleteLegacySharedJobFile() async {
