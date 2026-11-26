@@ -279,7 +279,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       shortcuts[r.id] = TrackInfo(id: r.id, title: r.title, artist: r.artist, artworkUrl: r.artworkUrl, duration: r.duration);
     }
 
-    return SafeArea(
+    // A barely visible neutral ambient tint above an otherwise #000 OLED
+    // canvas. No colored branding wash or whole-page backdrop blur.
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0, 0.19, 0.40],
+          colors: [Color(0xFF0D0D10), Color(0xFF050506), Colors.black],
+        ),
+      ),
+      child: SafeArea(
       child: RefreshIndicator(
         onRefresh: _refresh,
         child: CustomScrollView(
@@ -574,6 +585,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
