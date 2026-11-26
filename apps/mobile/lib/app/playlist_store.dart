@@ -350,7 +350,7 @@ class PlaylistStore {
             (coverPngBase64.isEmpty || coverPngBase64.length > 350000 ||
              !RegExp(r'^[A-Za-z0-9+/]*={0,2}$').hasMatch(coverPngBase64))) {
           throw ArgumentError.value(
-            coverPngBase64?.length, 'coverPngBase64',
+            coverPngBase64.length, 'coverPngBase64',
             'Invalid or oversized cover thumbnail',
           );
         }
