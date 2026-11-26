@@ -17,6 +17,20 @@ jobs:
   probe-open-licensed-sample:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: film-web
+            id: aqz-KE-bpKQ
+            client: WEB
+          - name: music-web
+            id: x43OJXk8idI
+            client: WEB
+          - name: music-mweb
+            id: x43OJXk8idI
+            client: MWEB
+    name: audio ${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,13 +39,25 @@ jobs:
       - name: Install isolated experimental client
         working-directory: backend/unofficial-youtube
         run: npm install --ignore-scripts --no-audit --no-fund
-      - name: Probe audio response on CC-BY Blender reference only
+      - name: Probe audio response on CC-BY source video
         working-directory: backend/unofficial-youtube
+        env:
+          BREEZZE_PROBE_VIDEO_ID: ${{ matrix.id }}
+          BREEZZE_PROBE_CLIENT: ${{ matrix.client }}
         run: npm run test:probe
 
   probe-existing-python-sidecar:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: film
+            id: aqz-KE-bpKQ
+          - name: music
+            id: x43OJXk8idI
+    name: ytmusicapi ${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,4 +68,6 @@ jobs:
         run: pip install -r requirements.txt
       - name: Probe signed audio candidate without persisting media
         working-directory: backend/ytmusicapi
+        env:
+          BREEZZE_PROBE_VIDEO_ID: ${{ matrix.id }}
         run: PYTHONPATH=. python scripts/probe_audio.py
