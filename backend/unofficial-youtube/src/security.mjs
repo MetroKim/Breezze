@@ -17,8 +17,11 @@ export function allowlistedVideo(id, env = process.env) {
 
 export function validSecret(provided, configured = process.env.BREEZZE_INTERNAL_AUDIO_TEST_TOKEN) {
   if (typeof provided !== 'string' || typeof configured !== 'string' ||
-      configured.length < 32 || provided.length !== configured.length) return false;
-  return timingSafeEqual(Buffer.from(provided), Buffer.from(configured));
+      configured.length < 32) return false;
+  const actual = Buffer.from(provided, 'utf8');
+  const expected = Buffer.from(configured, 'utf8');
+  if (actual.length !== expected.length) return false;
+  return timingSafeEqual(actual, expected);
 }
 
 export function safeAudioCdn(raw) {
