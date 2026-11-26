@@ -237,7 +237,7 @@ void main() {
         .complete(ProviderError('temporary_provider_failure'));
     await tester.pump();
     expect(
-      find.text('Search could not be completed. Try again in a moment.'),
+      find.text('Music catalog search is temporarily unavailable. Try again in Breezze.'),
       findsOneWidget,
     );
     await tester.tap(find.text('Try again'));
