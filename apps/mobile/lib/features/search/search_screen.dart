@@ -361,11 +361,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (name is! String || name.trim().isEmpty) return const [];
     final genres = artist['genres'];
     final terms = <String>[
-      '$' + '{name.trim()} new releases',
-      '$' + '{name.trim()} albums',
+      '${name.trim()} new releases',
+      '${name.trim()} albums',
       if (genres is List)
         for (final genre in genres.whereType<String>().take(2))
-          '$' + '{name.trim()} $' + 'genre',
+          '${name.trim()} $genre',
     ];
     return terms.toSet().toList();
   }
