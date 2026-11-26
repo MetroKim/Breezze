@@ -48,3 +48,34 @@ export function safeByteRange(range) {
       end > MAX_RANGE_NUMBER))) return false;
   return range;
 }
+
+
+/**
+ * Strictly verify that upstream 206 bytes match the client's requested
+ * seek range. Prevent returning the wrong segment or a misleading length.
+ * No upstream-provided URL or playback token is returned to the client.
+ */
+export function validUpstreamRange(requestedRange, contentRange, contentLength) {
+  if (typeof contentRange !== 'string') return false;
+  const parsed = /^bytes (\\d+)-(\\d+)\/(\\d+|\*)$/.exec(contentRange);
+  if (!parsed) return false;
+  const start = Number(parsed[1]);
+  const end = Number(parsed[2]);
+  const total = parsed[3] === '*' ? null : Number(parsed[3]);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+      start < 0 || end < start ||
+      (total !== null && (!Number.isSafeInteger(total) || end >= total))) {
+    return false;
+  }
+  if (requestedRange) {
+    const request = /^bytes=(\\d+)-(\\d*)$/.exec(requestedRange);
+    if (!request || start !== Number(request[1])) return false;
+    if (request[2] !== '' && end > Number(request[2])) return false;
+  }
+  if (contentLength !== null) {
+    if (!/^\\d+$/.test(contentLength)) return false;
+    const length = Number(contentLength);
+    if (!Number.isSafeInteger(length) || length !== end - start + 1) return false;
+  }
+  return true;
+}
