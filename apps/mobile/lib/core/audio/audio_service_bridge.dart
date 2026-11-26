@@ -179,28 +179,54 @@ class AudioServiceBridge extends audio.BaseAudioHandler
   }
 }
 
-/// Starts audio_service with our handler; called once by the app root.
+/// Platform eligibility is separately testable without native OS plugins.
+///
+/// Browser playback follows the web engine's browser/visibility policy.
+/// Linux needs a desktop D-Bus/MPRIS session; Windows needs SMTC; macOS
+/// uses the audio_service native plugin. Initialization may still fail and
+/// must not prevent the listener from using the application.
+bool supportsBreezzeSystemMediaSession(TargetPlatform platform, {
+  bool isWeb = false,
+}) {
+  if (isWeb) return false;
+  return platform == TargetPlatform.android ||
+      platform == TargetPlatform.iOS ||
+      platform == TargetPlatform.macOS ||
+      platform == TargetPlatform.windows ||
+      platform == TargetPlatform.linux;
+}
+
+/// Starts ONE audio_service handler as the OS projection of PlayerController.
+///
+/// Mac/Windows/Linux support is a capability attempt, not a claim of
+/// certified media-key or OS notification behavior. Failure to establish a
+/// native OS media session must not create a second controller or stop local
+/// audio playback.
 Future<BackgroundAudioBridge> startBackgroundAudio(
     ProviderContainer container) async {
-  // audio_service is the native Android/iOS media-session bridge. Web and
-  // desktop targets use the audio engine without attempting an unsupported
-  // OS notification/lock-screen integration.
-  if (kIsWeb ||
-      (defaultTargetPlatform != TargetPlatform.android &&
-          defaultTargetPlatform != TargetPlatform.iOS)) {
+  if (!supportsBreezzeSystemMediaSession(
+    defaultTargetPlatform,
+    isWeb: kIsWeb,
+  )) {
     return NoopBackgroundBridge();
   }
 
-  final bridge = await audio.AudioService.init(
-    builder: () => AudioServiceBridge(container),
-    config: const audio.AudioServiceConfig(
-      androidNotificationChannelId: 'com.breezze.audio',
-      androidNotificationChannelName: 'Breezze playback',
-      androidNotificationChannelDescription:
-          'Playback controls for Breezze',
-      androidNotificationIcon: 'drawable/ic_breezze_notification',
-      androidStopForegroundOnPause: false,
-    ),
-  );
-  return bridge;
+  try {
+    return await audio.AudioService.init(
+      builder: () => AudioServiceBridge(container),
+      config: const audio.AudioServiceConfig(
+        androidNotificationChannelId: 'com.breezze.audio',
+        androidNotificationChannelName: 'Breezze playback',
+        androidNotificationChannelDescription:
+            'Playback controls for Breezze',
+        androidNotificationIcon: 'drawable/ic_breezze_notification',
+        androidStopForegroundOnPause: false,
+      ),
+    );
+  } catch (error) {
+    // A minimal Linux distro may lack a user D-Bus session; a Windows
+    // runner may not expose SMTC. Neither failure should crash the app.
+    // Do not claim an OS bridge is active in this fallback.
+    return NoopBackgroundBridge();
+  }
 }
