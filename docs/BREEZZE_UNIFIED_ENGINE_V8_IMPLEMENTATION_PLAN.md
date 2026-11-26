@@ -91,3 +91,18 @@ Spotify/Deezer/MusicBrainz = discovery/metadata/previews only where licensed. Yo
 | Signed packaging | Release/CI runners, signing keys, stores and hardware acceptance | **Not verified** |
 
 **Next change order:** (A) current-commit Flutter CI; (B) OS/native interruption acceptance; (C) correct offline encryption/DRM and storage migration; (D) real licensed tracks and online dual-player DSP; (E) device accessibility + desktop MPRIS acceptance; (F) production signing and release freeze review. No green release status until all gates pass.
+
+
+## Continuation checkpoint — 2026-11-26 (V8.1: CI reliability and account isolation)
+
+**No release claim:** a GitHub Actions run is PASS only after completion against the exact release candidate SHA; pending, queued, running or cancelled is never a pass.
+
+- **Navigation contract:** the identity guard now checks the canonical `Home / New / Library / Search` labels. Older guard failed on literal legacy `Browse` assertions; new source-based guard is committed and an earlier pipeline has shown identity guard SUCCESS.
+- **Search regression:** `search_typeahead_test.dart` previously failed because its global `find.text('Songs')` found two headings across nested routes. The test now searches inside `SpotifyArtistScreen`. The Spotify/Deezer discovery + video isolation workflow `45812828461` returned SUCCESS on this change (`f11eccb`); full quality CI remains separate.
+- **Private download jobs:** the previous shared `Downloads/jobs.json` contained one account's song titles/statuses after a different listener signed in. `DownloadJobOwnerDirectory` now derives a fixed owner-hashed private directory; `DownloadsController` clears pending status on auth changes, cancels prior-owner transfers, discards late transfer updates and serializes owner-scoped job writes. Legacy shared job file is removed instead of reassigned. Tests: `download_job_scope_test.dart`, `download_job_account_isolation_test.dart`. These are committed but **Flutter execution must still pass**.
+- **CI scheduling:** `.github/workflows/ci.yml`, `breezze-quality.yml`, `codeql.yml`, and `v8-secret-history-guard.yml` use `cancel-in-progress: false`. This preserves the active build/scan while GitHub retains only the newest pending run on each ref. Do not equate an older successful SHA with validation of current main.
+- **Security scan:** V8 secret-history guard `45813467262` completed SUCCESS on `7e53d6f`; it is not proof that historical leaked provider keys have been revoked or replaced.
+- **Backend deployment drift:** Railway production's latest verified successful Breezze API deployment is commit `13b6c9e7` (2026-11-25), behind the current V8 main. Connected Supabase `djwvyjtebmsavhcrmhxf` lacks Prisma catalog tables `Track` and `AudioAssetVariant`. Preserve the current Railway `DATABASE_URL` until the authoritative DB and migration process are established; **never** direct production to an empty Supabase catalog.
+- **Outstanding P0:** exact current-SHA Flutter/Windows/macOS/iOS/Android/Linux/Web CI and CodeQL; physical and simulator media-session/accessibility evidence; verified rights-cleared full-track catalog and offline grants; qualified online dual-source AutoMix; release-only signing certificates/keys and reproducible signed installers. Provider metadata alone cannot close rights gates.
+
+See the same-sha evidence links and outstanding blockers in [master issue #27](https://github.com/MetroKim/Breezze/issues/27).
