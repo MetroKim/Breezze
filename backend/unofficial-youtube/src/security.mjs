@@ -57,7 +57,7 @@ export function safeByteRange(range) {
  */
 export function validUpstreamRange(requestedRange, contentRange, contentLength) {
   if (typeof contentRange !== 'string') return false;
-  const parsed = /^bytes (\\d+)-(\\d+)\/(\\d+|\*)$/.exec(contentRange);
+  const parsed = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(contentRange);
   if (!parsed) return false;
   const start = Number(parsed[1]);
   const end = Number(parsed[2]);
@@ -68,12 +68,12 @@ export function validUpstreamRange(requestedRange, contentRange, contentLength) 
     return false;
   }
   if (requestedRange) {
-    const request = /^bytes=(\\d+)-(\\d*)$/.exec(requestedRange);
+    const request = /^bytes=(\d+)-(\d*)$/.exec(requestedRange);
     if (!request || start !== Number(request[1])) return false;
     if (request[2] !== '' && end > Number(request[2])) return false;
   }
   if (contentLength !== null) {
-    if (!/^\\d+$/.test(contentLength)) return false;
+    if (!/^\d+$/.test(contentLength)) return false;
     const length = Number(contentLength);
     if (!Number.isSafeInteger(length) || length !== end - start + 1) return false;
   }
