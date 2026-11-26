@@ -237,6 +237,54 @@ void main() {
     expect(player.state.playbackState, PlaybackState.playing);
   });
 
+  test('V8 call end resumes through the single global player', () async {
+    final resolver = _FakeResolver();
+    final engine = _CallResumeFakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await player.playTrack(trackId: 'catalog-qa:call-auto-resume');
+    expect(player.state.playbackState, PlaybackState.playing);
+    engine.armForCall();
+    engine.emit(PlaybackState.interrupted);
+    await Future<void>.delayed(Duration.zero);
+    expect(player.state.playbackState, PlaybackState.interrupted);
+    engine.emit(PlaybackState.paused);
+    engine.callEnded();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(player.state.playbackState, PlaybackState.playing);
+    expect(resolver.calls, 1);
+  });
+
+  test('manual pause during a call cancels V8 auto resume', () async {
+    final engine = _CallResumeFakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(_FakeResolver()),
+    ]);
+    addTearDown(() async {
+      container.dispose();
+      await engine.dispose();
+    });
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await player.playTrack(trackId: 'catalog-qa:manual-call-pause');
+    engine.armForCall();
+    engine.emit(PlaybackState.interrupted);
+    await Future<void>.delayed(Duration.zero);
+    await player.pause();
+    engine.emit(PlaybackState.paused);
+    engine.callEnded();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(player.state.playbackState, PlaybackState.paused);
+  });
+
   test('completed track advances the single global queue exactly once', () async {
     final resolver = _FakeResolver();
     final engine = _FakeAudioEngine();
@@ -642,5 +690,33 @@ class _FakeAudioEngine implements AudioEngineAdapter {
   Future<void> dispose() async {
     await _positions.close();
     await _states.close();
+  }
+}
+
+/// Simulates the *native OS's* focus-restored signal without loading plugins.
+class _CallResumeFakeAudioEngine extends _FakeAudioEngine
+    implements CallInterruptionResumeSource {
+  final _callResumes = StreamController<bool>.broadcast();
+  bool _armed = false;
+
+  @override
+  Stream<bool> get callResumeRequests => _callResumes.stream;
+
+  void armForCall() => _armed = true;
+
+  @override
+  void cancelPendingCallResume() => _armed = false;
+
+  void callEnded() {
+    if (_armed) {
+      _armed = false;
+      _callResumes.add(true);
+    }
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _callResumes.close();
+    await super.dispose();
   }
 }
