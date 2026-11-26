@@ -42,7 +42,7 @@ jobs:
             sudo apt-get update -qq
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
-          ffmpeg -version | head -n 1
+          ffmpeg -version >/dev/null
       - name: Decode original PCM audio over real authenticated HTTP
         working-directory: backend/unofficial-youtube
         run: npm run test:decode
