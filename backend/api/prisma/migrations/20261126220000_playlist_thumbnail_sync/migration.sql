@@ -3,3 +3,7 @@
 -- no public file bucket, exposed download URL, or provider stream is created.
 ALTER TABLE "Playlist"
   ADD COLUMN "coverPngBase64" TEXT;
+
+-- Private listener profile avatar thumbnail; never publicly exposed.
+ALTER TABLE "User"
+  ADD COLUMN "avatarPngBase64" TEXT;
