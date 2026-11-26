@@ -25,6 +25,8 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.DETAIL_BAR, "class BzBrandedAppBar BzCompactBrandMark")
         self.write(guard.BROWSE, "YouTubeMusicClientScreen(")
         self.write(guard.PROVIDER, "BzBrandedAppBar(")
+        for page in guard.SECONDARY_PAGES:
+            self.write(page, "appBar: BzBrandedAppBar(")
 
     def write(self, name, value):
         file = self.root / name
@@ -49,6 +51,12 @@ class V8SingleUiSourceTests(unittest.TestCase):
     def test_provider_legacy_appbar_is_rejected(self):
         self.write(guard.PROVIDER, "BzBrandedAppBar( appBar: AppBar(")
         self.assertIn("LEGACY_PROVIDER_TOOLBAR", str(guard.violations(self.root)))
+
+    def test_old_detail_toolbar_is_rejected(self):
+        target = guard.SECONDARY_PAGES[0]
+        self.write(target, "appBar: AppBar(")
+        issues = guard.violations(self.root)
+        self.assertTrue(any("LEGACY_DETAIL_TOOLBAR" in x for x in issues))
 
     def test_vendored_unlicensed_ui_is_rejected(self):
         (self.root / "apps/mobile/lib/ytm_ui_clone").mkdir(parents=True)
