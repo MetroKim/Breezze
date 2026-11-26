@@ -27,7 +27,8 @@ class V8SingleUiSourceTests(unittest.TestCase):
 
         self.write(guard.PROVIDER, "BzBrandedAppBar(")
         self.write(guard.DEVICE_VIDEO,
-                   "BzBrandedAppBar setLooping(next) if (!_repeat && !_closing")
+                   "BzBrandedAppBar setLooping(next) if (!_repeat && !_closing "
+                   "_fillVideo ? BoxFit.cover : BoxFit.contain")
         self.write(guard.OFFICIAL_VIDEO,
                    "BzBrandedAppBar BzSvgIcon(name: 'skip-previous' "
                    "BzSvgIcon(name: 'skip-next'")
@@ -65,6 +66,14 @@ class V8SingleUiSourceTests(unittest.TestCase):
     def test_licensed_video_must_keep_opt_in_loop_and_svg_controls(self):
         self.write(guard.DEVICE_VIDEO, "BzBrandedAppBar setLooping(next)")
         self.assertIn("LOCAL_VIDEO_REPEAT_DEFAULT_MISSING",
+                      str(guard.violations(self.root)))
+
+    def test_native_video_must_keep_fill_fit_selection(self):
+        self.write(
+            guard.DEVICE_VIDEO,
+            "BzBrandedAppBar setLooping(next) if (!_repeat && !_closing",
+        )
+        self.assertIn("LOCAL_VIDEO_FULLBLEED_MODE_MISSING",
                       str(guard.violations(self.root)))
 
     def test_official_video_keeps_svg_previous_next(self):
