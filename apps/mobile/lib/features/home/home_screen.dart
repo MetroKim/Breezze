@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/main_tab.dart';
 
+import '../../app/breezze_navigation.dart';
 import '../../app/bootstrap.dart';
 import '../../app/recent_store.dart';
 import '../../app/playlist_store.dart';
@@ -304,7 +305,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 onSelected: (value) {
                   if (value == 'settings') {
                     Navigator.of(context).push(
-                      MaterialPageRoute(
+                      breezzePageRoute<void>(
+              context: context,
                         builder: (_) => const SettingsScreen(),
                       ),
                     );
@@ -327,7 +329,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: InkWell(
                       customBorder: const CircleBorder(),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
+                        breezzePageRoute<void>(
+              context: context,
                           builder: (_) => const AccountScreen(),
                         ),
                       ),
