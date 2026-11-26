@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:cryptography/cryptography.dart';
 
 class _UnusedLyricsHttp implements LyricsHttp {
   @override
@@ -213,6 +214,100 @@ void main() {
     ), isFalse);
     expect(await File('${root.path}/$id/audio.m4a').exists(), isFalse);
     expect(await library.list(ownerId: 'user-1'), isEmpty);
+  });
+
+  test('protected download commits only AES-GCM ciphertext and owner metadata', () async {
+    const id = 'protected-audio';
+    final track = BzTrack(id: id, title: 'Original song', artist: 'Breezze QA');
+    final cipher = BreezzeOfflineAudioCipher(
+      SecretKey(List<int>.filled(32, 0x23)),
+    );
+    final protectedLibrary = DownloadsLibrary(
+      root: root,
+      lyrics: LyricsProvider(_UnusedLyricsHttp()),
+      protectAudio: ({
+        required File plaintextFile,
+        required File encryptedFile,
+        required String ownerId,
+        required String catalogTrackId,
+        String? assetVersion,
+      }) async {
+        await cipher.encryptFile(
+          input: plaintextFile,
+          output: encryptedFile,
+          ownerId: ownerId,
+          catalogTrackId: catalogTrackId,
+          assetVersion: assetVersion,
+        );
+      },
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentLength = 3
+        ..add(utf8.encode('abc'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final lease = DateTime.now().toUtc().add(const Duration(hours: 1));
+    expect(await protectedLibrary.download(
+      track,
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'listener-a',
+      catalogTrackId: id,
+      rightsExpiresAtUtc: lease,
+    ), isTrue);
+
+    final folder = Directory('${root.path}/$id');
+    expect(await File('${folder.path}/audio.m4a').exists(), isFalse);
+    expect(await File('${folder.path}/audio.part').exists(), isFalse);
+    final list = await protectedLibrary.list(ownerId: 'listener-a');
+    expect(list, hasLength(1));
+    expect(list.single.audioPath, '${folder.path}/audio.bza');
+    expect(await protectedLibrary.list(ownerId: 'listener-b'), isEmpty);
+    final decrypted = await cipher.decryptRange(
+      encrypted: File(list.single.audioPath),
+      ownerId: 'listener-a',
+      catalogTrackId: id,
+    ).toList();
+    expect(decrypted.expand((e) => e).toList(), utf8.encode('abc'));
+  });
+
+  test('encryption failure does not silently save plaintext audio', () async {
+    const id = 'protected-fail';
+    final protectedLibrary = DownloadsLibrary(
+      root: root,
+      lyrics: LyricsProvider(_UnusedLyricsHttp()),
+      protectAudio: ({
+        required File plaintextFile,
+        required File encryptedFile,
+        required String ownerId,
+        required String catalogTrackId,
+        String? assetVersion,
+      }) async {
+        throw StateError('Simulated unavailable platform keystore');
+      },
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentLength = 3
+        ..add(utf8.encode('abc'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    expect(await protectedLibrary.download(
+      BzTrack(id: id, title: 'Fail secure', artist: 'Breezze'),
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'listener-a',
+      catalogTrackId: id,
+    ), isFalse);
+    final folder = Directory('${root.path}/$id');
+    expect(await File('${folder.path}/audio.m4a').exists(), isFalse);
+    expect(await File('${folder.path}/audio.part').exists(), isFalse);
+    expect(await protectedLibrary.list(ownerId: 'listener-a'), isEmpty);
   });
 
   test('lists only assets owned by the requested account', () async {
