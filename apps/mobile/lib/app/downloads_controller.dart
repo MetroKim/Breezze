@@ -36,9 +36,9 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       final after = next is AuthSignedIn ? next.userId : null;
       if (before != after) _switchOwner(after);
     });
+    final initialAuth = ref.read(authSessionProvider);
     _switchOwner(
-      ref.read(authSessionProvider) case AuthSignedIn(:final userId)
-          ? userId : null,
+      initialAuth is AuthSignedIn ? initialAuth.userId : null,
     );
     unawaited(_deleteLegacySharedJobFile());
   }
