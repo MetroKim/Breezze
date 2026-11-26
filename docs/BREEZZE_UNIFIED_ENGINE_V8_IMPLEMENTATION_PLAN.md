@@ -2,6 +2,19 @@
 
 **Owner:** Breezze engineering | **Branch:** `main` | **Baseline:** `cb71606a124d94281a75402651455964d3a96f92` | **Started:** 2026-11-26 | **Release state:** BLOCKED until verified.
 
+**SINGLE CANONICAL VERSION — V8 ONLY (2026-11-26).** This is the sole active Breezze master plan, execution backlog and release-acceptance authority. The obsolete V6/V7 plan files are removed from the working tree, with their historical Git commits preserved for audit. No task, README, CI job, PR description or downstream AI agent may treat an earlier plan's version labels, screenshots, checkmarks, provider choices or target platforms as the current implementation contract. All future changes belong to V8 and its evidence ledger; stage/checkpoint numbers (e.g. V8.2 or V8.4) are revisions **within** V8, not separate product versions.
+
+### Consolidated engineering decisions retained in V8
+
+- Retain the existing Flutter monorepo (`apps/mobile`) with Riverpod and the shared `design_system`, `api_client`, and `audio_contracts` packages. No second app, UI toolkit, client-wide theme or audio controller.
+- Use one NestJS/Prisma API; Supabase Auth/Postgres with schema/RLS boundaries; Cloudflare API and media Workers with private R2; Drift/SQLite and a per-account outbox on devices. Do not add redundant Isar/Hive databases or duplicate cloud gateways.
+- Four tabs are **Home / New / Library / Search** (New replaces the older Browse label). Retain one persistent global player, queue, Now Playing, and adaptive desktop sidebar/phone tab bar.
+- Catalog APIs are for discovery and legally available previews only. Spotify/Deezer/YouTube Music metadata is never a full-track distribution or offline entitlement. Full native audio and downloads require independently authorized licensed assets, territory/time-granted sessions and actual verified delivery bytes.
+- Preserve legacy account IDs/data until an explicitly tested migration; validate cross-account isolation, Google/Apple native sign-in configuration, and rights/security/account-transition tests before changing production auth.
+- Keep the absolute release, production deployment, downloadable source/artifact and store-publication freeze until every required V8 verification gate and explicit owner approval. Historical CI or implementation source alone is not proof of completion.
+
+
+
 ## V8 UI Reference Integration — YTMusic-style structure, Breezze identity (2026-11-26)
 
 **Cross-chat handoff — START HERE for any future Breezze design session.** Owner selected [jogeanmcf/ytmusic_clone](https://github.com/jogeanmcf/ytmusic_clone) as the **complete UX structure and section reference** for Breezze V8, supplemented with premium restrained glassmorphism. The reference's GitHub repository has no declared license (as inspected 2026-11-26), and its README explicitly calls its streaming backend unfinished. **Do not copy source, code, artwork, fonts, YouTube Music marks, layout assets, or package setup into Breezze; independently implement equivalent screen hierarchy and interactions in existing Flutter/Riverpod with original Breezze styling.** Do not add GetX, a second app or an independent player.
