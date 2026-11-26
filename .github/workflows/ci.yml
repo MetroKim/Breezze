@@ -33,6 +33,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate canonical Flutter package and reject fake audio scaffold
         run: python3 tools/check_independent_identity.py
+      - name: Test V8-only plan authority guard
+        run: python3 -m unittest discover -s tools -p 'test_v8_plan_authority.py' -v
+      - name: Reject obsolete plans and references
+        run: python3 tools/check_v8_plan_authority.py
 
   quality:
     name: Breezze quality gates

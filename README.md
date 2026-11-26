@@ -4,7 +4,7 @@
 
 Breezze is an independent product. It is not affiliated with or endorsed by YouTube, Google, Spotify, Apple, or another streaming service.
 
-> **Unified v6 master specification:** [One authoritative v5+v6 architecture and execution ledger](docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md) supersedes both draft versions. Reuse the existing Flutter player, Drift outbox, NestJS/Prisma backend and Cloudflare Workers. Advanced AI/DSP, Supabase identity cutover and collaborative features are explicitly gated; they are not considered complete merely because a module is listed.
+> **Single authoritative version: V8.** [Breezze Unified Engine V8 — implementation and acceptance plan](docs/BREEZZE_UNIFIED_ENGINE_V8_IMPLEMENTATION_PLAN.md) governs navigation, architecture, catalog/media rights, frontend/backend wiring and all quality gates. Earlier plan versions are retired; historical commits remain available for audit. Breezze is still in development and must not be released or newly deployed before complete verification and explicit owner approval.
 
 ## Active implementation
 
@@ -14,12 +14,12 @@ The production-target client is Flutter in `apps/mobile`, with NestJS in `backen
 
 ## Product boundaries
 
-- Four primary destinations: Home, Browse, Library and Search.
+- Four primary destinations: Home, **New**, Library and Search. New replaces the former Browse label.
 - One global player and queue shared by every screen.
 - No artist portal, artist upload workflow, subscriptions, billing, memberships or paywalls in this release.
 - Artist and album pages are listener-facing catalog experiences only.
 - Search metadata is not a playback licence. Playback requires a backend-authorized source with applicable rights.
-- The only external music catalogue providers are YouTube Music (through `ytmusicapi`, metadata/discovery only) and Deezer (catalogue metadata plus any officially available short previews). Breezze owns the playback UI and queue.
+- Spotify and Deezer metadata/discovery (and allowed short previews) are separate from playback rights; YouTube Music through `ytmusicapi` supplies discovery metadata and official embedded video. Breezze owns its native player and queue, which require independently authorized recordings and media grants.
 - Breezze does not extract YouTube audio, bypass provider access controls, or re-host third-party recordings.
 
 ## Repository layout
