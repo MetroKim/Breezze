@@ -294,6 +294,46 @@ void main() {
         reason: 'Local typeahead must not contact Spotify/Deezer');
   });
 
+  testWidgets('Audio renders a single list, not Spotify and Deezer source shelves',
+      (tester) async {
+    final source = _SearchSource();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [catalogSourceProvider.overrideWithValue(source)],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    await tester.enterText(find.byType(TextField), 'bongo');
+    await tester.pump(const Duration(milliseconds: 500));
+    source.pending['bongo']!.complete(ProviderOk([
+      ProviderTrack(
+        breezzeTrackId: 'bz:spotify:4iV5W9uYEdYUVa79Axb7Rh',
+        providerTrackId: 'spotify:4iV5W9uYEdYUVa79Axb7Rh',
+        title: 'First Bongo Song',
+        artist: 'Artist A',
+        duration: const Duration(seconds: 210),
+      ),
+      ProviderTrack(
+        breezzeTrackId: 'bz:deezer:3135556',
+        providerTrackId: 'deezer:3135556',
+        title: 'Second Bongo Song',
+        artist: 'Artist B',
+        duration: const Duration(seconds: 240),
+      ),
+    ]));
+    await tester.pump();
+    expect(find.text('First Bongo Song'), findsOneWidget);
+    expect(find.text('Second Bongo Song'), findsOneWidget);
+    expect(find.text('Spotify'), findsNothing,
+        reason: 'No standalone provider shelf heading');
+    expect(find.text('Deezer'), findsNothing,
+        reason: 'No standalone provider shelf heading');
+    for (final scope in ['Audio', 'Video', 'Library', 'Local']) {
+      expect(find.widgetWithText(BzFilterPill, scope), findsOneWidget);
+    }
+  });
+
   testWidgets('Music Videos filter renders external video action and honest empty state',
       (tester) async {
     final api = _VideoDiscoveryApi();
