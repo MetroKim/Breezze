@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 import '../video/open_youtube_player.dart';
 
 /// YouTube Music public discovery and separately consented read-only playlists.
@@ -489,8 +490,9 @@ class _YouTubeMusicClientScreenState
     final sections = _ytRows(moods?['sections']);
     return Scaffold(
       backgroundColor: theme.bzBackground,
-      appBar: AppBar(
-        title: const Text('YouTube Music'),
+      appBar: BzBrandedAppBar(
+        title: 'Discover',
+        subtitle: 'YouTube Music public catalog',
         actions: [
           IconButton(
             tooltip: 'Refresh YouTube Music',
@@ -699,7 +701,7 @@ class _YtMoodPlaylistsScreenState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title)),
+    appBar: BzBrandedAppBar(title: widget.title, subtitle: 'Music source'),
     body: _playlists == null
         ? const Center(child: CircularProgressIndicator())
         : _playlists!.isEmpty
@@ -787,7 +789,7 @@ class _YtCollectionScreenState extends ConsumerState<_YtCollectionScreen> {
   Widget build(BuildContext context) {
     final rows = _ytRows(_collection?['tracks']);
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: BzBrandedAppBar(title: widget.title, subtitle: 'Music source'),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _collection == null
@@ -894,7 +896,7 @@ class _YtConnectedPlaylistScreenState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title)),
+    appBar: BzBrandedAppBar(title: widget.title, subtitle: 'Music source'),
     body: _error != null
         ? Center(child: OutlinedButton(
             onPressed: _load,
@@ -989,7 +991,7 @@ class _YtArtistSearchState extends ConsumerState<_YtArtistSearchScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('YouTube Music artists')),
+    appBar: const BzBrandedAppBar(title: 'Artists', subtitle: 'YouTube Music'),
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1088,7 +1090,7 @@ class _YtArtistState extends ConsumerState<_YtArtistScreen> {
   Widget build(BuildContext context) {
     final item = _artist;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: BzBrandedAppBar(title: widget.title, subtitle: 'Music source'),
       body: _loading
         ? const Center(child: CircularProgressIndicator())
         : item == null
@@ -1176,7 +1178,7 @@ class _YtChartsState extends ConsumerState<_YtChartsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('YouTube Music charts')),
+    appBar: const BzBrandedAppBar(title: 'Charts', subtitle: 'YouTube Music'),
     body: _loading
       ? const Center(child: CircularProgressIndicator())
       : _charts == null
@@ -1289,7 +1291,7 @@ class _YtSongSearchState extends ConsumerState<_YtSongSearchScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('YouTube Music song search')),
+      appBar: const BzBrandedAppBar(title: 'Song search', subtitle: 'YouTube Music'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -1409,7 +1411,7 @@ class _YtWatchQueueState extends ConsumerState<_YtWatchQueueScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title)),
+    appBar: BzBrandedAppBar(title: widget.title, subtitle: 'Music source'),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : _queue == null
