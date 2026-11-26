@@ -134,6 +134,13 @@ void main() {
     expect(api.artistSearchCalls, 0,
         reason: 'Supplied Spotify ID skips ambiguous name-based fallback');
     expect(find.text('Test Singer'), findsWidgets);
+    expect(find.byWidgetPredicate((widget) =>
+      widget is Semantics &&
+      widget.properties.label == 'Artist portrait for Test Singer'),
+      findsOneWidget);
+    expect(find.byWidgetPredicate((widget) =>
+      widget is Semantics && widget.properties.header == true),
+      findsWidgets);
     expect(find.text('Songs'), findsOneWidget);
     expect(find.text('Spotify Song'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('New Releases'), 220);
