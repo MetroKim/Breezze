@@ -978,11 +978,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
           Expanded(
             child: _loading
-                ? ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: 7,
-                    separatorBuilder: (_, __) => const SizedBox(height: 14),
-                    itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                ? Semantics(
+                    liveRegion: true,
+                    label: _searchVideos
+                        ? 'Searching music videos'
+                        : _searchLocal
+                            ? 'Searching selected local audio'
+                            : 'Searching songs and artists',
+                    child: ExcludeSemantics(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: 7,
+                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        itemBuilder: (_, __) => const BzSkeletonTrackRow(),
+                      ),
+                    ),
                   )
                 : !_searched
                     ? _buildRecentSearches(theme)
@@ -1017,13 +1027,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           )
                         : _results.isEmpty && _artistMatches.isEmpty
                             ? Center(
-                                child: Text(
+                                child: Semantics(
+                                  liveRegion: true,
+                                  child: Text(
                                   (_searchLocal
                                       ? 'No matching local songs. Choose audio files above to search your device.'
                                       : _searchVideos && !_searchLibrary
                                           ? 'No official videos found for "${_controller.text.trim()}"'
                                           : 'No results for "${_controller.text.trim()}"'),
                                   style: theme.textTheme.titleMedium,
+                                  ),
                                 ),
                               )
                             : ListView.builder(
