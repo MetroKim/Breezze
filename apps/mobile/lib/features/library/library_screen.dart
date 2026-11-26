@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/breezze_navigation.dart';
 import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../app/playlist_store.dart';
@@ -291,7 +292,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   void _openPlaylist(UserPlaylist playlist) {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      breezzePageRoute<void>(
+              context: context,
         builder: (_) => PlaylistDetailScreen(
           ownerId: _ownerId,
           playlistId: playlist.id,
@@ -705,7 +707,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               );
               return;
             }
-            Navigator.of(context).push(MaterialPageRoute(
+            Navigator.of(context).push(breezzePageRoute<void>(
+              context: context,
               builder: (_) => DeezerAlbumCatalogScreen(
                 albumId: album.id,
                 title: album.title,
@@ -1029,7 +1032,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   },
                 ),
           onTap: () async {
-            await Navigator.of(context).push(MaterialPageRoute(
+            await Navigator.of(context).push(breezzePageRoute<void>(
+              context: context,
               builder: (_) => ArtistDetailScreen(
                 artist: entry.name,
                 savedTracks: entry.tracks,
