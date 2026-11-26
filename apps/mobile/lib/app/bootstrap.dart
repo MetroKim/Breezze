@@ -77,10 +77,10 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
   bool _sameRecording(Map a, Map b) {
     String normalized(Object? text) =>
         text is String ? text.toLowerCase().trim()
-            .replaceAll(RegExp(r'\\s+'), ' ') : '';
+            .replaceAll(RegExp(r'\s+'), ' ') : '';
     String? isrc(Object? value) {
       if (value is! String) return null;
-      final code = value.toUpperCase().replaceAll(RegExp(r'[-\\s]'), '');
+      final code = value.toUpperCase().replaceAll(RegExp(r'[-\s]'), '');
       return RegExp(r'^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$').hasMatch(code)
           ? code : null;
     }
