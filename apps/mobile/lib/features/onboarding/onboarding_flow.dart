@@ -59,7 +59,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  BzRibbonLogo(width: 140, color: theme.bzText1),
+                  BzBrandLockup(markHeight: 44, color: theme.bzText1),
                   const SizedBox(height: 24),
                   Text(
                     'Pick a few things you love and\nBreezze tunes itself to you.',
