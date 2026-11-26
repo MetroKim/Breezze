@@ -41,7 +41,7 @@ void main() {
       home: Scaffold(
         body: Center(
           child: SizedBox(
-            height: 270,
+            height: 360,
             child: BzReleaseShelf(
               items: [source],
               onOpen: (item) => opened = item,
