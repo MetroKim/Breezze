@@ -340,7 +340,8 @@ class PlayerController extends Notifier<PlayerState> {
     _callResumeSub?.cancel();
     _engine = engine;
     if (engine is CallInterruptionResumeSource) {
-      _callResumeSub = engine.callResumeRequests.listen((shouldResume) {
+      _callResumeSub = (engine as CallInterruptionResumeSource)
+          .callResumeRequests.listen((shouldResume) {
         if (!shouldResume || !identical(_engine, engine)) return;
         final generation = _requestGeneration;
         final trackId = state.currentTrack?.id;
@@ -557,7 +558,7 @@ class PlayerController extends Notifier<PlayerState> {
     if (state.playbackState == PlaybackState.interrupted) {
       // Explicit user/OS pause while the phone owns focus forbids auto resume.
       if (engine is CallInterruptionResumeSource) {
-        engine.cancelPendingCallResume();
+        (engine as CallInterruptionResumeSource).cancelPendingCallResume();
       }
       return;
     }
