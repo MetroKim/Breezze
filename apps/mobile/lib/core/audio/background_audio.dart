@@ -68,6 +68,7 @@ final backgroundSessionAvailabilityProvider =
 class BackgroundAudioSync {
   final Ref ref;
   ProviderSubscription<PlayerState>? _subscription;
+  bool _disposed = false;
 
   BackgroundAudioSync({required this.ref});
 
@@ -78,6 +79,7 @@ class BackgroundAudioSync {
     String? artworkUrl,
     required bool playing,
   }) {
+    if (_disposed) return;
     // A desktop D-Bus/SMTC server may vanish *after* initialization. Future
     // failures must never escape an unawaited listener and crash playback.
     // The single controller remains authoritative; only its OS projection
@@ -89,7 +91,7 @@ class BackgroundAudioSync {
         artworkUrl: artworkUrl,
         playing: playing,
       )).catchError((Object error, StackTrace stackTrace) {
-        if (ref.read(backgroundBridgeProvider) != bridge) return;
+        if (_disposed || ref.read(backgroundBridgeProvider) != bridge) return;
         ref.read(backgroundSessionAvailabilityProvider.notifier).state =
             BackgroundSessionAvailability.unavailable;
         ref.read(backgroundBridgeProvider.notifier).state =
@@ -137,6 +139,7 @@ class BackgroundAudioSync {
   }
 
   void dispose() {
+    _disposed = true;
     _subscription?.close();
   }
 }
