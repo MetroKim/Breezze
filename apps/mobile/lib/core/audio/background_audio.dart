@@ -83,12 +83,12 @@ class BackgroundAudioSync {
     // The single controller remains authoritative; only its OS projection
     // becomes temporarily unavailable.
     unawaited(
-      bridge.update(
+      Future<void>.sync(() => bridge.update(
         title: title,
         artist: artist,
         artworkUrl: artworkUrl,
         playing: playing,
-      ).catchError((Object error, StackTrace stackTrace) {
+      )).catchError((Object error, StackTrace stackTrace) {
         if (ref.read(backgroundBridgeProvider) != bridge) return;
         ref.read(backgroundSessionAvailabilityProvider.notifier).state =
             BackgroundSessionAvailability.unavailable;
