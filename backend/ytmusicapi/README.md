@@ -9,7 +9,6 @@ This isolated service uses the MIT-licensed [sigma67/ytmusicapi](https://github.
 - `GET /videos?q={query}&limit=20` — only YouTube Music `MUSIC_VIDEO_TYPE_OMV` results
 - `GET /tracks/{videoId}` — track metadata
 - `GET /tracks/{videoId}/music-video` — official music-video counterpart when available
-- `GET /tracks/{videoId}/audio-candidate` — **non-production experimental** direct audio URL from `YTMusic.get_song()`; disabled by default and not a playback entitlement
 - `GET /artists/search?q={query}&limit=20` — YouTube Music artist discovery
 - `GET /artists/{artistId}` — public artist profile, songs and albums metadata
 - `GET /charts?country=ZZ` — YouTube Music artist charts and music-video chart playlists; `ZZ` means global
@@ -21,13 +20,12 @@ This isolated service uses the MIT-licensed [sigma67/ytmusicapi](https://github.
 - `GET /moods/playlists?params={token}&limit=20` — matching public mood playlists
 - `GET /explore` — YouTube Music new releases, trending, new official videos, and Top Songs only when actually present
 
-The standard catalog routes deliberately drop YouTube's `streamingData`, adaptive formats and signed URLs. A separate **non-production opt-in experiment** exposes only an already-direct HTTPS `googlevideo.com` audio candidate from `YTMusic.get_song()` without signature deciphering, DRM bypass or a download endpoint. The primary NestJS provider still advertises metadata-only capabilities; rights-aware playback resolution, downloads and production availability remain disabled. Experimental audio is **not** an approved distribution or offline entitlement.
-
-## Experimental native-audio feasibility
-
-This probe is **off by default** and blocked when `RAILWAY_ENVIRONMENT_NAME=production` (sidecar), or when `NODE_ENV=production` / Railway environment is production (API). Set `BREEZZE_YTMUSIC_AUDIO_EXPERIMENT=true` on **both** the private Python sidecar and the NestJS API in a dedicated, nonproduction test environment. The private sidecar validates Googlevideo HTTPS hostnames, direct audio MIME types and URL expiration. The NestJS route `GET /api/v1/providers/youtube_music/audio-candidate/{videoId}` requires Supabase JWT auth and independently validates the result. Flutter's existing `LiveResolver` hands a valid candidate to `just_audio`, otherwise it falls through to normal resolver and preview handling. **Flutter build switch:** opt in with `--dart-define=BREEZZE_YTMUSIC_AUDIO_EXPERIMENT=true`. This makes song taps in Home, Browse, Search and catalog screens try the candidate first, then fall back to the visible official YouTube player if absent or unplayable; music-video-only actions remain video. The switch defaults to disabled in ordinary builds. No new native player or extra playlist controller is created.
-
-**Acceptance evidence required before claiming playback works:** (1) stubbed Python, API and Flutter tests pass; (2) the test environment returns a real direct format for the selected public song; (3) playback, range seeks and expiry refresh actually work on an emulator; (4) measure whether media URLs are tied to the sidecar egress IP and fail from the device; (5) confirm permission for any eventual distribution. A signed URL working inside the container does not prove a device can stream it. Do not expose credentials or persistent signed media URLs; the experiment does not support offline downloads.
+The catalog routes deliberately discard YouTube's `streamingData`, adaptive
+formats, bearer credentials and signed media URLs. The previously experimental
+audio-candidate endpoint and its URL selection helper have been removed. A
+feature flag must never turn this metadata service into a media URL dispenser.
+Music metadata is not an audio entitlement: native streaming and offline
+downloads require a separate authorized catalog and a rights-aware delivery path.
 
 ## Run locally
 
