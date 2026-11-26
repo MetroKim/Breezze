@@ -253,7 +253,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         throw const FormatException('Image must be smaller than 10 MB');
       }
       final codec = await ui.instantiateImageCodec(
-        original, targetWidth: 320, targetHeight: 320,
+        original, targetWidth: 224, targetHeight: 224,
         allowUpscaling: false,
       );
       final frame = await codec.getNextFrame();
@@ -262,7 +262,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       );
       frame.image.dispose();
       codec.dispose();
-      if (png == null || png.lengthInBytes > 560000) {
+      if (png == null || png.lengthInBytes > 256000) {
         throw const FormatException('Choose a smaller image');
       }
       if (!_ownerStillActive()) return;
@@ -274,10 +274,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       );
       if (!_ownerStillActive() || !saved) return;
       await _load(sync: false);
+      unawaited(_sync());
       widget.onChanged?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Playlist cover saved on this device.'),
+          content: Text('Playlist cover saved. Syncing to your account when online.'),
         ));
       }
     } catch (_) {
@@ -297,6 +298,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       );
       if (!_ownerStillActive() || !saved) return;
       await _load(sync: false);
+      unawaited(_sync());
       widget.onChanged?.call();
     } catch (_) {
       if (_ownerStillActive()) {
