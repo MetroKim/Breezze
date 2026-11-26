@@ -66,8 +66,25 @@ jobs:
           rows = obj.get('results', [])
           errors = obj.get('errors', [])
           print(f'SEMGREP_FINDINGS: {len(rows)}; SCAN_ERRORS: {len(errors)}')
+          # Only metadata needed for remediation. NEVER publish matched code,
+          # snippets, metavariables, request headers or secret values.
+          def safe(value):
+              return ''.join(
+                  ch if ch.isascii() and (ch.isalnum() or ch in '._/-:')
+                  else '_' for ch in str(value)
+              )[:180]
+          for item in rows:
+              start = item.get('start') or {}
+              print('SEMGREP_LOCATION:', safe(item.get('check_id', '?')),
+                    safe(item.get('path', '?')),
+                    safe(start.get('line', '?')))
+          for issue in errors:
+              if isinstance(issue, dict):
+                  print('SEMGREP_ERROR_TYPE:', safe(issue.get('type', 'unknown')))
+              else:
+                  print('SEMGREP_ERROR_TYPE: unknown')
           if errors:
-              print('SEMGREP_SCAN_INCOMPLETE: inspect restricted runner logs')
+              print('SEMGREP_SCAN_INCOMPLETE: errors require remediation')
               sys.exit(2)
           PYTHON
           if (( result != 0 )); then
