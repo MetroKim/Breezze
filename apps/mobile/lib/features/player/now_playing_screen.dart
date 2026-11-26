@@ -11,6 +11,8 @@ import 'package:material_ui/material_ui.dart' hide RepeatMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../../app/breezze_navigation.dart';
+import '../search/search_screen.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_transport_controls.dart';
 import '../player/player_controller.dart';
@@ -80,6 +82,31 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         _lyricsMode = 'none';
       });
     }
+  }
+
+  /// Native audio and official YouTube video remain separate sanctioned
+  /// playback modes. A video search never guesses a counterpart or extracts
+  /// audio; the listener explicitly chooses the official video result.
+  Future<void> _openVideoMode(
+    PlayerController controller,
+    TrackInfo track,
+  ) async {
+    final query = [
+      if ((track.title ?? '').trim().isNotEmpty) track.title!.trim(),
+      if ((track.artist ?? '').trim().isNotEmpty) track.artist!.trim(),
+      'official music video',
+    ].join(' ');
+    await controller.pause();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      breezzePageRoute<void>(
+        context: context,
+        builder: (_) => SearchScreen(
+          initialQuery: query,
+          initialVideoSearch: true,
+        ),
+      ),
+    );
   }
 
   void _openPlayingNext() {
@@ -316,6 +343,23 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 ),
                               ),
                               _FavoriteButton(track: track),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            children: [
+                              const BzSvgIcon(name: 'music-note', size: 18),
+                              const SizedBox(width: 7),
+                              Text('Song mode',
+                                  style: theme.textTheme.labelLarge),
+                              const Spacer(),
+                              TextButton.icon(
+                                onPressed: () => _openVideoMode(controller, track),
+                                icon: const BzSvgIcon(name: 'video', size: 18),
+                                label: const Text('Find video'),
+                              ),
                             ],
                           ),
                         ),
