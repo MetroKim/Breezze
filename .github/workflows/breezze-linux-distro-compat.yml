@@ -13,7 +13,7 @@ on:
       - 'apps/mobile/tool/test_linux_portability_audit.py'
       - 'apps/mobile/tool/generate_platform_targets.sh'
       - 'packages/**'
-      - 'docs/BREEZZE_MASTER_PLAN_V7.md'
+      - 'docs/BREEZZE_UNIFIED_ENGINE_V8_IMPLEMENTATION_PLAN.md'
 
 permissions:
   contents: read
