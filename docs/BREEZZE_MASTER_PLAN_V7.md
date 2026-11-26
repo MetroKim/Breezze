@@ -95,7 +95,7 @@ Official references: https://docs.flutter.dev/reference/supported-platforms , ht
 - One PlayerController everywhere; no source spoofing, no native streaming from ytmusicapi, no audio engine duplication or unlicensed content in queue.
 - Android: audio focus granted/denied, call/notification interruption, headphones/Bluetooth disconnect, foreground service and notification actions; resume **only** after explicit user action.
 - iOS: AVAudioSession configured before source, background audio declaration, call/Siri interruptions, route changes, native lock-screen media actions; recheck that no automatic post-call resume occurs.
-- **Desktop gap:** current `startBackgroundAudio` returns `NoopBackgroundBridge` outside Android/iOS, so macOS Now Playing, Windows SMTC and Linux MPRIS are **not completed** despite library dependencies/older README claims. Wire real platform adapters and certify their commands before closing.
+- **Desktop OS media integration advanced (UNVERIFIED):** `startBackgroundAudio` now attempts the same audio_service handler on Android/iOS/macOS/Windows/Linux and falls back to NoopBackgroundBridge when the native media service cannot initialize. macOS Now Playing, Windows SMTC and Linux MPRIS remain unverified for real hardware media keys, state and seek; web still has a no-op bridge. Require host-specific tests before marking PASS.
 - Simulated events in unit tests are necessary but do **not** replace real device/Bluetooth validation. Physical-device results are explicitly still open.
 
 ### P0-C — Playback rights, reliable media and downloads [BLOCKED / PARTLY IMPLEMENTED]
