@@ -3,6 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
+import '../search/search_screen.dart';
+import 'spotify_artist_screen.dart';
 import '../../app/saved_album_store.dart';
 import '../../app/followed_artist_store.dart';
 import '../../core/audio/playback_source_policy.dart';
@@ -400,15 +402,16 @@ class TrackDetailScreen extends ConsumerWidget {
   }
 }
 
-/// Artist page for a saved artist. The page is useful immediately for a
-/// listener's saved tracks; catalog-only sections stay explicitly unavailable
-/// until a canonical artist provider supplies verified metadata.
-class ArtistDetailScreen extends ConsumerStatefulWidget {
+/// Single Breezze artist page; Spotify is the exclusive artist catalogue.
+/// Older saved artist references resolve by exact name on Spotify instead of
+/// fetching a parallel Deezer profile or pretending two artists are the same.
+class ArtistDetailScreen extends ConsumerWidget {
   final String artist;
   final List<FavoriteTrack> savedTracks;
   final List<FavoriteTrack> searchTracks;
   final String? canonicalArtistId;
   final String? portraitUrl;
+  final String? spotifyArtistId;
 
   const ArtistDetailScreen({
     super.key,
@@ -417,501 +420,45 @@ class ArtistDetailScreen extends ConsumerStatefulWidget {
     this.searchTracks = const [],
     this.canonicalArtistId,
     this.portraitUrl,
+    this.spotifyArtistId,
   });
 
   @override
-  ConsumerState<ArtistDetailScreen> createState() => _ArtistDetailScreenState();
-}
-
-class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
-  List<Map<String, dynamic>> _deezerAlbums = [];
-  bool _discographyLoading = true;
-  String? _discographyError;
-  String? _deezerArtistId;
-  bool _changingFollow = false;
-
-  String get artist => widget.artist;
-  List<FavoriteTrack> get savedTracks => widget.savedTracks;
-  List<FavoriteTrack> get searchTracks => widget.searchTracks;
-  String? get canonicalArtistId => widget.canonicalArtistId;
-  String? get portraitUrl => widget.portraitUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDeezerDiscography();
-  }
-
-  Future<void> _loadDeezerDiscography() async {
-    try {
-      final api = ref.read(authSessionProvider.notifier).api;
-      final search = await api.discoveryArtistSearch(artist);
-      final rawArtists = search['items'];
-      if (rawArtists is! List) {
-        if (mounted) setState(() { _discographyLoading = false; });
-        return;
-      }
-      final normalized = artist.trim().toLowerCase();
-      Map? match;
-      for (final item in rawArtists.whereType<Map>()) {
-        final name = item['name'];
-        if (name is String && name.trim().toLowerCase() == normalized) {
-          match = item;
-          break;
-        }
-      }
-      final id = match?['id'];
-      if (id == null) {
-        if (mounted) setState(() { _discographyLoading = false; });
-        return;
-      }
-      final result = await api.discoveryArtistAlbums(id.toString());
-      final rawAlbums = result['items'];
-      if (!mounted) return;
-      setState(() {
-        _deezerArtistId = id.toString();
-        _deezerAlbums = rawAlbums is List
-            ? rawAlbums.whereType<Map>().map((item) =>
-                item.map((key, value) => MapEntry(key.toString(), value))).toList()
-            : [];
-        _discographyLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _discographyError = 'Deezer artist catalog is temporarily unavailable.';
-        _discographyLoading = false;
-      });
-    }
-  }
-
-  Future<void> _changeArtistMembership(
-    String key, {
-    bool? follow,
-    bool? pinned,
-  }) async {
-    if (_changingFollow) return;
-    final auth = ref.read(authSessionProvider);
-    if (auth is! AuthSignedIn) return;
-    setState(() => _changingFollow = true);
-    final store = FollowedArtistStore();
-    try {
-      if (follow == true) {
-        await store.follow(auth.userId, key, artist);
-      } else if (follow == false) {
-        await store.unfollow(auth.userId, key);
-      } else if (pinned != null) {
-        await store.setPinned(auth.userId, key, pinned);
-      }
-      try {
-        await store.syncWithCloud(
-          auth.userId,
-          ref.read(authSessionProvider.notifier).api,
-          ownerStillActive: () {
-            final current = ref.read(authSessionProvider);
-            return current is AuthSignedIn && current.userId == auth.userId;
-          },
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SpotifyArtistScreen(
+      artistName: artist,
+      artistId: spotifyArtistId,
+      portraitUrl: spotifyArtistId == null ? null : portraitUrl,
+      savedTracks: savedTracks,
+      onTrackSelected: (row) {
+        final id = row['providerTrackId'];
+        if (id is! String ||
+            !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) return;
+        final duration = row['durationSec'];
+        final track = TrackInfo(
+          id: 'bz:spotify:$id',
+          title: row['title'] as String? ?? 'Song',
+          artist: row['artist'] as String? ?? artist,
+          artworkUrl: row['artworkUrl'] as String?,
+          duration: Duration(seconds: duration is num ? duration.toInt() : 0),
         );
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Saved on this device. Sync will retry online.'),
-          ));
-        }
-      }
-      if (mounted) ref.invalidate(_artistFollowing(key));
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not update this artist. Try again.'),
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: track),
         ));
-      }
-    } finally {
-      if (mounted) setState(() => _changingFollow = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final artistKey = canonicalArtistId != null
-        ? 'catalog:$canonicalArtistId'
-        : _deezerArtistId != null ? 'apple:$_deezerArtistId' : null;
-    final signedIn = ref.watch(authSessionProvider) is AuthSignedIn;
-    final following = signedIn && artistKey != null
-        ? ref.watch(_artistFollowing(artistKey))
-        : null;
-    final queue = [for (final track in savedTracks) track.toTrackInfo()];
-    final heroArtwork = portraitUrl ?? (searchTracks.isNotEmpty
-        ? searchTracks.first.artworkUrl
-        : (savedTracks.isNotEmpty ? savedTracks.first.artworkUrl : null));
-
-    return Scaffold(
-      backgroundColor: theme.bzBackground,
-      appBar: AppBar(
-        title: const Text('Artist'),
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const BzSvgIcon(name: 'chevron-left'),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: BzAmbientBackdrop(
-              // Artist pages tint from cover art (Deezer Music 7.0): the
-              // hero blooms from the first available artwork while the
-              // tracklist below stays readable on the plain ground.
-              artworkUrl: heroArtwork,
-              child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
-              children: [
-                Center(
-                  child: ClipOval(
-                    child: portraitUrl == null
-                        ? Container(
-                            width: 156,
-                            height: 156,
-                            color: theme.bzSurface1,
-                            alignment: Alignment.center,
-                            child: BzSvgIcon(
-                              name: 'mic',
-                              size: 54,
-                              color: theme.bzText2,
-                            ),
-                          )
-                        : Image.network(
-                            portraitUrl!,
-                            width: 156,
-                            height: 156,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: 156,
-                              height: 156,
-                              color: theme.bzSurface1,
-                              alignment: Alignment.center,
-                              child: BzSvgIcon(
-                                name: 'mic',
-                                size: 54,
-                                color: theme.bzText2,
-                              ),
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text(artist,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium),
-                const SizedBox(height: 6),
-                Text(
-                  canonicalArtistId != null
-                      ? 'Verified artist profile'
-                      : savedTracks.isNotEmpty
-                          ? 'Artist from your saved music'
-                          : 'Artist from track search · not verified',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.bzText2,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: savedTracks.isEmpty
-                          ? null
-                          : () async {
-                              final first = savedTracks.first;
-                              if (isYouTubeSongId(first.id)) {
-                                await openYouTubePlayer(
-                                  context: context,
-                                  ref: ref,
-                                  videoId: first.id.substring('bz:youtube_music:'.length),
-                                  title: first.title,
-                                  artist: first.artist,
-                                  artworkUrl: first.artworkUrl,
-                                );
-                                return;
-                              }
-                              await ref.read(playerControllerProvider.notifier).playTrack(
-                                trackId: first.id,
-                                queue: queue,
-                                origin: 'library',
-                                sourceContext: artist,
-                              );
-                            },
-                      icon: BzSvgIcon(
-                        name: 'play',
-                        color: theme.bzBackground,
-                        size: 18,
-                      ),
-                      label: const Text('Play saved songs'),
-                    ),
-                    if (following != null && artistKey != null)
-                      following.when(
-                        loading: () => const OutlinedButton(
-                          onPressed: null, child: Text('Loading…'),
-                        ),
-                        error: (_, __) => OutlinedButton(
-                          onPressed: () => ref.invalidate(_artistFollowing(artistKey)),
-                          child: const Text('Retry follow status'),
-                        ),
-                        data: (record) => Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            OutlinedButton.icon(
-                              icon: BzSvgIcon(name: record != null
-                                  ? 'check' : 'user-round-plus'),
-                              label: Text(record != null ? 'Following' : 'Follow'),
-                              onPressed: _changingFollow ? null : () =>
-                                  _changeArtistMembership(
-                                    artistKey, follow: record == null,
-                                  ),
-                            ),
-                            if (record != null) ...[
-                              const SizedBox(width: 8),
-                              OutlinedButton.icon(
-                                icon: BzSvgIcon(name: record.isPinned
-                                    ? 'star-filled' : 'star'),
-                                label: Text(record.isPinned ? 'Unpin' : 'Pin'),
-                                onPressed: _changingFollow ? null : () =>
-                                    _changeArtistMembership(
-                                      artistKey, pinned: !record.isPinned,
-                                    ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                _CatalogSection(
-                  title: 'Saved Songs',
-                  subtitle: 'Songs by this artist that you have saved.',
-                  available: savedTracks.isNotEmpty,
-                  child: Column(
-                    children: [
-                      for (var i = 0; i < savedTracks.length; i++)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: _TrackArtwork(
-                            url: savedTracks[i].artworkUrl,
-                            size: 48,
-                          ),
-                          title: Text(
-                            savedTracks[i].title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            savedTracks[i].artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () async {
-                            final song = savedTracks[i];
-                            if (isYouTubeSongId(song.id)) {
-                              await openYouTubePlayer(
-                                context: context,
-                                ref: ref,
-                                videoId: song.id.substring('bz:youtube_music:'.length),
-                                title: song.title,
-                                artist: song.artist,
-                                artworkUrl: song.artworkUrl,
-                              );
-                              return;
-                            }
-                            await ref.read(playerControllerProvider.notifier).playTrack(
-                              trackId: song.id,
-                              queue: queue,
-                              startIndex: i,
-                              origin: 'library',
-                              sourceContext: artist,
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-                if (searchTracks.isNotEmpty)
-                  _CatalogSection(
-                    title: 'Tracks found in search',
-                    subtitle: 'Matching tracks from the current search results, not a verified complete discography.',
-                    available: true,
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < searchTracks.length; i++)
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: _TrackArtwork(url: searchTracks[i].artworkUrl, size: 48),
-                            title: Text(searchTracks[i].title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Text(searchTracks[i].artist, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            onTap: () async {
-                              final song = searchTracks[i];
-                              if (isYouTubeSongId(song.id)) {
-                                await openYouTubePlayer(
-                                  context: context,
-                                  ref: ref,
-                                  videoId: song.id.substring('bz:youtube_music:'.length),
-                                  title: song.title,
-                                  artist: song.artist,
-                                  artworkUrl: song.artworkUrl,
-                                );
-                                return;
-                              }
-                              await ref.read(playerControllerProvider.notifier).playTrack(
-                                trackId: song.id,
-                                queue: [for (final item in searchTracks) item.toTrackInfo()],
-                                startIndex: i,
-                                origin: 'search',
-                                sourceContext: artist,
-                              );
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                if (_discographyLoading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_discographyError != null)
-                  _CatalogSection(
-                    title: 'Deezer catalog discography',
-                    subtitle: _discographyError!,
-                    available: false,
-                  )
-                else
-                  _CatalogSection(
-                    title: 'Deezer catalog discography',
-                    subtitle: _deezerArtistId == null
-                        ? 'No exact artist match was returned by Deezer for this name.'
-                        : 'Albums and singles linked to the exact Deezer artist record. This is Deezer catalog coverage, not a guarantee of every regional release.',
-                    available: _deezerAlbums.isNotEmpty,
-                    child: Column(
-                      children: [
-                        for (final album in _deezerAlbums)
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: _TrackArtwork(
-                              url: album['artworkUrl'] as String?,
-                              size: 52,
-                            ),
-                            title: Text(
-                              album['title'] as String? ?? 'Untitled release',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              [
-                                if (album['releaseDate'] is String)
-                                  (album['releaseDate'] as String).split('T').first,
-                                if (album['trackCount'] is num)
-                                  '${(album['trackCount'] as num).toInt()} tracks',
-                              ].join(' · '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            onTap: () {
-                              final albumId = album['id'];
-                              if (albumId == null) return;
-                              Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => DeezerAlbumCatalogScreen(
-                                  albumId: albumId.toString(),
-                                  title: album['title'] as String? ?? 'Unknown album',
-                                  artist: album['artist'] as String? ?? artist,
-                                  artworkUrl: album['artworkUrl'] as String?,
-                                  deezerUrl: album['url'] as String?,
-                                ),
-                              ));
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ref.watch(_artistVideos(artist)).when(
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => TextButton.icon(
-                    onPressed: () => ref.invalidate(_artistVideos(artist)),
-                    icon: const BzSvgIcon(name: 'refresh'),
-                    label: const Text('Retry music videos'),
-                  ),
-                  data: (videos) => _CatalogSection(
-                    title: 'Music Videos',
-                    subtitle: 'No videos found for this artist.',
-                    available: videos.isNotEmpty,
-                    child: Column(children: [
-                      for (final video in videos)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: _TrackArtwork(url: video['artworkUrl'] as String?, size: 52),
-                          title: Text(video['title'] as String? ?? 'Music video'),
-                          trailing: const BzSvgIcon(name: 'play'),
-                          onTap: () async {
-                            await ref.read(playerControllerProvider.notifier).pause();
-                            if (!context.mounted) return;
-                            await Navigator.of(context).push(MaterialPageRoute<void>(
-                              builder: (_) => OfficialMusicVideoScreen(
-                                videoId: video['id'] as String,
-                                title: video['title'] as String? ?? 'Music video',
-                                artist: artist,
-                                artworkUrl: video['artworkUrl'] as String?,
-                              ),
-                            ));
-                          },
-                        ),
-                    ]),
-                  ),
-                ),
-                ref.watch(_artistConcerts(artist)).when(
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => _CatalogSection(
-                    title: 'Upcoming Concerts',
-                    subtitle: '',
-                    available: true,
-                    child: TextButton(
-                      onPressed: () => ref.invalidate(_artistConcerts(artist)),
-                      child: const Text('Retry concert listings'),
-                    ),
-                  ),
-                  data: (events) => _CatalogSection(
-                    title: 'Upcoming Concerts',
-                    subtitle: 'No upcoming shows found in your region.',
-                    available: events.isNotEmpty,
-                    child: Column(children: [
-                      for (final event in events)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const BzSvgIcon(name: 'calendar'),
-                          title: Text(event['title'] as String? ?? 'Concert'),
-                          subtitle: Text([
-                            if (event['date'] is String) (event['date'] as String).split('T').first,
-                            if (event['venue'] is String) event['venue'] as String,
-                            if (event['city'] is String) event['city'] as String,
-                          ].join(' · ')),
-                        ),
-                      const Text('Concert data provided by JamBase'),
-                    ]),
-                  ),
-                ),
-              ],
-            ),
-            ),
-          ),
-        ),
-      ),
+      },
+      onSavedTrackSelected: (favorite) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
+        ));
+      },
+      onSuggestedSearch: (query) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SearchScreen(initialQuery: query),
+        ));
+      },
     );
   }
 }
-
 
 /// Deezer album detail from the public album and track API.
 /// It never turns a preview URL into a full-track playback source.
