@@ -1,4 +1,4 @@
-name: Breezze Live QA Media Delivery (No Production Deployment)
+name: Breezze Live QA Full-Track Media Delivery (No Production Deployment)
 
 on:
   # Explicit opt-in until the repository has a scoped Cloudflare Actions
@@ -50,7 +50,7 @@ jobs:
           printf '%s' "$secret" | npx wrangler secret put MEDIA_SIGNING_KEY --env qa
           printf '%s' "$secret" > "$RUNNER_TEMP/breezze-qa-media-secret"
           chmod 600 "$RUNNER_TEMP/breezze-qa-media-secret"
-      - name: Test real Cloudflare Worker and isolated R2 bytes
+      - name: Generate full-length original test audio and verify R2 range/delivery
         run: |
           set -euo pipefail
           QA_HOST="https://breezze-media-qa.ykw8vmq7ph.workers.dev"
@@ -62,7 +62,11 @@ jobs:
             rm -f "$RUNNER_TEMP/breezze-qa-media-secret"
           }
           trap cleanup EXIT
-          ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i 'sine=frequency=440:duration=5' -c:a aac -b:a 128k -movflags +faststart -y "$RUNNER_TEMP/breezze-qa.m4a"
+          # Synthetic 125-second recording: no copyrighted artist audio.
+          # 5-second previews cannot prove full-length delivery or far seeks.
+          ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i 'sine=frequency=440:sample_rate=16000:duration=125' -c:a aac -b:a 128k -movflags +faststart -y "$RUNNER_TEMP/breezze-qa.m4a"
+          QA_DURATION="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$RUNNER_TEMP/breezze-qa.m4a")"
+          awk -v seconds="$QA_DURATION" 'BEGIN { exit !(seconds >= 124 && seconds <= 127) }'
           QA_BYTES="$(stat -c%s "$RUNNER_TEMP/breezze-qa.m4a")"
           QA_EXPIRES="$(node -e 'process.stdout.write(String(Date.now()+120000))')"
           export QA_ID QA_BYTES QA_EXPIRES
@@ -77,6 +81,15 @@ jobs:
           [ "$(curl -sS --max-time 20 -o "$RUNNER_TEMP/breezze-range.bin" -w '%{http_code}' -H 'Range: bytes=0-1023' "$QA_PLAY_URL")" = 206 ]
           [ "$(wc -c < "$RUNNER_TEMP/breezze-range.bin" | tr -d ' ')" = 1024 ]
           [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$QA_HOST/audio/$QA_ID/AAC_256?e=$QA_EXPIRES&s=forged")" = 403 ]
-          # This does NOT prove native mobile decoding or copyrighted
-          # YouTube streams. It proves current deployed Worker+R2 bytes.
-          echo 'PASS: isolated live QA R2 AAC upload, signed HEAD, byte-range, signature-denial'
+          # Verify the *complete* remote recording can be fetched byte-for-byte.
+          [ "$(curl -sS --max-time 40 -o "$RUNNER_TEMP/breezze-qa-remote.m4a" -w '%{http_code}' "$QA_PLAY_URL")" = 200 ]
+          cmp "$RUNNER_TEMP/breezze-qa.m4a" "$RUNNER_TEMP/breezze-qa-remote.m4a"
+          REMOTE_DURATION="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$RUNNER_TEMP/breezze-qa-remote.m4a")"
+          awk -v seconds="$REMOTE_DURATION" 'BEGIN { exit !(seconds >= 124 && seconds <= 127) }'
+          # Far seek approximates a player asking for bytes near media EOF.
+          [ "$(curl -sS --max-time 20 -o "$RUNNER_TEMP/breezze-tail.bin" -w '%{http_code}' -H 'Range: bytes=-1024' "$QA_PLAY_URL")" = 206 ]
+          tail -c 1024 "$RUNNER_TEMP/breezze-qa.m4a" > "$RUNNER_TEMP/breezze-tail-expected.bin"
+          cmp "$RUNNER_TEMP/breezze-tail-expected.bin" "$RUNNER_TEMP/breezze-tail.bin"
+          # QA proves Worker + R2 are capable of licensed full-length delivery.
+          # It does NOT prove any artist rights, mobile decoder or offline grant.
+          echo 'PASS: synthetic 125s AAC signed full-byte delivery, ffprobe duration, 206 far seek, forged-signature denial'
