@@ -16,7 +16,7 @@ interface SpotifyTrack {
   is_playable?: boolean;
   is_local?: boolean;
   external_ids?: { isrc?: string };
-  artists?: Array<{ name?: string }>;
+  artists?: Array<{ id?: string; name?: string }>;
   album?: { images?: Array<{ url?: string }> };
 }
 
@@ -345,8 +345,14 @@ export class SpotifyAdapter implements ProviderAdapter {
       .filter(row => !seenAlbums.has(row.id) && (seenAlbums.add(row.id), true));
     const threshold = new Date();
     threshold.setUTCFullYear(threshold.getUTCFullYear() - 1);
-    const newReleases = albums.filter(item => item.releaseDate.length >= 4 &&
-      item.releaseDate >= threshold.toISOString().slice(0, 4));
+    const cutoffDate = threshold.toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const newReleases = albums.filter(item => {
+      // Spotify can report YYYY, YYYY-MM or YYYY-MM-DD. A partial date
+      // must not be promoted to a newly published release without proof.
+      if (item.releaseDate.length !== 10) return false;
+      return item.releaseDate >= cutoffDate && item.releaseDate <= today;
+    });
     const seenSongs = new Set<string>();
     const songs = songsResponse.kind === 'ok' && Array.isArray(songsResponse.value.tracks?.items)
       ? songsResponse.value.tracks.items
