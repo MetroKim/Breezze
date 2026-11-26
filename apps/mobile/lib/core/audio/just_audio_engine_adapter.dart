@@ -8,7 +8,12 @@ import 'package:just_audio/just_audio.dart' as ja;
 /// Native audio engine — implements the Breezze engine contract over
 /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
 class JustAudioEngineAdapter implements AudioEngineAdapter {
-  final ja.AudioPlayer _player = ja.AudioPlayer();
+  // The Breezze controller owns interruption decisions. just_audio's
+  // automatic interruption handler can auto-resume after calls, contrary
+  // to our privacy-conscious "resume only on user request" policy.
+  // Its native audio-session activation remains enabled: it requests OS
+  // focus only when playback actually starts.
+  final ja.AudioPlayer _player = ja.AudioPlayer(handleInterruptions: false);
   final StreamController<PlaybackState> _states =
       StreamController<PlaybackState>.broadcast();
   late final StreamSubscription<ja.PlaybackEvent> _errorSubscription;
@@ -16,15 +21,17 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
   StreamSubscription<void>? _becomingNoisySubscription;
   bool _disposed = false;
+  late final Future<void> _sessionReady;
 
   JustAudioEngineAdapter() {
     _errorSubscription = _player.playbackEventStream.listen(
       (_) {},
       onError: (Object error, StackTrace stackTrace) {
-        _states.add(PlaybackState.failed);
+        if (!_disposed) _states.add(PlaybackState.failed);
       },
     );
     _stateSubscription = _player.playerStateStream.listen((state) {
+      if (_disposed) return;
       PlaybackState mapped;
       final processing = state.processingState;
 
@@ -42,7 +49,9 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       }
       _states.add(mapped);
     });
-    unawaited(_configureAudioSession());
+    // Awaited before resolving the first playable source, so the session
+    // category and event subscriptions cannot race with initial playback.
+    _sessionReady = _configureAudioSession();
   }
 
   Future<void> _configureAudioSession() async {
@@ -55,9 +64,11 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
     }
     try {
       final session = await AudioSession.instance;
+      if (_disposed) return;
       await session.configure(const AudioSessionConfiguration.music());
       if (_disposed) return;
       _interruptionSubscription = session.interruptionEventStream.listen((event) {
+        if (_disposed) return;
         if (event.begin) {
           // Pause rather than duck for calls, navigation prompts and other
           // exclusive audio interruptions. Never auto-resume after a call.
@@ -68,6 +79,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
         }
       });
       _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
+        if (_disposed) return;
         // Headphones/Bluetooth route removed: pause to avoid speaker leakage.
         unawaited(_player.pause().catchError((_) {}));
       });
@@ -78,6 +90,8 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
 
   @override
   Future<void> prepare(PlayableSource source) async {
+    await _sessionReady;
+    if (_disposed) throw StateError('Breezze audio engine is disposed');
     if (source.isLocal && !kIsWeb && !source.streamUrl.startsWith('content://')) {
       await _player.setFilePath(source.streamUrl);
     } else {
@@ -86,7 +100,12 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    await _sessionReady;
+    if (_disposed) throw StateError('Breezze audio engine is disposed');
+    // just_audio activates the OS audio session here, not on app startup.
+    await _player.play();
+  }
 
   @override
   Future<void> pause() => _player.pause();
@@ -116,7 +135,10 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   Stream<PlaybackState> get engineStateStream => _states.stream;
 
   Future<void> dispose() async {
+    if (_disposed) return;
     _disposed = true;
+    // An in-flight session setup must not install listeners after disposal.
+    await _sessionReady;
     await _errorSubscription.cancel();
     await _stateSubscription.cancel();
     await _interruptionSubscription?.cancel();
