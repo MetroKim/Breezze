@@ -81,29 +81,6 @@ class _BrowseChartApi extends BreezzeApi {
       };
 }
 
-class _YouTubeBrowseApi extends _BrowseChartApi {
-  @override
-  Future<Map<String, dynamic>> ytMusicExplore() async => {
-    'kind': 'ok',
-    'value': {
-      'source': 'youtube_music',
-      'newReleases': [
-        {'albumId': 'MPREabcdefghij', 'title': 'Client Album'},
-      ],
-      'trending': [],
-      'newVideos': [],
-      'topSongsAvailable': false,
-      'playbackAvailable': false,
-    },
-  };
-
-  @override
-  Future<Map<String, dynamic>> ytMusicMoods() async => {
-    'kind': 'ok',
-    'value': {'source': 'youtube_music', 'sections': []},
-  };
-}
-
 class _BrowseSession extends AuthSessionController {
   _BrowseSession(this.catalogApi);
 
