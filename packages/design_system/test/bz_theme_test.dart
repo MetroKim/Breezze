@@ -1,4 +1,5 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -11,6 +12,27 @@ double _contrastRatio(Color a, Color b) {
 }
 
 void main() {
+  test('Apple devices use OS font proxies without bundling SF Pro', () {
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.macOS]) {
+      final theme = bzLightTheme(platform: platform);
+      expect(theme.platform, platform);
+      expect(theme.textTheme.displayMedium?.fontFamily, 'CupertinoSystemDisplay');
+      expect(theme.textTheme.headlineLarge?.fontFamily, 'CupertinoSystemDisplay');
+      expect(theme.textTheme.titleLarge?.fontFamily, 'CupertinoSystemDisplay');
+      expect(theme.textTheme.titleMedium?.fontFamily, 'CupertinoSystemText');
+      expect(theme.textTheme.bodyLarge?.fontFamily, 'CupertinoSystemText');
+      expect(theme.textTheme.bodyMedium?.fontFamily, 'CupertinoSystemText');
+      expect(theme.bzBackground, BzThemeColors.light.background);
+    }
+    final android = bzLightTheme(platform: TargetPlatform.android);
+    expect(android.platform, TargetPlatform.android);
+    expect(android.textTheme.displayMedium?.fontFamily,
+        isNot('CupertinoSystemDisplay'));
+    expect(android.textTheme.bodyMedium?.fontFamily,
+        isNot('CupertinoSystemText'));
+  });
+
+
   test('Breezze original light/dark palette clears WCAG AA body text contrast', () {
     for (final theme in [bzLightTheme(), bzDarkTheme()]) {
       final palette = theme.bz;
