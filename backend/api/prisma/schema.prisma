@@ -20,6 +20,8 @@ model User {
   mfaPendingSecretCiphertext String?
   mfaLastUsedStep BigInt?
   displayName    String?
+  /// User-uploaded private thumbnail (never a music provider image URL).
+  avatarPngBase64 String?         @db.Text
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   refreshTokens  RefreshToken[]
