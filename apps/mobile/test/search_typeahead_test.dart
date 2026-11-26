@@ -418,7 +418,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('Test Singer'), findsWidgets);
-    expect(find.text('Popular Songs'), findsOneWidget);
+    expect(find.text('Songs'), findsOneWidget);
   });
 
   testWidgets('Music Videos filter renders external video action and honest empty state',
