@@ -384,11 +384,3251 @@ class ArtistDetailScreen extends ConsumerWidget {
       savedTracks: savedTracks,
       onTrackSelected: (row) {
         final id = row['providerTrackId'];
+        final provider = row['providerId'] == 'deezer' ? 'deezer' : 'spotify';
         if (id is! String ||
-            !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) return;
+            !(provider == 'deezer'
+              ? RegExp(r'^[0-9]{1,20}
+          title: row['title'] as String? ?? 'Song',
+          artist: row['artist'] as String? ?? artist,
+          artworkUrl: row['artworkUrl'] as String?,
+          duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+        );
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: track),
+        ));
+      },
+      onDeezerAlbumSelected: (release) {
+        final id = release['id'];
+        if (id is! String || !RegExp(r'^[0-9]{1,20}
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
+        ));
+      },
+      onSuggestedSearch: (query) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SearchScreen(initialQuery: query),
+        ));
+      },
+    );
+  }
+}
+
+/// Deezer album detail from the public album and track API.
+/// It never turns a preview URL into a full-track playback source.
+class DeezerAlbumCatalogScreen extends ConsumerWidget {
+  final String albumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? deezerUrl;
+
+  const DeezerAlbumCatalogScreen({
+    super.key,
+    required this.albumId,
+    required this.title,
+    required this.artist,
+    this.artworkUrl,
+    this.deezerUrl,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final savedKey = (ownerId: ownerId, albumId: albumId);
+    final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
+    final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
+    final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: tracks.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BzSvgIcon(name: 'wifi-off', size: 34),
+                      const SizedBox(height: 12),
+                      Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      Text('Deezer could not return this album tracklist.', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => ref.invalidate(_deezerAlbumTracksProvider(albumId)),
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (data) {
+                final rawAlbum = data['album'];
+                final albumMetadata = rawAlbum is Map
+                    ? Map<String, dynamic>.from(rawAlbum)
+                    : <String, dynamic>{};
+                final albumGenres = albumMetadata['genres'] is List
+                    ? (albumMetadata['genres'] as List)
+                        .whereType<String>()
+                        .where((value) => value.trim().isNotEmpty)
+                        .toList(growable: false)
+                    : <String>[];
+                final isCompilation = albumMetadata['isCompilation'] == true;
+                final rawItems = data['items'];
+                final items = rawItems is List
+                    ? rawItems.whereType<Map>().map((item) =>
+                        item.map((key, value) => MapEntry(key.toString(), value))).toList()
+                    : <Map<String, dynamic>>[];
+                return BzAmbientBackdrop(
+                  artworkUrl: artworkUrl,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+                    children: [
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(BzRadius.artwork),
+                          child: artworkUrl == null
+                              ? Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: const BzBnoteMark(size: 72),
+                                )
+                              : Image.network(
+                                  artworkUrl!,
+                                  width: 220,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                      const SizedBox(height: 6),
+                      Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: isSaved.isLoading ? null : () async {
+                          try {
+                            final wasSaved = isSaved.valueOrNull == true;
+                            final store = SavedAlbumStore();
+                            if (wasSaved) {
+                              await store.remove(ownerId, albumId);
+                            } else {
+                              await store.save(ownerId, SavedAlbum(
+                                id: albumId,
+                                title: title,
+                                artist: artist,
+                                artworkUrl: artworkUrl,
+                                catalogUrl: deezerUrl,
+                                genres: albumGenres,
+                                isCompilation: isCompilation,
+                                addedAt: DateTime.now().toUtc(),
+                              ));
+                            }
+                            var cloudSynced = false;
+                            final active = context.mounted
+                                ? ref.read(authSessionProvider)
+                                : null;
+                            if (auth is AuthSignedIn &&
+                                active is AuthSignedIn &&
+                                active.userId == ownerId) {
+                              try {
+                                await store.syncWithCloud(
+                                  ownerId,
+                                  ref.read(authSessionProvider.notifier).api,
+                                  ownerStillActive: () {
+                                    if (!context.mounted) return false;
+                                    final latest = ref.read(authSessionProvider);
+                                    return latest is AuthSignedIn &&
+                                        latest.userId == ownerId;
+                                  },
+                                );
+                                cloudSynced = true;
+                              } catch (_) {
+                                // The durable local outbox retains this exact
+                                // add/remove operation for the next reconnect.
+                              }
+                            }
+                            ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.invalidate(isAlbumPinnedProvider(savedKey));
+                            ref.read(savedAlbumRefreshProvider.notifier).state++;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(
+                                  auth is! AuthSignedIn
+                                      ? (wasSaved ? 'Removed from this device'
+                                          : 'Saved on this device')
+                                      : cloudSynced
+                                          ? (wasSaved ? 'Album removed from Library'
+                                              : 'Album saved across your devices')
+                                          : 'Saved locally. Cloud sync will retry when connected.',
+                                )),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Could not update saved albums.')),
+                              );
+                            }
+                          }
+                        },
+                        icon: BzSvgIcon(
+                          name: isSaved.valueOrNull == true ? 'check' : 'plus',
+                          color: theme.bzBackground,
+                        ),
+                        label: Text(isSaved.valueOrNull == true
+                            ? 'Saved in Library'
+                            : 'Add Album to Library'),
+                      ),
+                      if (isSaved.valueOrNull == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: isPinned.isLoading ? null : () async {
+                            final active = ref.read(authSessionProvider);
+                            final activeOwner = active is AuthSignedIn
+                                ? active.userId : 'guest';
+                            if (activeOwner != ownerId) return;
+                            try {
+                              final store = SavedAlbumStore();
+                              final nextPinned = isPinned.valueOrNull != true;
+                              final updated = await store.setPinned(
+                                ownerId, albumId, nextPinned,
+                              );
+                              if (!updated || !context.mounted) return;
+                              var synced = active is! AuthSignedIn;
+                              if (active is AuthSignedIn) {
+                                try {
+                                  await store.syncWithCloud(
+                                    ownerId,
+                                    ref.read(authSessionProvider.notifier).api,
+                                    ownerStillActive: () {
+                                      if (!context.mounted) return false;
+                                      final current = ref.read(authSessionProvider);
+                                      return current is AuthSignedIn &&
+                                          current.userId == ownerId;
+                                    },
+                                  );
+                                  synced = true;
+                                } catch (_) {
+                                  // Pin remains durable locally when offline.
+                                }
+                              }
+                              if (!context.mounted) return;
+                              final latest = ref.read(authSessionProvider);
+                              if ((latest is AuthSignedIn
+                                  ? latest.userId : 'guest') != ownerId) return;
+                              ref.invalidate(isAlbumPinnedProvider(savedKey));
+                              ref.read(savedAlbumRefreshProvider.notifier).state++;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(synced
+                                    ? (nextPinned ? 'Album pinned to top'
+                                        : 'Album unpinned')
+                                    : 'Pin saved on this device. Cloud sync will retry.')),
+                              );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content:
+                                      Text('Could not update album pin.')),
+                                );
+                              }
+                            }
+                          },
+                          icon: BzSvgIcon(name:
+                              isPinned.valueOrNull == true ? 'star-filled' : 'star'),
+                          label: Text(isPinned.valueOrNull == true
+                              ? 'Unpin album' : 'Pin album to top'),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        child: Text(
+                          'Deezer album metadata and short audio previews. These are not full recordings; full-track and offline playback require separately authorized rights.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      if (items.isEmpty)
+                        Text('Deezer did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                      else
+                        for (var i = 0; i < items.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: SizedBox(
+                              width: 28,
+                              child: Text(
+                                (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
+                                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                              ),
+                            ),
+                            title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              items[i]['durationMs'] is num
+                                  ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
+                                  : 'Duration not supplied',
+                            ),
+                            trailing: IconButton(
+                              tooltip: items[i]['previewUrl'] is String
+                                  ? 'Play 30-second sample in Breezze' : 'Full audio unavailable in Breezze',
+                              icon: BzSvgIcon(name: items[i]['previewUrl'] is String
+                                  ? 'play' : 'info', size: 18),
+                              onPressed: () async {
+                                final item = items[i];
+                                final trackId = item['id']?.toString() ?? '';
+                                if (item['previewUrl'] is String &&
+                                    RegExp(r'^[0-9]{1,20}$').hasMatch(trackId)) {
+                                  final id = 'bz:deezer_preview:$trackId';
+                                  await ref.read(playerControllerProvider.notifier).playTrack(
+                                    trackId: id,
+                                    queue: [TrackInfo(
+                                      id: id,
+                                      title: item['title'] as String?,
+                                      artist: artist,
+                                      artworkUrl: artworkUrl,
+                                      duration: const Duration(seconds: 30),
+                                    )],
+                                    startIndex: 0,
+                                    origin: 'album',
+                                    sourceContext: 'Deezer preview (up to 30 seconds)',
+                                  );
+                                } else if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text(
+                                      'Full audio is unavailable in Breezze until a licensed stream is connected.',
+                                    )),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+/// Album detail layout. Construct this only from a verified canonical album
+/// record; search-result tracks alone are not enough to synthesize an album.
+class AlbumDetailScreen extends ConsumerWidget {
+  final String canonicalAlbumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? releaseDate;
+  final String? recordLabel;
+  final List<TrackInfo> tracks;
+  final List<String> credits;
+
+  const AlbumDetailScreen({
+    super.key,
+    required this.canonicalAlbumId,
+    required this.title,
+    required this.artist,
+    required this.tracks,
+    this.artworkUrl,
+    this.releaseDate,
+    this.recordLabel,
+    this.credits = const [],
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final queue = tracks.where((track) => !isMetadataOnlyTrackId(track.id)).toList();
+
+    Future<void> playAt(int index, {bool shuffle = false}) async {
+      if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+      final track = tracks[index];
+      if (isYouTubeSongId(track.id)) {
+        await openYouTubePlayer(
+          context: context,
+          ref: ref,
+          videoId: track.id.substring('bz:youtube_music:'.length),
+          title: track.title ?? 'YouTube Music',
+          artist: track.artist ?? artist,
+          artworkUrl: track.artworkUrl,
+        );
+        return;
+      }
+      if (isMetadataOnlyTrackId(track.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
+        );
+        return;
+      }
+      final queueIndex = queue.indexWhere((item) => item.id == track.id);
+      if (queueIndex < 0) return;
+      final player = ref.read(playerControllerProvider.notifier);
+      await player.playTrack(
+        trackId: track.id,
+        queue: queue,
+        startIndex: queueIndex,
+        origin: 'album',
+        sourceContext: canonicalAlbumId,
+      );
+      if (shuffle) player.toggleShuffle();
+    }
+
+    Future<void> play({bool shuffle = false}) async {
+      if (tracks.isEmpty) return;
+      final nativeIndex = tracks.indexWhere((item) => !isMetadataOnlyTrackId(item.id));
+      if (nativeIndex >= 0) {
+        await playAt(nativeIndex, shuffle: shuffle);
+      } else {
+        await playAt(0, shuffle: shuffle);
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: BzAmbientBackdrop(
+              artworkUrl: artworkUrl,
+              child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+              children: [
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    child: _TrackArtwork(
+                      url: artworkUrl,
+                      size: 250,
+                      radius: BzRadius.artwork,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 6),
+                Text(artist,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.bzText2,
+                    )),
+                if (releaseDate != null || recordLabel != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [if (releaseDate != null) releaseDate!, if (recordLabel != null) recordLabel!].join(' · '),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(),
+                      icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
+                      label: const Text('Play'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(shuffle: true),
+                      icon: const BzSvgIcon(name: 'shuffle'),
+                      label: const Text('Shuffle'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                _CatalogSection(
+                  title: 'Tracks',
+                  subtitle: 'The verified tracklist for this album.',
+                  available: tracks.isNotEmpty,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < tracks.length; i++)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Text(
+                            '${i + 1}'.padLeft(2, '0'),
+                            style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                          ),
+                          title: Text(
+                            tracks[i].title ?? 'Unknown track',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            tracks[i].artist ?? artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text(
+                            _duration(tracks[i].duration),
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                          ),
+                          onTap: () => playAt(i),
+                        ),
+                    ],
+                  ),
+                ),
+                _CatalogSection(
+                  title: 'Credits',
+                  subtitle: 'Verified album and track credits.',
+                  available: credits.isNotEmpty,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [for (final credit in credits) Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(credit),
+                    )],
+                  ),
+                ),
+              ],
+            ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _duration(Duration duration) {
+    if (duration <= Duration.zero) return '';
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+class _CatalogSection extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool available;
+  final Widget? child;
+
+  const _CatalogSection({
+    required this.title,
+    required this.subtitle,
+    required this.available,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (available && child != null)
+            child!
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              child: Row(
+                children: [
+                  const BzSvgIcon(name: 'info', size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+class _TrackArtwork extends StatelessWidget {
+  final String? url;
+  final double size;
+  final double radius;
+
+  const _TrackArtwork({
+    required this.url,
+    required this.size,
+    this.radius = BzRadius.artwork,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: url == null
+          ? Container(
+              width: size,
+              height: size,
+              color: theme.bzSurface1,
+              alignment: Alignment.center,
+              child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+            )
+          : Image.network(
+              url!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: size,
+                height: size,
+                color: theme.bzSurface1,
+                alignment: Alignment.center,
+                child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+              ),
+            ),
+    );
+  }
+}
+).hasMatch(id)
+              : RegExp(r'^[A-Za-z0-9]{22}
+          title: row['title'] as String? ?? 'Song',
+          artist: row['artist'] as String? ?? artist,
+          artworkUrl: row['artworkUrl'] as String?,
+          duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+        );
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: track),
+        ));
+      },
+      onSavedTrackSelected: (favorite) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
+        ));
+      },
+      onSuggestedSearch: (query) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SearchScreen(initialQuery: query),
+        ));
+      },
+    );
+  }
+}
+
+/// Deezer album detail from the public album and track API.
+/// It never turns a preview URL into a full-track playback source.
+class DeezerAlbumCatalogScreen extends ConsumerWidget {
+  final String albumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? deezerUrl;
+
+  const DeezerAlbumCatalogScreen({
+    super.key,
+    required this.albumId,
+    required this.title,
+    required this.artist,
+    this.artworkUrl,
+    this.deezerUrl,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final savedKey = (ownerId: ownerId, albumId: albumId);
+    final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
+    final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
+    final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: tracks.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BzSvgIcon(name: 'wifi-off', size: 34),
+                      const SizedBox(height: 12),
+                      Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      Text('Deezer could not return this album tracklist.', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => ref.invalidate(_deezerAlbumTracksProvider(albumId)),
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (data) {
+                final rawAlbum = data['album'];
+                final albumMetadata = rawAlbum is Map
+                    ? Map<String, dynamic>.from(rawAlbum)
+                    : <String, dynamic>{};
+                final albumGenres = albumMetadata['genres'] is List
+                    ? (albumMetadata['genres'] as List)
+                        .whereType<String>()
+                        .where((value) => value.trim().isNotEmpty)
+                        .toList(growable: false)
+                    : <String>[];
+                final isCompilation = albumMetadata['isCompilation'] == true;
+                final rawItems = data['items'];
+                final items = rawItems is List
+                    ? rawItems.whereType<Map>().map((item) =>
+                        item.map((key, value) => MapEntry(key.toString(), value))).toList()
+                    : <Map<String, dynamic>>[];
+                return BzAmbientBackdrop(
+                  artworkUrl: artworkUrl,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+                    children: [
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(BzRadius.artwork),
+                          child: artworkUrl == null
+                              ? Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: const BzBnoteMark(size: 72),
+                                )
+                              : Image.network(
+                                  artworkUrl!,
+                                  width: 220,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                      const SizedBox(height: 6),
+                      Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: isSaved.isLoading ? null : () async {
+                          try {
+                            final wasSaved = isSaved.valueOrNull == true;
+                            final store = SavedAlbumStore();
+                            if (wasSaved) {
+                              await store.remove(ownerId, albumId);
+                            } else {
+                              await store.save(ownerId, SavedAlbum(
+                                id: albumId,
+                                title: title,
+                                artist: artist,
+                                artworkUrl: artworkUrl,
+                                catalogUrl: deezerUrl,
+                                genres: albumGenres,
+                                isCompilation: isCompilation,
+                                addedAt: DateTime.now().toUtc(),
+                              ));
+                            }
+                            var cloudSynced = false;
+                            final active = context.mounted
+                                ? ref.read(authSessionProvider)
+                                : null;
+                            if (auth is AuthSignedIn &&
+                                active is AuthSignedIn &&
+                                active.userId == ownerId) {
+                              try {
+                                await store.syncWithCloud(
+                                  ownerId,
+                                  ref.read(authSessionProvider.notifier).api,
+                                  ownerStillActive: () {
+                                    if (!context.mounted) return false;
+                                    final latest = ref.read(authSessionProvider);
+                                    return latest is AuthSignedIn &&
+                                        latest.userId == ownerId;
+                                  },
+                                );
+                                cloudSynced = true;
+                              } catch (_) {
+                                // The durable local outbox retains this exact
+                                // add/remove operation for the next reconnect.
+                              }
+                            }
+                            ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.invalidate(isAlbumPinnedProvider(savedKey));
+                            ref.read(savedAlbumRefreshProvider.notifier).state++;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(
+                                  auth is! AuthSignedIn
+                                      ? (wasSaved ? 'Removed from this device'
+                                          : 'Saved on this device')
+                                      : cloudSynced
+                                          ? (wasSaved ? 'Album removed from Library'
+                                              : 'Album saved across your devices')
+                                          : 'Saved locally. Cloud sync will retry when connected.',
+                                )),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Could not update saved albums.')),
+                              );
+                            }
+                          }
+                        },
+                        icon: BzSvgIcon(
+                          name: isSaved.valueOrNull == true ? 'check' : 'plus',
+                          color: theme.bzBackground,
+                        ),
+                        label: Text(isSaved.valueOrNull == true
+                            ? 'Saved in Library'
+                            : 'Add Album to Library'),
+                      ),
+                      if (isSaved.valueOrNull == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: isPinned.isLoading ? null : () async {
+                            final active = ref.read(authSessionProvider);
+                            final activeOwner = active is AuthSignedIn
+                                ? active.userId : 'guest';
+                            if (activeOwner != ownerId) return;
+                            try {
+                              final store = SavedAlbumStore();
+                              final nextPinned = isPinned.valueOrNull != true;
+                              final updated = await store.setPinned(
+                                ownerId, albumId, nextPinned,
+                              );
+                              if (!updated || !context.mounted) return;
+                              var synced = active is! AuthSignedIn;
+                              if (active is AuthSignedIn) {
+                                try {
+                                  await store.syncWithCloud(
+                                    ownerId,
+                                    ref.read(authSessionProvider.notifier).api,
+                                    ownerStillActive: () {
+                                      if (!context.mounted) return false;
+                                      final current = ref.read(authSessionProvider);
+                                      return current is AuthSignedIn &&
+                                          current.userId == ownerId;
+                                    },
+                                  );
+                                  synced = true;
+                                } catch (_) {
+                                  // Pin remains durable locally when offline.
+                                }
+                              }
+                              if (!context.mounted) return;
+                              final latest = ref.read(authSessionProvider);
+                              if ((latest is AuthSignedIn
+                                  ? latest.userId : 'guest') != ownerId) return;
+                              ref.invalidate(isAlbumPinnedProvider(savedKey));
+                              ref.read(savedAlbumRefreshProvider.notifier).state++;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(synced
+                                    ? (nextPinned ? 'Album pinned to top'
+                                        : 'Album unpinned')
+                                    : 'Pin saved on this device. Cloud sync will retry.')),
+                              );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content:
+                                      Text('Could not update album pin.')),
+                                );
+                              }
+                            }
+                          },
+                          icon: BzSvgIcon(name:
+                              isPinned.valueOrNull == true ? 'star-filled' : 'star'),
+                          label: Text(isPinned.valueOrNull == true
+                              ? 'Unpin album' : 'Pin album to top'),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        child: Text(
+                          'Deezer album metadata and short audio previews. These are not full recordings; full-track and offline playback require separately authorized rights.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      if (items.isEmpty)
+                        Text('Deezer did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                      else
+                        for (var i = 0; i < items.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: SizedBox(
+                              width: 28,
+                              child: Text(
+                                (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
+                                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                              ),
+                            ),
+                            title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              items[i]['durationMs'] is num
+                                  ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
+                                  : 'Duration not supplied',
+                            ),
+                            trailing: IconButton(
+                              tooltip: items[i]['previewUrl'] is String
+                                  ? 'Play 30-second sample in Breezze' : 'Full audio unavailable in Breezze',
+                              icon: BzSvgIcon(name: items[i]['previewUrl'] is String
+                                  ? 'play' : 'info', size: 18),
+                              onPressed: () async {
+                                final item = items[i];
+                                final trackId = item['id']?.toString() ?? '';
+                                if (item['previewUrl'] is String &&
+                                    RegExp(r'^[0-9]{1,20}$').hasMatch(trackId)) {
+                                  final id = 'bz:deezer_preview:$trackId';
+                                  await ref.read(playerControllerProvider.notifier).playTrack(
+                                    trackId: id,
+                                    queue: [TrackInfo(
+                                      id: id,
+                                      title: item['title'] as String?,
+                                      artist: artist,
+                                      artworkUrl: artworkUrl,
+                                      duration: const Duration(seconds: 30),
+                                    )],
+                                    startIndex: 0,
+                                    origin: 'album',
+                                    sourceContext: 'Deezer preview (up to 30 seconds)',
+                                  );
+                                } else if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text(
+                                      'Full audio is unavailable in Breezze until a licensed stream is connected.',
+                                    )),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+/// Album detail layout. Construct this only from a verified canonical album
+/// record; search-result tracks alone are not enough to synthesize an album.
+class AlbumDetailScreen extends ConsumerWidget {
+  final String canonicalAlbumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? releaseDate;
+  final String? recordLabel;
+  final List<TrackInfo> tracks;
+  final List<String> credits;
+
+  const AlbumDetailScreen({
+    super.key,
+    required this.canonicalAlbumId,
+    required this.title,
+    required this.artist,
+    required this.tracks,
+    this.artworkUrl,
+    this.releaseDate,
+    this.recordLabel,
+    this.credits = const [],
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final queue = tracks.where((track) => !isMetadataOnlyTrackId(track.id)).toList();
+
+    Future<void> playAt(int index, {bool shuffle = false}) async {
+      if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+      final track = tracks[index];
+      if (isYouTubeSongId(track.id)) {
+        await openYouTubePlayer(
+          context: context,
+          ref: ref,
+          videoId: track.id.substring('bz:youtube_music:'.length),
+          title: track.title ?? 'YouTube Music',
+          artist: track.artist ?? artist,
+          artworkUrl: track.artworkUrl,
+        );
+        return;
+      }
+      if (isMetadataOnlyTrackId(track.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
+        );
+        return;
+      }
+      final queueIndex = queue.indexWhere((item) => item.id == track.id);
+      if (queueIndex < 0) return;
+      final player = ref.read(playerControllerProvider.notifier);
+      await player.playTrack(
+        trackId: track.id,
+        queue: queue,
+        startIndex: queueIndex,
+        origin: 'album',
+        sourceContext: canonicalAlbumId,
+      );
+      if (shuffle) player.toggleShuffle();
+    }
+
+    Future<void> play({bool shuffle = false}) async {
+      if (tracks.isEmpty) return;
+      final nativeIndex = tracks.indexWhere((item) => !isMetadataOnlyTrackId(item.id));
+      if (nativeIndex >= 0) {
+        await playAt(nativeIndex, shuffle: shuffle);
+      } else {
+        await playAt(0, shuffle: shuffle);
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: BzAmbientBackdrop(
+              artworkUrl: artworkUrl,
+              child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+              children: [
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    child: _TrackArtwork(
+                      url: artworkUrl,
+                      size: 250,
+                      radius: BzRadius.artwork,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 6),
+                Text(artist,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.bzText2,
+                    )),
+                if (releaseDate != null || recordLabel != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [if (releaseDate != null) releaseDate!, if (recordLabel != null) recordLabel!].join(' · '),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(),
+                      icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
+                      label: const Text('Play'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(shuffle: true),
+                      icon: const BzSvgIcon(name: 'shuffle'),
+                      label: const Text('Shuffle'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                _CatalogSection(
+                  title: 'Tracks',
+                  subtitle: 'The verified tracklist for this album.',
+                  available: tracks.isNotEmpty,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < tracks.length; i++)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Text(
+                            '${i + 1}'.padLeft(2, '0'),
+                            style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                          ),
+                          title: Text(
+                            tracks[i].title ?? 'Unknown track',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            tracks[i].artist ?? artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text(
+                            _duration(tracks[i].duration),
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                          ),
+                          onTap: () => playAt(i),
+                        ),
+                    ],
+                  ),
+                ),
+                _CatalogSection(
+                  title: 'Credits',
+                  subtitle: 'Verified album and track credits.',
+                  available: credits.isNotEmpty,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [for (final credit in credits) Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(credit),
+                    )],
+                  ),
+                ),
+              ],
+            ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _duration(Duration duration) {
+    if (duration <= Duration.zero) return '';
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+class _CatalogSection extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool available;
+  final Widget? child;
+
+  const _CatalogSection({
+    required this.title,
+    required this.subtitle,
+    required this.available,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (available && child != null)
+            child!
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              child: Row(
+                children: [
+                  const BzSvgIcon(name: 'info', size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+class _TrackArtwork extends StatelessWidget {
+  final String? url;
+  final double size;
+  final double radius;
+
+  const _TrackArtwork({
+    required this.url,
+    required this.size,
+    this.radius = BzRadius.artwork,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: url == null
+          ? Container(
+              width: size,
+              height: size,
+              color: theme.bzSurface1,
+              alignment: Alignment.center,
+              child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+            )
+          : Image.network(
+              url!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: size,
+                height: size,
+                color: theme.bzSurface1,
+                alignment: Alignment.center,
+                child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+              ),
+            ),
+    );
+  }
+}
+).hasMatch(id))) return;
         final duration = row['durationSec'];
         final track = TrackInfo(
-          id: 'bz:spotify:$id',
+          id: 'bz:$provider:$id',
+          title: row['title'] as String? ?? 'Song',
+          artist: row['artist'] as String? ?? artist,
+          artworkUrl: row['artworkUrl'] as String?,
+          duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+        );
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: track),
+        ));
+      },
+      onSavedTrackSelected: (favorite) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
+        ));
+      },
+      onSuggestedSearch: (query) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SearchScreen(initialQuery: query),
+        ));
+      },
+    );
+  }
+}
+
+/// Deezer album detail from the public album and track API.
+/// It never turns a preview URL into a full-track playback source.
+class DeezerAlbumCatalogScreen extends ConsumerWidget {
+  final String albumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? deezerUrl;
+
+  const DeezerAlbumCatalogScreen({
+    super.key,
+    required this.albumId,
+    required this.title,
+    required this.artist,
+    this.artworkUrl,
+    this.deezerUrl,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final savedKey = (ownerId: ownerId, albumId: albumId);
+    final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
+    final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
+    final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: tracks.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BzSvgIcon(name: 'wifi-off', size: 34),
+                      const SizedBox(height: 12),
+                      Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      Text('Deezer could not return this album tracklist.', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => ref.invalidate(_deezerAlbumTracksProvider(albumId)),
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (data) {
+                final rawAlbum = data['album'];
+                final albumMetadata = rawAlbum is Map
+                    ? Map<String, dynamic>.from(rawAlbum)
+                    : <String, dynamic>{};
+                final albumGenres = albumMetadata['genres'] is List
+                    ? (albumMetadata['genres'] as List)
+                        .whereType<String>()
+                        .where((value) => value.trim().isNotEmpty)
+                        .toList(growable: false)
+                    : <String>[];
+                final isCompilation = albumMetadata['isCompilation'] == true;
+                final rawItems = data['items'];
+                final items = rawItems is List
+                    ? rawItems.whereType<Map>().map((item) =>
+                        item.map((key, value) => MapEntry(key.toString(), value))).toList()
+                    : <Map<String, dynamic>>[];
+                return BzAmbientBackdrop(
+                  artworkUrl: artworkUrl,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+                    children: [
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(BzRadius.artwork),
+                          child: artworkUrl == null
+                              ? Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: const BzBnoteMark(size: 72),
+                                )
+                              : Image.network(
+                                  artworkUrl!,
+                                  width: 220,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                      const SizedBox(height: 6),
+                      Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: isSaved.isLoading ? null : () async {
+                          try {
+                            final wasSaved = isSaved.valueOrNull == true;
+                            final store = SavedAlbumStore();
+                            if (wasSaved) {
+                              await store.remove(ownerId, albumId);
+                            } else {
+                              await store.save(ownerId, SavedAlbum(
+                                id: albumId,
+                                title: title,
+                                artist: artist,
+                                artworkUrl: artworkUrl,
+                                catalogUrl: deezerUrl,
+                                genres: albumGenres,
+                                isCompilation: isCompilation,
+                                addedAt: DateTime.now().toUtc(),
+                              ));
+                            }
+                            var cloudSynced = false;
+                            final active = context.mounted
+                                ? ref.read(authSessionProvider)
+                                : null;
+                            if (auth is AuthSignedIn &&
+                                active is AuthSignedIn &&
+                                active.userId == ownerId) {
+                              try {
+                                await store.syncWithCloud(
+                                  ownerId,
+                                  ref.read(authSessionProvider.notifier).api,
+                                  ownerStillActive: () {
+                                    if (!context.mounted) return false;
+                                    final latest = ref.read(authSessionProvider);
+                                    return latest is AuthSignedIn &&
+                                        latest.userId == ownerId;
+                                  },
+                                );
+                                cloudSynced = true;
+                              } catch (_) {
+                                // The durable local outbox retains this exact
+                                // add/remove operation for the next reconnect.
+                              }
+                            }
+                            ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.invalidate(isAlbumPinnedProvider(savedKey));
+                            ref.read(savedAlbumRefreshProvider.notifier).state++;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(
+                                  auth is! AuthSignedIn
+                                      ? (wasSaved ? 'Removed from this device'
+                                          : 'Saved on this device')
+                                      : cloudSynced
+                                          ? (wasSaved ? 'Album removed from Library'
+                                              : 'Album saved across your devices')
+                                          : 'Saved locally. Cloud sync will retry when connected.',
+                                )),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Could not update saved albums.')),
+                              );
+                            }
+                          }
+                        },
+                        icon: BzSvgIcon(
+                          name: isSaved.valueOrNull == true ? 'check' : 'plus',
+                          color: theme.bzBackground,
+                        ),
+                        label: Text(isSaved.valueOrNull == true
+                            ? 'Saved in Library'
+                            : 'Add Album to Library'),
+                      ),
+                      if (isSaved.valueOrNull == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: isPinned.isLoading ? null : () async {
+                            final active = ref.read(authSessionProvider);
+                            final activeOwner = active is AuthSignedIn
+                                ? active.userId : 'guest';
+                            if (activeOwner != ownerId) return;
+                            try {
+                              final store = SavedAlbumStore();
+                              final nextPinned = isPinned.valueOrNull != true;
+                              final updated = await store.setPinned(
+                                ownerId, albumId, nextPinned,
+                              );
+                              if (!updated || !context.mounted) return;
+                              var synced = active is! AuthSignedIn;
+                              if (active is AuthSignedIn) {
+                                try {
+                                  await store.syncWithCloud(
+                                    ownerId,
+                                    ref.read(authSessionProvider.notifier).api,
+                                    ownerStillActive: () {
+                                      if (!context.mounted) return false;
+                                      final current = ref.read(authSessionProvider);
+                                      return current is AuthSignedIn &&
+                                          current.userId == ownerId;
+                                    },
+                                  );
+                                  synced = true;
+                                } catch (_) {
+                                  // Pin remains durable locally when offline.
+                                }
+                              }
+                              if (!context.mounted) return;
+                              final latest = ref.read(authSessionProvider);
+                              if ((latest is AuthSignedIn
+                                  ? latest.userId : 'guest') != ownerId) return;
+                              ref.invalidate(isAlbumPinnedProvider(savedKey));
+                              ref.read(savedAlbumRefreshProvider.notifier).state++;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(synced
+                                    ? (nextPinned ? 'Album pinned to top'
+                                        : 'Album unpinned')
+                                    : 'Pin saved on this device. Cloud sync will retry.')),
+                              );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content:
+                                      Text('Could not update album pin.')),
+                                );
+                              }
+                            }
+                          },
+                          icon: BzSvgIcon(name:
+                              isPinned.valueOrNull == true ? 'star-filled' : 'star'),
+                          label: Text(isPinned.valueOrNull == true
+                              ? 'Unpin album' : 'Pin album to top'),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        child: Text(
+                          'Deezer album metadata and short audio previews. These are not full recordings; full-track and offline playback require separately authorized rights.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      if (items.isEmpty)
+                        Text('Deezer did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                      else
+                        for (var i = 0; i < items.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: SizedBox(
+                              width: 28,
+                              child: Text(
+                                (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
+                                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                              ),
+                            ),
+                            title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              items[i]['durationMs'] is num
+                                  ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
+                                  : 'Duration not supplied',
+                            ),
+                            trailing: IconButton(
+                              tooltip: items[i]['previewUrl'] is String
+                                  ? 'Play 30-second sample in Breezze' : 'Full audio unavailable in Breezze',
+                              icon: BzSvgIcon(name: items[i]['previewUrl'] is String
+                                  ? 'play' : 'info', size: 18),
+                              onPressed: () async {
+                                final item = items[i];
+                                final trackId = item['id']?.toString() ?? '';
+                                if (item['previewUrl'] is String &&
+                                    RegExp(r'^[0-9]{1,20}$').hasMatch(trackId)) {
+                                  final id = 'bz:deezer_preview:$trackId';
+                                  await ref.read(playerControllerProvider.notifier).playTrack(
+                                    trackId: id,
+                                    queue: [TrackInfo(
+                                      id: id,
+                                      title: item['title'] as String?,
+                                      artist: artist,
+                                      artworkUrl: artworkUrl,
+                                      duration: const Duration(seconds: 30),
+                                    )],
+                                    startIndex: 0,
+                                    origin: 'album',
+                                    sourceContext: 'Deezer preview (up to 30 seconds)',
+                                  );
+                                } else if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text(
+                                      'Full audio is unavailable in Breezze until a licensed stream is connected.',
+                                    )),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+/// Album detail layout. Construct this only from a verified canonical album
+/// record; search-result tracks alone are not enough to synthesize an album.
+class AlbumDetailScreen extends ConsumerWidget {
+  final String canonicalAlbumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? releaseDate;
+  final String? recordLabel;
+  final List<TrackInfo> tracks;
+  final List<String> credits;
+
+  const AlbumDetailScreen({
+    super.key,
+    required this.canonicalAlbumId,
+    required this.title,
+    required this.artist,
+    required this.tracks,
+    this.artworkUrl,
+    this.releaseDate,
+    this.recordLabel,
+    this.credits = const [],
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final queue = tracks.where((track) => !isMetadataOnlyTrackId(track.id)).toList();
+
+    Future<void> playAt(int index, {bool shuffle = false}) async {
+      if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+      final track = tracks[index];
+      if (isYouTubeSongId(track.id)) {
+        await openYouTubePlayer(
+          context: context,
+          ref: ref,
+          videoId: track.id.substring('bz:youtube_music:'.length),
+          title: track.title ?? 'YouTube Music',
+          artist: track.artist ?? artist,
+          artworkUrl: track.artworkUrl,
+        );
+        return;
+      }
+      if (isMetadataOnlyTrackId(track.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
+        );
+        return;
+      }
+      final queueIndex = queue.indexWhere((item) => item.id == track.id);
+      if (queueIndex < 0) return;
+      final player = ref.read(playerControllerProvider.notifier);
+      await player.playTrack(
+        trackId: track.id,
+        queue: queue,
+        startIndex: queueIndex,
+        origin: 'album',
+        sourceContext: canonicalAlbumId,
+      );
+      if (shuffle) player.toggleShuffle();
+    }
+
+    Future<void> play({bool shuffle = false}) async {
+      if (tracks.isEmpty) return;
+      final nativeIndex = tracks.indexWhere((item) => !isMetadataOnlyTrackId(item.id));
+      if (nativeIndex >= 0) {
+        await playAt(nativeIndex, shuffle: shuffle);
+      } else {
+        await playAt(0, shuffle: shuffle);
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: BzAmbientBackdrop(
+              artworkUrl: artworkUrl,
+              child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+              children: [
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    child: _TrackArtwork(
+                      url: artworkUrl,
+                      size: 250,
+                      radius: BzRadius.artwork,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 6),
+                Text(artist,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.bzText2,
+                    )),
+                if (releaseDate != null || recordLabel != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [if (releaseDate != null) releaseDate!, if (recordLabel != null) recordLabel!].join(' · '),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(),
+                      icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
+                      label: const Text('Play'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(shuffle: true),
+                      icon: const BzSvgIcon(name: 'shuffle'),
+                      label: const Text('Shuffle'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                _CatalogSection(
+                  title: 'Tracks',
+                  subtitle: 'The verified tracklist for this album.',
+                  available: tracks.isNotEmpty,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < tracks.length; i++)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Text(
+                            '${i + 1}'.padLeft(2, '0'),
+                            style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                          ),
+                          title: Text(
+                            tracks[i].title ?? 'Unknown track',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            tracks[i].artist ?? artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text(
+                            _duration(tracks[i].duration),
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                          ),
+                          onTap: () => playAt(i),
+                        ),
+                    ],
+                  ),
+                ),
+                _CatalogSection(
+                  title: 'Credits',
+                  subtitle: 'Verified album and track credits.',
+                  available: credits.isNotEmpty,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [for (final credit in credits) Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(credit),
+                    )],
+                  ),
+                ),
+              ],
+            ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _duration(Duration duration) {
+    if (duration <= Duration.zero) return '';
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+class _CatalogSection extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool available;
+  final Widget? child;
+
+  const _CatalogSection({
+    required this.title,
+    required this.subtitle,
+    required this.available,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (available && child != null)
+            child!
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              child: Row(
+                children: [
+                  const BzSvgIcon(name: 'info', size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+class _TrackArtwork extends StatelessWidget {
+  final String? url;
+  final double size;
+  final double radius;
+
+  const _TrackArtwork({
+    required this.url,
+    required this.size,
+    this.radius = BzRadius.artwork,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: url == null
+          ? Container(
+              width: size,
+              height: size,
+              color: theme.bzSurface1,
+              alignment: Alignment.center,
+              child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+            )
+          : Image.network(
+              url!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: size,
+                height: size,
+                color: theme.bzSurface1,
+                alignment: Alignment.center,
+                child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+              ),
+            ),
+    );
+  }
+}
+).hasMatch(id)) return;
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => DeezerAlbumCatalogScreen(
+            albumId: id,
+            title: release['title'] as String? ?? 'Album',
+            artist: artist,
+            artworkUrl: release['artworkUrl'] as String?,
+            deezerUrl: release['url'] as String?,
+          ),
+        ));
+      },
+      onSavedTrackSelected: (favorite) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
+        ));
+      },
+      onSuggestedSearch: (query) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SearchScreen(initialQuery: query),
+        ));
+      },
+    );
+  }
+}
+
+/// Deezer album detail from the public album and track API.
+/// It never turns a preview URL into a full-track playback source.
+class DeezerAlbumCatalogScreen extends ConsumerWidget {
+  final String albumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? deezerUrl;
+
+  const DeezerAlbumCatalogScreen({
+    super.key,
+    required this.albumId,
+    required this.title,
+    required this.artist,
+    this.artworkUrl,
+    this.deezerUrl,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final savedKey = (ownerId: ownerId, albumId: albumId);
+    final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
+    final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
+    final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: tracks.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BzSvgIcon(name: 'wifi-off', size: 34),
+                      const SizedBox(height: 12),
+                      Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      Text('Deezer could not return this album tracklist.', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => ref.invalidate(_deezerAlbumTracksProvider(albumId)),
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (data) {
+                final rawAlbum = data['album'];
+                final albumMetadata = rawAlbum is Map
+                    ? Map<String, dynamic>.from(rawAlbum)
+                    : <String, dynamic>{};
+                final albumGenres = albumMetadata['genres'] is List
+                    ? (albumMetadata['genres'] as List)
+                        .whereType<String>()
+                        .where((value) => value.trim().isNotEmpty)
+                        .toList(growable: false)
+                    : <String>[];
+                final isCompilation = albumMetadata['isCompilation'] == true;
+                final rawItems = data['items'];
+                final items = rawItems is List
+                    ? rawItems.whereType<Map>().map((item) =>
+                        item.map((key, value) => MapEntry(key.toString(), value))).toList()
+                    : <Map<String, dynamic>>[];
+                return BzAmbientBackdrop(
+                  artworkUrl: artworkUrl,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+                    children: [
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(BzRadius.artwork),
+                          child: artworkUrl == null
+                              ? Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: const BzBnoteMark(size: 72),
+                                )
+                              : Image.network(
+                                  artworkUrl!,
+                                  width: 220,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                      const SizedBox(height: 6),
+                      Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: isSaved.isLoading ? null : () async {
+                          try {
+                            final wasSaved = isSaved.valueOrNull == true;
+                            final store = SavedAlbumStore();
+                            if (wasSaved) {
+                              await store.remove(ownerId, albumId);
+                            } else {
+                              await store.save(ownerId, SavedAlbum(
+                                id: albumId,
+                                title: title,
+                                artist: artist,
+                                artworkUrl: artworkUrl,
+                                catalogUrl: deezerUrl,
+                                genres: albumGenres,
+                                isCompilation: isCompilation,
+                                addedAt: DateTime.now().toUtc(),
+                              ));
+                            }
+                            var cloudSynced = false;
+                            final active = context.mounted
+                                ? ref.read(authSessionProvider)
+                                : null;
+                            if (auth is AuthSignedIn &&
+                                active is AuthSignedIn &&
+                                active.userId == ownerId) {
+                              try {
+                                await store.syncWithCloud(
+                                  ownerId,
+                                  ref.read(authSessionProvider.notifier).api,
+                                  ownerStillActive: () {
+                                    if (!context.mounted) return false;
+                                    final latest = ref.read(authSessionProvider);
+                                    return latest is AuthSignedIn &&
+                                        latest.userId == ownerId;
+                                  },
+                                );
+                                cloudSynced = true;
+                              } catch (_) {
+                                // The durable local outbox retains this exact
+                                // add/remove operation for the next reconnect.
+                              }
+                            }
+                            ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.invalidate(isAlbumPinnedProvider(savedKey));
+                            ref.read(savedAlbumRefreshProvider.notifier).state++;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(
+                                  auth is! AuthSignedIn
+                                      ? (wasSaved ? 'Removed from this device'
+                                          : 'Saved on this device')
+                                      : cloudSynced
+                                          ? (wasSaved ? 'Album removed from Library'
+                                              : 'Album saved across your devices')
+                                          : 'Saved locally. Cloud sync will retry when connected.',
+                                )),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Could not update saved albums.')),
+                              );
+                            }
+                          }
+                        },
+                        icon: BzSvgIcon(
+                          name: isSaved.valueOrNull == true ? 'check' : 'plus',
+                          color: theme.bzBackground,
+                        ),
+                        label: Text(isSaved.valueOrNull == true
+                            ? 'Saved in Library'
+                            : 'Add Album to Library'),
+                      ),
+                      if (isSaved.valueOrNull == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: isPinned.isLoading ? null : () async {
+                            final active = ref.read(authSessionProvider);
+                            final activeOwner = active is AuthSignedIn
+                                ? active.userId : 'guest';
+                            if (activeOwner != ownerId) return;
+                            try {
+                              final store = SavedAlbumStore();
+                              final nextPinned = isPinned.valueOrNull != true;
+                              final updated = await store.setPinned(
+                                ownerId, albumId, nextPinned,
+                              );
+                              if (!updated || !context.mounted) return;
+                              var synced = active is! AuthSignedIn;
+                              if (active is AuthSignedIn) {
+                                try {
+                                  await store.syncWithCloud(
+                                    ownerId,
+                                    ref.read(authSessionProvider.notifier).api,
+                                    ownerStillActive: () {
+                                      if (!context.mounted) return false;
+                                      final current = ref.read(authSessionProvider);
+                                      return current is AuthSignedIn &&
+                                          current.userId == ownerId;
+                                    },
+                                  );
+                                  synced = true;
+                                } catch (_) {
+                                  // Pin remains durable locally when offline.
+                                }
+                              }
+                              if (!context.mounted) return;
+                              final latest = ref.read(authSessionProvider);
+                              if ((latest is AuthSignedIn
+                                  ? latest.userId : 'guest') != ownerId) return;
+                              ref.invalidate(isAlbumPinnedProvider(savedKey));
+                              ref.read(savedAlbumRefreshProvider.notifier).state++;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(synced
+                                    ? (nextPinned ? 'Album pinned to top'
+                                        : 'Album unpinned')
+                                    : 'Pin saved on this device. Cloud sync will retry.')),
+                              );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content:
+                                      Text('Could not update album pin.')),
+                                );
+                              }
+                            }
+                          },
+                          icon: BzSvgIcon(name:
+                              isPinned.valueOrNull == true ? 'star-filled' : 'star'),
+                          label: Text(isPinned.valueOrNull == true
+                              ? 'Unpin album' : 'Pin album to top'),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        child: Text(
+                          'Deezer album metadata and short audio previews. These are not full recordings; full-track and offline playback require separately authorized rights.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      if (items.isEmpty)
+                        Text('Deezer did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                      else
+                        for (var i = 0; i < items.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: SizedBox(
+                              width: 28,
+                              child: Text(
+                                (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
+                                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                              ),
+                            ),
+                            title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              items[i]['durationMs'] is num
+                                  ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
+                                  : 'Duration not supplied',
+                            ),
+                            trailing: IconButton(
+                              tooltip: items[i]['previewUrl'] is String
+                                  ? 'Play 30-second sample in Breezze' : 'Full audio unavailable in Breezze',
+                              icon: BzSvgIcon(name: items[i]['previewUrl'] is String
+                                  ? 'play' : 'info', size: 18),
+                              onPressed: () async {
+                                final item = items[i];
+                                final trackId = item['id']?.toString() ?? '';
+                                if (item['previewUrl'] is String &&
+                                    RegExp(r'^[0-9]{1,20}$').hasMatch(trackId)) {
+                                  final id = 'bz:deezer_preview:$trackId';
+                                  await ref.read(playerControllerProvider.notifier).playTrack(
+                                    trackId: id,
+                                    queue: [TrackInfo(
+                                      id: id,
+                                      title: item['title'] as String?,
+                                      artist: artist,
+                                      artworkUrl: artworkUrl,
+                                      duration: const Duration(seconds: 30),
+                                    )],
+                                    startIndex: 0,
+                                    origin: 'album',
+                                    sourceContext: 'Deezer preview (up to 30 seconds)',
+                                  );
+                                } else if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text(
+                                      'Full audio is unavailable in Breezze until a licensed stream is connected.',
+                                    )),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+/// Album detail layout. Construct this only from a verified canonical album
+/// record; search-result tracks alone are not enough to synthesize an album.
+class AlbumDetailScreen extends ConsumerWidget {
+  final String canonicalAlbumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? releaseDate;
+  final String? recordLabel;
+  final List<TrackInfo> tracks;
+  final List<String> credits;
+
+  const AlbumDetailScreen({
+    super.key,
+    required this.canonicalAlbumId,
+    required this.title,
+    required this.artist,
+    required this.tracks,
+    this.artworkUrl,
+    this.releaseDate,
+    this.recordLabel,
+    this.credits = const [],
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final queue = tracks.where((track) => !isMetadataOnlyTrackId(track.id)).toList();
+
+    Future<void> playAt(int index, {bool shuffle = false}) async {
+      if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+      final track = tracks[index];
+      if (isYouTubeSongId(track.id)) {
+        await openYouTubePlayer(
+          context: context,
+          ref: ref,
+          videoId: track.id.substring('bz:youtube_music:'.length),
+          title: track.title ?? 'YouTube Music',
+          artist: track.artist ?? artist,
+          artworkUrl: track.artworkUrl,
+        );
+        return;
+      }
+      if (isMetadataOnlyTrackId(track.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
+        );
+        return;
+      }
+      final queueIndex = queue.indexWhere((item) => item.id == track.id);
+      if (queueIndex < 0) return;
+      final player = ref.read(playerControllerProvider.notifier);
+      await player.playTrack(
+        trackId: track.id,
+        queue: queue,
+        startIndex: queueIndex,
+        origin: 'album',
+        sourceContext: canonicalAlbumId,
+      );
+      if (shuffle) player.toggleShuffle();
+    }
+
+    Future<void> play({bool shuffle = false}) async {
+      if (tracks.isEmpty) return;
+      final nativeIndex = tracks.indexWhere((item) => !isMetadataOnlyTrackId(item.id));
+      if (nativeIndex >= 0) {
+        await playAt(nativeIndex, shuffle: shuffle);
+      } else {
+        await playAt(0, shuffle: shuffle);
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: BzAmbientBackdrop(
+              artworkUrl: artworkUrl,
+              child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+              children: [
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    child: _TrackArtwork(
+                      url: artworkUrl,
+                      size: 250,
+                      radius: BzRadius.artwork,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 6),
+                Text(artist,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.bzText2,
+                    )),
+                if (releaseDate != null || recordLabel != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [if (releaseDate != null) releaseDate!, if (recordLabel != null) recordLabel!].join(' · '),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(),
+                      icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
+                      label: const Text('Play'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(shuffle: true),
+                      icon: const BzSvgIcon(name: 'shuffle'),
+                      label: const Text('Shuffle'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                _CatalogSection(
+                  title: 'Tracks',
+                  subtitle: 'The verified tracklist for this album.',
+                  available: tracks.isNotEmpty,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < tracks.length; i++)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Text(
+                            '${i + 1}'.padLeft(2, '0'),
+                            style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                          ),
+                          title: Text(
+                            tracks[i].title ?? 'Unknown track',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            tracks[i].artist ?? artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text(
+                            _duration(tracks[i].duration),
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                          ),
+                          onTap: () => playAt(i),
+                        ),
+                    ],
+                  ),
+                ),
+                _CatalogSection(
+                  title: 'Credits',
+                  subtitle: 'Verified album and track credits.',
+                  available: credits.isNotEmpty,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [for (final credit in credits) Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(credit),
+                    )],
+                  ),
+                ),
+              ],
+            ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _duration(Duration duration) {
+    if (duration <= Duration.zero) return '';
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+class _CatalogSection extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool available;
+  final Widget? child;
+
+  const _CatalogSection({
+    required this.title,
+    required this.subtitle,
+    required this.available,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (available && child != null)
+            child!
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              child: Row(
+                children: [
+                  const BzSvgIcon(name: 'info', size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+class _TrackArtwork extends StatelessWidget {
+  final String? url;
+  final double size;
+  final double radius;
+
+  const _TrackArtwork({
+    required this.url,
+    required this.size,
+    this.radius = BzRadius.artwork,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: url == null
+          ? Container(
+              width: size,
+              height: size,
+              color: theme.bzSurface1,
+              alignment: Alignment.center,
+              child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+            )
+          : Image.network(
+              url!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: size,
+                height: size,
+                color: theme.bzSurface1,
+                alignment: Alignment.center,
+                child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+              ),
+            ),
+    );
+  }
+}
+).hasMatch(id)
+              : RegExp(r'^[A-Za-z0-9]{22}
+          title: row['title'] as String? ?? 'Song',
+          artist: row['artist'] as String? ?? artist,
+          artworkUrl: row['artworkUrl'] as String?,
+          duration: Duration(seconds: duration is num ? duration.toInt() : 0),
+        );
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: track),
+        ));
+      },
+      onSavedTrackSelected: (favorite) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TrackDetailScreen(track: favorite.toTrackInfo()),
+        ));
+      },
+      onSuggestedSearch: (query) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SearchScreen(initialQuery: query),
+        ));
+      },
+    );
+  }
+}
+
+/// Deezer album detail from the public album and track API.
+/// It never turns a preview URL into a full-track playback source.
+class DeezerAlbumCatalogScreen extends ConsumerWidget {
+  final String albumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? deezerUrl;
+
+  const DeezerAlbumCatalogScreen({
+    super.key,
+    required this.albumId,
+    required this.title,
+    required this.artist,
+    this.artworkUrl,
+    this.deezerUrl,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final auth = ref.watch(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : 'guest';
+    final savedKey = (ownerId: ownerId, albumId: albumId);
+    final isSaved = ref.watch(isAlbumSavedProvider(savedKey));
+    final isPinned = ref.watch(isAlbumPinnedProvider(savedKey));
+    final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: tracks.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BzSvgIcon(name: 'wifi-off', size: 34),
+                      const SizedBox(height: 12),
+                      Text('Album catalog unavailable', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      Text('Deezer could not return this album tracklist.', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => ref.invalidate(_deezerAlbumTracksProvider(albumId)),
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (data) {
+                final rawAlbum = data['album'];
+                final albumMetadata = rawAlbum is Map
+                    ? Map<String, dynamic>.from(rawAlbum)
+                    : <String, dynamic>{};
+                final albumGenres = albumMetadata['genres'] is List
+                    ? (albumMetadata['genres'] as List)
+                        .whereType<String>()
+                        .where((value) => value.trim().isNotEmpty)
+                        .toList(growable: false)
+                    : <String>[];
+                final isCompilation = albumMetadata['isCompilation'] == true;
+                final rawItems = data['items'];
+                final items = rawItems is List
+                    ? rawItems.whereType<Map>().map((item) =>
+                        item.map((key, value) => MapEntry(key.toString(), value))).toList()
+                    : <Map<String, dynamic>>[];
+                return BzAmbientBackdrop(
+                  artworkUrl: artworkUrl,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(20, 18, 20, BzBreakpoints.bottomClearance(context, compact: 180)),
+                    children: [
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(BzRadius.artwork),
+                          child: artworkUrl == null
+                              ? Container(
+                                  width: 220,
+                                  height: 220,
+                                  color: theme.bzSurface1,
+                                  alignment: Alignment.center,
+                                  child: const BzBnoteMark(size: 72),
+                                )
+                              : Image.network(
+                                  artworkUrl!,
+                                  width: 220,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const BzBnoteMark(size: 72),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(title, textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                      const SizedBox(height: 6),
+                      Text(artist, textAlign: TextAlign.center, style: theme.textTheme.titleMedium?.copyWith(color: theme.bzText2)),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: isSaved.isLoading ? null : () async {
+                          try {
+                            final wasSaved = isSaved.valueOrNull == true;
+                            final store = SavedAlbumStore();
+                            if (wasSaved) {
+                              await store.remove(ownerId, albumId);
+                            } else {
+                              await store.save(ownerId, SavedAlbum(
+                                id: albumId,
+                                title: title,
+                                artist: artist,
+                                artworkUrl: artworkUrl,
+                                catalogUrl: deezerUrl,
+                                genres: albumGenres,
+                                isCompilation: isCompilation,
+                                addedAt: DateTime.now().toUtc(),
+                              ));
+                            }
+                            var cloudSynced = false;
+                            final active = context.mounted
+                                ? ref.read(authSessionProvider)
+                                : null;
+                            if (auth is AuthSignedIn &&
+                                active is AuthSignedIn &&
+                                active.userId == ownerId) {
+                              try {
+                                await store.syncWithCloud(
+                                  ownerId,
+                                  ref.read(authSessionProvider.notifier).api,
+                                  ownerStillActive: () {
+                                    if (!context.mounted) return false;
+                                    final latest = ref.read(authSessionProvider);
+                                    return latest is AuthSignedIn &&
+                                        latest.userId == ownerId;
+                                  },
+                                );
+                                cloudSynced = true;
+                              } catch (_) {
+                                // The durable local outbox retains this exact
+                                // add/remove operation for the next reconnect.
+                              }
+                            }
+                            ref.invalidate(isAlbumSavedProvider(savedKey));
+                            ref.invalidate(isAlbumPinnedProvider(savedKey));
+                            ref.read(savedAlbumRefreshProvider.notifier).state++;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(
+                                  auth is! AuthSignedIn
+                                      ? (wasSaved ? 'Removed from this device'
+                                          : 'Saved on this device')
+                                      : cloudSynced
+                                          ? (wasSaved ? 'Album removed from Library'
+                                              : 'Album saved across your devices')
+                                          : 'Saved locally. Cloud sync will retry when connected.',
+                                )),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Could not update saved albums.')),
+                              );
+                            }
+                          }
+                        },
+                        icon: BzSvgIcon(
+                          name: isSaved.valueOrNull == true ? 'check' : 'plus',
+                          color: theme.bzBackground,
+                        ),
+                        label: Text(isSaved.valueOrNull == true
+                            ? 'Saved in Library'
+                            : 'Add Album to Library'),
+                      ),
+                      if (isSaved.valueOrNull == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: isPinned.isLoading ? null : () async {
+                            final active = ref.read(authSessionProvider);
+                            final activeOwner = active is AuthSignedIn
+                                ? active.userId : 'guest';
+                            if (activeOwner != ownerId) return;
+                            try {
+                              final store = SavedAlbumStore();
+                              final nextPinned = isPinned.valueOrNull != true;
+                              final updated = await store.setPinned(
+                                ownerId, albumId, nextPinned,
+                              );
+                              if (!updated || !context.mounted) return;
+                              var synced = active is! AuthSignedIn;
+                              if (active is AuthSignedIn) {
+                                try {
+                                  await store.syncWithCloud(
+                                    ownerId,
+                                    ref.read(authSessionProvider.notifier).api,
+                                    ownerStillActive: () {
+                                      if (!context.mounted) return false;
+                                      final current = ref.read(authSessionProvider);
+                                      return current is AuthSignedIn &&
+                                          current.userId == ownerId;
+                                    },
+                                  );
+                                  synced = true;
+                                } catch (_) {
+                                  // Pin remains durable locally when offline.
+                                }
+                              }
+                              if (!context.mounted) return;
+                              final latest = ref.read(authSessionProvider);
+                              if ((latest is AuthSignedIn
+                                  ? latest.userId : 'guest') != ownerId) return;
+                              ref.invalidate(isAlbumPinnedProvider(savedKey));
+                              ref.read(savedAlbumRefreshProvider.notifier).state++;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(synced
+                                    ? (nextPinned ? 'Album pinned to top'
+                                        : 'Album unpinned')
+                                    : 'Pin saved on this device. Cloud sync will retry.')),
+                              );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content:
+                                      Text('Could not update album pin.')),
+                                );
+                              }
+                            }
+                          },
+                          icon: BzSvgIcon(name:
+                              isPinned.valueOrNull == true ? 'star-filled' : 'star'),
+                          label: Text(isPinned.valueOrNull == true
+                              ? 'Unpin album' : 'Pin album to top'),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.bzSurface1,
+                          borderRadius: BorderRadius.circular(BzRadius.card),
+                          border: Border.all(color: theme.bzSeparator),
+                        ),
+                        child: Text(
+                          'Deezer album metadata and short audio previews. These are not full recordings; full-track and offline playback require separately authorized rights.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text('Tracks • ${items.length}', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      if (items.isEmpty)
+                        Text('Deezer did not return tracks for this album.', style: theme.textTheme.bodyMedium)
+                      else
+                        for (var i = 0; i < items.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: SizedBox(
+                              width: 28,
+                              child: Text(
+                                (items[i]['trackNumber'] ?? i + 1).toString().padLeft(2, '0'),
+                                style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                              ),
+                            ),
+                            title: Text(items[i]['title'] as String? ?? 'Unknown track', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              items[i]['durationMs'] is num
+                                  ? _formatDuration(Duration(milliseconds: (items[i]['durationMs'] as num).toInt()))
+                                  : 'Duration not supplied',
+                            ),
+                            trailing: IconButton(
+                              tooltip: items[i]['previewUrl'] is String
+                                  ? 'Play 30-second sample in Breezze' : 'Full audio unavailable in Breezze',
+                              icon: BzSvgIcon(name: items[i]['previewUrl'] is String
+                                  ? 'play' : 'info', size: 18),
+                              onPressed: () async {
+                                final item = items[i];
+                                final trackId = item['id']?.toString() ?? '';
+                                if (item['previewUrl'] is String &&
+                                    RegExp(r'^[0-9]{1,20}$').hasMatch(trackId)) {
+                                  final id = 'bz:deezer_preview:$trackId';
+                                  await ref.read(playerControllerProvider.notifier).playTrack(
+                                    trackId: id,
+                                    queue: [TrackInfo(
+                                      id: id,
+                                      title: item['title'] as String?,
+                                      artist: artist,
+                                      artworkUrl: artworkUrl,
+                                      duration: const Duration(seconds: 30),
+                                    )],
+                                    startIndex: 0,
+                                    origin: 'album',
+                                    sourceContext: 'Deezer preview (up to 30 seconds)',
+                                  );
+                                } else if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text(
+                                      'Full audio is unavailable in Breezze until a licensed stream is connected.',
+                                    )),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+/// Album detail layout. Construct this only from a verified canonical album
+/// record; search-result tracks alone are not enough to synthesize an album.
+class AlbumDetailScreen extends ConsumerWidget {
+  final String canonicalAlbumId;
+  final String title;
+  final String artist;
+  final String? artworkUrl;
+  final String? releaseDate;
+  final String? recordLabel;
+  final List<TrackInfo> tracks;
+  final List<String> credits;
+
+  const AlbumDetailScreen({
+    super.key,
+    required this.canonicalAlbumId,
+    required this.title,
+    required this.artist,
+    required this.tracks,
+    this.artworkUrl,
+    this.releaseDate,
+    this.recordLabel,
+    this.credits = const [],
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final queue = tracks.where((track) => !isMetadataOnlyTrackId(track.id)).toList();
+
+    Future<void> playAt(int index, {bool shuffle = false}) async {
+      if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+      final track = tracks[index];
+      if (isYouTubeSongId(track.id)) {
+        await openYouTubePlayer(
+          context: context,
+          ref: ref,
+          videoId: track.id.substring('bz:youtube_music:'.length),
+          title: track.title ?? 'YouTube Music',
+          artist: track.artist ?? artist,
+          artworkUrl: track.artworkUrl,
+        );
+        return;
+      }
+      if (isMetadataOnlyTrackId(track.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This album track has metadata only; native playback is unavailable.')),
+        );
+        return;
+      }
+      final queueIndex = queue.indexWhere((item) => item.id == track.id);
+      if (queueIndex < 0) return;
+      final player = ref.read(playerControllerProvider.notifier);
+      await player.playTrack(
+        trackId: track.id,
+        queue: queue,
+        startIndex: queueIndex,
+        origin: 'album',
+        sourceContext: canonicalAlbumId,
+      );
+      if (shuffle) player.toggleShuffle();
+    }
+
+    Future<void> play({bool shuffle = false}) async {
+      if (tracks.isEmpty) return;
+      final nativeIndex = tracks.indexWhere((item) => !isMetadataOnlyTrackId(item.id));
+      if (nativeIndex >= 0) {
+        await playAt(nativeIndex, shuffle: shuffle);
+      } else {
+        await playAt(0, shuffle: shuffle);
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: theme.bzBackground,
+      appBar: AppBar(
+        title: const Text('Album'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const BzSvgIcon(name: 'chevron-left'),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: BzAmbientBackdrop(
+              artworkUrl: artworkUrl,
+              child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+              children: [
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(BzRadius.artwork),
+                    child: _TrackArtwork(
+                      url: artworkUrl,
+                      size: 250,
+                      radius: BzRadius.artwork,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 6),
+                Text(artist,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.bzText2,
+                    )),
+                if (releaseDate != null || recordLabel != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [if (releaseDate != null) releaseDate!, if (recordLabel != null) recordLabel!].join(' · '),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(),
+                      icon: BzSvgIcon(name: 'play', color: theme.bzBackground, size: 18),
+                      label: const Text('Play'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: queue.isEmpty ? null : () => play(shuffle: true),
+                      icon: const BzSvgIcon(name: 'shuffle'),
+                      label: const Text('Shuffle'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                _CatalogSection(
+                  title: 'Tracks',
+                  subtitle: 'The verified tracklist for this album.',
+                  available: tracks.isNotEmpty,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < tracks.length; i++)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Text(
+                            '${i + 1}'.padLeft(2, '0'),
+                            style: theme.textTheme.labelMedium?.copyWith(color: theme.bzText2),
+                          ),
+                          title: Text(
+                            tracks[i].title ?? 'Unknown track',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            tracks[i].artist ?? artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text(
+                            _duration(tracks[i].duration),
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                          ),
+                          onTap: () => playAt(i),
+                        ),
+                    ],
+                  ),
+                ),
+                _CatalogSection(
+                  title: 'Credits',
+                  subtitle: 'Verified album and track credits.',
+                  available: credits.isNotEmpty,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [for (final credit in credits) Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(credit),
+                    )],
+                  ),
+                ),
+              ],
+            ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _duration(Duration duration) {
+    if (duration <= Duration.zero) return '';
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+class _CatalogSection extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool available;
+  final Widget? child;
+
+  const _CatalogSection({
+    required this.title,
+    required this.subtitle,
+    required this.available,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (available && child != null)
+            child!
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.bzSurface1,
+                borderRadius: BorderRadius.circular(BzRadius.card),
+                border: Border.all(color: theme.bzSeparator),
+              ),
+              child: Row(
+                children: [
+                  const BzSvgIcon(name: 'info', size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+class _TrackArtwork extends StatelessWidget {
+  final String? url;
+  final double size;
+  final double radius;
+
+  const _TrackArtwork({
+    required this.url,
+    required this.size,
+    this.radius = BzRadius.artwork,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: url == null
+          ? Container(
+              width: size,
+              height: size,
+              color: theme.bzSurface1,
+              alignment: Alignment.center,
+              child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+            )
+          : Image.network(
+              url!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: size,
+                height: size,
+                color: theme.bzSurface1,
+                alignment: Alignment.center,
+                child: BzBnoteMark(size: size * 0.3, color: theme.bzText2),
+              ),
+            ),
+    );
+  }
+}
+).hasMatch(id))) return;
+        final duration = row['durationSec'];
+        final track = TrackInfo(
+          id: 'bz:$provider:$id',
           title: row['title'] as String? ?? 'Song',
           artist: row['artist'] as String? ?? artist,
           artworkUrl: row['artworkUrl'] as String?,
