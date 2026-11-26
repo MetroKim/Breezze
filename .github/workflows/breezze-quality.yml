@@ -366,6 +366,10 @@ jobs:
         working-directory: apps/mobile
         run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
 
+      - name: Verify Breezze V8 design and device-adaptive interactions on macOS host
+        working-directory: apps/mobile
+        run: flutter test test/v8_cross_device_layout_test.dart test/bz_morphing_brand_header_test.dart test/bz_branded_app_bar_test.dart test/bz_discovery_action_tile_test.dart --reporter expanded
+
       - name: Build macOS desktop
         working-directory: apps/mobile
         run: flutter build macos --debug --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
@@ -402,6 +406,10 @@ jobs:
       - name: Test playlist persistence on Windows host
         working-directory: apps/mobile
         run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
+
+      - name: Verify Breezze V8 design and device-adaptive interactions on Windows host
+        working-directory: apps/mobile
+        run: flutter test test/v8_cross_device_layout_test.dart test/bz_morphing_brand_header_test.dart test/bz_branded_app_bar_test.dart test/bz_discovery_action_tile_test.dart --reporter expanded
 
       - name: Build Windows desktop
         working-directory: apps/mobile
