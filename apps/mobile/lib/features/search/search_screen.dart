@@ -1,7 +1,6 @@
-import '../free_music/device_audio.dart';
-import '../video/device_video.dart';
 import '../player/now_playing_screen.dart';
 import 'dart:async';
+import 'package:file_selector/file_selector.dart';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
@@ -42,6 +41,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   var _searched = false;
   var _searchLibrary = false;
   var _searchVideos = false;
+  var _searchLocal = false;
+  // Scope controls become visible only after the first query has resolved.
+  var _searchScopesRevealed = false;
+  final List<BzTrack> _deviceAudioTracks = [];
+  final Map<String, String> _deviceAudioPaths = {};
   String? _error;
 
   static const _suggestedSearches = <String, String>{
@@ -107,6 +111,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       _searched = normalized.length >= 2;
       _results = [];
       _error = null;
+      _searchScopesRevealed = false;
     });
     if (normalized.length < 2) return;
     _typeaheadTimer = Timer(const Duration(milliseconds: 500), () {
@@ -141,6 +146,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     if (!mounted || generation != _searchGeneration) return;
 
+    if (_searchLocal) {
+      // Local results are exclusively from files the user explicitly chose.
+      // Never crawl device storage or issue network requests in Local mode.
+      final needle = normalized.toLowerCase();
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _loading = false;
+        _searchScopesRevealed = true;
+        _results = _deviceAudioTracks.where((track) =>
+          track.title.toLowerCase().contains(needle) ||
+          track.artist.toLowerCase().contains(needle),
+        ).toList();
+      });
+      return;
+    }
+
     if (_searchLibrary) {
       try {
         final auth = ref.read(authSessionProvider);
@@ -153,6 +174,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             item.artist.toLowerCase().contains(needle));
         setState(() {
           _loading = false;
+          _searchScopesRevealed = true;
           _results = [
             for (final item in matches)
               BzTrack(
@@ -168,6 +190,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         if (!mounted || generation != _searchGeneration) return;
         setState(() {
           _loading = false;
+          _searchScopesRevealed = true;
           _results = [];
           _error = 'Your library could not be searched right now.';
         });
@@ -216,6 +239,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         if (!mounted || generation != _searchGeneration) return;
         setState(() {
           _loading = false;
+          _searchScopesRevealed = true;
           _results = videos.where((item) =>
               RegExp(r'^[A-Za-z0-9_-]{11}$')
                   .hasMatch(item['id'] as String? ?? '')).map((item) {
@@ -235,6 +259,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         if (!mounted || generation != _searchGeneration) return;
         setState(() {
           _loading = false;
+          _searchScopesRevealed = true;
           _results = [if (op is ProviderOk<List<ProviderTrack>>) ...op.value
                   .map((track) => BzTrack(
                         id: track.breezzeTrackId,
@@ -255,9 +280,76 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _loading = false;
+          _searchScopesRevealed = true;
         _results = [];
         if (_results.isEmpty) _error = 'Could not reach the music source. Check your connection.';
       });
+    }
+  }
+
+  void _selectResultScope({
+    bool video = false,
+    bool library = false,
+    bool local = false,
+  }) {
+    if (_searchVideos == video &&
+        _searchLibrary == library &&
+        _searchLocal == local) return;
+    _typeaheadTimer?.cancel();
+    _searchGeneration++;
+    setState(() {
+      _searchVideos = video;
+      _searchLibrary = library;
+      _searchLocal = local;
+      _results = [];
+      _error = null;
+    });
+    if (_controller.text.trim().length >= 2) {
+      _search(_controller.text, recordHistory: false);
+    }
+  }
+
+  Future<void> _chooseLocalAudio() async {
+    const audio = XTypeGroup(
+      label: 'Audio files',
+      extensions: ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg'],
+      mimeTypes: ['audio/*'],
+      uniformTypeIdentifiers: ['public.audio'],
+    );
+    try {
+      // Permission is explicit: only user-selected files become searchable.
+      final files = await openFiles(acceptedTypeGroups: [audio]);
+      if (!mounted || files.isEmpty) return;
+      final batch = DateTime.now().microsecondsSinceEpoch;
+      final imported = <BzTrack>[];
+      final paths = <String, String>{};
+      for (final (index, file) in files.indexed) {
+        if (file.path.trim().isEmpty) continue;
+        final id = 'device-search:$batch:$index';
+        imported.add(BzTrack(
+          id: id,
+          title: file.name,
+          artist: 'On this device',
+          duration: Duration.zero,
+        ));
+        paths[id] = file.path;
+      }
+      final needle = _controller.text.trim().toLowerCase();
+      setState(() {
+        _deviceAudioTracks.addAll(imported);
+        _deviceAudioPaths.addAll(paths);
+        if (_searchLocal) {
+          _results = _deviceAudioTracks.where((track) =>
+            track.title.toLowerCase().contains(needle) ||
+            track.artist.toLowerCase().contains(needle),
+          ).toList();
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Unable to open device audio. Try selecting files again.'),
+      ));
     }
   }
 
@@ -294,6 +386,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       setState(() {
         _searchVideos = true;
         _searchLibrary = false;
+        _searchLocal = false;
       });
     }
     _controller.text = query;
@@ -610,7 +703,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     final playableTracks = _results
-        .where((item) => !isMetadataOnlyTrackId(item.id))
+        .where((item) => !isMetadataOnlyTrackId(item.id) &&
+            (!item.id.startsWith('device-search:') ||
+                _deviceAudioPaths.containsKey(item.id)))
         .toList();
     final queue = [
       for (final item in playableTracks)
@@ -620,6 +715,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           artist: item.artist,
           artworkUrl: item.artworkUrl,
           duration: item.duration,
+          localFilePath: _deviceAudioPaths[item.id],
         )
     ];
     final index = playableTracks.indexOf(track);
@@ -712,62 +808,51 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   onChanged: _onQueryChanged,
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    BzFilterPill(
-                      label: 'Breezze',
-                      active: !_searchLibrary,
-                      onTap: () {
-                        setState(() => _searchLibrary = false);
-                        if (_controller.text.trim().isNotEmpty) {
-                          _search(_controller.text);
-                        }
-                      },
+                // BitChord-inspired behavior: source choices appear only
+                // after a search resolves, never on the empty search landing.
+                if (_searchScopesRevealed &&
+                    _controller.text.trim().length >= 2) ...[
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        BzFilterPill(
+                          label: 'Audio',
+                          active: !_searchVideos && !_searchLibrary && !_searchLocal,
+                          onTap: () => _selectResultScope(),
+                        ),
+                        const SizedBox(width: 8),
+                        BzFilterPill(
+                          label: 'Video',
+                          active: _searchVideos,
+                          onTap: () => _selectResultScope(video: true),
+                        ),
+                        const SizedBox(width: 8),
+                        BzFilterPill(
+                          label: 'Library',
+                          active: _searchLibrary,
+                          onTap: () => _selectResultScope(library: true),
+                        ),
+                        const SizedBox(width: 8),
+                        BzFilterPill(
+                          label: 'Local',
+                          active: _searchLocal,
+                          onTap: () => _selectResultScope(local: true),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    BzFilterPill(
-                      label: 'Your Library',
-                      active: _searchLibrary,
-                      onTap: () {
-                        setState(() => _searchLibrary = true);
-                        if (_controller.text.trim().isNotEmpty) {
-                          _search(_controller.text);
-                        }
-                      },
+                  ),
+                  if (_searchLocal) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _chooseLocalAudio,
+                        icon: const Icon(Icons.folder_open_outlined),
+                        label: const Text('Choose audio files'),
+                      ),
                     ),
                   ],
-                ),
-                if (!_searchLibrary) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      BzFilterPill(
-                        label: 'Songs',
-                        active: !_searchVideos,
-                        onTap: () {
-                          if (_searchVideos) {
-                            setState(() => _searchVideos = false);
-                            if (_controller.text.trim().isNotEmpty) {
-                              _search(_controller.text);
-                            }
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      BzFilterPill(
-                        label: 'Music Videos',
-                        active: _searchVideos,
-                        onTap: () {
-                          if (!_searchVideos) {
-                            setState(() => _searchVideos = true);
-                            if (_controller.text.trim().isNotEmpty) {
-                              _search(_controller.text);
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
                 ],
               ],
             ),
@@ -811,9 +896,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         : _results.isEmpty
                             ? Center(
                                 child: Text(
-                                  (_searchVideos && !_searchLibrary
-                                      ? 'No official videos found for "${_controller.text.trim()}"'
-                                      : 'No results for "${_controller.text.trim()}"'),
+                                  (_searchLocal
+                                      ? 'No matching local songs. Choose audio files above to search your device.'
+                                      : _searchVideos && !_searchLibrary
+                                          ? 'No official videos found for "${_controller.text.trim()}"'
+                                          : 'No results for "${_controller.text.trim()}"'),
                                   style: theme.textTheme.titleMedium,
                                 ),
                               )
@@ -1045,17 +1132,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return ListView(
       padding: EdgeInsets.fromLTRB(16, 12, 16, BzBreakpoints.bottomClearance(context, compact: 180)),
       children: [
-        if (_searchVideos && supportsDeviceVideo)
-          ListTile(
-            leading: const BzSvgIcon(name: 'video'),
-            title: const Text('Open a music video'),
-            onTap: () => pickDeviceVideo(context),
-          ),
-        ListTile(
-          leading: const BzSvgIcon(name: 'play'),
-          title: const Text('Open audio files'),
-          onTap: () => pickDeviceAudio(context, ref),
-        ),
         if (_recentSearches.isNotEmpty) ...[
           Row(
             children: [
