@@ -10,6 +10,8 @@ const verdict = {
   videoId: id,
   sample: 'Big Buck Bunny / Blender Foundation / CC BY 3.0',
   metadata: false,
+  playabilityStatus: null,
+  infoKeys: [],
   audioFormat: false,
   playableAudioBytes: false,
   status: null,
@@ -31,9 +33,16 @@ const classify = (data) => {
 try {
   const client = await Innertube.create({ lang: 'en', location: 'US' });
   const info = await client.getBasicInfo(id);
+  verdict.infoKeys = Object.keys(info ?? {}).filter(key =>
+    ['basic_info', 'playability_status', 'streaming_data', 'captions',
+      'current_video_endpoint', 'watch_next_feed'].includes(key));
+  verdict.playabilityStatus = info?.playability_status?.status || null;
+  // A 200 OK metadata request is not proof of video details nor audio.
   verdict.metadata = Boolean(info?.basic_info?.id === id ||
-    info?.basic_info?.title);
-  if (!verdict.metadata) throw new Error('NO_VIDEO_METADATA');
+    info?.basic_info?.video_id === id || info?.basic_info?.title);
+  // We still attempt a format lookup if the upstream omits videoDetails,
+  // so the report differentiates blocked metadata from blocked audio.
+  if (!info) throw new Error('NO_VIDEO_METADATA');
   const format = await client.getStreamingData(id, {
     type: 'audio', quality: 'best',
   });
