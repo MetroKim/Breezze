@@ -42,23 +42,35 @@ class BzMorphingBrandHeader extends StatelessWidget {
   const BzMorphingBrandHeader({
     super.key,
     this.actions = const <Widget>[],
+    this.sidebarBrandOnDesktop = false,
   });
 
   final List<Widget> actions;
+
+  /// The desktop shell already contains the Breezze wordmark. Hide this
+  /// page-level logo there to prevent duplicate branding in one viewport.
+  final bool sidebarBrandOnDesktop;
 
   @override
   Widget build(BuildContext context) {
     return SliverPersistentHeader(
       pinned: true,
-      delegate: _BzBrandHeaderDelegate(actions: actions),
+      delegate: _BzBrandHeaderDelegate(
+        actions: actions,
+        sidebarBrandOnDesktop: sidebarBrandOnDesktop,
+      ),
     );
   }
 }
 
 class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _BzBrandHeaderDelegate({required this.actions});
+  const _BzBrandHeaderDelegate({
+    required this.actions,
+    required this.sidebarBrandOnDesktop,
+  });
 
   final List<Widget> actions;
+  final bool sidebarBrandOnDesktop;
 
   @override
   double get maxExtent => 94;
@@ -81,6 +93,8 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
     final visibleActions = narrow && actions.length > 2
         ? <Widget>[actions.first, actions.last]
         : actions;
+    final brandAlreadyInSidebar = sidebarBrandOnDesktop &&
+        MediaQuery.sizeOf(context).width >= BzBreakpoints.medium;
 
     // A pinned sliver must paint its full declared extent. Without the
     // expansion Flutter may measure the action row as 48dp while the sliver
@@ -107,7 +121,7 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Semantics(
+              if (!brandAlreadyInSidebar) Semantics(
                 label: 'Breezze',
                 image: true,
                 child: ExcludeSemantics(
@@ -164,5 +178,7 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(covariant _BzBrandHeaderDelegate oldDelegate) => true;
+  bool shouldRebuild(covariant _BzBrandHeaderDelegate oldDelegate) =>
+      oldDelegate.sidebarBrandOnDesktop != sidebarBrandOnDesktop ||
+      oldDelegate.actions != actions;
 }
