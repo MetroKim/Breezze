@@ -285,7 +285,9 @@ void main() {
     expect(source.calls, ['first query'],
         reason: 'Local mode must not invoke a remote catalogue');
     await tester.enterText(find.byType(TextField), 'different query');
-    expect(find.widgetWithText(BzFilterPill, 'Audio'), findsNothing);
+    // Local is a persistent on-device scope: editing its query keeps the
+    // scope selector visible without starting a remote provider search.
+    expect(find.widgetWithText(BzFilterPill, 'Audio'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.widgetWithText(BzFilterPill, 'Local'), findsOneWidget);
     expect(source.calls, ['first query'],

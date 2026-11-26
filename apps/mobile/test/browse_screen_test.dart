@@ -204,7 +204,7 @@ void main() {
     expect(find.textContaining('Catalog metadata only'), findsOneWidget);
     expect(find.textContaining('Deezer'), findsWidgets);
   });
-  testWidgets('Browse opens in-app Spotify and Deezer search while YouTube stays video-only',
+  testWidgets('Browse opens in-app Search without revealing filters before a query',
       (tester) async {
     final source = _BrowseSource();
     await _mountBrowse(tester, source);
@@ -217,7 +217,8 @@ void main() {
 
     expect(find.text('Search'), findsOneWidget);
     expect(find.text('YouTube Music'), findsNothing);
-    expect(find.widgetWithText(BzFilterPill, 'Music Videos'), findsOneWidget);
+    expect(find.widgetWithText(BzFilterPill, 'Audio'), findsNothing);
+    expect(find.widgetWithText(BzFilterPill, 'Video'), findsNothing);
   });
 
   testWidgets('Unavailable Browse sections do not invent charts',
