@@ -1,4 +1,4 @@
-> **AUTHORITATIVE CURRENT PLAN — 26 Nov 2026:** Use [Breezze Master Plan v7](BREEZZE_MASTER_PLAN_V7.md) for the six-platform Flutter target, Linux distro qualification, current CI status and ordered remaining work. Everything below is a **historical backlog**; old Spotify/Deezer/Audius, five-tab, authentication and passing-test statements must not be treated as present-day approval or evidence. The [source no-release freeze](security/BREEZZE_RELEASE_FREEZE_20261125.md) remains active.
+> **V8 IS THE ONLY AUTHORITATIVE PLAN — 26 Nov 2026:** Use [Breezze Unified Engine V8](BREEZZE_UNIFIED_ENGINE_V8_IMPLEMENTATION_PLAN.md) for the current four-tab (Home/New/Library/Search) Flutter implementation, provider/media rights, CI, six-platform acceptance and ordered work. Everything below is a **historical backlog**, not a second roadmap; old Spotify/Deezer/Audius, five-tab, authentication and passing-test statements are not current approval or evidence. The [source no-release freeze](security/BREEZZE_RELEASE_FREEZE_20261125.md) remains active.
 
 # Breezze Engineering Backlog — Completion Plan & Critical Defect Register
 
