@@ -353,15 +353,26 @@ export class SpotifyAdapter implements ProviderAdapter {
       if (item.releaseDate.length !== 10) return false;
       return item.releaseDate >= cutoffDate && item.releaseDate <= today;
     });
+    // Spotify's development API no longer exposes the old artist top-tracks
+    // ranking. Use its supported track-search order and place songs credited
+    // to this artist as LEAD before features/collaborations. Retain original
+    // provider relevance order within each band (stable sort by index).
     const seenSongs = new Set<string>();
-    const songs = songsResponse.kind === 'ok' && Array.isArray(songsResponse.value.tracks?.items)
+    const rows = songsResponse.kind === 'ok' &&
+      Array.isArray(songsResponse.value.tracks?.items)
       ? songsResponse.value.tracks.items
-        .filter(row => row.artists?.some(a => a.id === id))
-        .map(row => this.mapTrack(row))
-        .filter((row): row is ProviderTrack => row !== null &&
-          !seenSongs.has(row.providerTrackId) &&
-          (seenSongs.add(row.providerTrackId), true))
+        .map((row, index) => ({
+          row, index, primary: row.artists?.[0]?.id === id,
+        }))
+        .filter(item => item.row.artists?.some(a => a.id === id))
+        .sort((a, b) => Number(b.primary) - Number(a.primary) ||
+          a.index - b.index)
       : [];
+    const songs = rows
+      .map(item => this.mapTrack(item.row))
+      .filter((row): row is ProviderTrack => row !== null &&
+        !seenSongs.has(row.providerTrackId) &&
+        (seenSongs.add(row.providerTrackId), true));
     const searchSuggestions = [
       ...albums.slice(0, 3).map(album => album.title),
       ...artist.genres.slice(0, 2).map(genre => artist.name + ' ' + genre),
