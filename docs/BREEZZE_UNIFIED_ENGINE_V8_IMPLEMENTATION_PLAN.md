@@ -29,13 +29,13 @@ Spotify/Deezer/MusicBrainz = discovery/metadata/previews only where licensed. Yo
 
 | Stage | Deliverables | Acceptance gate | Status |
 |---|---|---|---|
-| **1. UX navigation** | Home / New / Library / Search; profile/settings; mini-player; no wrong labels | Flutter widget tests + accessibility labels, iOS and Android smoke | In progress |
-| **2. Unified engine** | Single controller, rights-gated resolver, queue, signed sources, native focus | Dart unit tests; Android/iOS real decoder; no metadata-only full audio | In progress — existing foundation |
+| **1. UX navigation** | Home / New / Library / Search; profile/settings; mini-player; no wrong labels | Flutter widget tests + accessibility labels, iOS and Android smoke | Four shell labels wired; unit test added — CI/native pending |
+| **2. Unified engine** | Single controller, rights-gated resolver, queue, signed sources, native focus | Dart unit tests; Android/iOS real decoder; no metadata-only full audio | Call auto-resume wired through player; policy + controller tests added; OS acceptance pending |
 | **3. Media authorization & infrastructure** | Territory, rights, verified R2 variant, bounded signed URL, session lifecycle | Postgres/R2 integration, 200/206 bytes, deny expired/missing grants | Backend contract tests previously passed; full licensed catalog **blocked** |
 | **4. Online AutoMix** | Pair analysis, dual-stream mix DSP or native verified transition, fallback and toggle | Two real authorized full tracks, seamless audible transition verified | Planning only; not complete |
-| **5. Offline & error handling** | Queue/retry, offline leases, encryption, interruption/restart, explicit failure reason | Offline airplane-mode verified, account isolation, expiry/denial | Partial |
+| **5. Offline & error handling** | Queue/retry, offline leases, encryption, interruption/restart, explicit failure reason | Offline airplane-mode verified, account isolation, expiry/denial | Early rights denial, user-facing errors, guarded retry implemented; **audio files currently plaintext in app-private storage**, encryption/DRM and native acceptance pending |
 | **6. Native OS + accessibility** | Auto-resume calls, no Bluetooth leak, media buttons, VoiceOver/TalkBack, Linux MPRIS | Emulator + physical device acceptance scripts and actual logs | Pending |
-| **7. Security, packaging & release** | Ignore credentials, secrets audit/rotation, signed Android/iOS/macOS/Windows/Linux artifacts, current-head CI | CI and CodeQL green, signatures verified, rights evidence, release checklist approved | BLOCKED |
+| **7. Security, packaging & release** | Ignore credentials, secrets audit/rotation, signed Android/iOS/macOS/Windows/Linux artifacts, current-head CI | CI and CodeQL green, signatures verified, rights evidence, release checklist approved | .gitignore hardened; live Supabase Vault verified empty; credentials not migrated; signed builds/CI BLOCKED |
 
 ## Implementation rules
 1. Make one scoped change at a time, with a regression test or exact manual acceptance command.
@@ -66,3 +66,18 @@ Spotify/Deezer/MusicBrainz = discovery/metadata/previews only where licensed. Yo
 - **Pending current SHA:** [main CI 45802553236](https://github.com/MetroKim/Breezze/actions/runs/45802553236), [CodeQL 45802553174](https://github.com/MetroKim/Breezze/actions/runs/45802553174); Android/iOS simulator workflows had no pass at creation.
 - **Critical blockers:** no verified paid/licensed full-song catalog nor rights to general Spotify/YouTube tracks, no signed distribution credentials/evidence, unverified physical device and VoiceOver/TalkBack acceptance.
 - **Privacy note:** repository was public when implementation started; no secrets or production binaries may be committed.
+
+## V8 execution ledger — 2026-11-26
+
+| Area | Source evidence | Status |
+|---|---|---|
+| Four-tab navigation | `main_tab.dart`, `bz_shell.dart`, `breezze_navigation_test.dart`; commits `af75086` / `77762ba` / `c7c9554` | Code committed; Flutter test pending |
+| Calls auto-resume | `call_auto_resume_policy.dart`, `JustAudioEngineAdapter`, `PlayerController`; tests `call_auto_resume_policy_test.dart` and `player_controller_test.dart`; through `4092a49` | Code committed; simulated unit tests pending; real telephony pending |
+| Offline error handling | `DownloadsController`, `DownloadsScreen`; fail-closed policy and UI errors; commits `f850224`, `69728b2` | Code committed; app/airplane-mode/lease tests pending |
+| Secrets | `.gitignore`, [verified custody record](security/BREEZZE_V8_SECRET_CUSTODY.md); Vault installed but **zero** records; last security-advisor check returned no security lints | Ignore rules committed; actual key migration and full historical scan not done |
+| Licensed catalog | Previous backend contract suite passed on old SHA; no verified recording-level distribution/offline contract | **External licensing dependency / blocked** |
+| Online AutoMix | Existing `Automix.plan` algorithm generates transition parameters only; no dual-source validated mixer or waveform/BPM evidence | **NOT IMPLEMENTED / blocked** |
+| Offline encryption | `DownloadsLibrary.download` writes `audio.m4a` in the app-private directory; metadata checks leases but file is **not encrypted at rest** | **NOT IMPLEMENTED / blocked** |
+| Signed packaging | Release/CI runners, signing keys, stores and hardware acceptance | **Not verified** |
+
+**Next change order:** (A) current-commit Flutter CI; (B) OS/native interruption acceptance; (C) correct offline encryption/DRM and storage migration; (D) real licensed tracks and online dual-player DSP; (E) device accessibility + desktop MPRIS acceptance; (F) production signing and release freeze review. No green release status until all gates pass.
