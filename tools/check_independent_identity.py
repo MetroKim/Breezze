@@ -24,6 +24,7 @@ def read(relative):
 pubspec = read('pubspec.yaml')
 main = read('lib/main.dart')
 shell = read('lib/widgets/bz_shell.dart')
+tabs = read('lib/app/main_tab.dart')
 root = read('lib/widgets/breezze_app_root.dart')
 player = read('lib/features/player/player_controller.dart')
 
@@ -42,9 +43,34 @@ if 'BreezzeAppRoot' not in main:
     issues.append('main.dart must launch the canonical BreezzeAppRoot')
 if 'BreezzeShell' not in root:
     issues.append('BreezzeAppRoot must launch the canonical BreezzeShell')
-for tab in ('Home', 'Browse', 'Library', 'Search'):
-    if not re.search(rf"_TabDestination\('{tab}'\s*,", shell):
-        issues.append(f'missing canonical tab: {tab}')
+# V8 moved the product tab labels into a single constant used by every
+# shell. The enum's internal 'browse' name is retained for persisted state,
+# while the second *visible* destination must be called New.
+expected_tabs = ['Home', 'New', 'Library', 'Search']
+match = re.search(
+    r'const\s+List<String>\s+breezzeMainTabLabels\s*=\s*<String>\[(.*?)\];',
+    tabs,
+    re.DOTALL,
+)
+if match is None:
+    issues.append('missing V8 canonical navigation labels in main_tab.dart')
+else:
+    declared_tabs = re.findall(r"'([^']+)'", match.group(1))
+    if declared_tabs != expected_tabs:
+        issues.append(
+            f'wrong primary navigation order: {declared_tabs!r}; '
+            f'expected {expected_tabs!r}'
+        )
+    # Keep semantics and tab labels driven by ONE list. Hardcoded legacy
+    # labels can pass static checks but still mismatch the mobile UI.
+    for index, tab in enumerate(expected_tabs):
+        if not re.search(
+            rf'_TabDestination\(breezzeMainTabLabels\[{index}\]\s*,',
+            shell,
+        ):
+            issues.append(f'missing canonical shell destination: {tab}')
+if re.search(r"_TabDestination\('Browse'\s*,", shell):
+    issues.append('legacy Browse label found; visible tab must be New')
 # Heartbeat/sleep timers are legitimate. Reject only the legacy fake player
 # pattern that advances elapsed audio position from a clock tick.
 if re.search(r'(?s)Timer\.periodic\s*\(.{0,900}?\b(?:_position|position)\s*\+=', player):
