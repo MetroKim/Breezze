@@ -280,7 +280,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _loading = false;
-          _searchScopesRevealed = true;
+        _searchScopesRevealed = true;
         _results = [];
         if (_results.isEmpty) _error = 'Could not reach the music source. Check your connection.';
       });
@@ -536,7 +536,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _download(BzTrack track) {
     // Metadata providers do not grant offline-download rights.
-    if (track.id.startsWith('bz:') || track.id.startsWith('bzv:')) {
+    if (track.id.startsWith('bz:') ||
+        track.id.startsWith('bzv:') ||
+        track.id.startsWith('device-search:')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Offline downloads are not available for this catalogue source.')),
       );
@@ -744,6 +746,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         setState(() {
           _recentSearches = [];
           _results = [];
+          _deviceAudioTracks.clear();
+          _deviceAudioPaths.clear();
+          _searchLibrary = false;
+          _searchVideos = false;
+          _searchLocal = false;
+          _searchScopesRevealed = false;
           _loading = false;
           _searched = false;
           _error = null;
@@ -1007,7 +1015,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             icon: const BzSvgIcon(name: 'play', size: 20),
                                             onPressed: () => _play(track),
                                           ),
-                                        if (!track.id.startsWith('bzv:'))
+                                        // Local file selections are ephemeral, not
+                                        // durable catalog IDs or download grants.
+                                        if (!track.id.startsWith('bzv:') &&
+                                            !track.id.startsWith('device-search:'))
                                           PopupMenuButton<String>(
                                             tooltip: 'Song actions',
                                             icon: const BzSvgIcon(name: 'more-vertical', size: 20),
@@ -1039,6 +1050,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                   artist: track.artist,
                                                   artworkUrl: track.artworkUrl,
                                                   duration: track.duration,
+                                                  localFilePath: _deviceAudioPaths[track.id],
                                                 );
                                                 final controller = ref.read(playerControllerProvider.notifier);
                                                 if (action == 'play_next') {
