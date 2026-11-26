@@ -309,7 +309,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                   thumbShape: const RoundSliderThumbShape(
                                       enabledThumbRadius: 6),
                                 ),
-                                child: Slider(
+                                child: Semantics(
+                                  label: 'Playback position',
+                                  value: '${_format(player.position)} of ${_format(player.duration)}',
+                                  child: Slider(
                                   value: player.duration > Duration.zero
                                       ? player.position.inMilliseconds
                                           .clamp(
@@ -324,6 +327,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                     controller.seekTo(
                                         Duration(milliseconds: v.toInt()));
                                   },
+                                  semanticFormatterCallback: (v) =>
+                                      _format(Duration(milliseconds: v.toInt())),
+                                  ),
                                 ),
                               ),
                               Row(
@@ -543,19 +549,33 @@ class _PlayPauseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return GestureDetector(
+    // A semantic button and focusable InkWell make the same circular Apple-
+    // inspired control work with VoiceOver, TalkBack, Switch Access and keys.
+    return Semantics(
+      button: true,
+      label: playing ? 'Pause playback' : 'Resume playback',
       onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: theme.bzText1,
-          shape: BoxShape.circle,
-        ),
-        child: BzSvgIcon(
-          name: playing ? 'pause' : 'play',
-          color: theme.bzBackground,
-          size: size * 0.42,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          excludeFromSemantics: true,
+          customBorder: const CircleBorder(),
+          child: ExcludeSemantics(
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                color: theme.bzText1,
+                shape: BoxShape.circle,
+              ),
+              child: BzSvgIcon(
+                name: playing ? 'pause' : 'play',
+                color: theme.bzBackground,
+                size: size * 0.42,
+              ),
+            ),
+          ),
         ),
       ),
     );
