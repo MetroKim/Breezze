@@ -37,7 +37,7 @@ jobs:
       - name: Prepare Linux build toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libblkid-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libblkid-dev xvfb xauth dbus-x11 libgl1-mesa-dri libegl1
       - name: Run offline Linux auditor unit tests
         run: python3 -m unittest discover -s apps/mobile/tool -p 'test_linux_portability_audit.py' -v
       - name: Generate Flutter platform runners
@@ -56,6 +56,25 @@ jobs:
           python3 apps/mobile/tool/linux_portability_audit.py \
             --bundle apps/mobile/build/linux/x64/release/bundle \
             --arch x86_64 --check-linker
+      - name: Smoke test the Linux X11 process without publishing a build
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$(pwd)/apps/mobile/build/linux/x64/release/bundle"
+          # Status 124 means the app process stayed alive through the window.
+          # This is not proof of its first rendered frame or audio capability.
+          set +e
+          timeout 12s dbus-run-session -- xvfb-run -a \
+            --server-args="-screen 0 1280x800x24" \
+            "$bundle/breezze" > "$RUNNER_TEMP/breezze-linux-startup.log" 2>&1
+          exit_status=$?
+          set -e
+          tail -n 70 "$RUNNER_TEMP/breezze-linux-startup.log"
+          if [ "$exit_status" -ne 124 ]; then
+            echo "Linux process exited early with status $exit_status" >&2
+            exit 1
+          fi
+          echo 'Linux process survived initial X11 startup smoke.'
       - name: Inspect runtime linkage on mainstream glibc distros
         shell: bash
         run: |
