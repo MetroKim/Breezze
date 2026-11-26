@@ -316,10 +316,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       mimeTypes: ['audio/*'],
       uniformTypeIdentifiers: ['public.audio'],
     );
+    final before = ref.read(authSessionProvider);
+    final ownerId = before is AuthSignedIn ? before.userId : 'guest';
+    final generation = _searchGeneration;
     try {
       // Permission is explicit: only user-selected files become searchable.
       final files = await openFiles(acceptedTypeGroups: [audio]);
-      if (!mounted || files.isEmpty) return;
+      if (!mounted || files.isEmpty || generation != _searchGeneration) return;
+      final current = ref.read(authSessionProvider);
+      final currentOwner = current is AuthSignedIn ? current.userId : 'guest';
+      if (currentOwner != ownerId) return;
       final batch = DateTime.now().microsecondsSinceEpoch;
       final imported = <BzTrack>[];
       final paths = <String, String>{};
