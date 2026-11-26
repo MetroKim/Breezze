@@ -60,7 +60,8 @@ export function createExperimentHandler({
     }
 
     const abort = new AbortController();
-    res.once('close', () => abort.abort());
+    const disconnect = () => abort.abort();
+    res.once('close', disconnect);
     try {
       const client = await createClient();
       const info = await client.getBasicInfo(trackId);
@@ -133,7 +134,7 @@ export function createExperimentHandler({
         res.destroy();
       }
     } finally {
-      res.removeAllListeners('close');
+      res.off('close', disconnect);
     }
   };
 }
