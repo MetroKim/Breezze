@@ -1,5 +1,4 @@
 import 'dart:async';
-import '../app/appearance_controller.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
@@ -247,7 +246,7 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     return MaterialApp(
       title: 'Breezze',
       debugShowCheckedModeBanner: false,
-      themeMode: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.dark,
+      themeMode: ThemeMode.dark,
       theme: bzLightTheme(),
       darkTheme: bzDarkTheme(),
       home: Builder(
