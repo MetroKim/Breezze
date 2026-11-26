@@ -193,11 +193,10 @@ class BreezzeApi {
   Future<Map<String, dynamic>> officialYouTubeVideoDetails(String videoId) =>
       _get('/providers/youtube/videos/${Uri.encodeComponent(videoId)}');
 
-  /// Spotify-only music discovery (separate from YouTube video discovery).
-  /// Spotify's own application performs playback; this returns metadata only.
-  /// Search both music catalogs concurrently through Breezze NestJS.
-  /// Every provider remains a separate source/attribution shelf, and the
-  /// response contains metadata only (not authorized audio bytes).
+  /// Search Spotify-first and Deezer-fallback catalog metadata through Breezze.
+  /// The API returns one deduplicated `tracks` list plus provenance-aware
+  /// legacy provider shelves. No public API result grants full-song audio,
+  /// offline rights, or permission to suppress mandatory attribution.
   Future<Map<String, dynamic>> searchMusicCatalogs(String query) =>
       _get('/providers/music/search?q=${Uri.encodeQueryComponent(query)}');
 
