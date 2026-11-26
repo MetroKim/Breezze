@@ -67,6 +67,22 @@ if manifest_path.exists():
         node.set(android_attr("name"), permission)
         root.insert(list(root).index(application), node)
 
+    # just_audio StreamAudioSource serves authenticated in-memory media
+    # through a local HTTP range proxy. Allow cleartext ONLY to loopback;
+    # never permit HTTP for arbitrary provider or CDN traffic.
+    nsc = app_dir / "android" / "app" / "src" / "main" / "res" / "xml" / "breezze_loopback_security.xml"
+    nsc.parent.mkdir(parents=True, exist_ok=True)
+    nsc.write_text("""<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
+  <domain-config cleartextTrafficPermitted="true">
+    <domain>localhost</domain>
+    <domain>127.0.0.1</domain>
+  </domain-config>
+</network-security-config>
+""")
+    application.set(android_attr("networkSecurityConfig"), "@xml/breezze_loopback_security")
+
     service_name = "com.ryanheise.audioservice.AudioService"
     if not any(node.get(android_attr("name")) == service_name
                for node in application.findall("service")):
@@ -157,6 +173,11 @@ if ios_plist.exists():
     if "audio" not in modes:
         modes.append("audio")
 
+    # The StreamAudioSource local HTTP proxy is an app-local range server.
+    # Allow local networking while preserving ATS for all external domains.
+    ats = values.setdefault("NSAppTransportSecurity", {})
+    ats["NSAllowsLocalNetworking"] = True
+
     # Native Google sign-in requires a registered reverse-client-ID callback.
     # Pass the same iOS OAuth client ID here and via Flutter --dart-define.
     ios_client_id = os.environ.get("BREEZZE_GOOGLE_IOS_CLIENT_ID", "").strip()
@@ -190,10 +211,12 @@ for entitlement_name in ("DebugProfile.entitlements", "Release.entitlements"):
     with entitlement_path.open("rb") as source:
         entitlements = plistlib.load(source)
     entitlements["com.apple.security.network.client"] = True
+    # just_audio StreamAudioSource listens on app-local loopback for ranges.
+    entitlements["com.apple.security.network.server"] = True
     entitlements["com.apple.security.files.user-selected.read-only"] = True
     with entitlement_path.open("wb") as target:
         plistlib.dump(entitlements, target)
 
-print("Configured Android release networking, media service, iOS background audio and macOS outbound networking.")
+print("Configured Android loopback-only media transport, media service, iOS background audio and macOS local proxy networking.")
 
 PY
