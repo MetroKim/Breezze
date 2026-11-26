@@ -121,3 +121,12 @@ See the same-sha evidence links and outstanding blockers in [master issue #27](h
 - **External release dependencies:** a valid per-recording streaming/offline license manifest and actual recordings/territories; authorized Android/iOS/Windows/macOS signing identities and stores; physical-device telephone and Bluetooth tests; real TalkBack, VoiceOver and Linux hardware-key evidence. Neither generated synthetic QA audio nor Spotify/YouTube catalog metadata supplies commercial distribution rights.
 
 **V8.2 acceptance priority:** green exact-head CI → native BZA8 decoder + interruption/accessible controls → connect and test authorized dual-deck AutoMix with two playback sessions → licensed catalog inventory and R2 delivery → signed installers + physical-device evidence → explicit release approval.
+
+
+## V8.3 Linux portability candidate — Android JNI bridge isolation (2026-11-26)
+
+**Observed main regression:** Linux compatibility [run 45816216959](https://github.com/MetroKim/Breezze/actions/runs/45816216959), job `139897392771`, successfully built the release bundle and passed an actual headless Linux app launch/MPRIS registration. Its cross-distro ELF linkage test then failed because the bundled `libdartjni.so` reported a missing `libjvm.so` dependency. This is **NOT** proof that all playback/media keys work.
+
+**Candidate repair:** `apps/mobile/tool/linux_portability_audit.py` now supports explicitly removing that exact Android JNI bridge from the final Linux staging bundle **only after** `readelf` successfully verifies that neither the executable nor any other included native object has a direct `DT_NEEDED` dependency on `libdartjni.so`. If dependency inspection fails, the file is kept and the check fails. This does not ignore generic `ldd` errors, touch Android builds or remove arbitrary libraries. Four Python tests cover safe pruning, required JNI, failed inspection and no-op cases. The CI workflow retains its strict complete-bundle ELF/linker checks, actual process/MPRIS startup and four distro image linkage tests after pruning; PR trigger added.
+
+**Acceptance:** the new exact-PR-head Linux portability workflow must pass; then verify a licensed actual track and media keys on Linux before claiming full native acceptance. A manually re-run earlier workflow or the previous MPRIS-only success does not certify this candidate.
