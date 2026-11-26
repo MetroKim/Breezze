@@ -21,7 +21,7 @@ grep -Fq 'interface org.mpris.MediaPlayer2.Player' <<< "$xml" || {
   echo 'BREEZZE_MPRIS_PLAYER_INTERFACE_MISSING' >&2
   exit 1
 }
-grep -Eq 'method (Pause|PlayPause)\(' <<< "$xml" || {
+grep -Eq '(^|[[:space:]])(Pause|PlayPause)\(' <<< "$xml" || {
   echo 'BREEZZE_MPRIS_TRANSPORT_INTERFACE_MISSING' >&2
   exit 1
 }
