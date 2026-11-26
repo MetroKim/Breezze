@@ -2,6 +2,10 @@
 /// MusicBrainz is a separately labeled metadata backup, never Spotify audio.
 /// YouTube is strictly for visible video playback. Provider IDs must never
 /// be mistaken for licensed, downloadable media URLs.
+const _publicAudioProofTrackId = 'bz:public_domain:promise';
+
+bool isPublicAudioProofTrackId(String id) => id == _publicAudioProofTrackId;
+
 final _spotifyTrackId = RegExp(r'^bz:spotify:[A-Za-z0-9]{22}$');
 final _deezerTrackId = RegExp(r'^bz:deezer:[0-9]{1,20}$');
 final _musicBrainzId = RegExp(r'^bz:musicbrainz:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$');
@@ -19,6 +23,7 @@ bool isYouTubeSongId(String id) => _youtubeSongId.hasMatch(id);
 /// Deezer 30-second previews are a separate, explicitly requested native
 /// audio action. Other external provider IDs and all videos are metadata.
 bool isMetadataOnlyTrackId(String id) =>
+    !isPublicAudioProofTrackId(id) &&
     !isDeezerPreview(id) &&
     (id.startsWith('bzv:') || id.startsWith('bz:'));
 
