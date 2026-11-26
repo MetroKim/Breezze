@@ -80,6 +80,13 @@ Official references: https://docs.flutter.dev/reference/supported-platforms , ht
 
 **Status vocabulary:** `IMPLEMENTED` = source present; `PASS` = supported automated/device evidence on matching SHA; `FAIL` = reproducible failed assertion; `QUEUED` = job hasn't run; `BLOCKED` = external dependency/rights/credentials; `UNVERIFIED` = missing evidence. Never convert `QUEUED` to `PASS`.
 
+### 26 Nov read-only production topology check (not a deploy or E2E test)
+
+- **Railway:** Breezze production environment currently reports four live services: Breezze API, Postgres, Breezze Catalog Metadata, and Redis, each with a SUCCESS latest deployment state. The API has **live-with-staged-changes**, and the environment has **two pending staged changes**. Do not accept/deploy until release freeze, full CI and DB migration backups are cleared. A successful infrastructure deployment is not proof of full playback.
+- **Supabase:** Breezze project reports ACTIVE_HEALTHY. The currently visible public tables are profiles, user_library, and pinned_playlists, each with RLS enabled and zero visible rows; this does not establish absence of authenticated users or prove the Railway Postgres tables have migrated. The current Supabase security advisor returned zero lints, which does not replace penetration/tenant-isolation tests.
+- **Cloudflare:** Current staging/production Worker revisions and R2 bindings have not been rechecked during this v7 review; the older documented media QA worker result is historical. Do not claim current-media production PASS.
+- **GitHub:** repository is currently public with no published Releases. Public source remains accessible to anyone with the URL; owner approval is necessary for visibility changes. All latest-SHA Actions still need verified conclusions.
+
 ## 5. Ordered engineering execution (one owner, one backlog)
 
 ### P0-A — Stable CI and regression gate [OPEN]
