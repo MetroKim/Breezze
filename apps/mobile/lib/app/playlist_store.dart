@@ -44,7 +44,7 @@ class UserPlaylist {
       );
 
   static String? _validCover(Object? raw) =>
-      raw is String && raw.isNotEmpty && raw.length <= 750000 ? raw : null;
+      raw is String && raw.isNotEmpty && raw.length <= 350000 ? raw : null;
 
   factory UserPlaylist.fromJson(Map<String, Object?> json) {
     final rawTracks = json['tracks'];
@@ -271,7 +271,9 @@ class PlaylistStore {
             createdAt: DateTime.tryParse(row['createdAt'] as String? ?? '') ??
                 cached?.createdAt ?? DateTime.now().toUtc(),
             tracks: rawItems is List ? tracks : (cached?.tracks ?? const []),
-            coverPngBase64: cached?.coverPngBase64,
+            coverPngBase64: row.containsKey('coverPngBase64')
+                ? UserPlaylist._validCover(row['coverPngBase64'])
+                : cached?.coverPngBase64,
           ));
         }
         // A local pending edit wins over a stale server snapshot. Legacy
@@ -345,7 +347,7 @@ class PlaylistStore {
     String? coverPngBase64,
   ) => _serialize(() async {
         if (coverPngBase64 != null &&
-            (coverPngBase64.isEmpty || coverPngBase64.length > 750000 ||
+            (coverPngBase64.isEmpty || coverPngBase64.length > 350000 ||
              !RegExp(r'^[A-Za-z0-9+/]*={0,2}$').hasMatch(coverPngBase64))) {
           throw ArgumentError.value(
             coverPngBase64?.length, 'coverPngBase64',
@@ -364,6 +366,9 @@ class PlaylistStore {
           isPinned: current.isPinned,
           coverPngBase64: coverPngBase64,
         );
+        _queue(ownerId, doc, 'cover', playlistId, {
+          'coverPngBase64': coverPngBase64,
+        });
         await _save(ownerId, doc);
         return true;
       });
@@ -576,6 +581,14 @@ class PlaylistStore {
               'pinned': true,
             });
           }
+          if (old.coverPngBase64 != null) {
+            converted.add({
+              'operationId': _newId(),
+              'type': 'cover',
+              'playlistId': nextId,
+              'coverPngBase64': old.coverPngBase64,
+            });
+          }
           for (final track in old.tracks) {
             converted.add({
               'operationId': _newId(),
@@ -657,6 +670,14 @@ class PlaylistStore {
         return;
       case 'rename':
         await api.renamePlaylist(id, operation['name'] as String);
+        return;
+      case 'cover':
+        final cover = operation['coverPngBase64'];
+        if (cover != null && (cover is! String ||
+            cover.isEmpty || cover.length > 350000)) {
+          throw const FormatException('Invalid playlist cover operation');
+        }
+        await api.setPlaylistCover(id, cover as String?);
         return;
       case 'pin':
         if (operation['pinned'] is! bool) {
