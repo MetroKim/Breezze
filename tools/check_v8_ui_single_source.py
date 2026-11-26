@@ -83,6 +83,11 @@ def violations(root: Path = REPO) -> list[str]:
     home = content.get(PRIMARY_PAGES[0], "")
     if home and home.count("BzPinnedMoodRail(") != 1:
         issues.append("DUPLICATE_HOME_MOOD_RAIL: " + PRIMARY_PAGES[0])
+    if ("BzDiscoverySpotlight(" in home and
+            "title: 'Recently Played'" in home and
+            home.index("BzDiscoverySpotlight(") <
+            home.index("title: 'Recently Played'")):
+        issues.append("HOME_PROMO_ABOVE_MUSIC: " + PRIMARY_PAGES[0])
 
     old_glass = content.get(GLASS_ADAPTER, "")
     if re.search(r"\bBackdropFilter\s*\(|\bImageFilter\.blur\s*\(", old_glass):
