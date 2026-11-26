@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test:probe": "node scripts/probe-audio.mjs",
-    "test:contract": "node --test test/*.test.mjs"
+    "test:contract": "node --test test/*.test.mjs",
+    "test:decode": "node scripts/verify-audio-decoder.mjs"
   },
   "dependencies": {
     "youtubei.js": "18.3.0"
