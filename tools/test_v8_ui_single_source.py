@@ -56,6 +56,15 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.PROVIDER, "BzBrandedAppBar( appBar: AppBar(")
         self.assertIn("LEGACY_PROVIDER_TOOLBAR", str(guard.violations(self.root)))
 
+    def test_old_promotional_home_precedes_music_is_rejected(self):
+        self.write(
+            guard.PRIMARY_PAGES[0],
+            "BzMorphingBrandHeader( BzPinnedMoodRail( "
+            "BzDiscoverySpotlight( title: 'Recently Played'",
+        )
+        self.assertIn("HOME_PROMO_ABOVE_MUSIC",
+                      str(guard.violations(self.root)))
+
     def test_old_home_without_pinned_moods_is_rejected(self):
         self.write(guard.PRIMARY_PAGES[0], "BzMorphingBrandHeader(")
         self.assertIn("HOME_PINNED_MOODS_MISSING",
