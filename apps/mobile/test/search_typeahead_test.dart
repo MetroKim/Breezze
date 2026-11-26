@@ -78,6 +78,11 @@ class _VideoDiscoveryApi extends BreezzeApi {
   _VideoDiscoveryApi() : super(baseUrl: 'https://breezze.example.test');
 
   @override
+  Future<Map<String, dynamic>> searchOfficialYouTubeVideos(
+    String query, {int limit = 20}
+  ) async => {'kind': 'ok', 'value': <Map<String, dynamic>>[]};
+
+  @override
   Future<Map<String, dynamic>> discoveryMusicVideos({
     String query = 'official music video',
   }) async => {
@@ -250,21 +255,64 @@ void main() {
   });
 
 
+  testWidgets('source filters appear only after the first search result and Local does not call network',
+      (tester) async {
+    final source = _SearchSource();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [catalogSourceProvider.overrideWithValue(source)],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    expect(find.widgetWithText(BzFilterPill, 'Audio'), findsNothing);
+    expect(find.widgetWithText(BzFilterPill, 'Video'), findsNothing);
+    expect(find.widgetWithText(BzFilterPill, 'Library'), findsNothing);
+    expect(find.widgetWithText(BzFilterPill, 'Local'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'first query');
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(source.calls, ['first query']);
+    expect(find.widgetWithText(BzFilterPill, 'Audio'), findsNothing);
+    source.pending['first query']!.complete(_result('First matching song'));
+    await tester.pump();
+    for (final scope in ['Audio', 'Video', 'Library', 'Local']) {
+      expect(find.widgetWithText(BzFilterPill, scope), findsOneWidget);
+    }
+    await tester.tap(find.widgetWithText(BzFilterPill, 'Local'));
+    await tester.pump();
+    expect(find.text('Choose audio files'), findsOneWidget);
+    expect(find.textContaining('No matching local songs'), findsOneWidget);
+    expect(source.calls, ['first query'],
+        reason: 'Local mode must not invoke a remote catalogue');
+    await tester.enterText(find.byType(TextField), 'different query');
+    expect(find.widgetWithText(BzFilterPill, 'Audio'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.widgetWithText(BzFilterPill, 'Local'), findsOneWidget);
+    expect(source.calls, ['first query'],
+        reason: 'Local typeahead must not contact Spotify/Deezer');
+  });
+
   testWidgets('Music Videos filter renders external video action and honest empty state',
       (tester) async {
     final api = _VideoDiscoveryApi();
+    final source = _SearchSource();
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authSessionProvider.overrideWith(() => _VideoSearchSession(api)),
+        catalogSourceProvider.overrideWithValue(source),
       ],
       child: MaterialApp(
         theme: bzLightTheme(),
         home: const Scaffold(body: SearchScreen()),
       ),
     ));
-    await tester.tap(find.widgetWithText(BzFilterPill, 'Music Videos'));
+    expect(find.widgetWithText(BzFilterPill, 'Video'), findsNothing);
     await tester.enterText(find.byType(TextField), 'official qa');
     await tester.pump(const Duration(milliseconds: 500));
+    source.pending['official qa']!.complete(_result('Initial audio result'));
+    await tester.pump();
+    expect(find.widgetWithText(BzFilterPill, 'Video'), findsOneWidget);
+    await tester.tap(find.widgetWithText(BzFilterPill, 'Video'));
     await tester.pump();
     expect(find.text('Official Video QA'), findsOneWidget);
     expect(find.byTooltip('Watch music video'), findsOneWidget);
