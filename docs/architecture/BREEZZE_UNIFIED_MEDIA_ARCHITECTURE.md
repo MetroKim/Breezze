@@ -30,6 +30,24 @@ Selecting a media kind retains the exact same search text. Spotify and Deezer ar
 
 **Repository implementation:** `apps/mobile/lib/features/search/search_screen.dart`; coverage `apps/mobile/test/search_typeahead_test.dart`. This is a UI/source-scope feature, **not evidence that Spotify or Deezer full commercial audio streams work**.
 
+## Spotify-exclusive artist experience (2026-11-26)
+
+When a listener types an artist name in Breezze Search, **Spotify artist matches appear above song results** as clickable artist portraits + names. Song results continue through the existing unified Spotify-first/Deezer-fallback audio search, but the ARTIST PAGE uses **Spotify only** for identity, metadata, songs, new releases, albums and singles. No Deezer, MusicBrainz or YouTube profile/discography is substituted when Spotify fails.
+
+Backend endpoints (all authenticated, server credentials only):
+
+- `GET /api/v1/providers/spotify/artists/search?q=...` — Spotify `GET /search?type=artist&limit=10`; prioritize exact/prefix artist-name matches and return Spotify artist ID, image, source URL, genre/follower fields only when supplied.
+- `GET /api/v1/providers/spotify/artists/:artistId` — Spotify `GET /artists/{id}` and `GET /artists/{id}/albums?include_groups=album,single`; query `GET /search?type=track&limit=10&q=artist:...` and verify each returned track includes the exact Spotify artist ID.
+- `GET /api/v1/providers/spotify/albums/:albumId` — Spotify `GET /albums/{id}` and `GET /albums/{id}/tracks`, metadata only.
+
+Spotify removed `GET /artists/{id}/top-tracks` and `GET /browse/new-releases` in its February 2026 API changes and had already restricted Related Artists for new development-mode apps. Never rely on those routes or fabricate popularity scores. The *artist song* list is source-ranked and artist-ID-verified; newest releases are determined from Spotify album dates with day precision within the last 12 months. Additional search queries are derived from Spotify-provided genres and album titles, **not** called Spotify recommendations/related artists.
+
+**Tours:** Spotify's artist API does not provide tour dates, venues, or ticket URLs. The page renders a clear unavailable state, not fabricated tours. The user explicitly requires Spotify as the only artist-data backend, so no third-party tour provider is silently merged. A future independently labeled ticket-event source requires a separate product decision.
+
+**Library continuity:** Existing saved songs remain visible and the Spotify artist page offers account-scoped Follow/Pin using a stable `catalog:sp_<SpotifyArtistId>` key. Existing legacy artist identities are never silently relabeled as Spotify artists: they must pass an exact Spotify artist-name search. No database wipe or migration is required for artist search. Preserve existing older artist-follow records until a deliberate migration maps them to Spotify artist IDs.
+
+**Spotify policy:** This UX preference is subject to Spotify's required metadata and artwork attribution, external source links and partner licensing. A browser-visible Spotify attribution link is present in the artist and release pages, but full branding/partner terms remain release gates; no direct Spotify audio grant is claimed.
+
 ## Four search scopes
 
 | Scope | Discovery / data access | Selection behavior | Status |
