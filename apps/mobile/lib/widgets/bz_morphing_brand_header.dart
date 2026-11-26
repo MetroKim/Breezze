@@ -3,6 +3,35 @@ import 'package:material_ui/material_ui.dart';
 
 import 'bz_brand_icons.dart';
 
+/// The same original Breezze circular badge used in compact headers.
+/// This is intentionally never the YouTube Music product mark.
+class BzCompactBrandMark extends StatelessWidget {
+  const BzCompactBrandMark({super.key, this.size = 40});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      image: true,
+      label: 'Breezze',
+      child: ExcludeSemantics(
+        child: Container(
+          key: const Key('breezze-circular-mark'),
+          width: size,
+          height: size,
+          decoration: const BoxDecoration(
+            color: Colors.black,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: BzBnoteMark(size: size * 0.57, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
 /// Scroll-aware, pinned Breezze identity for discovery pages.
 ///
 /// Recreates the useful *interaction pattern* of an expanding/collapsing
@@ -88,6 +117,7 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
                           : null,
                     ),
                     alignment: Alignment.center,
+                    clipBehavior: Clip.antiAlias,
                     child: AnimatedSwitcher(
                       duration: reduceMotion
                           ? Duration.zero
