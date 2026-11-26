@@ -1,6 +1,9 @@
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
+import 'package:flutter/cupertino.dart' show
+    CupertinoActionSheet, CupertinoActionSheetAction,
+    CupertinoTheme, CupertinoThemeData, showCupertinoModalPopup;
 import 'package:material_ui/material_ui.dart' hide RepeatMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -89,6 +92,55 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     BuildContext context,
     PlayerController controller,
   ) {
+    // Shared action model; only the presentation varies by platform.
+    final actions = <({String label, String icon, VoidCallback execute})>[
+      (label: 'Playing Next', icon: 'queue', execute: _openPlayingNext),
+      (label: 'Shuffle queue', icon: 'shuffle',
+        execute: controller.toggleShuffle),
+      (label: 'Change repeat mode', icon: 'repeat',
+        execute: controller.cycleRepeat),
+      (label: _lyricsVisible ? 'Hide lyrics' : 'Show lyrics',
+        icon: 'lyrics',
+        execute: () => setState(() {
+          _lyricsVisible = !_lyricsVisible;
+          if (!_lyricsVisible) _lyricsFocus = false;
+        })),
+    ];
+    void dispatch(BuildContext sheetContext, VoidCallback action) {
+      Navigator.of(sheetContext).pop();
+      action();
+    }
+
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      final theme = Theme.of(context);
+      showCupertinoModalPopup<void>(
+        context: context,
+        semanticsDismissible: true,
+        builder: (sheetContext) => CupertinoTheme(
+          data: CupertinoThemeData(
+            brightness: theme.brightness,
+            primaryColor: theme.bzText1,
+          ),
+          child: CupertinoActionSheet(
+            title: const Text('Playback actions'),
+            actions: [
+              for (final action in actions)
+                CupertinoActionSheetAction(
+                  onPressed: () => dispatch(sheetContext, action.execute),
+                  child: Text(action.label),
+                ),
+            ],
+            cancelButton: CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(sheetContext).pop(),
+              child: const Text('Cancel'),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Android and desktop retain Breezze's neutral Material sheet.
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -97,41 +149,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const BzSvgIcon(name: 'queue'),
-              title: const Text('Playing Next'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _openPlayingNext();
-              },
-            ),
-            ListTile(
-              leading: const BzSvgIcon(name: 'shuffle'),
-              title: const Text('Shuffle queue'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                controller.toggleShuffle();
-              },
-            ),
-            ListTile(
-              leading: const BzSvgIcon(name: 'repeat'),
-              title: const Text('Change repeat mode'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                controller.cycleRepeat();
-              },
-            ),
-            ListTile(
-              leading: BzSvgIcon(name: _lyricsVisible ? 'lyrics' : 'lyrics'),
-              title: Text(_lyricsVisible ? 'Hide lyrics' : 'Show lyrics'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                setState(() {
-                  _lyricsVisible = !_lyricsVisible;
-                  if (!_lyricsVisible) _lyricsFocus = false;
-                });
-              },
-            ),
+            for (final action in actions)
+              ListTile(
+                leading: BzSvgIcon(name: action.icon),
+                title: Text(action.label),
+                onTap: () => dispatch(sheetContext, action.execute),
+              ),
           ],
         ),
       ),
