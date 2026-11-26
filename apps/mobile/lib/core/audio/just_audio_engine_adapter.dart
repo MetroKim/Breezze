@@ -7,15 +7,23 @@ import 'package:just_audio/just_audio.dart' as ja;
 
 /// Native audio engine — implements the Breezze engine contract over
 /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
-class JustAudioEngineAdapter implements AudioEngineAdapter {
-  // The Breezze controller owns interruption decisions. just_audio's
-  // automatic interruption handler can auto-resume after calls, contrary
-  // to our privacy-conscious "resume only on user request" policy.
-  // Its native audio-session activation remains enabled: it requests OS
-  // focus only when playback actually starts.
+class JustAudioEngineAdapter implements AudioEngineAdapter, CallInterruptionResumeSource {
+  // Breezze owns interruptions and server playback sessions. Automatic
+  // resume is eligible only after an actual call-like audio-focus release,
+  // and is executed by PlayerController after rights/session revalidation.
   final ja.AudioPlayer _player = ja.AudioPlayer(handleInterruptions: false);
   final StreamController<PlaybackState> _states =
       StreamController<PlaybackState>.broadcast();
+  final StreamController<bool> _callResumeRequests =
+      StreamController<bool>.broadcast();
+  final CallAutoResumePolicy _callResumePolicy = CallAutoResumePolicy();
+  bool _interruptionActive = false;
+
+  @override
+  Stream<bool> get callResumeRequests => _callResumeRequests.stream;
+
+  @override
+  void cancelPendingCallResume() => _callResumePolicy.cancel();
   late final StreamSubscription<ja.PlaybackEvent> _errorSubscription;
   late final StreamSubscription<ja.PlayerState> _stateSubscription;
   StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
@@ -47,6 +55,9 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       } else {
         mapped = PlaybackState.paused;
       }
+      // An OS pause on call BEGIN is not the end of the interruption.
+      // Suppress that transient paused event until focus returns.
+      if (_interruptionActive && mapped == PlaybackState.paused) return;
       _states.add(mapped);
     });
     // Awaited before resolving the first playable source, so the session
@@ -75,19 +86,35 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       _interruptionSubscription = session.interruptionEventStream.listen((event) {
         if (_disposed) return;
         if (event.begin) {
-          // The "interrupted" state MUST enter the controller before the
-          // just_audio pause event: otherwise the OS pause can win the race
-          // and look like a user-requested pause to session bookkeeping.
-          if (_player.playing) _states.add(PlaybackState.interrupted);
-          // Do not duck/auto-resume through calls, Siri or exclusive focus.
+          final wasPlaying = _player.playing;
+          _callResumePolicy.begin(
+            wasPlaying: wasPlaying,
+            // Ducks do not grant permission for automatic playback restart.
+            callLike: event.type != AudioInterruptionType.duck,
+          );
+          _interruptionActive = true;
+          // Emit interrupted BEFORE pausing so the controller can suspend
+          // the server heartbeat without mistaking OS focus loss for a tap.
+          if (wasPlaying) _states.add(PlaybackState.interrupted);
           unawaited(_player.pause().catchError((_) {}));
         } else {
-          // Session focus returning is NOT permission to resume playback.
+          _interruptionActive = false;
+          // Publish the restored focus state first. The controller converts
+          // interrupted -> paused; only then may it honor the resume request.
           _states.add(PlaybackState.paused);
+          if (_callResumePolicy.end()) {
+            scheduleMicrotask(() {
+              if (!_disposed && !_callResumeRequests.isClosed) {
+                _callResumeRequests.add(true);
+              }
+            });
+          }
         }
       });
       _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
         if (_disposed) return;
+        _callResumePolicy.cancel();
+        _interruptionActive = false;
         // Headphones/Bluetooth route removed: interrupt BEFORE pause so
         // a stale native "playing" event cannot expose audio on speakers.
         if (_player.playing) _states.add(PlaybackState.interrupted);
@@ -100,6 +127,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
 
   @override
   Future<void> prepare(PlayableSource source) async {
+    _callResumePolicy.cancel();
     await _sessionReady;
     if (_disposed) throw StateError('Breezze audio engine is disposed');
     if (source.isLocal && !kIsWeb && !source.streamUrl.startsWith('content://')) {
@@ -126,13 +154,19 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() {
+    _callResumePolicy.cancel();
+    return _player.pause();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> stop() {
+    _callResumePolicy.cancel();
+    return _player.stop();
+  }
 
   @override
   Duration get position => _player.position;
@@ -155,6 +189,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _callResumePolicy.cancel();
     // An in-flight session setup must not install listeners after disposal.
     await _sessionReady;
     await _errorSubscription.cancel();
@@ -162,6 +197,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
     await _interruptionSubscription?.cancel();
     await _becomingNoisySubscription?.cancel();
     await _states.close();
+    await _callResumeRequests.close();
     await _player.dispose();
   }
 }
