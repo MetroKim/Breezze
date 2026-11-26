@@ -156,6 +156,27 @@ class _SpotifySearchSignedIn extends AuthSessionController {
 }
 
 void main() {
+  testWidgets('search retains Breezze style with accessible heading and input',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    await tester.pump();
+    expect(find.byWidgetPredicate((widget) =>
+        widget is Semantics &&
+        widget.properties.label ==
+            'Search songs, artists, albums and music videos'), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) =>
+        widget is Semantics && widget.properties.header == true &&
+        widget.child is Text &&
+        (widget.child! as Text).data == 'Search'), findsOneWidget);
+    // Source filters are still hidden on the initial, empty search screen.
+    expect(find.widgetWithText(BzFilterPill, 'Audio'), findsNothing);
+  });
+
   testWidgets('typeahead debounces and discards older results', (tester) async {
     final source = _SearchSource();
     await tester.pumpWidget(ProviderScope(
