@@ -1,9 +1,14 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/breezze_navigation.dart';
 import 'bz_brand_icons.dart';
 import 'bz_playback_scrubber.dart';
 import '../features/browse/browse_screen.dart';
@@ -41,6 +46,16 @@ class BzHome extends ConsumerStatefulWidget {
 class _BzHomeState extends ConsumerState<BzHome> {
   int _index = 0;
 
+  /// Four stable destinations, independent of window size and device class.
+  /// A selection signal is tactile on iOS but never needed for navigation.
+  void _selectTab(int next) {
+    if (next < 0 || next >= _tabs.length || next == _index) return;
+    setState(() => _index = next);
+    if (!kIsWeb && Theme.of(context).platform == TargetPlatform.iOS) {
+      unawaited(HapticFeedback.selectionClick().catchError((_) {}));
+    }
+  }
+
   static const _tabs = [
     _TabDestination('Home', 'assets/icons/home.svg'),
     _TabDestination('Browse', 'assets/icons/new.svg'),
@@ -57,7 +72,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
   Widget build(BuildContext context) {
     ref.listen<int>(homeTabHintProvider, (previous, next) {
       if (next >= 0 && next < _tabs.length) {
-        if (next != _index) setState(() => _index = next);
+        if (next != _index) _selectTab(next);
         ref.read(homeTabHintProvider.notifier).state = -1;
       }
     });
@@ -88,12 +103,18 @@ class _BzHomeState extends ConsumerState<BzHome> {
               _DesktopNavigation(
                 index: _index,
                 tabs: _tabs,
-                onChanged: (i) => setState(() => _index = i),
+                onChanged: _selectTab,
                 onOpenAccount: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AccountScreen()),
+                  breezzePageRoute<void>(
+                    context: context,
+                    builder: (_) => const AccountScreen(),
+                  ),
                 ),
                 onOpenSettings: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  breezzePageRoute<void>(
+                    context: context,
+                    builder: (_) => const SettingsScreen(),
+                  ),
                 ),
               ),
               Expanded(
@@ -142,7 +163,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
                     _TabBar(
                       index: _index,
                       tabs: _tabs,
-                      onChanged: (i) => setState(() => _index = i),
+                      onChanged: _selectTab,
                     ),
                   ],
                 ),
@@ -153,7 +174,8 @@ class _BzHomeState extends ConsumerState<BzHome> {
 
   void _openNowPlaying() {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      breezzePageRoute<void>(
+        context: context,
         builder: (_) => const NowPlayingScreen(),
         fullscreenDialog: true,
       ),
@@ -646,9 +668,12 @@ class _TabButton extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     destination.label,
-                    maxLines: 1,
+                    // Preserve labels (and all four destinations) when a
+                    // listener increases Dynamic Type.
+                    maxLines: MediaQuery.textScalerOf(context).scale(10) > 16
+                        ? 2 : 1,
                     overflow: TextOverflow.ellipsis,
-                    softWrap: false,
+                    softWrap: true,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 10,
