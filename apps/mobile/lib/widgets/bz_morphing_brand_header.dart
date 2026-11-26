@@ -33,20 +33,17 @@ class BzCompactBrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      image: true,
-      label: 'Breezze',
-      child: ExcludeSemantics(
-        child: Container(
-          key: const Key('breezze-circular-mark'),
-          width: size,
-          height: size,
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: BzBnoteMark(size: size * 0.57, color: Colors.white),
+    // Transparent official mark + name, not the black app-icon badge.
+    return SizedBox(
+      key: const Key('breezze-transparent-brand'),
+      height: size,
+      child: FittedBox(
+        alignment: Alignment.centerLeft,
+        fit: BoxFit.scaleDown,
+        child: BzBrandLockup(
+          markHeight: size,
+          compact: true,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
@@ -57,8 +54,8 @@ class BzCompactBrandMark extends StatelessWidget {
 ///
 /// Recreates the useful *interaction pattern* of an expanding/collapsing
 /// music-app masthead. The artwork, wordmark and code belong to Breezze.
-/// The pill gently morphs into a black circular badge containing only our
-/// own B-note mark. No YouTube Music trademarks or clone source are used.
+/// The logo shrinks into a compact backgroundless Breezze mark-and-name
+/// lockup. Both states use the original brand SVG, never an app-icon tile. No YouTube Music trademarks or clone source are used.
 class BzMorphingBrandHeader extends StatelessWidget {
   const BzMorphingBrandHeader({
     super.key,
@@ -107,7 +104,7 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final highContrast = MediaQuery.highContrastOf(context);
     final background = theme.bzBackground;
-    final width = 116 - progress * 72;
+    final width = 154 - progress * 26;
     // Very narrow phones/foldables need a functional, unclipped header.
     // Secondary settings are reachable through Account when hidden.
     final narrow = MediaQuery.sizeOf(context).width < 360;
@@ -154,35 +151,22 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
                     curve: Curves.easeOutCubic,
                     width: width,
                     height: 44,
-                    decoration: BoxDecoration(
-                      color: compact ? Colors.black : Colors.transparent,
-                      borderRadius: BorderRadius.circular(compact ? 22 : 8),
-                      border: compact && highContrast
-                          ? Border.all(color: Colors.white, width: 1.5)
-                          : null,
-                    ),
-                    alignment: Alignment.center,
-                    clipBehavior: Clip.antiAlias,
+                    decoration: const BoxDecoration(color: Colors.transparent),
+                    alignment: Alignment.centerLeft,
+                    clipBehavior: Clip.none,
                     child: AnimatedSwitcher(
                       duration: reduceMotion
                           ? Duration.zero
                           : const Duration(milliseconds: 150),
                       child: compact
-                          ? const BzBnoteMark(
+                          ? const BzBrandLockup(
                               key: Key('breezze-compact-icon'),
-                              size: 25,
-                              color: Colors.white,
+                              markHeight: 27,
+                              compact: true,
                             )
-                          : SizedBox(
-                              key: const Key('breezze-expanded-wordmark'),
-                              width: 106,
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: BzRibbonLogo(
-                                  width: 106,
-                                  color: theme.bzText1,
-                                ),
-                              ),
+                          : const BzBrandLockup(
+                              key: Key('breezze-expanded-wordmark'),
+                              markHeight: 34,
                             ),
                     ),
                   ),
