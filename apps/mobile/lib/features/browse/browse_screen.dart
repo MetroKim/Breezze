@@ -184,6 +184,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
           BzMorphingBrandHeader(
+            sidebarBrandOnDesktop: true,
             actions: [
               IconButton(
                 tooltip: 'Search Breezze music',
