@@ -49,6 +49,8 @@ export interface ProviderTrack {
   sourceUrl?: string;
   previewUrl?: string;
   durationSec?: number;
+  /** Recording-level identifier when supplied by the catalog. */
+  isrc?: string;
 }
 
 export interface ProviderAdapter {
