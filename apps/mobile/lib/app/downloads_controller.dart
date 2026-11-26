@@ -279,7 +279,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       final onWifi = network.contains(ConnectivityResult.wifi);
       final onMobile = network.contains(ConnectivityResult.mobile);
       if (!onWifi && (!onMobile || preferences.wifiOnly || !preferences.allowCellular)) {
-        _setStatus(key, onMobile ? 'waiting_for_wifi' : 'waiting_for_network');
+        _setStatus(key, onMobile ? 'waiting_for_wifi' : 'waiting_for_network', cancellation: cancellation);
         return;
       }
       final auth = ref.read(authSessionProvider);
@@ -316,17 +316,22 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         rightsExpiresAtUtc: lease,
         cancellation: cancellation,
         onProgress: (value) {
-          if (mounted) state = {...state, key: value};
+          if (mounted && identical(_cancellations[key], cancellation)) {
+            state = {...state, key: value};
+          }
         },
       );
       if (cancellation.isCancelled) return;
-      _setStatus(key, ok ? 'downloaded' : 'failed');
+      _setStatus(key, ok ? 'downloaded' : 'failed', cancellation: cancellation);
     } catch (_) {
       if (!cancellation.isCancelled) _setStatus(key, 'failed', cancellation: cancellation);
     } finally {
-      if (identical(_cancellations[key], cancellation)) _cancellations.remove(key);
-      if (mounted && ref.read(downloadJobStatusProvider)[key] != 'paused') {
-        state = Map<String, double>.of(state)..remove(key);
+      // An old listener's late Future must not erase another account's job.
+      if (identical(_cancellations[key], cancellation)) {
+        _cancellations.remove(key);
+        if (mounted && ref.read(downloadJobStatusProvider)[key] != 'paused') {
+          state = Map<String, double>.of(state)..remove(key);
+        }
       }
     }
   }
@@ -350,7 +355,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       final onWifi = network.contains(ConnectivityResult.wifi);
       final onMobile = network.contains(ConnectivityResult.mobile);
       if (!onWifi && (!onMobile || preferences.wifiOnly || !preferences.allowCellular)) {
-        _setStatus(track.id, onMobile ? 'waiting_for_wifi' : 'waiting_for_network');
+        _setStatus(track.id, onMobile ? 'waiting_for_wifi' : 'waiting_for_network', cancellation: cancellation);
         return;
       }
 
@@ -406,7 +411,10 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         assetVersion: grant.assetVersion,
         cancellation: cancellation,
         onProgress: (progress) {
-          if (mounted) state = {...state, track.id: progress};
+          if (mounted &&
+              identical(_cancellations[track.id], cancellation)) {
+            state = {...state, track.id: progress};
+          }
         },
       );
 
@@ -418,11 +426,11 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     } catch (_) {
       if (!cancellation.isCancelled) _setStatus(track.id, 'failed', cancellation: cancellation);
     } finally {
-      if (identical(_cancellations[track.id], cancellation)) _cancellations.remove(track.id);
-      if (mounted) {
-        if (ref.read(downloadJobStatusProvider)[track.id] != 'paused') {
-          final next = Map<String, double>.of(state)..remove(track.id);
-          state = next;
+      if (identical(_cancellations[track.id], cancellation)) {
+        _cancellations.remove(track.id);
+        if (mounted &&
+            ref.read(downloadJobStatusProvider)[track.id] != 'paused') {
+          state = Map<String, double>.of(state)..remove(track.id);
         }
       }
     }
