@@ -26,6 +26,11 @@ jobs:
         run: |
           set -euo pipefail
           if ! command -v ffmpeg >/dev/null 2>&1; then
+            # Some GitHub Ubuntu images ship a Microsoft apt source that
+            # intermittently returns HTTP 403. Audio decoding needs Ubuntu
+            # packages only, never third-party repository packages.
+            sudo grep -rl 'packages.microsoft.com' /etc/apt/sources.list.d \
+              | xargs -r sudo rm -f || true
             sudo apt-get update -qq
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
@@ -46,6 +51,11 @@ jobs:
         run: |
           set -euo pipefail
           if ! command -v ffmpeg >/dev/null 2>&1; then
+            # Some GitHub Ubuntu images ship a Microsoft apt source that
+            # intermittently returns HTTP 403. Audio decoding needs Ubuntu
+            # packages only, never third-party repository packages.
+            sudo grep -rl 'packages.microsoft.com' /etc/apt/sources.list.d \
+              | xargs -r sudo rm -f || true
             sudo apt-get update -qq
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
