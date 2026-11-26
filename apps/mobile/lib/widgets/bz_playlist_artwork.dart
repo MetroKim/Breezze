@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -11,16 +14,31 @@ class BzPlaylistArtwork extends StatelessWidget {
     super.key,
     required this.artworkUrls,
     this.customArtworkUrl,
+    this.customArtworkBase64,
     this.size = 56,
   });
 
   final List<String?> artworkUrls;
   final String? customArtworkUrl;
+  /// Listener-selected local PNG thumbnail, never a provider download URL.
+  final String? customArtworkBase64;
   final double size;
+
+  Uint8List? get _localCover {
+    final raw = customArtworkBase64;
+    if (raw == null || raw.length > 750000) return null;
+    try {
+      final bytes = base64Decode(raw);
+      return bytes.isNotEmpty && bytes.length <= 560000 ? bytes : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final localCover = _localCover;
     final art = artworkUrls
         .whereType<String>()
         .where((url) {
@@ -61,7 +79,7 @@ class BzPlaylistArtwork extends StatelessWidget {
 
     return Semantics(
       image: true,
-      label: customArtworkUrl == null
+      label: localCover == null && customArtworkUrl == null
           ? 'Playlist cover made from saved song artwork'
           : 'User-selected playlist cover',
       child: ExcludeSemantics(
@@ -69,7 +87,13 @@ class BzPlaylistArtwork extends StatelessWidget {
           borderRadius: BorderRadius.circular(BzRadius.artwork),
           child: SizedBox.square(
             dimension: size,
-            child: customArtworkUrl != null &&
+            child: localCover != null
+                ? Image.memory(
+                    localCover,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => tile(0),
+                  )
+                : customArtworkUrl != null &&
                     Uri.tryParse(customArtworkUrl!)?.scheme == 'https'
                 ? Image.network(
                     customArtworkUrl!,
