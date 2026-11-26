@@ -29,6 +29,8 @@ jobs:
           persist-credentials: false
       - name: Test inventory behavior
         run: python3 -m unittest discover -s tools -p 'test_v8_dependency_inventory.py' -v
+      - name: Test hostile XML and native-manifest input boundaries
+        run: python3 -m unittest discover -s tools -p 'test_safe_xml.py' -v
       - name: Block nondeterministic production dependencies
         run: python3 tools/v8_dependency_inventory.py --root .
 
