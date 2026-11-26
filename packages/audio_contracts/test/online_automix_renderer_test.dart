@@ -193,6 +193,31 @@ void main() {
     expect(outgoing.stops, 1);
   });
 
+  test('final incoming gain failure leaves outgoing deck available', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    var fullGainWrites = 0;
+    incoming.onVolume = (level) {
+      if (level >= 1 && ++fullGainWrites == 2) {
+        throw StateError('final native gain failed');
+      }
+    };
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () => true,
+        steps: 4,
+        delay: (_) async {},
+      ),
+      throwsStateError,
+    );
+    expect(incoming.stops, 1);
+    expect(outgoing.stops, 0);
+    expect(outgoing.levels.last, 1);
+  });
+
   test('last-step grant revocation stops both decks after their gain writes', () async {
     final outgoing = _Deck();
     final incoming = _Deck();
