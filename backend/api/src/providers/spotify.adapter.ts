@@ -22,6 +22,58 @@ interface SpotifyTrack {
 
 interface SpotifySearchPayload {
   tracks?: { items?: SpotifyTrack[] };
+  artists?: { items?: SpotifyArtist[] };
+}
+
+interface SpotifyArtist {
+  id?: string;
+  name?: string;
+  images?: Array<{ url?: string }>;
+  genres?: string[];
+  followers?: { total?: number };
+  popularity?: number;
+  external_urls?: { spotify?: string };
+}
+
+interface SpotifyAlbum {
+  id?: string;
+  name?: string;
+  album_type?: string;
+  release_date?: string;
+  total_tracks?: number;
+  images?: Array<{ url?: string }>;
+  external_urls?: { spotify?: string };
+  artists?: Array<{ id?: string; name?: string }>;
+}
+
+export interface SpotifyArtistView {
+  id: string;
+  name: string;
+  imageUrl?: string;
+  url: string;
+  genres: string[];
+  followers?: number;
+}
+
+export interface SpotifyArtistRelease {
+  id: string;
+  title: string;
+  type: string;
+  releaseDate: string;
+  trackCount: number;
+  artworkUrl?: string;
+  url: string;
+}
+
+export interface SpotifyArtistPage {
+  artist: SpotifyArtistView;
+  songs: ProviderTrack[];
+  albums: SpotifyArtistRelease[];
+  newReleases: SpotifyArtistRelease[];
+  searchSuggestions: string[];
+  tours: { status: 'unsupported'; events: [] };
+  songStatus: 'ok' | 'unavailable';
+  albumStatus: 'ok' | 'unavailable';
 }
 
 interface SpotifyTokenPayload {
@@ -183,6 +235,139 @@ export class SpotifyAdapter implements ProviderAdapter {
     // Short-lived cache reduces Spotify development-mode API consumption.
     await this.cache.set(key, result, 90);
     return result;
+  }
+
+
+  private mapArtist(row: SpotifyArtist): SpotifyArtistView | null {
+    if (!spotifyTrackId.test(row.id ?? '') || !row.name?.trim()) return null;
+    const image = row.images?.find(item =>
+      typeof item.url === 'string' && item.url.startsWith('https://'))?.url;
+    return {
+      id: row.id!,
+      name: row.name.trim(),
+      imageUrl: image,
+      url: 'https://open.spotify.com/artist/' + row.id,
+      genres: Array.isArray(row.genres) ? row.genres.filter(
+        (name): name is string => typeof name === 'string').slice(0, 8) : [],
+      followers: typeof row.followers?.total === 'number'
+        ? row.followers.total : undefined,
+    };
+  }
+
+  /** Official Spotify artist search. No Deezer or YouTube artist fallback. */
+  async searchArtists(query: string): Promise<ProviderResult<SpotifyArtistView[]>> {
+    const q = query.trim().replace(/\\s+/g, ' ');
+    if (q.length < 2 || q.length > 120) return providerOk([]);
+    const key = 'provider:spotify:artists:v1:' +
+      crypto.createHash('sha256').update(q.toLowerCase()).digest('hex');
+    const cached = await this.cache.get<ProviderResult<SpotifyArtistView[]>>(key);
+    if (cached) return cached;
+    const result = await this.request<SpotifySearchPayload>(
+      'search', new URLSearchParams({ q, type: 'artist', limit: '10' }),
+    );
+    if (result.kind !== 'ok') return result;
+    if (!Array.isArray(result.value.artists?.items)) {
+      return providerError('SPOTIFY_ARTISTS_INVALID', 'Artist discovery returned invalid data');
+    }
+    const items = result.value.artists.items
+      .map(item => this.mapArtist(item)).filter((a): a is SpotifyArtistView => a !== null);
+    const norm = (name: string) => name.normalize('NFKC').toLowerCase().trim();
+    const needle = norm(q);
+    items.sort((a, b) => {
+      const score = (name: string) => {
+        const text = norm(name);
+        return text === needle ? 3 : text.startsWith(needle) ? 2 :
+          text.includes(needle) ? 1 : 0;
+      };
+      return score(b.name) - score(a.name);
+    });
+    const response = providerOk(items, 'Artist metadata supplied by Spotify');
+    await this.cache.set(key, response, 120);
+    return response;
+  }
+
+  private mapRelease(row: SpotifyAlbum, artistId: string): SpotifyArtistRelease | null {
+    if (!spotifyTrackId.test(row.id ?? '') || !row.name?.trim() ||
+        !row.artists?.some(artist => artist.id === artistId)) return null;
+    const imageUrl = row.images?.find(img =>
+      typeof img.url === 'string' && img.url.startsWith('https://'))?.url;
+    const date = row.release_date ?? '';
+    return {
+      id: row.id!, title: row.name.trim(),
+      type: row.album_type === 'single' ? 'single' : 'album',
+      releaseDate: /^\\d{4}(-\\d{2}){0,2}$/.test(date) ? date : '',
+      trackCount: typeof row.total_tracks === 'number' ? row.total_tracks : 0,
+      artworkUrl: imageUrl,
+      url: 'https://open.spotify.com/album/' + row.id,
+    };
+  }
+
+  /**
+   * Artist page uses Spotify ONLY for artist/catalog data. Spotify removed
+   * /artists/:id/top-tracks in February 2026: use supported type=track search
+   * and verify the artist ID on every returned recording. Tour data cannot be
+   * obtained from Spotify; return an explicit empty/unsupported state.
+   */
+  async getArtistPage(id: string): Promise<ProviderResult<SpotifyArtistPage>> {
+    if (!spotifyTrackId.test(id)) {
+      return providerError('INVALID_SPOTIFY_ARTIST_ID', 'Invalid artist ID');
+    }
+    const key = 'provider:spotify:artist-page:v1:' + id;
+    const cached = await this.cache.get<ProviderResult<SpotifyArtistPage>>(key);
+    if (cached) return cached;
+    const profile = await this.request<SpotifyArtist>('artists/' + id);
+    if (profile.kind !== 'ok') return profile;
+    const artist = this.mapArtist(profile.value);
+    if (!artist || artist.id !== id) {
+      return providerError('SPOTIFY_ARTIST_INVALID', 'Artist record is unavailable');
+    }
+    const [albumsResponse, songsResponse] = await Promise.all([
+      this.request<{ items?: SpotifyAlbum[] }>(
+        'artists/' + id + '/albums',
+        new URLSearchParams({ include_groups: 'album,single', limit: '20' }),
+      ),
+      this.request<SpotifySearchPayload>(
+        'search', new URLSearchParams({
+          q: 'artist:"' + artist.name.replace(/"/g, '') + '"',
+          type: 'track', limit: '10',
+        }),
+      ),
+    ]);
+    const releases = albumsResponse.kind === 'ok' && Array.isArray(albumsResponse.value.items)
+      ? albumsResponse.value.items
+          .map(row => this.mapRelease(row, id))
+          .filter((row): row is SpotifyArtistRelease => row !== null)
+      : [];
+    // Unique album IDs; keep new releases first. No global /browse/new-releases.
+    const seenAlbums = new Set<string>();
+    const albums = releases
+      .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate))
+      .filter(row => !seenAlbums.has(row.id) && (seenAlbums.add(row.id), true));
+    const threshold = new Date();
+    threshold.setUTCFullYear(threshold.getUTCFullYear() - 1);
+    const newReleases = albums.filter(item => item.releaseDate.length >= 4 &&
+      item.releaseDate >= threshold.toISOString().slice(0, 4));
+    const seenSongs = new Set<string>();
+    const songs = songsResponse.kind === 'ok' && Array.isArray(songsResponse.value.tracks?.items)
+      ? songsResponse.value.tracks.items
+        .filter(row => row.artists?.some(a => a.id === id))
+        .map(row => this.mapTrack(row))
+        .filter((row): row is ProviderTrack => row !== null &&
+          !seenSongs.has(row.providerTrackId) &&
+          (seenSongs.add(row.providerTrackId), true))
+      : [];
+    const searchSuggestions = [
+      ...albums.slice(0, 3).map(album => album.title),
+      ...artist.genres.slice(0, 2).map(genre => artist.name + ' ' + genre),
+    ].filter((name, index, arr) => arr.indexOf(name) === index);
+    const response = providerOk<SpotifyArtistPage>({
+      artist, songs, albums, newReleases, searchSuggestions,
+      tours: { status: 'unsupported', events: [] },
+      songStatus: songsResponse.kind === 'ok' ? 'ok' : 'unavailable',
+      albumStatus: albumsResponse.kind === 'ok' ? 'ok' : 'unavailable',
+    }, 'Artist metadata supplied by Spotify; full-track playback is not granted');
+    await this.cache.set(key, response, 120);
+    return response;
   }
 
   async getTrack(providerTrackId: string): Promise<ProviderResult<ProviderTrack>> {
