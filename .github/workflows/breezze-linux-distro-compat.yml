@@ -22,7 +22,7 @@ concurrency:
   group: breezze-linux-portability-${{ github.ref }}
   # Cancel obsolete runs so the most recent main SHA gets the build agents.
   # Native device acceptance retains separate non-cancelling workflows.
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   linux-x64:
@@ -39,7 +39,7 @@ jobs:
       - name: Prepare Linux build toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libblkid-dev xvfb xauth dbus-x11 libgl1-mesa-dri libegl1 gnome-keyring libglib2.0-bin
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libblkid-dev xvfb xauth dbus-x11 libgl1-mesa-dri libegl1 gnome-keyring libglib2.0-bin libmpv-dev
       - name: Run offline Linux auditor unit tests
         run: python3 -m unittest discover -s apps/mobile/tool -p 'test_linux_portability_audit.py' -v
       - name: Generate Flutter platform runners
