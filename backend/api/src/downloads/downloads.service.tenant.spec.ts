@@ -3,6 +3,7 @@ import { DownloadsService } from './downloads.service';
 describe('DownloadsService tenant isolation', () => {
   const prisma = {
     track: { findUnique: jest.fn() },
+    audioAssetVariant: { findUnique: jest.fn() },
     downloadRecord: {
       findMany: jest.fn(),
       deleteMany: jest.fn(),
@@ -17,6 +18,9 @@ describe('DownloadsService tenant isolation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.track.findUnique.mockResolvedValue({ id: 'track-1', source: null, externalId: null });
+    prisma.audioAssetVariant.findUnique.mockResolvedValue({
+      status: 'ready', verifiedAt: new Date(), sizeBytes: 1024n, mimeType: 'audio/mp4',
+    });
     service = new DownloadsService(prisma as any, rights as any, signer as any, providers as any);
   });
 
@@ -54,7 +58,7 @@ describe('DownloadsService tenant isolation', () => {
     });
     signer.createPlaybackUrl.mockReturnValue({
       url: 'https://cdn.example/audio/track-1/download?sig=test',
-      expiresAt: new Date('2026-11-21T18:00:00.000Z'),
+      expiresAt: new Date(Date.now() + 60_000),
     });
     prisma.downloadRecord.upsert.mockResolvedValue({ id: 'download-1' });
 
