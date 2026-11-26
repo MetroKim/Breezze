@@ -889,24 +889,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return Material(
       color: theme.scaffoldBackgroundColor,
       child: SafeArea(
-        child: Column(
+        child: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => const [
+            BzMorphingBrandHeader(sidebarBrandOnDesktop: true),
+          ],
+          body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const BzCompactBrandMark(size: 38),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Semantics(
-                        header: true,
-                        child: Text('Search', style: theme.textTheme.displayMedium),
-                      ),
-                    ),
-                  ],
+                Semantics(
+                  header: true,
+                  child: Text('Search', style: theme.textTheme.displayMedium),
                 ),
                 const SizedBox(height: 16),
                 // PRT-01 search pill: --radius-pill (capsule) with the
@@ -1333,6 +1329,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               ),
           ),
         ],
+        ),
         ),
       ),
     );
