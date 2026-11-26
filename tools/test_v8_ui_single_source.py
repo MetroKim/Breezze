@@ -20,8 +20,8 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.THEME, "export 'src/bz_theme.dart';")
         self.write(guard.GLASS_CORE, "BackdropFilter(")
         self.write(guard.GLASS_ADAPTER, "return BzGlass(")
-        self.write(guard.BRAND, "class BzBnoteMark")
-        self.write(guard.MORPH, "class BzMorphingBrandHeader BzBnoteMark")
+        self.write(guard.BRAND, "class BzBnoteMark class BzBrandLockup")
+        self.write(guard.MORPH, "class BzMorphingBrandHeader BzBrandLockup")
         self.write(guard.MOOD, "class BzPinnedMoodRail")
         self.write(guard.DETAIL_BAR, "class BzBrandedAppBar BzCompactBrandMark")
 
@@ -56,6 +56,13 @@ class V8SingleUiSourceTests(unittest.TestCase):
     def test_provider_legacy_appbar_is_rejected(self):
         self.write(guard.PROVIDER, "BzBrandedAppBar( appBar: AppBar(")
         self.assertIn("LEGACY_PROVIDER_TOOLBAR", str(guard.violations(self.root)))
+
+    def test_old_black_badge_brand_is_rejected(self):
+        self.write(guard.MORPH,
+                   "class BzMorphingBrandHeader BzBrandLockup "
+                   "color: compact ? Colors.black")
+        self.assertIn("OBSOLETE_BLACK_BADGE_BRAND",
+                      str(guard.violations(self.root)))
 
     def test_old_promotional_home_precedes_music_is_rejected(self):
         self.write(
