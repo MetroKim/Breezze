@@ -19,6 +19,7 @@ class SpotifyArtistScreen extends ConsumerStatefulWidget {
   final String? portraitUrl;
   final List<FavoriteTrack> savedTracks;
   final ValueChanged<Map<String, dynamic>> onTrackSelected;
+  final ValueChanged<Map<String, dynamic>> onDeezerAlbumSelected;
   final ValueChanged<FavoriteTrack> onSavedTrackSelected;
   final ValueChanged<String> onSuggestedSearch;
 
@@ -29,6 +30,7 @@ class SpotifyArtistScreen extends ConsumerStatefulWidget {
     required this.portraitUrl,
     required this.savedTracks,
     required this.onTrackSelected,
+    required this.onDeezerAlbumSelected,
     required this.onSavedTrackSelected,
     required this.onSuggestedSearch,
   });
@@ -241,13 +243,19 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
         if (release['type'] is String) release['type'] as String,
       ].join(' · '), maxLines: 1),
       trailing: const BzSvgIcon(name: 'chevron-right', size: 18),
-      onTap: id == null ? null : () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => SpotifyReleaseScreen(
-          albumId: id,
-          title: title,
-          onTrackSelected: widget.onTrackSelected,
-        )),
-      ),
+      onTap: id == null ? null : () {
+        if (release['providerId'] == 'deezer') {
+          widget.onDeezerAlbumSelected(release);
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => SpotifyReleaseScreen(
+            albumId: id,
+            title: title,
+            onTrackSelected: widget.onTrackSelected,
+          )),
+        );
+      },
     );
   }
 
@@ -259,6 +267,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
     final songs = _maps(_data?['songs']);
     final albums = _maps(_data?['albums']);
     final newReleases = _maps(_data?['newReleases']);
+    final relatedArtists = _maps(_data?['relatedArtists']);
     final suggestions = _data?['searchSuggestions'] is List
         ? (_data!['searchSuggestions'] as List).whereType<String>().toList()
         : <String>[];
@@ -331,6 +340,9 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                     ),
                   ]),
                   _section(theme, 'Songs', [
+                    if (_data?['songSource'] == 'deezer')
+                      Text('Deezer catalog · Spotify songs unavailable',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
                     for (final song in songs)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -345,15 +357,37 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                       ? 'Song lookup is temporarily unavailable.'
                       : 'Spotify returned no verified artist tracks.'),
                   _section(theme, 'New Releases', [
+                    if (_data?['albumSource'] == 'deezer' && newReleases.isNotEmpty)
+                      Text('Deezer catalog · Spotify releases unavailable',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
                     for (final release in newReleases) _releaseRow(release),
-                  ], emptyMessage: 'No recent releases verified by Spotify.'),
+                  ], emptyMessage: 'No recent releases verified by the selected catalog.'),
                   _section(theme, 'Albums & Singles', [
+                    if (_data?['albumSource'] == 'deezer' && albums.isNotEmpty)
+                      Text('Deezer catalog · Spotify discography unavailable',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
                     for (final release in albums) _releaseRow(release),
                   ], emptyMessage: _data?['albumStatus'] == 'unavailable'
                       ? 'Discography temporarily unavailable.'
-                      : 'No releases in the Spotify catalog.'),
+                      : 'No releases in the selected catalog.'),
                   _section(theme, 'Tours', const [],
-                    emptyMessage: 'Spotify does not provide concert or tour schedules through its artist API.'),
+                    emptyMessage: 'Spotify and Deezer do not provide reliable tour dates through these standard catalog endpoints.'),
+                  if (relatedArtists.isNotEmpty)
+                    _section(theme, 'Similar Artists', [
+                      Text('Deezer artist recommendations · metadata only',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
+                      for (final item in relatedArtists)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: _SpotifyArtwork(
+                            url: item['imageUrl'] as String?, size: 46, circle: true),
+                          title: Text(item['name'] as String? ?? 'Artist'),
+                          trailing: const BzSvgIcon(name: 'chevron-right', size: 18),
+                          onTap: item['name'] is String
+                              ? () => widget.onSuggestedSearch(item['name'] as String)
+                              : null,
+                        ),
+                    ]),
                   _section(theme, 'Related Searches', [
                     Wrap(spacing: 8, runSpacing: 6, children: [
                       for (final query in suggestions)
