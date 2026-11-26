@@ -121,3 +121,21 @@ See the same-sha evidence links and outstanding blockers in [master issue #27](h
 - **External release dependencies:** a valid per-recording streaming/offline license manifest and actual recordings/territories; authorized Android/iOS/Windows/macOS signing identities and stores; physical-device telephone and Bluetooth tests; real TalkBack, VoiceOver and Linux hardware-key evidence. Neither generated synthetic QA audio nor Spotify/YouTube catalog metadata supplies commercial distribution rights.
 
 **V8.2 acceptance priority:** green exact-head CI → native BZA8 decoder + interruption/accessible controls → connect and test authorized dual-deck AutoMix with two playback sessions → licensed catalog inventory and R2 delivery → signed installers + physical-device evidence → explicit release approval.
+
+
+## V8.3 candidate — Online AutoMix fail-closed transition guard (2026-11-26)
+
+**Scope: implementation candidate only; do not mark Stage 4 or release PASS.**
+
+- Strengthened `packages/audio_contracts/lib/src/online_automix_renderer.dart`: rights/session predicate exceptions are treated as denial, including the pre-start and final-gain checks. A revoked grant stops both decks (best-effort when native stop itself fails).
+- Always attempts to stop the incoming deck on every transition failure, even when native `play()` starts sound and its Future subsequently throws.
+- The outgoing deck is not stopped until the incoming gain and final authorization check have succeeded, preserving a fallback to the same authorized outgoing recording when the last gain write fails.
+- Added five focused unit regressions in `packages/audio_contracts/test/online_automix_renderer_test.dart`: delayed native-start failure, authorization checker exception, pre-start denial, final gain failure, and last-step revocation.
+- **Validation required:** exact PR-head `flutter test test/online_automix_renderer_test.dart` from `packages/audio_contracts`, package analysis, full current-head CI and CodeQL, then Android/iOS authorized *dual* playback with interruption, decoder failure, rights expiry, queue handoff and measured audible transition. No signed or published release from this candidate.
+- **Not yet solved by this change:** global PlayerController wiring, per-track BPM/key DSP and pitch-preserving stretch, real approved recording bytes/streaming rights, encrypted offline-device acceptance, actual OS hardware/accessibility tests and signed packaging.
+
+
+
+### V8.3 API-client analyzer regression on the latest CI candidate
+
+PR #79 CI [run 45817293030](https://github.com/MetroKim/Breezze/actions/runs/45817293030), job `139900206420`, successfully analyzed and tested Flutter mobile but failed at `packages/api_client` analysis: seven `BzTrack` fixtures in `downloads_library_test.dart` had no required `duration`, and `downloads_library.dart` used a redundant `rangeStart!` after non-null promotion. Commits `61b6a3f`, `fd3de34` and `7a458a2` correct and format those sites. **Source repair is pending a subsequent complete exact-head CI; the earlier failed run remains failed.**
