@@ -20,6 +20,8 @@ model User {
   mfaPendingSecretCiphertext String?
   mfaLastUsedStep BigInt?
   displayName    String?
+  /// User-uploaded private thumbnail (never a music provider image URL).
+  avatarPngBase64 String?         @db.Text
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   refreshTokens  RefreshToken[]
@@ -426,6 +428,9 @@ model Playlist {
   userId    String
   name      String
   isPinned  Boolean        @default(false)
+  /// Small owner-uploaded PNG thumbnail; validated and owner-scoped at API.
+  /// Not a music-provider stream, external URL, or shared public asset.
+  coverPngBase64 String?   @db.Text
   createdAt DateTime       @default(now())
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     PlaylistItem[]

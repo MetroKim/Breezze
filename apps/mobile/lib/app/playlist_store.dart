@@ -22,6 +22,8 @@ class UserPlaylist {
   final DateTime createdAt;
   final List<FavoriteTrack> tracks;
   final bool isPinned;
+  /// Account-scoped custom cover thumbnail in the existing playlist document.
+  final String? coverPngBase64;
 
   const UserPlaylist({
     required this.id,
@@ -29,6 +31,7 @@ class UserPlaylist {
     required this.createdAt,
     required this.tracks,
     this.isPinned = false,
+    this.coverPngBase64,
   });
 
   UserPlaylist withPinned(bool pinned) => UserPlaylist(
@@ -37,7 +40,11 @@ class UserPlaylist {
         createdAt: createdAt,
         tracks: tracks,
         isPinned: pinned,
+        coverPngBase64: coverPngBase64,
       );
+
+  static String? _validCover(Object? raw) =>
+      raw is String && raw.isNotEmpty && raw.length <= 350000 ? raw : null;
 
   factory UserPlaylist.fromJson(Map<String, Object?> json) {
     final rawTracks = json['tracks'];
@@ -45,6 +52,7 @@ class UserPlaylist {
       id: json['id'] as String,
       name: json['name'] as String? ?? 'Untitled playlist',
       isPinned: json['isPinned'] == true,
+      coverPngBase64: _validCover(json['coverPngBase64']),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       tracks: [
@@ -60,6 +68,7 @@ class UserPlaylist {
         'id': id,
         'name': name,
         'isPinned': isPinned,
+        if (coverPngBase64 != null) 'coverPngBase64': coverPngBase64,
         'createdAt': createdAt.toIso8601String(),
         'tracks': tracks.map((track) => track.toJson()).toList(),
       };
@@ -262,6 +271,9 @@ class PlaylistStore {
             createdAt: DateTime.tryParse(row['createdAt'] as String? ?? '') ??
                 cached?.createdAt ?? DateTime.now().toUtc(),
             tracks: rawItems is List ? tracks : (cached?.tracks ?? const []),
+            coverPngBase64: row.containsKey('coverPngBase64')
+                ? UserPlaylist._validCover(row['coverPngBase64'])
+                : cached?.coverPngBase64,
           ));
         }
         // A local pending edit wins over a stale server snapshot. Legacy
@@ -321,7 +333,42 @@ class PlaylistStore {
           createdAt: current.createdAt,
           tracks: List<FavoriteTrack>.unmodifiable(tracks),
           isPinned: current.isPinned,
+          coverPngBase64: current.coverPngBase64,
         );
+        await _save(ownerId, doc);
+        return true;
+      });
+
+  /// Saves a cover locally in the canonical account-scoped playlist document.
+  /// No new database or unapproved cloud media storage is introduced.
+  Future<bool> setLocalCover(
+    String ownerId,
+    String playlistId,
+    String? coverPngBase64,
+  ) => _serialize(() async {
+        if (coverPngBase64 != null &&
+            (coverPngBase64.isEmpty || coverPngBase64.length > 350000 ||
+             !RegExp(r'^[A-Za-z0-9+/]*={0,2}$').hasMatch(coverPngBase64))) {
+          throw ArgumentError.value(
+            coverPngBase64?.length, 'coverPngBase64',
+            'Invalid or oversized cover thumbnail',
+          );
+        }
+        final doc = await _read(ownerId);
+        final index = doc.playlists.indexWhere((p) => p.id == playlistId);
+        if (index < 0) return false;
+        final current = doc.playlists[index];
+        doc.playlists[index] = UserPlaylist(
+          id: current.id,
+          name: current.name,
+          createdAt: current.createdAt,
+          tracks: current.tracks,
+          isPinned: current.isPinned,
+          coverPngBase64: coverPngBase64,
+        );
+        _queue(ownerId, doc, 'cover', playlistId, {
+          'coverPngBase64': coverPngBase64,
+        });
         await _save(ownerId, doc);
         return true;
       });
@@ -343,6 +390,7 @@ class PlaylistStore {
           createdAt: current.createdAt,
           tracks: current.tracks,
           isPinned: current.isPinned,
+          coverPngBase64: current.coverPngBase64,
         );
         _queue(ownerId, doc, 'rename', playlistId, {'name': normalized});
         await _save(ownerId, doc);
@@ -411,6 +459,7 @@ class PlaylistStore {
             createdAt: current.createdAt,
             tracks: [...current.tracks, track],
             isPinned: current.isPinned,
+            coverPngBase64: current.coverPngBase64,
           );
           _queue(ownerId, doc, 'add', current.id, {
             'track': track.toJson(),
@@ -453,6 +502,7 @@ class PlaylistStore {
           createdAt: current.createdAt,
           tracks: tracks,
           isPinned: current.isPinned,
+          coverPngBase64: current.coverPngBase64,
         );
         _queue(ownerId, doc, 'reorder', playlistId, {
           'tracks': tracks.map((track) => track.toJson()).toList(),
@@ -479,6 +529,7 @@ class PlaylistStore {
           createdAt: current.createdAt,
           tracks: current.tracks.where((track) => track.id != trackId).toList(),
           isPinned: current.isPinned,
+          coverPngBase64: current.coverPngBase64,
         );
         _queue(ownerId, doc, 'remove', playlistId, {'track': removed.toJson()});
         await _save(ownerId, doc);
@@ -514,6 +565,7 @@ class PlaylistStore {
             createdAt: old.createdAt,
             tracks: old.tracks,
             isPinned: old.isPinned,
+            coverPngBase64: old.coverPngBase64,
           );
           converted.add({
             'operationId': _newId(),
@@ -527,6 +579,14 @@ class PlaylistStore {
               'type': 'pin',
               'playlistId': nextId,
               'pinned': true,
+            });
+          }
+          if (old.coverPngBase64 != null) {
+            converted.add({
+              'operationId': _newId(),
+              'type': 'cover',
+              'playlistId': nextId,
+              'coverPngBase64': old.coverPngBase64,
             });
           }
           for (final track in old.tracks) {
@@ -610,6 +670,14 @@ class PlaylistStore {
         return;
       case 'rename':
         await api.renamePlaylist(id, operation['name'] as String);
+        return;
+      case 'cover':
+        final cover = operation['coverPngBase64'];
+        if (cover != null && (cover is! String ||
+            cover.isEmpty || cover.length > 350000)) {
+          throw const FormatException('Invalid playlist cover operation');
+        }
+        await api.setPlaylistCover(id, cover as String?);
         return;
       case 'pin':
         if (operation['pinned'] is! bool) {

@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:material_ui/material_ui.dart';
@@ -11,6 +10,8 @@ import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
+import '../../widgets/bz_playlist_artwork.dart';
+import '../../widgets/bz_picked_thumbnail.dart';
 import '../player/player_controller.dart';
 import '../video/open_youtube_player.dart';
 import '../video/official_youtube_queue_policy.dart';
@@ -230,6 +231,56 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         );
   }
 
+  /// The user explicitly selects the image. Downsample the picture to a
+  /// bounded local thumbnail rather than persisting a multi-megabyte original.
+  /// Account switching during the native file chooser cancels the update.
+  Future<void> _chooseCover(UserPlaylist playlist) async {
+    if (!_ownerStillActive()) return;
+    try {
+      final cover = await pickBreezzePngThumbnail(label: 'Playlist cover');
+      if (cover == null || !_ownerStillActive()) return;
+      if (!_ownerStillActive()) return;
+      final saved = await _store.setLocalCover(
+        widget.ownerId, playlist.id,
+        cover,
+      );
+      if (!_ownerStillActive() || !saved) return;
+      await _load(sync: false);
+      unawaited(_sync());
+      widget.onChanged?.call();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Playlist cover saved. Syncing to your account when online.'),
+        ));
+      }
+    } catch (_) {
+      if (_ownerStillActive()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Unable to save this image. Choose a PNG, JPEG or WebP under 10 MB.'),
+        ));
+      }
+    }
+  }
+
+  Future<void> _restoreArtwork(UserPlaylist playlist) async {
+    if (!_ownerStillActive()) return;
+    try {
+      final saved = await _store.setLocalCover(
+        widget.ownerId, playlist.id, null,
+      );
+      if (!_ownerStillActive() || !saved) return;
+      await _load(sync: false);
+      unawaited(_sync());
+      widget.onChanged?.call();
+    } catch (_) {
+      if (_ownerStillActive()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not restore generated playlist artwork.'),
+        ));
+      }
+    }
+  }
+
   Future<void> _rename(UserPlaylist playlist) async {
     final controller = TextEditingController(text: playlist.name);
     final name = await showDialog<String>(
@@ -325,12 +376,6 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       );
     }
 
-    final artworks = playlist.tracks
-        .where((item) => item.artworkUrl != null)
-        .map((item) => item.artworkUrl!)
-        .toList();
-    final artwork = artworks.isEmpty ? null : artworks.first;
-
     return Scaffold(
       backgroundColor: theme.bzBackground,
       body: SafeArea(
@@ -350,15 +395,26 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     PopupMenuButton<String>(
                       icon: BzSvgIcon(name: 'more-vertical'),
                       onSelected: (value) {
+                        if (value == 'cover') _chooseCover(playlist);
+                        if (value == 'restore_cover') _restoreArtwork(playlist);
                         if (value == 'rename') _rename(playlist);
                         if (value == 'delete') _delete(playlist);
                       },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'cover',
+                          child: Text('Choose cover photo'),
+                        ),
+                        if (playlist.coverPngBase64 != null)
+                          const PopupMenuItem(
+                            value: 'restore_cover',
+                            child: Text('Use generated cover'),
+                          ),
+                        const PopupMenuItem(
                           value: 'rename',
                           child: Text('Rename'),
                         ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'delete',
                           child: Text('Delete playlist'),
                         ),
@@ -375,35 +431,12 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(BzRadius.modal),
-                        child: artwork == null
-                            ? Container(
-                                width: 220,
-                                height: 220,
-                                color: theme.bzSurface1,
-                                alignment: Alignment.center,
-                                child: BzBnoteMark(
-                                  size: 72,
-                                  color: theme.bzText2,
-                                ),
-                              )
-                            : Image.network(
-                                artwork,
-                                width: 220,
-                                height: 220,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  width: 220,
-                                  height: 220,
-                                  color: theme.bzSurface1,
-                                  alignment: Alignment.center,
-                                  child: BzBnoteMark(
-                                    size: 72,
-                                    color: theme.bzText2,
-                                  ),
-                                ),
-                              ),
+                      child: BzPlaylistArtwork(
+                        size: 220,
+                        customArtworkBase64: playlist.coverPngBase64,
+                        artworkUrls: [
+                          for (final track in playlist.tracks) track.artworkUrl,
+                        ],
                       ),
                     ),
                     const SizedBox(height: 22),

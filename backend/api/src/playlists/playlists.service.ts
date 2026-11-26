@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { validatePngThumbnail } from '../media/png-thumbnail';
 
 @Injectable()
 export class PlaylistsService {
@@ -81,6 +82,21 @@ export class PlaylistsService {
     return this.prisma.playlist.findFirst({
       where: { id: playlistId, userId },
     });
+  }
+
+  /**
+   * Persist only a small validated PNG thumbnail in the playlist owner's
+   * existing row. Client credentials, external provider media, and storage
+   * service-role keys never enter this endpoint. Null restores the 2x2 cover.
+   */
+  async setCover(userId: string, playlistId: string, coverPngBase64: string | null) {
+    const normalizedCover = validatePngThumbnail(coverPngBase64);
+    const result = await this.prisma.playlist.updateMany({
+      where: { id: playlistId, userId },
+      data: { coverPngBase64: normalizedCover },
+    });
+    if (result.count !== 1) throw new NotFoundException('PLAYLIST_NOT_FOUND');
+    return { id: playlistId, coverPngBase64: normalizedCover };
   }
 
   async delete(userId: string, playlistId: string) {

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma.service';
+import { validatePngThumbnail } from '../media/png-thumbnail';
 
 export interface UpdateUserProfile {
   displayName?: string;
@@ -21,6 +22,7 @@ export class UsersService {
         id: true,
         email: true,
         displayName: true,
+        avatarPngBase64: true,
         createdAt: true,
         preference: {
           select: {
@@ -104,6 +106,16 @@ export class UsersService {
           : null,
       };
     });
+  }
+
+  async setAvatar(userId: string, avatarPngBase64: string | null) {
+    const normalized = validatePngThumbnail(avatarPngBase64);
+    const updated = await this.prisma.user.updateMany({
+      where: { id: userId },
+      data: { avatarPngBase64: normalized },
+    });
+    if (updated.count !== 1) throw new NotFoundException('USER_NOT_FOUND');
+    return { avatarPngBase64: normalized };
   }
 
   async delete(userId: string, password: string) {

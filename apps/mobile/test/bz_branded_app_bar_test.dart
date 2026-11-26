@@ -40,7 +40,10 @@ void main() {
         ),
       ),
     ));
-    expect(find.textContaining('Breezze · Official music'), findsOneWidget);
+    // One backgroundless official mark + wordmark, alongside the truncated
+    // page title. Never repeat the Breezze brand as a second headline.
+    expect(find.text('Breezze'), findsOneWidget);
+    expect(find.text('Official music video discovery'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -1,25 +1,25 @@
 import 'dart:async';
-import '../../app/appearance_controller.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
-import '../../core/api/breezze_api.dart';
-import '../../features/onboarding/onboarding_controller.dart';
+import '../core/api/breezze_api.dart';
+import '../features/onboarding/onboarding_controller.dart';
 
-import '../../core/auth/auth_session.dart';
-import '../../core/audio/just_audio_engine_adapter.dart';
-import '../../core/audio/encrypted_offline_audio_source.dart';
-import '../../core/audio/audio_service_bridge.dart';
-import '../../core/audio/background_audio.dart';
-import '../../core/audio/playback_queue_store.dart';
-import '../../core/database/migrate_to_drift.dart';
-import '../../core/database/outbox_sync_service.dart';
-import '../../features/player/player_controller.dart';
-import '../../features/authentication/auth_screen.dart';
-import '../../features/onboarding/onboarding_flow.dart';
+import '../core/auth/auth_session.dart';
+import '../core/audio/just_audio_engine_adapter.dart';
+import '../core/audio/encrypted_offline_audio_source.dart';
+import '../core/audio/audio_service_bridge.dart';
+import '../core/audio/background_audio.dart';
+import '../core/audio/playback_queue_store.dart';
+import '../core/database/migrate_to_drift.dart';
+import '../core/database/outbox_sync_service.dart';
+import '../features/player/player_controller.dart';
+import '../features/authentication/auth_screen.dart';
+import '../features/onboarding/onboarding_flow.dart';
 import 'bz_shell.dart';
+import 'bz_brand_icons.dart';
 
 /// Auth gate: auth screen until signed in, then the shell. On
 /// sign-in, queued offline ops drain to the backend. First-time
@@ -246,14 +246,41 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     return MaterialApp(
       title: 'Breezze',
       debugShowCheckedModeBanner: false,
-      themeMode: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.system,
+      themeMode: ThemeMode.dark,
       theme: bzLightTheme(),
       darkTheme: bzDarkTheme(),
       home: Builder(
         builder: (context) {
           if (auth is AuthUninitialized) {
             return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+              backgroundColor: Colors.black,
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    BzBnoteMark(size: 92, color: Colors.white),
+                    SizedBox(height: 22),
+                    Text(
+                      'Breezze',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    SizedBox(height: 32),
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           }
 

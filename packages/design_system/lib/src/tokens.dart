@@ -40,8 +40,8 @@ class BzColorsDark {
   static const textTertiary = Color(0xFF737378); // ~rgba(255,255,255,0.45)
   static const separator = Color(0x1AFFFFFF); // 10% white hairline
   static const brandOnDark = Color(0xFFFFFFFF);
-  static const accent = Color(0xFFE9E9ED);
-  static const accentOnTint = Color(0xFFDEDEE4);
+  static const accent = Color(0xFFFFFFFF);
+  static const accentOnTint = Color(0xFFFFFFFF);
   static const live = Color(0xFF30D158);
   static const success = Color(0xFF55C88A);
   static const warning = Color(0xFFEAB95C);

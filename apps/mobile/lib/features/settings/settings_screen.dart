@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/breezze_navigation.dart';
 import '../../app/download_preferences.dart';
-import '../../app/appearance_controller.dart';
 import '../../app/search_history_store.dart';
 import '../../core/audio/background_audio.dart';
 import '../../core/auth/auth_session.dart';
@@ -356,27 +355,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
           _section(theme, 'Appearance & Accessibility', [
-            ListTile(
-              leading: const BzSvgIcon(name: 'moon'),
-              title: const Text('Appearance'),
-              trailing: DropdownButton<ThemeMode>(
-                value: ref.watch(appearanceProvider).valueOrNull ?? ThemeMode.system,
-                items: const [
-                  DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
-                  DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
-                  DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
-                ],
-                onChanged: ref.watch(appearanceProvider).isLoading ? null : (mode) async {
-                  if (mode == null) return;
-                  try {
-                    await ref.read(appearanceProvider.notifier).select(mode);
-                  } catch (_) {
-                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Could not save appearance. Try again.')),
-                    );
-                  }
-                },
-              ),
+            const ListTile(
+              leading: BzSvgIcon(name: 'moon'),
+              title: Text('OLED Black'),
+              subtitle: Text('Pure-black background · silent white controls · always on'),
+              trailing: BzSvgIcon(name: 'check'),
             ),
             ListTile(
               leading: const BzSvgIcon(name: 'settings'),

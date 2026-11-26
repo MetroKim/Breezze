@@ -19,6 +19,7 @@ import '../settings/account_screen.dart';
 import '../search/search_screen.dart';
 import '../../widgets/bz_discovery_spotlight.dart';
 import '../../widgets/bz_morphing_brand_header.dart';
+import '../../widgets/bz_pinned_mood_rail.dart';
 import '../../widgets/bz_discovery_action_tile.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
@@ -278,7 +279,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       shortcuts[r.id] = TrackInfo(id: r.id, title: r.title, artist: r.artist, artworkUrl: r.artworkUrl, duration: r.duration);
     }
 
-    return SafeArea(
+    // A barely visible neutral ambient tint above an otherwise #000 OLED
+    // canvas. No colored branding wash or whole-page backdrop blur.
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0, 0.19, 0.40],
+          colors: [Color(0xFF0D0D10), Color(0xFF050506), Colors.black],
+        ),
+      ),
+      child: SafeArea(
       child: RefreshIndicator(
         onRefresh: _refresh,
         child: CustomScrollView(
@@ -321,6 +333,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
+            // The original reference pins discovery filters underneath its
+            // masthead. Breezze keeps that interaction but uses our own mood
+            // taxonomy and authenticated music-search route.
+            BzPinnedMoodRail(
+              moods: const ['Energy', 'Focus', 'Relax', 'Workout', 'Chill', 'Commute'],
+              onMoodSelected: (mood) => Navigator.of(context).push(
+                breezzePageRoute<void>(
+                  context: context,
+                  builder: (_) => SearchScreen(initialQuery: '$mood music'),
+                ),
+              ),
+            ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
                   16, 14, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
@@ -329,98 +353,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // The Flutter discovery pattern is inspired by editorial music
           // browsers, not copied from the unlicensed reference source.
           Text(_greeting, style: theme.textTheme.displayMedium),
-          const SizedBox(height: 16),
-          BzDiscoverySpotlight(
-            eyebrow: 'Breezze discovery',
-            title: 'Your next favorite starts here',
-            description: 'Explore music, artists and videos from real catalog results.',
-            actionLabel: 'Explore New',
-            onAction: () => ref.read(homeTabHintProvider.notifier).state =
-                MainTab.browse.index,
-          ),
-          const SizedBox(height: 24),
-          Text('Match your mood', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 52,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (final mood in const <String>['Energy', 'Focus', 'Relax', 'Workout', 'Chill']) ...[
-                  BzFilterPill(
-                    label: mood,
-                    active: false,
-                    onTap: () => Navigator.of(context).push(
-                      breezzePageRoute<void>(
-                        context: context,
-                        builder: (_) => SearchScreen(
-                          initialQuery: '$mood music',
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text('Discover in Breezze', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 740
-                  ? 3
-                  : constraints.maxWidth >= 330
-                      ? 2
-                      : 1;
-              final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  SizedBox(
-                    width: width,
-                    child: BzDiscoveryActionTile(
-                      label: 'New releases',
-                      description: 'Music and albums',
-                      iconName: 'disc-3',
-                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
-                          MainTab.browse.index,
-                    ),
-                  ),
-                  SizedBox(
-                    width: width,
-                    child: BzDiscoveryActionTile(
-                      label: 'Music videos',
-                      description: 'Official video search',
-                      iconName: 'video',
-                      onTap: () => Navigator.of(context).push(
-                        breezzePageRoute<void>(
-                          context: context,
-                          builder: (_) => const SearchScreen(
-                            initialQuery: 'official music video',
-                            initialVideoSearch: true,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: width,
-                    child: BzDiscoveryActionTile(
-                      label: 'Find artists',
-                      description: 'Search artist profiles',
-                      iconName: 'user-round',
-                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
-                          MainTab.search.index,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           if (_loading) ...[
             const BzSkeleton(width: 172, height: 16, radius: 5),
             const SizedBox(height: 16),
@@ -494,6 +427,74 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
+          // Render the genuine music sessions before promotional chrome,
+          // following the reference's music-first Home hierarchy.
+          const SizedBox(height: 16),
+          BzDiscoverySpotlight(
+            eyebrow: 'Breezze discovery',
+            title: 'Your next favorite starts here',
+            description: 'Explore music, artists and videos from real catalog results.',
+            actionLabel: 'Explore New',
+            onAction: () => ref.read(homeTabHintProvider.notifier).state =
+                MainTab.browse.index,
+          ),
+          const SizedBox(height: 24),
+          Text('Discover in Breezze', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 740
+                  ? 3
+                  : constraints.maxWidth >= 330
+                      ? 2
+                      : 1;
+              final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'New releases',
+                      description: 'Music and albums',
+                      iconName: 'disc-3',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.browse.index,
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Music videos',
+                      description: 'Official video search',
+                      iconName: 'video',
+                      onTap: () => Navigator.of(context).push(
+                        breezzePageRoute<void>(
+                          context: context,
+                          builder: (_) => const SearchScreen(
+                            initialQuery: 'official music video',
+                            initialVideoSearch: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Find artists',
+                      description: 'Search artist profiles',
+                      iconName: 'user-round',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.search.index,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
           if (!_loading && (_recentlyPlayed.isNotEmpty || _favorites.isNotEmpty)) ...[
             _Rail(
               title: 'Your Mix',
@@ -516,6 +517,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
+          // A compact vertical list follows the horizontal shelves. Every
+          // title, artist and thumbnail comes from this owner's real history.
+          if (!_loading && _recentlyPlayed.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Continue listening',
+                style: theme.textTheme.titleLarge),
+            const SizedBox(height: 12),
+            for (var i = 0; i < _recentlyPlayed.length && i < 8; i++)
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(BzRadius.artwork),
+                  child: _recentlyPlayed[i].artworkUrl == null
+                      ? SizedBox(
+                          width: 52, height: 52,
+                          child: Center(
+                            child: BzBnoteMark(
+                              size: 26, color: theme.bzText2,
+                            ),
+                          ),
+                        )
+                      : Image.network(
+                          _recentlyPlayed[i].artworkUrl!,
+                          width: 52, height: 52, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              BzBnoteMark(size: 52, color: theme.bzText2),
+                        ),
+                ),
+                title: Text(
+                  _recentlyPlayed[i].title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  _recentlyPlayed[i].artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: BzSvgIcon(
+                  name: 'play', size: 18, color: theme.bzText2,
+                ),
+                onTap: () {
+                  final queue = [
+                    for (final item in _recentlyPlayed)
+                      TrackInfo(
+                        id: item.id,
+                        title: item.title,
+                        artist: item.artist,
+                        artworkUrl: item.artworkUrl,
+                        duration: item.duration,
+                      ),
+                  ];
+                  _play(queue[i], queue, i);
+                },
+              ),
+            const SizedBox(height: 22),
+          ],
           if (!_loading && !_localDataUnavailable && _recentlyPlayed.isEmpty && _favorites.isEmpty)
             _FirstRunCard(
               onSearch: () => ref.read(homeTabHintProvider.notifier).state = MainTab.search.index,
@@ -527,6 +585,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

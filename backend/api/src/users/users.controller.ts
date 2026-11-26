@@ -10,8 +10,10 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
+  IsDefined,
   IsOptional,
   IsString,
+  ValidateIf,
   Matches,
   MaxLength,
   MinLength,
@@ -53,6 +55,14 @@ export class UpdateMeDto {
   favoriteArtists?: string[] | null;
 }
 
+export class AvatarPhotoDto {
+  @ValidateIf((dto: AvatarPhotoDto) => dto.avatarPngBase64 !== null)
+  @IsDefined()
+  @IsString()
+  @MaxLength(350000)
+  avatarPngBase64!: string | null;
+}
+
 export class DeleteAccountDto {
   @IsString()
   @MinLength(1)
@@ -76,6 +86,14 @@ export class UsersController {
     @Body() body: UpdateMeDto,
   ) {
     return this.users.update(userId, body);
+  }
+
+  @Patch('me/avatar')
+  setAvatar(
+    @CurrentUser() userId: string,
+    @Body() dto: AvatarPhotoDto,
+  ) {
+    return this.users.setAvatar(userId, dto.avatarPngBase64);
   }
 
   @Delete('me')

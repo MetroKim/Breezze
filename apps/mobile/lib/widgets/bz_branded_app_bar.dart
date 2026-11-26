@@ -47,7 +47,7 @@ class BzBrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: ExcludeSemantics(
                 child: condensed
                     ? Text(
-                        'Breezze · $title',
+                        title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
@@ -58,16 +58,6 @@ class BzBrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Breezze',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.bzAccent,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
                 Text(
                   title,
                   maxLines: 1,

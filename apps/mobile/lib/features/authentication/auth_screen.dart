@@ -138,7 +138,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: BzRibbonLogo(width: 154, color: theme.bzText1),
+                    child: BzBrandLockup(markHeight: 36, color: theme.bzText1),
                   ),
                   const SizedBox(height: 28),
                   BzGlassContainer(
@@ -275,7 +275,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(48),
-          child: BzRibbonLogo(width: 340, color: theme.bzText1),
+          child: BzBrandLockup(markHeight: 62, color: theme.bzText1),
         ),
       ),
     );
@@ -294,7 +294,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         if (MediaQuery.sizeOf(context).width < 980) ...[
           Align(
             alignment: Alignment.centerLeft,
-            child: BzRibbonLogo(width: 168, color: theme.bzText1),
+            child: BzBrandLockup(markHeight: 40, color: theme.bzText1),
           ),
           const SizedBox(height: 28),
         ],
@@ -686,7 +686,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  BzRibbonLogo(width: 104, color: theme.bzText1),
+                  BzBrandLockup(markHeight: 28, color: theme.bzText1),
                   const SizedBox(height: 20),
                   Text(
                     auth.setupRequired ? 'Secure your administrator account' : 'Two-factor verification',
@@ -806,7 +806,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  BzRibbonLogo(width: 104, color: theme.bzText1),
+                  BzBrandLockup(markHeight: 28, color: theme.bzText1),
                   const SizedBox(height: 20),
                   Text('Save your recovery codes',
                       style: theme.textTheme.headlineMedium,

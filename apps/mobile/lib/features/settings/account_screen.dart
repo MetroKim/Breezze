@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
+import '../../widgets/bz_picked_thumbnail.dart';
+import '../../app/breezze_navigation.dart';
+import '../notifications/notifications_screen.dart';
+import '../onboarding/onboarding_flow.dart';
+import '../onboarding/onboarding_controller.dart';
+import 'settings_screen.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -24,6 +33,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   bool _saving = false;
   String? _error;
   String? _email;
+  String? _avatarPngBase64;
+  bool _photoBusy = false;
 
   @override
   void initState() {
@@ -42,14 +53,17 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Future<void> _load() async {
+    final active = ref.read(authSessionProvider);
+    final owner = active is AuthSignedIn ? active.userId : null;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final api = ref.read(authSessionProvider.notifier).api;
+      if (owner == null) throw StateError('SIGN_IN_REQUIRED');
       final results = await Future.wait([api.profile(), api.sessions()]);
-      if (!mounted) return;
+      if (!_currentOwner(owner)) return;
       final profile = results[0] as Map<String, dynamic>;
       final preference = profile['preference'] is Map
           ? Map<String, dynamic>.from(profile['preference'] as Map)
@@ -64,10 +78,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             (preference['favoriteArtists'] as List<dynamic>? ?? const [])
                 .whereType<String>().join(', ');
         _email = profile['email'] as String?;
+        _avatarPngBase64 = profile['avatarPngBase64'] is String
+            ? profile['avatarPngBase64'] as String
+            : null;
         _sessions = results[1] as List<Map<String, dynamic>>;
         _loading = false;
       });
     } catch (_) {
+      if (owner != null && !_currentOwner(owner)) return;
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -185,9 +203,127 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     }
   }
 
+  /// Switch account is an explicit sign-out followed by the existing
+  /// authenticated sign-in gate. Never reuse another account's session,
+  /// queue, downloads or profile cache.
+  Future<void> _switchAccount() async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Switch Breezze account?'),
+        content: const Text(
+          'Playback will stop. Your saved music stays with this account. '
+          'Sign in with the other account to continue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Switch account'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    try {
+      await ref.read(authSessionProvider.notifier).signOut();
+      // BreezzeAppRoot listens to auth and replaces the entire signed-in
+      // shell with the sign-in gate; no manual route duplication.
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not switch accounts. Try again.')),
+      );
+    }
+  }
+
+  bool _currentOwner(String userId) {
+    if (!mounted) return false;
+    final auth = ref.read(authSessionProvider);
+    return auth is AuthSignedIn && auth.userId == userId;
+  }
+
+  Uint8List? get _avatarBytes {
+    final raw = _avatarPngBase64;
+    if (raw == null || raw.length > 350000) return null;
+    try {
+      final bytes = base64Decode(raw);
+      return bytes.isNotEmpty && bytes.length <= 256000 ? bytes : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _chooseProfilePhoto() async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || _photoBusy) return;
+    final owner = auth.userId;
+    setState(() => _photoBusy = true);
+    try {
+      final png = await pickBreezzePngThumbnail(
+        label: 'Profile picture', side: 160,
+      );
+      if (png == null || !_currentOwner(owner)) return;
+      await ref.read(authSessionProvider.notifier).api.setAvatarPhoto(png);
+      if (!_currentOwner(owner)) return;
+      setState(() => _avatarPngBase64 = png);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo saved to your account.')),
+      );
+    } catch (_) {
+      if (_currentOwner(owner)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not save this photo. Choose a PNG, JPEG or WebP smaller than 10 MB.'),
+        ));
+      }
+    } finally {
+      if (_currentOwner(owner)) setState(() => _photoBusy = false);
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || _photoBusy) return;
+    final owner = auth.userId;
+    setState(() => _photoBusy = true);
+    try {
+      await ref.read(authSessionProvider.notifier).api.setAvatarPhoto(null);
+      if (_currentOwner(owner)) setState(() => _avatarPngBase64 = null);
+    } catch (_) {
+      if (_currentOwner(owner)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not remove your profile photo.')),
+        );
+      }
+    } finally {
+      if (_currentOwner(owner)) setState(() => _photoBusy = false);
+    }
+  }
+
+  /// Existing users can repeat the same persisted mood/genre onboarding
+  /// instead of creating a second preference store or resetting their account.
+  void _revisitMusicTastes() {
+    ref.invalidate(onboardingProvider);
+    Navigator.of(context).push(
+      breezzePageRoute<void>(
+        context: context,
+        builder: (routeContext) => OnboardingFlow(
+          onComplete: () {
+            Navigator.of(routeContext).pop();
+            _load();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final avatarBytes = _avatarBytes;
     return Scaffold(
       appBar: BzBrandedAppBar(
         title: 'Account',
@@ -231,17 +367,38 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           border: Border.all(color: theme.bzSeparator),
                         ),
                         alignment: Alignment.center,
-                        child: BzBnoteMark(size: 42, color: theme.bzText2),
+                        child: ClipOval(
+                          child: avatarBytes == null
+                              ? BzBnoteMark(size: 42, color: theme.bzText2)
+                              : Image.memory(
+                                  avatarBytes,
+                                  width: 96,
+                                  height: 96,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  errorBuilder: (_, __, ___) =>
+                                      BzBnoteMark(size: 42, color: theme.bzText2),
+                                ),
+                        ),
                       ),
                       const SizedBox(height: 10),
-                      Text(
-                        'Profile photo',
-                        style: theme.textTheme.labelLarge,
-                      ),
-                      Text(
-                        'Photo editing will be available when profile media support is connected.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                      Text('Profile photo', style: theme.textTheme.labelLarge),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _photoBusy ? null : _chooseProfilePhoto,
+                            icon: const BzSvgIcon(name: 'user-round', size: 18),
+                            label: Text(_photoBusy ? 'Saving…' : 'Choose photo'),
+                          ),
+                          if (_avatarPngBase64 != null)
+                            TextButton(
+                              onPressed: _photoBusy ? null : _removeProfilePhoto,
+                              child: const Text('Remove photo'),
+                            ),
+                        ],
                       ),
                     ],
                   ),
@@ -249,6 +406,42 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 const SizedBox(height: 22),
                 Text(_email ?? '', style: theme.textTheme.bodyMedium),
                 const SizedBox(height: 16),
+                Text('ACCOUNT & ACTIVITY', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 6),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'user-round'),
+                  title: const Text('Switch account'),
+                  subtitle: const Text('Sign in with a different Breezze account'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: _switchAccount,
+                ),
+                Divider(color: theme.bzSeparator),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'settings'),
+                  title: const Text('Settings'),
+                  subtitle: const Text('Playback, downloads and accessibility'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: () => Navigator.of(context).push(
+                    breezzePageRoute<void>(
+                      context: context,
+                      builder: (_) => const SettingsScreen(),
+                    ),
+                  ),
+                ),
+                Divider(color: theme.bzSeparator),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'bell'),
+                  title: const Text('Activity & notifications'),
+                  subtitle: const Text('Updates and unread activity'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: () => Navigator.of(context).push(
+                    breezzePageRoute<void>(
+                      context: context,
+                      builder: (_) => const NotificationsScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
                 TextField(
                   controller: _name,
                   maxLength: 80,
@@ -271,6 +464,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 FilledButton(
                   onPressed: _saving ? null : _saveProfile,
                   child: Text(_saving ? 'Saving…' : 'Save profile'),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'headphones'),
+                  title: const Text('Update music tastes'),
+                  subtitle: const Text('Choose your region, genres and favorite artists again'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: _saving ? null : _revisitMusicTastes,
                 ),
                 const SizedBox(height: 28),
                 Text('ACTIVE SESSIONS', style: theme.textTheme.labelLarge),

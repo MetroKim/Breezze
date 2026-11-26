@@ -295,10 +295,47 @@ void main() {
 
     expect(find.byType(YouTubeMusicClientScreen), findsOneWidget);
     expect(find.byType(BzBrandedAppBar), findsOneWidget);
-    expect(find.text('Breezze'), findsOneWidget);
+    // The app toolbar is unique, while the provider detail may also show
+    // Breezze's brand inside a section. Count the actual toolbar instead of
+    // enforcing an arbitrary global text occurrence after the brand refresh.
+    expect(
+      find.descendant(
+        of: find.byType(BzBrandedAppBar),
+        matching: find.text('Breezze'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Discover'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
+
+  testWidgets('New shows reference-priority sections once with working moods route',
+      (tester) async {
+    final source = _BrowseSource();
+    await _mountBrowse(tester, source, api: _BrowseChartApi());
+    source.requests.first.complete(ProviderOk(<ProviderTrack>[]));
+    await tester.pump();
+
+    // These are promoted from the general catalog grid rather than
+    // duplicated as a second, nonfunctional set of category cards.
+    expect(find.text('Explore'), findsOneWidget);
+    expect(find.text('New Releases'), findsOneWidget);
+    expect(find.text('Charts'), findsOneWidget);
+    expect(find.text('Moods & Activities'), findsOneWidget);
+    expect(find.text('More to explore'), findsOneWidget);
+
+    await tester.tap(find.text('Moods & Activities'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.byType(BzBrandedAppBar), findsOneWidget);
+    expect(find.text('Moods & Activities'), findsWidgets);
+    // The actual category search uses the existing provider adapter.
+    expect(source.calls.last, 'Focus music');
+    source.requests.last.complete(ProviderOk(<ProviderTrack>[]));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 
 }

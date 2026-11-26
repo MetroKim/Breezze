@@ -15,7 +15,7 @@ class AppearanceController extends AsyncNotifier<ThemeMode> {
     final saved = await _storage.read(key: _key);
     return ThemeMode.values.firstWhere(
       (mode) => mode.name == saved,
-      orElse: () => ThemeMode.system,
+      orElse: () => ThemeMode.dark,
     );
   }
 

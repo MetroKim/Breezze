@@ -33,14 +33,29 @@ class BzAmbientBackdrop extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         ColoredBox(color: colors.background),
-        if (hasArtwork)
-          Image.network(
-            artworkUrl!,
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.low,
-            alignment: Alignment.topCenter,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          ),
+        // Crossfade between actual current-track covers. Keep one blur
+        // surface and disable motion entirely for accessibility requests.
+        AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 420),
+          switchInCurve: Curves.easeInOutCubic,
+          switchOutCurve: Curves.easeInOutCubic,
+          child: hasArtwork
+              ? Image.network(
+                  artworkUrl!,
+                  key: ValueKey(artworkUrl),
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.low,
+                  gaplessPlayback: true,
+                  alignment: Alignment.topCenter,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (_, __, ___) =>
+                      const SizedBox.expand(),
+                )
+              : const SizedBox.expand(key: ValueKey('oled-no-artwork')),
+        ),
         // One backdrop blur rather than overlapping filtered circles.
         // The artwork supplies the track/artist-specific colour palette.
         if (blurArtwork)

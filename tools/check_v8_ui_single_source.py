@@ -18,9 +18,12 @@ GLASS_CORE = "packages/design_system/lib/src/glass/bz_glass.dart"
 GLASS_ADAPTER = "packages/design_system/lib/src/bz_glass_container.dart"
 BRAND = "apps/mobile/lib/widgets/bz_brand_icons.dart"
 MORPH = "apps/mobile/lib/widgets/bz_morphing_brand_header.dart"
+MOOD = "apps/mobile/lib/widgets/bz_pinned_mood_rail.dart"
 DETAIL_BAR = "apps/mobile/lib/widgets/bz_branded_app_bar.dart"
 BROWSE = "apps/mobile/lib/features/browse/browse_screen.dart"
 PROVIDER = "apps/mobile/lib/features/browse/ytmusic_client_screen.dart"
+DEVICE_VIDEO = "apps/mobile/lib/features/video/device_video.dart"
+OFFICIAL_VIDEO = "apps/mobile/lib/features/video/official_music_video_screen.dart"
 PRIMARY_PAGES = (
     "apps/mobile/lib/features/home/home_screen.dart",
     "apps/mobile/lib/features/browse/browse_screen.dart",
@@ -41,7 +44,8 @@ def violations(root: Path = REPO) -> list[str]:
     issues: list[str] = []
     content: dict[str, str] = {}
     for name in (SHELL, TABS, THEME, GLASS_CORE, GLASS_ADAPTER, BRAND,
-                 MORPH, DETAIL_BAR, BROWSE, PROVIDER, *PRIMARY_PAGES,
+                 MORPH, MOOD, DETAIL_BAR, BROWSE, PROVIDER, DEVICE_VIDEO, OFFICIAL_VIDEO,
+                 *PRIMARY_PAGES,
                  *SECONDARY_PAGES):
         p = root / name
         if not p.is_file():
@@ -61,12 +65,23 @@ def violations(root: Path = REPO) -> list[str]:
     has(GLASS_CORE, r"BackdropFilter\(", "CANONICAL_GLASS_MISSING")
     has(GLASS_ADAPTER, r"return BzGlass\(", "GLASS_FACADE_NOT_DELEGATED")
     has(BRAND, r"class BzBnoteMark", "ORIGINAL_BRAND_MISSING")
+    has(BRAND, r"class BzBrandLockup", "ORIGINAL_TRANSPARENT_BRAND_MISSING")
     has(MORPH, r"class BzMorphingBrandHeader", "MORPH_HEADER_MISSING")
-    has(MORPH, r"BzBnoteMark", "MORPH_OWN_SYMBOL_MISSING")
+    has(MORPH, r"BzBrandLockup", "MORPH_TRANSPARENT_BRAND_MISSING")
+    has(MOOD, r"class BzPinnedMoodRail", "PINNED_MOOD_SOURCE_MISSING")
+    has(PRIMARY_PAGES[0], r"BzPinnedMoodRail\(", "HOME_PINNED_MOODS_MISSING")
+    has(BROWSE, r"featuredDestinations", "FEATURED_NEW_SECTIONS_MISSING")
+    has(BROWSE, r"otherDestinations", "NEW_DUPLICATE_DESTINATIONS")
     has(DETAIL_BAR, r"class BzBrandedAppBar", "UNIFIED_DETAIL_BAR_MISSING")
     has(DETAIL_BAR, r"BzCompactBrandMark", "UNIFIED_BRAND_MISSING")
     has(BROWSE, r"YouTubeMusicClientScreen\(", "YT_CATALOG_NOT_IN_NEW")
     has(PROVIDER, r"BzBrandedAppBar", "PROVIDER_OLD_BRANDING")
+    has(DEVICE_VIDEO, r"BzBrandedAppBar", "LOCAL_VIDEO_OLD_BRANDING")
+    has(DEVICE_VIDEO, r"setLooping\(next\)", "LOCAL_VIDEO_REPEAT_MISSING")
+    has(DEVICE_VIDEO, r"_fillVideo \? BoxFit.cover : BoxFit.contain", "LOCAL_VIDEO_FULLBLEED_MODE_MISSING")
+    has(DEVICE_VIDEO, r"if \(!_repeat && !_closing", "LOCAL_VIDEO_REPEAT_DEFAULT_MISSING")
+    has(OFFICIAL_VIDEO, r"BzSvgIcon\(name: 'skip-previous'", "OFFICIAL_VIDEO_PREVIOUS_SVG_MISSING")
+    has(OFFICIAL_VIDEO, r"BzSvgIcon\(name: 'skip-next'", "OFFICIAL_VIDEO_NEXT_SVG_MISSING")
 
     for page in PRIMARY_PAGES:
         source = content.get(page, "")
@@ -74,6 +89,19 @@ def violations(root: Path = REPO) -> list[str]:
             issues.append("OLD_PAGE_HEADER: " + page)
         if source and "BzCompactBrandMark(" in source:
             issues.append("DUPLICATE_PAGE_BRAND: " + page)
+
+    home = content.get(PRIMARY_PAGES[0], "")
+    if home and home.count("BzPinnedMoodRail(") != 1:
+        issues.append("DUPLICATE_HOME_MOOD_RAIL: " + PRIMARY_PAGES[0])
+    if ("BzDiscoverySpotlight(" in home and
+            "title: 'Recently Played'" in home and
+            home.index("BzDiscoverySpotlight(") <
+            home.index("title: 'Recently Played'")):
+        issues.append("HOME_PROMO_ABOVE_MUSIC: " + PRIMARY_PAGES[0])
+
+    morph = content.get(MORPH, "")
+    if "color: compact ? Colors.black" in morph:
+        issues.append("OBSOLETE_BLACK_BADGE_BRAND: " + MORPH)
 
     old_glass = content.get(GLASS_ADAPTER, "")
     if re.search(r"\bBackdropFilter\s*\(|\bImageFilter\.blur\s*\(", old_glass):

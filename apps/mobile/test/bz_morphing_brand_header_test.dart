@@ -29,7 +29,7 @@ Widget _host({MediaQueryData? media, VoidCallback? onSearch}) {
 }
 
 void main() {
-  testWidgets('wordmark morphs into circular Breezze B-note on scroll',
+  testWidgets('official Breezze mark and name compress without app-icon background',
       (tester) async {
     await tester.pumpWidget(_host());
     expect(find.byKey(const Key('breezze-expanded-wordmark')), findsOneWidget);
@@ -82,7 +82,7 @@ void main() {
     expect(find.byKey(const Key('breezze-compact-icon')), findsOneWidget);
   });
 
-  testWidgets('library/search compact brand contains Breezze mark',
+  testWidgets('library/search compact brand uses transparent mark-and-name lockup',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: bzLightTheme(),
@@ -90,8 +90,9 @@ void main() {
         body: Center(child: BzCompactBrandMark(size: 38)),
       ),
     ));
-    expect(find.byKey(const Key('breezze-circular-mark')), findsOneWidget);
+    expect(find.byKey(const Key('breezze-transparent-brand')), findsOneWidget);
     expect(find.byType(BzCompactBrandMark), findsOneWidget);
+    expect(find.text('Breezze'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('desktop sidebar prevents duplicated Breezze wordmarks',

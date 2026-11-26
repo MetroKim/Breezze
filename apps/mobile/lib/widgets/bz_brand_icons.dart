@@ -117,6 +117,51 @@ class BzBnoteMark extends StatelessWidget {
   }
 }
 
+/// Official backgroundless Breezze identity: the original mark extracted
+/// from the app-icon SVG plus the Breezze name. This never draws an app-icon
+/// rectangle, black circular badge, or third-party music service trademark.
+class BzBrandLockup extends StatelessWidget {
+  const BzBrandLockup({
+    super.key,
+    this.markHeight = 32,
+    this.compact = false,
+    this.color,
+  });
+
+  final double markHeight;
+  final bool compact;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = color ?? Theme.of(context).colorScheme.onSurface;
+    return Semantics(
+      image: true,
+      label: 'Breezze',
+      child: ExcludeSemantics(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            BzBnoteMark(size: markHeight, color: foreground),
+            SizedBox(width: compact ? 5 : 8),
+            Text(
+              'Breezze',
+              maxLines: 1,
+              overflow: TextOverflow.fade,
+              style: TextStyle(
+                color: foreground,
+                fontSize: compact ? 18 : 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.8,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Ribbon wordmark. Kept as a brand illustration, not an interface icon.
 class BzRibbonLogo extends StatelessWidget {
   final double width;

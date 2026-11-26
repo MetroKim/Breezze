@@ -12,17 +12,24 @@ class BzDiscoveryActionTile extends StatelessWidget {
     required this.label,
     required this.description,
     required this.iconName,
+    this.artworkUrl,
     required this.onTap,
   });
 
   final String label;
   final String description;
   final String iconName;
+  /// Real provider image only; an absent image retains the restrained
+  /// elevated OLED tile instead of an invented or stock artist portrait.
+  final String? artworkUrl;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final uri = artworkUrl == null ? null : Uri.tryParse(artworkUrl!);
+    final showArtwork = uri != null &&
+        uri.scheme == 'https' && uri.host.isNotEmpty;
     return Semantics(
       button: true,
       label: label,
@@ -39,8 +46,41 @@ class BzDiscoveryActionTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(BzRadius.card),
               border: Border.all(color: theme.bzSeparator, width: 0.5),
             ),
-            padding: const EdgeInsets.all(13),
-            child: Row(
+            child: Stack(
+              fit: StackFit.passthrough,
+              children: [
+                if (showArtwork)
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(BzRadius.card),
+                      child: Image.network(
+                        artworkUrl!,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, __, ___) =>
+                            ColoredBox(color: theme.bzSurface1),
+                      ),
+                    ),
+                  ),
+                if (showArtwork)
+                  const Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Color(0xE6000000),
+                            Color(0x7D000000),
+                            Color(0x65000000),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(13),
+                  child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 BzSvgIcon(name: iconName, color: theme.bzAccent, size: 23),
@@ -72,6 +112,9 @@ class BzDiscoveryActionTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 BzSvgIcon(name: 'chevron-right', color: theme.bzText2, size: 16),
+                  ],
+                ),
+              ),
               ],
             ),
           ),
