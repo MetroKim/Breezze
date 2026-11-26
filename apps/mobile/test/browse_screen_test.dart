@@ -107,10 +107,26 @@ class _BrowseChartApi extends BreezzeApi {
       };
 }
 
+
+class _PendingLicensedVideoApi extends _BrowseChartApi {
+  final requests = <Completer<Map<String, dynamic>>>[];
+
+  @override
+  Future<Map<String, dynamic>> licensedVideos() {
+    final request = Completer<Map<String, dynamic>>();
+    requests.add(request);
+    return request.future;
+  }
+}
+
 class _BrowseSession extends AuthSessionController {
   _BrowseSession(this.catalogApi);
 
   final BreezzeApi catalogApi;
+
+  void switchTo(String owner) {
+    state = AuthSignedIn(userId: owner, email: '$owner@example.test');
+  }
 
   @override
   AuthState build() => const AuthSignedOut();
@@ -335,6 +351,52 @@ void main() {
     expect(source.calls.last, 'Focus music');
     source.requests.last.complete(ProviderOk(<ProviderTrack>[]));
     await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('New never displays a prior listener licensed video response',
+      (tester) async {
+    final source = _BrowseSource();
+    final api = _PendingLicensedVideoApi();
+    await _mountBrowse(tester, source, api: api);
+    source.requests.first.complete(ProviderOk(<ProviderTrack>[]));
+    await tester.pump();
+
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(BrowseScreen)));
+    final session =
+        container.read(authSessionProvider.notifier) as _BrowseSession;
+    session.switchTo('listener-a');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Breezze Videos'));
+    await tester.tap(find.text('Breezze Videos'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.requests, hasLength(1));
+
+    session.switchTo('listener-b');
+    await tester.pump();
+    await tester.pump();
+    expect(api.requests, hasLength(2));
+
+    api.requests.first.complete({
+      'source': 'Breezze',
+      'items': [
+        {'title': 'Private video for listener A', 'artist': 'A'},
+      ],
+    });
+    await tester.pump();
+    expect(find.text('Private video for listener A'), findsNothing);
+
+    api.requests.last.complete({
+      'source': 'Breezze',
+      'items': [
+        {'title': 'Video for listener B', 'artist': 'B'},
+      ],
+    });
+    await tester.pump();
+    expect(find.text('Video for listener B'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
