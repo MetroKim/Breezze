@@ -50,4 +50,24 @@ void main() {
     expect(find.byType(GridView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('user cover overrides the four real-song artwork tiles',
+      (tester) async {
+    const tinyPng =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
+        'AAAAC0lEQVR42mP8/x8AAwMCAO+/+5AAAAAASUVORK5CYII=';
+    await tester.pumpWidget(MaterialApp(
+      theme: bzDarkTheme(),
+      home: const Scaffold(
+        body: BzPlaylistArtwork(
+          artworkUrls: [],
+          customArtworkBase64: tinyPng,
+          size: 128,
+        ),
+      ),
+    ));
+    expect(find.byType(GridView), findsNothing);
+    expect(find.byWidgetPredicate((w) => w is Image &&
+        w.image is MemoryImage), findsOneWidget);
+  });
+
 }
