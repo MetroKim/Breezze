@@ -642,10 +642,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ListTile(
                 key: Key('breezze-overview-playlist-${playlist.id}'),
                 contentPadding: EdgeInsets.zero,
-                leading: BzSvgIcon(
-                  name: 'list-music',
-                  size: 26,
-                  color: theme.bzAccent,
+                leading: BzPlaylistArtwork(
+                  size: 48,
+                  customArtworkBase64: playlist.coverPngBase64,
+                  artworkUrls: [
+                    for (final track in playlist.tracks) track.artworkUrl,
+                  ],
                 ),
                 title: Text(
                   playlist.name,
@@ -730,6 +732,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           leading: BzPlaylistArtwork(
             size: 54,
+            customArtworkBase64: playlist.coverPngBase64,
             artworkUrls: [
               for (final track in playlist.tracks) track.artworkUrl,
             ],
