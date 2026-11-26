@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderRegistry } from './provider-registry.service';
 import { YtMusicAdapter } from './ytmusic.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
+import { ArtistCatalogService } from './artist-catalog.service';
 import { OfficialYouTubeDataService } from './official-youtube-data.service';
 
 // Read-only provider discovery and metadata endpoints.
@@ -13,6 +14,7 @@ export class ProvidersController {
     private readonly youtubeMusic: YtMusicAdapter,
     private readonly officialYouTube: OfficialYouTubeDataService,
     private readonly spotify: SpotifyAdapter,
+    private readonly artistCatalog: ArtistCatalogService,
   ) {}
 
   @Get()
@@ -34,8 +36,8 @@ export class ProvidersController {
     return this.registry.searchMusic(q ?? '');
   }
 
-  // Artist discovery/profile is Spotify-only by product decision. The app
-  // never passes Deezer/YouTube artist metadata into this screen.
+  // Artist identity and profile remain Spotify-led. Optional, exact-name
+  // Deezer supplements fill missing sections only when approved.
   @Get('spotify/artists/search')
   @UseGuards(JwtAuthGuard)
   searchSpotifyArtists(@Query('q') q: string) {
@@ -45,7 +47,7 @@ export class ProvidersController {
   @Get('spotify/artists/:artistId')
   @UseGuards(JwtAuthGuard)
   spotifyArtistPage(@Param('artistId') artistId: string) {
-    return this.spotify.getArtistPage(artistId);
+    return this.artistCatalog.getArtistPage(artistId);
   }
 
   @Get('spotify/albums/:albumId')
