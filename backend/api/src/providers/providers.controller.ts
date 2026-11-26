@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderRegistry } from './provider-registry.service';
 import { YtMusicAdapter } from './ytmusic.adapter';
+import { SpotifyAdapter } from './spotify.adapter';
 import { OfficialYouTubeDataService } from './official-youtube-data.service';
 
 // Read-only provider discovery and metadata endpoints.
@@ -11,6 +12,7 @@ export class ProvidersController {
     private readonly registry: ProviderRegistry,
     private readonly youtubeMusic: YtMusicAdapter,
     private readonly officialYouTube: OfficialYouTubeDataService,
+    private readonly spotify: SpotifyAdapter,
   ) {}
 
   @Get()
@@ -24,12 +26,26 @@ export class ProvidersController {
     return this.registry.searchAll(q ?? '');
   }
 
-  // Spotify and Deezer music discovery in parallel. Each provider gets its
-  // own attributed shelf in the client; YouTube is a separate video search.
+  // Spotify-first and Deezer-fallback audio discovery, with a single
+  // matched recording list. YouTube video discovery is separate.
   @Get('music/search')
   @UseGuards(JwtAuthGuard)
   searchMusic(@Query('q') q: string) {
     return this.registry.searchMusic(q ?? '');
+  }
+
+  // Artist discovery/profile is Spotify-only by product decision. The app
+  // never passes Deezer/YouTube artist metadata into this screen.
+  @Get('spotify/artists/search')
+  @UseGuards(JwtAuthGuard)
+  searchSpotifyArtists(@Query('q') q: string) {
+    return this.spotify.searchArtists(q ?? '');
+  }
+
+  @Get('spotify/artists/:artistId')
+  @UseGuards(JwtAuthGuard)
+  spotifyArtistPage(@Param('artistId') artistId: string) {
+    return this.spotify.getArtistPage(artistId);
   }
 
   // Google official video discovery. No YouTube audio extraction endpoint.
