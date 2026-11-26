@@ -1,7 +1,4 @@
-import os
 import re
-from datetime import datetime, timezone
-from urllib.parse import parse_qs, urlsplit
 from threading import BoundedSemaphore
 from typing import Any
 
@@ -193,77 +190,6 @@ def get_track(video_id: str) -> dict[str, Any]:
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail="YTMUSIC_UPSTREAM_UNAVAILABLE") from exc
-    finally:
-        PROVIDER_SLOTS.release()
-
-
-# Isolated feasibility experiment: accepts only direct HTTPS audio URLs that
-# the unofficial API already returns. Never deciphers signatures, bypasses DRM,
-# caches audio, or offers a download. Disabled on production deployments.
-def select_audio_candidate(song: dict[str, Any]) -> dict[str, Any] | None:
-    if (song.get("playabilityStatus") or {}).get("status") != "OK":
-        return None
-    streaming = song.get("streamingData") or {}
-    formats = streaming.get("adaptiveFormats") or []
-    now = int(datetime.now(timezone.utc).timestamp())
-    candidates = []
-    for item in formats if isinstance(formats, list) else []:
-        if not isinstance(item, dict):
-            continue
-        mime = item.get("mimeType")
-        url = item.get("url")
-        if not isinstance(mime, str) or not mime.startswith("audio/"):
-            continue
-        if not isinstance(url, str):
-            continue
-        try:
-            parsed = urlsplit(url)
-            host = (parsed.hostname or "").lower()
-            expiry = int(parse_qs(parsed.query).get("expire", ["0"])[0])
-        except (ValueError, TypeError):
-            continue
-        if parsed.scheme != "https" or not (
-            host == "googlevideo.com" or host.endswith(".googlevideo.com")
-        ) or parsed.username or parsed.password or expiry <= now + 60:
-            continue
-        bitrate = item.get("bitrate")
-        if not isinstance(bitrate, int) or bitrate <= 0:
-            continue
-        # Keep the URL transient. Other upstream keys may contain cookies,
-        # signature ciphers, identifiers or player internals: never forward.
-        candidates.append({
-            "streamUrl": url,
-            "mimeType": mime.split(";", 1)[0],
-            "bitrateKbps": bitrate // 1000,
-            "expiresAt": datetime.fromtimestamp(expiry, tz=timezone.utc).isoformat(),
-        })
-    if not candidates:
-        return None
-    return max(candidates, key=lambda candidate: candidate["bitrateKbps"])
-
-
-@app.get("/tracks/{video_id}/audio-candidate")
-def get_audio_candidate(video_id: str) -> dict[str, Any]:
-    # A native-audio POC can only run in an explicitly opted-in, non-production
-    # environment. A public metadata catalog must never expose signed URLs.
-    if (os.getenv("BREEZZE_YTMUSIC_AUDIO_EXPERIMENT") != "true" or
-            os.getenv("RAILWAY_ENVIRONMENT_NAME", "").lower() == "production"):
-        raise HTTPException(status_code=404, detail="EXPERIMENT_DISABLED")
-    if not WATCH_VIDEO_ID.fullmatch(video_id):
-        raise HTTPException(status_code=400, detail="INVALID_YOUTUBE_MUSIC_ID")
-    if not PROVIDER_SLOTS.acquire(blocking=False):
-        raise HTTPException(status_code=503, detail="YTMUSIC_CAPACITY_EXCEEDED",
-                            headers={"Retry-After": "2"})
-    try:
-        candidate = select_audio_candidate(YTMusic().get_song(video_id))
-        if candidate is None:
-            raise HTTPException(status_code=404, detail="DIRECT_AUDIO_NOT_AVAILABLE")
-        return {"source": "youtube_music", "providerTrackId": video_id,
-                "experimental": True, "candidate": candidate}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="YTMUSIC_AUDIO_PROBE_UNAVAILABLE") from exc
     finally:
         PROVIDER_SLOTS.release()
 
