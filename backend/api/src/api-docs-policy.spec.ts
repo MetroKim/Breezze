@@ -5,14 +5,15 @@ describe('production API documentation isolation', () => {
     expect(shouldExposeSwaggerDocs('production')).toBe(false);
   });
 
-  it('allows local and test-only documentation for contract development', () => {
+  it('allows documentation only for an explicit development or test runtime', () => {
     expect(shouldExposeSwaggerDocs('development')).toBe(true);
     expect(shouldExposeSwaggerDocs('test')).toBe(true);
-    expect(shouldExposeSwaggerDocs(undefined)).toBe(true);
   });
 
-  it('fails closed when production is explicitly selected', () => {
-    expect(shouldExposeSwaggerDocs(process.env.NODE_ENV === 'production'
-      ? 'production' : 'production')).toBe(false);
+  it('fails closed on missing or unknown runtime configuration', () => {
+    expect(shouldExposeSwaggerDocs(undefined)).toBe(false);
+    expect(shouldExposeSwaggerDocs('')).toBe(false);
+    expect(shouldExposeSwaggerDocs('prod')).toBe(false);
+    expect(shouldExposeSwaggerDocs('Production')).toBe(false);
   });
 });
