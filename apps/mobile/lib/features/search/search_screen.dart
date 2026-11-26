@@ -23,6 +23,7 @@ import '../../core/database/outbox_sync_service.dart';
 import '../player/player_controller.dart';
 import '../player/unified_media_handoff.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_morphing_brand_header.dart';
 
 /// Search screen — real results from the live source, with local recent
 /// searches and live download progress.
@@ -886,9 +887,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Semantics(
-                  header: true,
-                  child: Text('Search', style: theme.textTheme.displayMedium),
+                Row(
+                  children: [
+                    const BzCompactBrandMark(size: 38),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child: Text('Search', style: theme.textTheme.displayMedium),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 // PRT-01 search pill: --radius-pill (capsule) with the
