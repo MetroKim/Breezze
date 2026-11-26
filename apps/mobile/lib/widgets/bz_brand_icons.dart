@@ -36,8 +36,6 @@ class BzSvgIcon extends StatelessWidget {
     'more-vertical': '<circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/>',
     'shuffle': '<path d="m16 3 5 5-5 5M3 7h2.5a5 5 0 0 1 4 2l5 6a5 5 0 0 0 4 2H21M16 21l5-5-5-5M3 17h2.5a5 5 0 0 0 3.3-1.25"/>',
     'skip-previous': '<path d="M5 5v14M19 5.5 8 12l11 6.5v-13Z"/>',
-    // The 10-second rewind glyph is distinct from previous-track skipping.
-    'rewind-10': '<path d="M5.5 8V4L2 8h3.5a8 8 0 1 1-1.3 7"/><path d="m9.5 10 1.5-1v6m3-6c-1.5 0-2.1 1.2-2.1 3s.6 3 2.1 3 2.1-1.2 2.1-3S15.5 9 14 9Z"/>',
     'skip-next': '<path d="M19 5v14M5 5.5 16 12 5 18.5v-13Z"/>',
     'repeat': '<path d="m17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3"/>',
     'pause': '<path d="M7 5.5A1.5 1.5 0 0 1 8.5 4h1A1.5 1.5 0 0 1 11 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-1A1.5 1.5 0 0 1 7 18.5v-13Zm6 0A1.5 1.5 0 0 1 14.5 4h1A1.5 1.5 0 0 1 17 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5v-13Z"/>',
