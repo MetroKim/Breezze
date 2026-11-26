@@ -8,6 +8,9 @@ import 'package:just_audio/just_audio.dart' as ja;
 /// Native audio engine — implements the Breezze engine contract over
 /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
 class JustAudioEngineAdapter implements AudioEngineAdapter, CallInterruptionResumeSource {
+  /// Native app injects an account-checked encrypted source resolver.
+  /// Tests and local device files can leave it unset.
+  final Future<ja.AudioSource> Function(String path)? encryptedSourceFactory;
   // Breezze owns interruptions and server playback sessions. Automatic
   // resume is eligible only after an actual call-like audio-focus release,
   // and is executed by PlayerController after rights/session revalidation.
@@ -31,7 +34,7 @@ class JustAudioEngineAdapter implements AudioEngineAdapter, CallInterruptionResu
   bool _disposed = false;
   late final Future<void> _sessionReady;
 
-  JustAudioEngineAdapter() {
+  JustAudioEngineAdapter({this.encryptedSourceFactory}) {
     _errorSubscription = _player.playbackEventStream.listen(
       (_) {},
       onError: (Object error, StackTrace stackTrace) {
@@ -130,7 +133,14 @@ class JustAudioEngineAdapter implements AudioEngineAdapter, CallInterruptionResu
     _callResumePolicy.cancel();
     await _sessionReady;
     if (_disposed) throw StateError('Breezze audio engine is disposed');
-    if (source.isLocal && !kIsWeb && !source.streamUrl.startsWith('content://')) {
+    if (source.isLocal && source.streamUrl.endsWith('.bza')) {
+      final factory = encryptedSourceFactory;
+      if (factory == null) throw StateError('ENCRYPTED_MEDIA_ENGINE_UNAVAILABLE');
+      // StreamAudioSource serves authenticated plaintext ranges in RAM;
+      // just_audio never sees the encrypted ciphertext as an audio file.
+      await _player.setAudioSource(await factory(source.streamUrl));
+    } else if (source.isLocal && !kIsWeb &&
+        !source.streamUrl.startsWith('content://')) {
       await _player.setFilePath(source.streamUrl);
     } else {
       await _player.setUrl(source.streamUrl);
