@@ -55,6 +55,9 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
     expect(result.providers.map(item => item.providerId)).toEqual(['spotify','deezer']);
     expect(result.providers[0].result).toMatchObject({kind:'ok',value:[{providerTrackId:'4iV5W9uYEdYUVa79Axb7Rh'}]});
     expect(result.providers[1].result).toMatchObject({kind:'ok',value:[{providerTrackId:'3135556'}]});
+    // Without matching durations/ISRC, similarly named editions stay apart.
+    expect(result.tracks).toHaveLength(2);
+    expect(result.tracks.map(track => track.providerId)).toEqual(['spotify', 'deezer']);
     expect(internal.search).not.toHaveBeenCalled();
   });
 
@@ -65,6 +68,8 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
     expect(response.partial).toBe(true);
     expect(response.providers[0].result).toMatchObject({kind:'error',code:'MUSIC_PROVIDER_UNAVAILABLE'});
     expect(response.providers[1].result).toMatchObject({kind:'ok',value:[{providerTrackId:'3135556'}]});
+    expect(response.tracks.map(track => track.providerId)).toEqual([]);
+    // This mock lacks title/artist, so no fabricated search row is produced.
   });
 
   it('coalesces concurrent typeahead requests for the same normalized query', async () => {
@@ -129,7 +134,7 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
   it('does not spend upstream search quota for invalid music queries', async () => {
     const instance = registry();
     const result = await instance.searchMusic('x');
-    expect(result).toEqual({query:'x',providers:[],partial:false});
+    expect(result).toEqual({query:'x',providers:[],tracks:[],partial:false});
     expect(spotify.search).not.toHaveBeenCalled();
     expect(deezer.search).not.toHaveBeenCalled();
   });
