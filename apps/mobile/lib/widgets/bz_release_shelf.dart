@@ -29,7 +29,7 @@ class BzReleaseShelf extends StatelessWidget {
         const SizedBox(height: 14),
         SizedBox(
           height: (218 + (MediaQuery.textScalerOf(context).scale(1) - 1) * 46)
-              .clamp(218.0, 310.0),
+              .clamp(218.0, 310.0).toDouble(),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
