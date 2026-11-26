@@ -879,12 +879,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Search', style: theme.textTheme.displayMedium),
+                Semantics(
+                  header: true,
+                  child: Text('Search', style: theme.textTheme.displayMedium),
+                ),
                 const SizedBox(height: 16),
                 // PRT-01 search pill: --radius-pill (capsule) with the
                 // surface-hover fill and a leading magnifier — the Apple
                 // Music search field treatment.
-                TextField(
+                Semantics(
+                  label: 'Search songs, artists, albums and music videos',
+                  child: TextField(
                   controller: _controller,
                   onSubmitted: _search,
                   textInputAction: TextInputAction.search,
@@ -919,6 +924,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                   ),
                   onChanged: _onQueryChanged,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 // BitChord-inspired behavior: source choices appear only
@@ -987,10 +993,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    _error!,
-                                    textAlign: TextAlign.center,
-                                    style: theme.textTheme.bodyMedium,
+                                  Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      _error!,
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
                                   ),
                                   const SizedBox(height: 16),
                                   OutlinedButton(
@@ -1027,24 +1036,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     if (index == 0) {
                                       return Padding(
                                         padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-                                        child: Text('Artists', style: theme.textTheme.titleLarge),
+                                        child: Semantics(
+                                          header: true,
+                                          child: Text('Artists', style: theme.textTheme.titleLarge),
+                                        ),
                                       );
                                     }
                                     if (index <= _artistMatches.length) {
                                       final artist = _artistMatches[index - 1];
                                       final photo = artist['imageUrl'] as String?;
                                       return ListTile(
-                                        leading: CircleAvatar(
-                                          radius: 27,
-                                          backgroundColor: theme.bzSurface1,
-                                          backgroundImage: photo != null
-                                              ? NetworkImage(photo) : null,
-                                          child: photo == null
-                                              ? const BzSvgIcon(name: 'mic', size: 22)
-                                              : null,
+                                        // Name and navigation are already in
+                                        // the tile's semantic label; avoid an
+                                        // unrelated duplicate image focus stop.
+                                        leading: ExcludeSemantics(
+                                          child: CircleAvatar(
+                                            radius: 27,
+                                            backgroundColor: theme.bzSurface1,
+                                            backgroundImage: photo != null
+                                                ? NetworkImage(photo) : null,
+                                            child: photo == null
+                                                ? const BzSvgIcon(name: 'mic', size: 22)
+                                                : null,
+                                          ),
                                         ),
                                         title: Text(artist['name'] as String? ?? 'Artist'),
-                                        subtitle: const Text('Artist · Songs & releases'),
+                                        subtitle: const Text('Artist · Open profile, songs and releases'),
                                         trailing: const BzSvgIcon(name: 'chevron-right', size: 18),
                                         onTap: () => _openArtist(artist),
                                       );
@@ -1052,7 +1069,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     if (index == _artistMatches.length + 1) {
                                       return Padding(
                                         padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                                        child: Text('Songs', style: theme.textTheme.titleLarge),
+                                        child: Semantics(
+                                          header: true,
+                                          child: Text('Songs', style: theme.textTheme.titleLarge),
+                                        ),
                                       );
                                     }
                                     index -= _artistMatches.length + 2;
@@ -1064,8 +1084,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text('Similar searches',
-                                                style: theme.textTheme.titleLarge),
+                                            Semantics(
+                                              header: true,
+                                              child: Text('Similar searches',
+                                                  style: theme.textTheme.titleLarge),
+                                            ),
                                             const SizedBox(height: 10),
                                             Wrap(
                                               spacing: 8,
