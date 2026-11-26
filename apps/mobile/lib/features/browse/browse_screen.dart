@@ -11,6 +11,8 @@ import '../video/official_music_video_screen.dart';
 import '../video/device_video.dart';
 import '../video/open_youtube_player.dart';
 import '../search/search_screen.dart';
+import './ytmusic_client_screen.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -116,7 +118,9 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
               context: context,
         builder: (_) => destination.title == 'Music'
             ? const SearchScreen()
-            : _BrowseCollectionScreen(destination: destination),
+            : destination.title == 'YouTube Music discovery'
+                ? const YouTubeMusicClientScreen()
+                : _BrowseCollectionScreen(destination: destination),
       ),
     );
   }
@@ -497,6 +501,11 @@ class _BrowseDestination {
 }
 
 const _browseDestinations = <_BrowseDestination>[
+  _BrowseDestination(
+    'YouTube Music discovery',
+    'Public music discovery, official videos and read-only linked playlists.',
+    'music-note',
+  ),
   _BrowseDestination('Music', 'Discover Spotify and Deezer tracks. Playback stays inside Breezze when authorized.', 'music-note'),
   _BrowseDestination('Latest Songs', 'Songs released in the last 30 days on your regional chart.', 'music-note'),
   _BrowseDestination('New Releases', 'Albums released in the last 30 days on your regional chart.', 'disc-3'),
@@ -825,8 +834,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     final progress = ref.watch(downloadProgressProvider);
     return Scaffold(
       backgroundColor: theme.bzBackground,
-      appBar: AppBar(
-        title: Text(widget.destination.title),
+      appBar: BzBrandedAppBar(
+        title: widget.destination.title,
         leading: IconButton(
           tooltip: 'Back to New',
           icon: const BzSvgIcon(name: 'chevron-left'),
@@ -1190,7 +1199,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
         const SizedBox(height: 24),
         OutlinedButton(
           onPressed: () => Navigator.of(context).maybePop(),
-          child: const Text('Back to Browse'),
+          child: const Text('Back to New'),
         ),
       ],
     );
