@@ -51,11 +51,11 @@ void main() {
     expect(await store.setLocalCover('listener-a', missing, 'YWJj'), isFalse);
     final id = await store.create('listener-a', 'Original');
     await expectLater(
-      store.setLocalCover('listener-a', id, '*' * 100),
+      store.setLocalCover('listener-a', id, List<String>.filled(100, '*').join()),
       throwsArgumentError,
     );
     await expectLater(
-      store.setLocalCover('listener-a', id, 'A' * 750001),
+      store.setLocalCover('listener-a', id, List<String>.filled(750001, 'A').join()),
       throwsArgumentError,
     );
     expect((await store.load('listener-a')).single.coverPngBase64, isNull);
