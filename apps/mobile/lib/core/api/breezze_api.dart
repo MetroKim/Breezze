@@ -718,6 +718,15 @@ class BreezzeApi {
         {'pinned': pinned},
       );
 
+  /// Owner-authorized private cover thumbnail; null restores source artwork.
+  Future<Map<String, dynamic>> setPlaylistCover(
+    String playlistId,
+    String? coverPngBase64,
+  ) => _patch(
+        '/playlists/${Uri.encodeComponent(playlistId)}/cover',
+        {'coverPngBase64': coverPngBase64},
+      );
+
   Future<Map<String, dynamic>> renamePlaylist(
     String playlistId,
     String name,
