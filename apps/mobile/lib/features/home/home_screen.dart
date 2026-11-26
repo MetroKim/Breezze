@@ -19,6 +19,7 @@ import '../settings/account_screen.dart';
 import '../search/search_screen.dart';
 import '../../widgets/bz_discovery_spotlight.dart';
 import '../../widgets/bz_morphing_brand_header.dart';
+import '../../widgets/bz_pinned_mood_rail.dart';
 import '../../widgets/bz_discovery_action_tile.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
@@ -321,6 +322,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
+            // The original reference pins discovery filters underneath its
+            // masthead. Breezze keeps that interaction but uses our own mood
+            // taxonomy and authenticated music-search route.
+            BzPinnedMoodRail(
+              moods: const ['Energy', 'Focus', 'Relax', 'Workout', 'Chill', 'Commute'],
+              onMoodSelected: (mood) => Navigator.of(context).push(
+                breezzePageRoute<void>(
+                  context: context,
+                  builder: (_) => SearchScreen(initialQuery: '$mood music'),
+                ),
+              ),
+            ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
                   16, 14, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
@@ -337,32 +350,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             actionLabel: 'Explore New',
             onAction: () => ref.read(homeTabHintProvider.notifier).state =
                 MainTab.browse.index,
-          ),
-          const SizedBox(height: 24),
-          Text('Match your mood', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 52,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (final mood in const <String>['Energy', 'Focus', 'Relax', 'Workout', 'Chill']) ...[
-                  BzFilterPill(
-                    label: mood,
-                    active: false,
-                    onTap: () => Navigator.of(context).push(
-                      breezzePageRoute<void>(
-                        context: context,
-                        builder: (_) => SearchScreen(
-                          initialQuery: '$mood music',
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ],
-            ),
           ),
           const SizedBox(height: 24),
           Text('Discover in Breezze', style: theme.textTheme.titleLarge),
