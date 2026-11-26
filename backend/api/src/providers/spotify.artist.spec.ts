@@ -15,7 +15,7 @@ describe('Spotify-only artist discovery and detail', () => {
     enabled: process.env.SPOTIFY_ENABLED,
   };
   const requests: string[] = [];
-  const latest = new Date().toISOString().slice(0, 10);
+  const latest = '2026-11-20';
 
   const artist = {
     id: artistId, name: 'Breezze Test Singer',
@@ -36,6 +36,7 @@ describe('Spotify-only artist discovery and detail', () => {
   };
 
   beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-26T12:00:00.000Z'));
     jest.clearAllMocks();
     requests.length = 0;
     process.env.SPOTIFY_CLIENT_ID = 'artist-test-client';
@@ -76,6 +77,7 @@ describe('Spotify-only artist discovery and detail', () => {
     });
   });
   afterEach(() => {
+    jest.useRealTimers();
     jest.restoreAllMocks();
     for (const [key, value] of Object.entries({
       SPOTIFY_CLIENT_ID: env.id,

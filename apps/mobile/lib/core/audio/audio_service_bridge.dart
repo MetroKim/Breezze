@@ -212,7 +212,7 @@ Future<BackgroundAudioBridge> startBackgroundAudio(
   }
 
   try {
-    return await audio.AudioService.init(
+    return await audio.AudioService.init<AudioServiceBridge>(
       builder: () => AudioServiceBridge(container),
       config: const audio.AudioServiceConfig(
         androidNotificationChannelId: 'com.breezze.audio',

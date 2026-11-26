@@ -149,7 +149,8 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
   Future<void> _loadTourEvents(String name, String owner, int generation) async {
     final requestGeneration = ++_tourRequestGeneration;
     // Touring location is a display filter, NEVER a rights/entitlement region.
-    final territory = (_concertCountry ?? ref.read(outboxTerritoryProvider))
+    final territory = (_concertCountry ??
+            ref.read(outboxTerritoryProvider) ?? 'WW')
         .trim().toUpperCase();
     if (!RegExp(r'^[A-Z]{2}$').hasMatch(territory) ||
         territory == 'WW' || territory == 'ZZ') {
@@ -204,7 +205,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
   }
 
   Future<void> _changeTourCountry(String artistName) async {
-    final current = _concertCountry ?? ref.read(outboxTerritoryProvider);
+    final current = _concertCountry ?? ref.read(outboxTerritoryProvider) ?? 'WW';
     final country = TextEditingController(
       text: RegExp(r'^[A-Z]{2}$').hasMatch(current) &&
           current != 'WW' ? current : '',

@@ -318,8 +318,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return name.contains(primary) ? 1 : 0;
     }
     final ranked = _results.asMap().entries.toList()
-      ..sort((a, b) => rank(b.value) - rank(a.value) ||
-          a.key.compareTo(b.key));
+      ..sort((a, b) {
+        final difference = rank(b.value) - rank(a.value);
+        return difference != 0 ? difference : a.key.compareTo(b.key);
+      });
     _results = ranked.map((entry) => entry.value).toList();
   }
 
