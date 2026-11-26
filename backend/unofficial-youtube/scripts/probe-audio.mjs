@@ -5,10 +5,15 @@ import { Innertube } from 'youtubei.js';
 
 const id = process.env.BREEZZE_PROBE_VIDEO_ID || 'aqz-KE-bpKQ';
 if (!/^[A-Za-z0-9_-]{11}$/.test(id)) throw new Error('Invalid probe video ID');
+const apiClient = process.env.BREEZZE_PROBE_CLIENT || 'WEB';
+if (!['WEB', 'MWEB'].includes(apiClient)) throw new Error('Unsupported API client');
 const verdict = {
   source: 'youtubei.js@18.3.0',
+  apiClient,
   videoId: id,
-  sample: 'Big Buck Bunny / Blender Foundation / CC BY 3.0',
+  sample: id === 'aqz-KE-bpKQ'
+    ? 'Big Buck Bunny / Blender Foundation / CC BY 3.0'
+    : 'Signal to Noise / Scott Buckley / CC BY 4.0',
   metadata: false,
   playabilityStatus: null,
   infoKeys: [],
@@ -32,7 +37,7 @@ const classify = (data) => {
 };
 try {
   const client = await Innertube.create({ lang: 'en', location: 'US' });
-  const info = await client.getBasicInfo(id);
+  const info = await client.getBasicInfo(id, { client: apiClient });
   verdict.infoKeys = Object.keys(info ?? {}).filter(key =>
     ['basic_info', 'playability_status', 'streaming_data', 'captions',
       'current_video_endpoint', 'watch_next_feed'].includes(key));
@@ -44,7 +49,7 @@ try {
   // so the report differentiates blocked metadata from blocked audio.
   if (!info) throw new Error('NO_VIDEO_METADATA');
   const format = await client.getStreamingData(id, {
-    type: 'audio', quality: 'best',
+    type: 'audio', quality: 'best', client: apiClient,
   });
   if (!format?.url) throw new Error('NO_AUDIO_STREAM_URL');
   const uri = new URL(format.url);
