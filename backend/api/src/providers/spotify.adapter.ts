@@ -15,6 +15,7 @@ interface SpotifyTrack {
   duration_ms?: number;
   is_playable?: boolean;
   is_local?: boolean;
+  external_ids?: { isrc?: string };
   artists?: Array<{ name?: string }>;
   album?: { images?: Array<{ url?: string }> };
 }
@@ -148,6 +149,7 @@ export class SpotifyAdapter implements ProviderAdapter {
       durationSec: Number.isFinite(row.duration_ms) && (row.duration_ms ?? 0) > 0
         ? Math.floor(row.duration_ms! / 1000) : undefined,
       artworkUrl: image?.url,
+      isrc: row.external_ids?.isrc,
       // A Spotify link is NOT a native audio stream.
       sourceUrl: 'https://open.spotify.com/track/' + id,
     };
