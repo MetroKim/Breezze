@@ -1,5 +1,6 @@
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 
 /// Shared mini-player seek control. Taps and drags must both commit a seek;
 /// accessibility increment/decrement actions work without pointer gestures.
@@ -22,6 +23,7 @@ class BzPlaybackScrubber extends StatefulWidget {
 class _BzPlaybackScrubberState extends State<BzPlaybackScrubber> {
   double? _dragValue;
   bool _dragging = false;
+  bool _keyboardFocused = false;
 
   double get _value =>
       (_dragging && _dragValue != null ? _dragValue! : widget.progress)
@@ -54,7 +56,36 @@ class _BzPlaybackScrubberState extends State<BzPlaybackScrubber> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final value = _value;
-    return Semantics(
+    return Focus(
+      canRequestFocus: widget.enabled,
+      onFocusChange: (focused) =>
+          setState(() => _keyboardFocused = focused),
+      onKeyEvent: (node, event) {
+        if (!widget.enabled || event is! KeyDownEvent) {
+          return KeyEventResult.ignored;
+        }
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.arrowRight ||
+            key == LogicalKeyboardKey.arrowUp) {
+          widget.onSeek((value + 0.05).clamp(0.0, 1.0));
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowLeft ||
+            key == LogicalKeyboardKey.arrowDown) {
+          widget.onSeek((value - 0.05).clamp(0.0, 1.0));
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.home) {
+          widget.onSeek(0);
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.end) {
+          widget.onSeek(1);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Semantics(
       slider: true,
       enabled: widget.enabled,
       label: 'Playback position',
@@ -67,7 +98,15 @@ class _BzPlaybackScrubberState extends State<BzPlaybackScrubber> {
       onDecrease: widget.enabled
           ? () => widget.onSeek((value - 0.05).clamp(0.0, 1.0))
           : null,
-      child: SizedBox(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: _keyboardFocused ? theme.bzAccent : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: SizedBox(
         height: 44,
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -108,6 +147,8 @@ class _BzPlaybackScrubberState extends State<BzPlaybackScrubber> {
             );
           },
         ),
+      ),
+      ),
       ),
     );
   }
