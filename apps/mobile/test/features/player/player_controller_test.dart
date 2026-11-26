@@ -263,6 +263,47 @@ void main() {
     expect(resolver.calls, 1);
   });
 
+  test('short phone call does not let a late server pause defeat auto resume', () async {
+    final client = _FakePlaybackSessionClient();
+    final gate = Completer<void>();
+    client.pauseGate = gate;
+    final resolver = _FakeResolver()
+      ..sources = [
+        PlayableSource(
+          trackId: 'catalog-qa:fast-call',
+          streamUrl: 'https://media.example/fast-call.mp3',
+          expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          sessionId: 'fast-call-session',
+        ),
+      ];
+    final engine = _CallResumeFakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+      playbackSessionClientProvider.overrideWithValue(client),
+    ]);
+    addTearDown(() async {
+      if (!gate.isCompleted) gate.complete();
+      container.dispose();
+      await engine.dispose();
+    });
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    await player.playTrack(trackId: 'catalog-qa:fast-call');
+    engine.armForCall();
+    engine.emit(PlaybackState.interrupted);
+    await Future<void>.delayed(Duration.zero);
+    expect(client.paused, ['fast-call-session']);
+    engine.emit(PlaybackState.paused);
+    engine.callEnded();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    // The server pause must complete before the controller issues resume.
+    expect(client.resumed, isEmpty);
+    gate.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(client.resumed, ['fast-call-session']);
+    expect(player.state.playbackState, PlaybackState.playing);
+  });
+
   test('manual pause during a call cancels V8 auto resume', () async {
     final engine = _CallResumeFakeAudioEngine();
     final container = ProviderContainer(overrides: [
@@ -579,6 +620,7 @@ class _FakePlaybackSessionClient implements PlaybackSessionClient {
   final List<Map<String, Object>> heartbeatCalls = [];
   bool failFirstHeartbeat = false;
   bool rejectNextResume = false;
+  Completer<void>? pauseGate;
 
   @override
   Future<Map<String, dynamic>> heartbeat({
@@ -598,7 +640,11 @@ class _FakePlaybackSessionClient implements PlaybackSessionClient {
   }
 
   @override
-  Future<void> pause(String sessionId) async { paused.add(sessionId); }
+  Future<void> pause(String sessionId) async {
+    paused.add(sessionId);
+    final gate = pauseGate;
+    if (gate != null) await gate.future;
+  }
 
   @override
   Future<void> resume(String sessionId) async {
