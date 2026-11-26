@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/bootstrap.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_transport_controls.dart';
 import '../player/player_controller.dart';
 
 /// Cover artwork, lyrics and queue share a single playback session.
@@ -373,51 +374,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        BzGlassContainer(
-                          radius: BzRadius.capsule,
-                          blur: 18,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                IconButton(
-                                  tooltip: 'Shuffle',
-                                  icon: BzSvgIcon(name: 'shuffle'),
-                                  onPressed: controller.toggleShuffle,
-                                  color: theme.bzText2,
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  tooltip: 'Previous track',
-                                  icon: BzSvgIcon(
-                                      name: 'skip-previous', size: 34),
-                                  onPressed: controller.previous,
-                                ),
-                                const SizedBox(width: 8),
-                                _PlayPauseButton(
-                                  playing: playing,
-                                  size: 64,
-                                  onTap: controller.togglePlayPause,
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  tooltip: 'Next track',
-                                  icon:
-                                      BzSvgIcon(name: 'skip-next', size: 34),
-                                  onPressed: controller.next,
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  tooltip: 'Repeat',
-                                  icon: BzSvgIcon(name: 'repeat'),
-                                  onPressed: controller.cycleRepeat,
-                                  color: theme.bzText2,
-                                ),
-                              ],
-                            ),
-                          ),
+                        BzTransportControls(
+                          playing: playing,
+                          onPrevious: controller.previous,
+                          onNext: controller.next,
+                          onTogglePlayPause: controller.togglePlayPause,
+                          onShuffle: controller.toggleShuffle,
+                          onRepeat: controller.cycleRepeat,
                         ),
                         const SizedBox(height: 4),
                         Row(
@@ -554,53 +517,6 @@ class _PlayerArtwork extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _PlayPauseButton extends StatelessWidget {
-  final bool playing;
-  final double size;
-  final VoidCallback onTap;
-
-  const _PlayPauseButton({
-    required this.playing,
-    required this.size,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    // A semantic button and focusable InkWell make the same circular Apple-
-    // inspired control work with VoiceOver, TalkBack, Switch Access and keys.
-    return Semantics(
-      button: true,
-      label: playing ? 'Pause playback' : 'Resume playback',
-      onTap: onTap,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          excludeFromSemantics: true,
-          customBorder: const CircleBorder(),
-          child: ExcludeSemantics(
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: theme.bzText1,
-                shape: BoxShape.circle,
-              ),
-              child: BzSvgIcon(
-                name: playing ? 'pause' : 'play',
-                color: theme.bzBackground,
-                size: size * 0.42,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
