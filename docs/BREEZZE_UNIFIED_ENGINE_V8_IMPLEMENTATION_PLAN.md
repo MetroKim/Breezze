@@ -2,6 +2,18 @@
 
 **Owner:** Breezze engineering | **Branch:** `main` | **Baseline:** `cb71606a124d94281a75402651455964d3a96f92` | **Started:** 2026-11-26 | **Release state:** BLOCKED until verified.
 
+**SINGLE CANONICAL VERSION — V8 ONLY (2026-11-26).** This is the sole active Breezze master plan, execution backlog and release-acceptance authority. The obsolete V6/V7 plan files are removed from the working tree, with their historical Git commits preserved for audit. No task, README, CI job, PR description or downstream AI agent may treat an earlier plan's version labels, screenshots, checkmarks, provider choices or target platforms as the current implementation contract. All future changes belong to V8 and its evidence ledger; stage/checkpoint numbers (e.g. V8.2 or V8.4) are revisions **within** V8, not separate product versions.
+
+### Consolidated engineering decisions retained in V8
+
+- Retain the existing Flutter monorepo (`apps/mobile`) with Riverpod and the shared `design_system`, `api_client`, and `audio_contracts` packages. No second app, UI toolkit, client-wide theme or audio controller.
+- Use one NestJS/Prisma API; Supabase Auth/Postgres with schema/RLS boundaries; Cloudflare API and media Workers with private R2; Drift/SQLite and a per-account outbox on devices. Do not add redundant Isar/Hive databases or duplicate cloud gateways.
+- Four tabs are **Home / New / Library / Search** (New replaces the older Browse label). Retain one persistent global player, queue, Now Playing, and adaptive desktop sidebar/phone tab bar.
+- Catalog APIs are for discovery and legally available previews only. Spotify/Deezer/YouTube Music metadata is never a full-track distribution or offline entitlement. Full native audio and downloads require independently authorized licensed assets, territory/time-granted sessions and actual verified delivery bytes.
+- Preserve legacy account IDs/data until an explicitly tested migration; validate cross-account isolation, Google/Apple native sign-in configuration, and rights/security/account-transition tests before changing production auth.
+- Keep the absolute release, production deployment, downloadable source/artifact and store-publication freeze until every required V8 verification gate and explicit owner approval. Historical CI or implementation source alone is not proof of completion.
+
+
 ## Product contract (single source of truth)
 - **Four top-level tabs in order:** **Home**, **New** (formerly Browse), **Library**, **Search**; no fifth Radio/Downloads/Settings tab.
 - **Home:** listener-scoped history, favorites, follows, personalized shelves with honest source metadata. Do not label algorithmic shelves or charts as official without a real dataset.
