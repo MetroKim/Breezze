@@ -38,6 +38,7 @@ class PlayerController extends Notifier<PlayerState> {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlaybackState>? _engineStateSub;
   StreamSubscription<bool>? _callResumeSub;
+  Future<void>? _interruptionServerPause;
   int _requestGeneration = 0;
   String? _autoAdvancedTrackId;
   Timer? _streamRecoveryTimer;
@@ -384,7 +385,16 @@ class PlayerController extends Notifier<PlayerState> {
       if (engineState == PlaybackState.interrupted &&
           _machine.state == PlaybackState.playing) {
         _machine.dispatch(InterruptionDetected());
-        unawaited(_pauseServerSession());
+        // A short call can finish before the pause RPC is acknowledged.
+        // Serialize the pause against resume so the resumed session never
+        // receives a late "pause" after the media has restarted.
+        final pauseRequest = _pauseServerSession();
+        _interruptionServerPause = pauseRequest;
+        unawaited(pauseRequest.whenComplete(() {
+          if (identical(_interruptionServerPause, pauseRequest)) {
+            _interruptionServerPause = null;
+          }
+        }));
         return;
       }
       if (engineState == PlaybackState.paused &&
@@ -569,6 +579,15 @@ class PlayerController extends Notifier<PlayerState> {
     _cancelStreamRecovery();
     final engine = _engine;
     if (engine == null || state.playbackState != PlaybackState.paused) return;
+    final generation = _requestGeneration;
+    final pendingPause = _interruptionServerPause;
+    if (pendingPause != null) {
+      await pendingPause;
+      // Stop/track switch/user pause while waiting revokes this resume.
+      if (generation != _requestGeneration ||
+          !identical(_engine, engine) ||
+          state.playbackState != PlaybackState.paused) return;
+    }
     final activeSource = _activeSource;
     final currentTrack = state.currentTrack;
     if (activeSource != null && activeSource.isExpired && currentTrack != null) {
