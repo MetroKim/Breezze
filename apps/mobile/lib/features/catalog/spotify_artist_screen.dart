@@ -287,7 +287,8 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(color: theme.bzText2)),
                 const SizedBox(height: 14),
-                if (_artistId != null && ownerUnchanged)
+                if (_data != null && _artistId != null && ownerUnchanged &&
+                    _initialOwner != null)
                   Wrap(alignment: WrapAlignment.center, spacing: 10, children: [
                     OutlinedButton.icon(
                       onPressed: _savingFollow ? null :
@@ -329,7 +330,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                       child: const Text('Artist details on Spotify'),
                     ),
                   ]),
-                  _section(theme, 'Popular Songs', [
+                  _section(theme, 'Songs', [
                     for (final song in songs)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
