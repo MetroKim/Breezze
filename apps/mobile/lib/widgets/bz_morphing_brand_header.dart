@@ -123,6 +123,18 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
         color: background.withValues(
           alpha: highContrast ? 1.0 : 0.97,
         ),
+        // Quiet OLED header depth, not a bright accent wash. The gradient
+        // collapses to flat black when high contrast is requested.
+        gradient: highContrast
+            ? null
+            : LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  theme.bzSurface1.withValues(alpha: 0.20 * (1 - progress)),
+                  background.withValues(alpha: 0.99),
+                ],
+              ),
         border: Border(
           bottom: BorderSide(
             color: overlapsContent || compact
