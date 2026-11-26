@@ -34,6 +34,11 @@ jobs:
       - name: Validate sidecar contracts
         working-directory: backend/unofficial-youtube
         run: npm run test:contract
+      - name: Check real native decoder availability
+        run: ffmpeg -version | head -n 1
+      - name: Decode original PCM audio over real authenticated HTTP
+        working-directory: backend/unofficial-youtube
+        run: npm run test:decode
       - name: Validate Docker Compose development stack
         run: docker compose -f backend/docker-compose.yml --profile experimental config --quiet
 
