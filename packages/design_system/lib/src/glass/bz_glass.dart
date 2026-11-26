@@ -133,6 +133,10 @@ class BzGlass extends StatefulWidget {
     this.radius = BzLiquidRadius.md,
     this.quality,
     this.shadow = true,
+    this.sigmaOverride,
+    this.saturationOverride,
+    this.tintOverride,
+    this.borderOverride,
     this.child,
   });
 
@@ -146,6 +150,13 @@ class BzGlass extends StatefulWidget {
   /// Whether to draw the soft glass lift shadow. Off for inline chrome.
   final bool shadow;
 
+  /// Compatibility overrides for Breezze's former glass-container widget.
+  /// All glass paints through this renderer and its blur-budget contract.
+  final double? sigmaOverride;
+  final double? saturationOverride;
+  final Color? tintOverride;
+  final Color? borderOverride;
+
   final Widget? child;
 
   @override
@@ -157,7 +168,8 @@ class _BzGlassElement extends State<BzGlass> {
   bool _registered = false;
   VoidCallback? _onBudgetChanged;
 
-  bool get _stateBlurs => _recipes[widget.state]!.sigma > 0;
+  bool get _stateBlurs =>
+      (widget.sigmaOverride ?? _recipes[widget.state]!.sigma) > 0;
 
   @override
   void didChangeDependencies() {
@@ -173,7 +185,8 @@ class _BzGlassElement extends State<BzGlass> {
   @override
   void didUpdateWidget(BzGlass oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldBlurs = _recipes[oldWidget.state]!.sigma > 0;
+    final oldBlurs =
+        (oldWidget.sigmaOverride ?? _recipes[oldWidget.state]!.sigma) > 0;
     if (_stateBlurs && !oldBlurs) {
       _ensureRegistered();
     } else if (!_stateBlurs && oldBlurs) {
@@ -219,8 +232,9 @@ class _BzGlassElement extends State<BzGlass> {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final recipe = _recipes[widget.state]!;
+    final sigmaSetting = widget.sigmaOverride ?? recipe.sigma;
     final quality = _resolvedQuality(context);
-    final blurBudgeted = recipe.sigma > 0 && quality != BzGlassQuality.solid;
+    final blurBudgeted = sigmaSetting > 0 && quality != BzGlassQuality.solid;
     final granted = !blurBudgeted ||
         _scope == null ||
         _scope!.grantOf(this) < _scope!.widget.maxVisibleSurfaces;
@@ -230,15 +244,19 @@ class _BzGlassElement extends State<BzGlass> {
     // border sides. Use a consistent hairline rim; the soft lift shadow
     // supplies depth without triggering paint exceptions on every glass
     // surface (including accessibility and budget-demoted states).
-    const border = Border.fromBorderSide(
-      BorderSide(color: BzGlassEdge.color, width: BzGlassEdge.width),
+    final border = Border.fromBorderSide(
+      BorderSide(
+        color: widget.borderOverride ?? BzGlassEdge.color,
+        width: BzGlassEdge.width,
+      ),
     );
-    final tint = _tint(widget.state, dark);
+    final tint = widget.tintOverride ?? _tint(widget.state, dark);
 
     if (blurBudgeted && granted) {
       final frost = quality == BzGlassQuality.frost;
-      final sigma = frost ? recipe.sigma * 1.25 : recipe.sigma;
-      final saturation = frost ? 1.0 : recipe.saturation;
+      final sigma = frost ? sigmaSetting * 1.25 : sigmaSetting;
+      final saturation =
+          frost ? 1.0 : (widget.saturationOverride ?? recipe.saturation);
       final ImageFilter filter = saturation == 1.0
           ? ImageFilter.blur(
               sigmaX: sigma,

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/main_tab.dart';
 
@@ -17,6 +16,10 @@ import '../video/open_youtube_player.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_screen.dart';
 import '../settings/account_screen.dart';
+import '../search/search_screen.dart';
+import '../../widgets/bz_discovery_spotlight.dart';
+import '../../widgets/bz_morphing_brand_header.dart';
+import '../../widgets/bz_discovery_action_tile.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
 ///
@@ -278,90 +281,145 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _refresh,
-        child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(16, 24, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
-        children: [
-          Row(
-            children: [
-              BzRibbonLogo(width: 96, color: theme.bzText1),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Create playlist',
-                onPressed: _createPlaylist,
-                icon: SvgPicture.asset(
-                  'assets/icons/plus.svg',
-                  width: 21,
-                  height: 21,
-                  colorFilter: ColorFilter.mode(
-                    theme.bzAccent,
-                    BlendMode.srcIn,
-                  ),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            BzMorphingBrandHeader(
+              sidebarBrandOnDesktop: true,
+              actions: [
+                IconButton(
+                  tooltip: 'Create playlist',
+                  onPressed: _createPlaylist,
+                  icon: BzSvgIcon(name: 'plus', color: theme.bzAccent),
                 ),
-              ),
-              PopupMenuButton<String>(
-                tooltip: 'More options',
-                icon: BzSvgIcon(name: 'more-vertical', color: theme.bzText1),
-                onSelected: (value) {
-                  if (value == 'settings') {
-                    Navigator.of(context).push(
-                      breezzePageRoute<void>(
-              context: context,
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    );
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'settings',
-                    child: Text('Settings'),
+                PopupMenuButton<String>(
+                  tooltip: 'More options',
+                  icon: BzSvgIcon(name: 'more-vertical', color: theme.bzText1),
+                  onSelected: (value) {
+                    if (value == 'settings') {
+                      Navigator.of(context).push(
+                        breezzePageRoute<void>(
+                          context: context,
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      );
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'settings', child: Text('Settings')),
+                  ],
+                ),
+                IconButton(
+                  tooltip: 'Account and profile',
+                  onPressed: () => Navigator.of(context).push(
+                    breezzePageRoute<void>(
+                      context: context,
+                      builder: (_) => const AccountScreen(),
+                    ),
                   ),
+                  icon: BzSvgIcon(name: 'user-round', color: theme.bzText1),
+                ),
+              ],
+            ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                  16, 14, 16, BzBreakpoints.bottomClearance(context, compact: 220)),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+          // The Flutter discovery pattern is inspired by editorial music
+          // browsers, not copied from the unlicensed reference source.
+          Text(_greeting, style: theme.textTheme.displayMedium),
+          const SizedBox(height: 16),
+          BzDiscoverySpotlight(
+            eyebrow: 'Breezze discovery',
+            title: 'Your next favorite starts here',
+            description: 'Explore music, artists and videos from real catalog results.',
+            actionLabel: 'Explore New',
+            onAction: () => ref.read(homeTabHintProvider.notifier).state =
+                MainTab.browse.index,
+          ),
+          const SizedBox(height: 24),
+          Text('Match your mood', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 52,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final mood in const <String>['Energy', 'Focus', 'Relax', 'Workout', 'Chill']) ...[
+                  BzFilterPill(
+                    label: mood,
+                    active: false,
+                    onTap: () => Navigator.of(context).push(
+                      breezzePageRoute<void>(
+                        context: context,
+                        builder: (_) => SearchScreen(
+                          initialQuery: '$mood music',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                 ],
-              ),
-              Semantics(
-                button: true,
-                label: 'Account and profile',
-                child: Tooltip(
-                  message: 'Open account',
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text('Discover in Breezze', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 740
+                  ? 3
+                  : constraints.maxWidth >= 330
+                      ? 2
+                      : 1;
+              final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'New releases',
+                      description: 'Music and albums',
+                      iconName: 'disc-3',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.browse.index,
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Music videos',
+                      description: 'Official video search',
+                      iconName: 'video',
                       onTap: () => Navigator.of(context).push(
                         breezzePageRoute<void>(
-              context: context,
-                          builder: (_) => const AccountScreen(),
-                        ),
-                      ),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: theme.bzSurface1,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: theme.bzSeparator),
-                        ),
-                        alignment: Alignment.center,
-                        child: SvgPicture.asset(
-                          'assets/icons/profile.svg',
-                          width: 20,
-                          height: 20,
-                          colorFilter: ColorFilter.mode(
-                            theme.bzText1,
-                            BlendMode.srcIn,
+                          context: context,
+                          builder: (_) => const SearchScreen(
+                            initialQuery: 'official music video',
+                            initialVideoSearch: true,
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ],
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Find artists',
+                      description: 'Search artist profiles',
+                      iconName: 'user-round',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.search.index,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 24),
-          // Hero greeting (§4.1): time-based, local only.
-          Text(_greeting, style: theme.textTheme.displayMedium),
           const SizedBox(height: 24),
           if (_loading) ...[
             const BzSkeleton(width: 172, height: 16, radius: 5),
@@ -464,8 +522,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           if (_replay != null && ((_replay!['totalPlays'] as num?)?.toInt() ?? 0) > 0)
             _ReplayCard(summary: _replay!),
-        ],
-      ),
+                ]),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

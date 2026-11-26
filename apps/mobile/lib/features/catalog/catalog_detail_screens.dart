@@ -13,6 +13,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 
 final _deezerTrackMatchesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
@@ -125,8 +126,8 @@ class TrackDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.bzBackground,
-      appBar: AppBar(
-        title: const Text('Song'),
+      appBar: BzBrandedAppBar(
+        title: 'Song',
         leading: IconButton(
           tooltip: 'Back to search',
           icon: const BzSvgIcon(name: 'chevron-left'),
@@ -464,8 +465,8 @@ class DeezerAlbumCatalogScreen extends ConsumerWidget {
     final tracks = ref.watch(_deezerAlbumTracksProvider(albumId));
     return Scaffold(
       backgroundColor: theme.bzBackground,
-      appBar: AppBar(
-        title: const Text('Album'),
+      appBar: BzBrandedAppBar(
+        title: 'Album',
         leading: IconButton(
           tooltip: 'Back',
           icon: const BzSvgIcon(name: 'chevron-left'),
@@ -841,8 +842,8 @@ class AlbumDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.bzBackground,
-      appBar: AppBar(
-        title: const Text('Album'),
+      appBar: BzBrandedAppBar(
+        title: 'Album',
         leading: IconButton(
           tooltip: 'Back',
           icon: const BzSvgIcon(name: 'chevron-left'),

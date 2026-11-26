@@ -11,6 +11,7 @@ import '../../app/followed_artist_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 
 /// Spotify is the only provider of artist, album, release and track metadata
 /// on this page. Tours explicitly report unavailable, rather than pretending
@@ -418,7 +419,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
         : <String>[];
     return Scaffold(
       backgroundColor: theme.bzBackground,
-      appBar: AppBar(title: const Text('Artist')),
+      appBar: const BzBrandedAppBar(title: 'Artist'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -688,7 +689,7 @@ class _SpotifyReleaseScreenState extends ConsumerState<SpotifyReleaseScreen> {
         ? raw.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
         : <Map<String, dynamic>>[];
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: BzBrandedAppBar(title: widget.title),
       body: ListView(padding: const EdgeInsets.all(20), children: [
         Center(child: _SpotifyArtwork(
           url: detail['artworkUrl'] as String?,

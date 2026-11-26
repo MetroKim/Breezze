@@ -35,6 +35,11 @@ jobs:
 
       - name: Verify recovered Breezze design source archives
         run: python3 tools/verify_design_handoff_archives.py
+      - name: Test V8 single UI source guard
+        run: python3 -m unittest discover -s tools -p 'test_v8_ui_single_source.py' -v
+
+      - name: Enforce one Breezze shell, glass renderer and branding
+        run: python3 tools/check_v8_ui_single_source.py
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -361,6 +366,10 @@ jobs:
         working-directory: apps/mobile
         run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
 
+      - name: Verify Breezze V8 design and device-adaptive interactions on macOS host
+        working-directory: apps/mobile
+        run: flutter test test/v8_cross_device_layout_test.dart test/bz_morphing_brand_header_test.dart test/bz_branded_app_bar_test.dart test/bz_discovery_action_tile_test.dart --reporter expanded
+
       - name: Build macOS desktop
         working-directory: apps/mobile
         run: flutter build macos --debug --dart-define=BREEZZE_SUPABASE_URL=${{ env.BREEZZE_SUPABASE_URL }} --dart-define=BREEZZE_SUPABASE_PUBLISHABLE_KEY=${{ env.BREEZZE_SUPABASE_PUBLISHABLE_KEY }}
@@ -397,6 +406,10 @@ jobs:
       - name: Test playlist persistence on Windows host
         working-directory: apps/mobile
         run: flutter test test/playlist_cross_device_sync_test.dart test/playlist_account_switch_guard_test.dart --reporter expanded
+
+      - name: Verify Breezze V8 design and device-adaptive interactions on Windows host
+        working-directory: apps/mobile
+        run: flutter test test/v8_cross_device_layout_test.dart test/bz_morphing_brand_header_test.dart test/bz_branded_app_bar_test.dart test/bz_discovery_action_tile_test.dart --reporter expanded
 
       - name: Build Windows desktop
         working-directory: apps/mobile

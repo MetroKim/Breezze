@@ -9,6 +9,7 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../core/audio/youtube_player_handoff.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 import 'official_youtube_queue_policy.dart';
 
 /// In-app official YouTube video player. This is video playback only; it does
@@ -246,8 +247,9 @@ class _OfficialMusicVideoScreenState
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.bzBackground,
-      appBar: AppBar(
-        title: const Text('YouTube player'),
+      appBar: BzBrandedAppBar(
+        title: 'Official music video',
+        subtitle: 'YouTube embedded player',
         leading: IconButton(
           tooltip: 'Back to music',
           icon: const BzSvgIcon(name: 'chevron-left'),

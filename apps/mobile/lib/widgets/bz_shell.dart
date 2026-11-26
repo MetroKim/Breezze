@@ -12,6 +12,7 @@ import '../app/breezze_navigation.dart';
 import '../app/main_tab.dart';
 import 'bz_brand_icons.dart';
 import 'bz_playback_scrubber.dart';
+import 'bz_morphing_brand_header.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
@@ -80,13 +81,16 @@ class _BzHomeState extends ConsumerState<BzHome> {
     final player = ref.watch(playerControllerProvider);
     final hasPlayer = player.playbackState != PlaybackState.idle;
 
+    // One glass budget per active page. IndexedStack retains the four pages
+    // for user state, but hidden pages cannot spend the visible page's blur
+    // budget. Shared player/tab chrome gets its own two-surface scope.
     final pages = IndexedStack(
       index: _index,
       children: const [
-        HomeScreen(),
-        BrowseScreen(),
-        LibraryScreen(),
-        SearchScreen(),
+        BzGlassBudgetScope(child: HomeScreen()),
+        BzGlassBudgetScope(child: BrowseScreen()),
+        BzGlassBudgetScope(child: LibraryScreen()),
+        BzGlassBudgetScope(child: SearchScreen()),
       ],
     );
 
@@ -94,7 +98,9 @@ class _BzHomeState extends ConsumerState<BzHome> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final expanded = constraints.maxWidth >= BzBreakpoints.medium;
-          if (!expanded) return pages;
+          if (!expanded) {
+            return BzSidebarBrandOwner(visible: false, child: pages);
+          }
 
           // Apple Music 7.0 desktop: content fills the pane and the glass
           // player pill floats above it, anchored bottom: 20, centered,
@@ -126,7 +132,10 @@ class _BzHomeState extends ConsumerState<BzHome> {
                         constraints: const BoxConstraints(
                           maxWidth: BzBreakpoints.contentMaxWidth,
                         ),
-                        child: pages,
+                        child: BzSidebarBrandOwner(
+                          visible: true,
+                          child: pages,
+                        ),
                       ),
                     ),
                     if (hasPlayer)
@@ -147,7 +156,8 @@ class _BzHomeState extends ConsumerState<BzHome> {
       ),
       bottomNavigationBar: MediaQuery.sizeOf(context).width >= BzBreakpoints.medium
           ? null
-          : SafeArea(
+          : BzGlassBudgetScope(
+              child: SafeArea(
               top: false,
               child: Padding(
                 // Floating Liquid Glass bottom chrome: wider margins so the
@@ -168,6 +178,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
                     ),
                   ],
                 ),
+              ),
               ),
             ),
     );

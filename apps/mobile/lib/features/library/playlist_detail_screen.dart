@@ -10,6 +10,7 @@ import '../../app/playlist_store.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 import '../player/player_controller.dart';
 import '../video/open_youtube_player.dart';
 import '../video/official_youtube_queue_policy.dart';
@@ -295,7 +296,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     final auth = ref.watch(authSessionProvider);
     if (!playlistOwnerMatchesSession(widget.ownerId, auth)) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Playlist unavailable')),
+        appBar: const BzBrandedAppBar(title: 'Playlist unavailable'),
         body: const Center(
           child: Text('This playlist is not available in the current account.'),
         ),
@@ -313,12 +314,12 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     if (playlist == null) {
       return Scaffold(
         backgroundColor: theme.bzBackground,
-        appBar: AppBar(
+        appBar: BzBrandedAppBar(
+          title: 'Playlist',
           leading: IconButton(
             icon: BzSvgIcon(name: 'chevron-down'),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          title: const Text('Playlist'),
         ),
         body: const Center(child: Text('This playlist is no longer available.')),
       );
