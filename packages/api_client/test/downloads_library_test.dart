@@ -310,6 +310,83 @@ void main() {
     expect(await protectedLibrary.list(ownerId: 'listener-a'), isEmpty);
   });
 
+  test('legacy authorized plaintext is migrated to BZA8 before encrypted-only listing', () async {
+    const id = 'catalog-legacy-audio';
+    final dir = Directory('${root.path}/$id');
+    await dir.create();
+    await File('${dir.path}/audio.m4a').writeAsString('legacy audio');
+    await File('${dir.path}/meta.json').writeAsString(jsonEncode({
+      'ownerId': 'user-a',
+      'catalogTrackId': id,
+      'title': 'Legacy audio',
+      'artist': 'Breezze',
+      'rightsExpiresAtUtc':
+          DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String(),
+    }));
+    final cipher = BreezzeOfflineAudioCipher(
+      SecretKey(List<int>.filled(32, 0x34)),
+    );
+    final protectedLibrary = DownloadsLibrary(
+      root: root,
+      lyrics: LyricsProvider(_UnusedLyricsHttp()),
+      protectAudio: ({
+        required File plaintextFile,
+        required File encryptedFile,
+        required String ownerId,
+        required String catalogTrackId,
+        String? assetVersion,
+      }) async {
+        await cipher.encryptFile(
+          input: plaintextFile, output: encryptedFile,
+          ownerId: ownerId, catalogTrackId: catalogTrackId,
+          assetVersion: assetVersion,
+        );
+      },
+    );
+    expect(await protectedLibrary.protectLegacy(ownerId: 'user-b'), 0);
+    expect(await File('${dir.path}/audio.m4a').exists(), isTrue);
+    expect(await protectedLibrary.protectLegacy(ownerId: 'user-a'), 1);
+    expect(await File('${dir.path}/audio.m4a').exists(), isFalse);
+    expect((await protectedLibrary.list(
+      ownerId: 'user-a', encryptedOnly: true,
+    )).single.audioPath, '${dir.path}/audio.bza');
+    final source = await cipher.decryptRange(
+      encrypted: File('${dir.path}/audio.bza'),
+      ownerId: 'user-a',
+      catalogTrackId: id,
+    ).toList();
+    expect(utf8.decode(source.expand((e) => e).toList()), 'legacy audio');
+  });
+
+  test('legacy migration does not expose plaintext if secure key store fails', () async {
+    const id = 'legacy-keystore-fail';
+    final dir = Directory('${root.path}/$id');
+    await dir.create();
+    await File('${dir.path}/audio.m4a').writeAsString('legacy');
+    await File('${dir.path}/meta.json').writeAsString(jsonEncode({
+      'ownerId': 'user-a',
+      'catalogTrackId': id,
+    }));
+    final protectedLibrary = DownloadsLibrary(
+      root: root,
+      lyrics: LyricsProvider(_UnusedLyricsHttp()),
+      protectAudio: ({
+        required File plaintextFile,
+        required File encryptedFile,
+        required String ownerId,
+        required String catalogTrackId,
+        String? assetVersion,
+      }) async {
+        throw StateError('No secure key storage');
+      },
+    );
+    expect(await protectedLibrary.protectLegacy(ownerId: 'user-a'), 0);
+    expect(await File('${dir.path}/audio.m4a').exists(), isTrue);
+    expect(await protectedLibrary.list(
+      ownerId: 'user-a', encryptedOnly: true,
+    ), isEmpty);
+  });
+
   test('lists only assets owned by the requested account', () async {
     final alice = Directory('${root.path}/bz_alice-track');
     final bob = Directory('${root.path}/bz_bob-track');
