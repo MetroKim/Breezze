@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { validatePngThumbnail } from '../media/png-thumbnail';
 
 @Injectable()
 export class PlaylistsService {
@@ -89,36 +90,13 @@ export class PlaylistsService {
    * service-role keys never enter this endpoint. Null restores the 2x2 cover.
    */
   async setCover(userId: string, playlistId: string, coverPngBase64: string | null) {
-    if (coverPngBase64 !== null) {
-      if (
-        typeof coverPngBase64 !== 'string' ||
-        !coverPngBase64 || coverPngBase64.length > 350000 ||
-        coverPngBase64.length % 4 !== 0 ||
-        !/^[A-Za-z0-9+/]+={0,2}$/.test(coverPngBase64)
-      ) {
-        throw new BadRequestException('PLAYLIST_COVER_INVALID_ENCODING');
-      }
-      const png = Buffer.from(coverPngBase64, 'base64');
-      const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-      if (
-        png.length < 45 || png.length > 256000 ||
-        !png.subarray(0, 8).equals(signature) ||
-        png.toString('ascii', 12, 16) !== 'IHDR'
-      ) {
-        throw new BadRequestException('PLAYLIST_COVER_INVALID_PNG');
-      }
-      const width = png.readUInt32BE(16);
-      const height = png.readUInt32BE(20);
-      if (width < 1 || height < 1 || width > 512 || height > 512) {
-        throw new BadRequestException('PLAYLIST_COVER_INVALID_DIMENSIONS');
-      }
-    }
+    const normalizedCover = validatePngThumbnail(coverPngBase64);
     const result = await this.prisma.playlist.updateMany({
       where: { id: playlistId, userId },
-      data: { coverPngBase64 },
+      data: { coverPngBase64: normalizedCover },
     });
     if (result.count !== 1) throw new NotFoundException('PLAYLIST_NOT_FOUND');
-    return { id: playlistId, coverPngBase64 };
+    return { id: playlistId, coverPngBase64: normalizedCover };
   }
 
   async delete(userId: string, playlistId: string) {
