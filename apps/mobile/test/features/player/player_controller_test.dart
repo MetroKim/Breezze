@@ -39,16 +39,16 @@ void main() {
     expect(player.state.playbackState, PlaybackState.idle);
   });
 
-  test('paused playback refreshes an expired provider grant before resume', () async {
+  test('paused playback refreshes an expired authorized grant before resume', () async {
     final resolver = _FakeResolver()
       ..sources = [
         PlayableSource(
-          trackId: 'bz:youtube_music:abcdefghijk',
+          trackId: 'catalog-qa:expired-grant',
           streamUrl: 'https://cdn.example.com/audio.m4a',
           expiresAtUtc: DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
         ),
         PlayableSource(
-          trackId: 'bz:youtube_music:abcdefghijk',
+          trackId: 'catalog-qa:expired-grant',
           streamUrl: 'https://cdn.example.com/audio.m4a',
           expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
         ),
@@ -65,7 +65,7 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const track = TrackInfo(
-      id: 'bz:youtube_music:abcdefghijk',
+      id: 'catalog-qa:expired-grant',
       title: 'Playable track',
       artist: 'Example Artist',
     );
@@ -286,7 +286,7 @@ void main() {
 
 
 
-  test('YouTube Music full-song source preserves next-track queue order', () async {
+  test('licensed full-song source preserves next-track queue order', () async {
     final resolver = _FakeResolver();
     final engine = _FakeAudioEngine();
     final container = ProviderContainer(overrides: [
@@ -297,8 +297,8 @@ void main() {
     final player = container.read(playerControllerProvider.notifier);
     player.attachEngine(engine);
     const queue = [
-      TrackInfo(id: 'bz:youtube_music:abcdefghijk', title: 'First'),
-      TrackInfo(id: 'bz:youtube_music:lmnopqrstuv', title: 'Second'),
+      TrackInfo(id: 'catalog-qa:queue-first', title: 'First'),
+      TrackInfo(id: 'catalog-qa:queue-second', title: 'Second'),
     ];
 
     await player.playTrack(trackId: queue.first.id, queue: queue, startIndex: 0);
