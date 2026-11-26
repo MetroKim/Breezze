@@ -25,6 +25,8 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.DETAIL_BAR, "class BzBrandedAppBar BzCompactBrandMark")
         self.write(guard.BROWSE, "YouTubeMusicClientScreen(")
         self.write(guard.PROVIDER, "BzBrandedAppBar(")
+        for page in guard.PRIMARY_PAGES:
+            self.write(page, "BzMorphingBrandHeader(")
         for page in guard.SECONDARY_PAGES:
             self.write(page, "appBar: BzBrandedAppBar(")
 
@@ -51,6 +53,17 @@ class V8SingleUiSourceTests(unittest.TestCase):
     def test_provider_legacy_appbar_is_rejected(self):
         self.write(guard.PROVIDER, "BzBrandedAppBar( appBar: AppBar(")
         self.assertIn("LEGACY_PROVIDER_TOOLBAR", str(guard.violations(self.root)))
+
+    def test_legacy_static_primary_header_is_rejected(self):
+        self.write(guard.PRIMARY_PAGES[0], "BzCompactBrandMark(")
+        self.assertIn("OLD_PAGE_HEADER", str(guard.violations(self.root)))
+
+    def test_duplicate_primary_logo_is_rejected(self):
+        self.write(
+            guard.PRIMARY_PAGES[1],
+            "BzMorphingBrandHeader( BzCompactBrandMark(",
+        )
+        self.assertIn("DUPLICATE_PAGE_BRAND", str(guard.violations(self.root)))
 
     def test_old_detail_toolbar_is_rejected(self):
         target = guard.SECONDARY_PAGES[0]
