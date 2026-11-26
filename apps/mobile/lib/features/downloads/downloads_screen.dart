@@ -13,6 +13,7 @@ import '../../widgets/bz_brand_icons.dart';
 import '../player/player_controller.dart';
 import '../video/device_video.dart';
 import '../../core/audio/offline_lease_policy.dart';
+import '../../core/audio/secure_downloads_library.dart';
 
 /// Downloads library — offline tracks with cover art + lyrics, plus a
 /// live in-progress section (§6.1).
@@ -27,6 +28,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   List<DownloadedTrack> _tracks = [];
   List<DownloadedVideo> _videos = [];
   int _storageBytes = 0;
+  bool _legacyPending = false;
   var _loading = true;
 
   @override
@@ -47,11 +49,17 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       return;
     }
     final dir = await downloadsDirectory(userId: auth.userId);
-    final library = DownloadsLibrary(
+    final library = secureDownloadsLibrary(
       root: dir,
       lyrics: ref.read(lyricsProvider),
     );
-    var tracks = await library.list(ownerId: auth.userId);
+    // Older app-private plaintext recordings must be sealed before being
+    // exposed to the native player. A missing keystore hides them, not plays
+    // them insecurely; users can refresh to retry migration.
+    await library.protectLegacy(ownerId: auth.userId);
+    final legacyPending = (await library.list(ownerId: auth.userId))
+        .any((item) => item.audioPath.endsWith('audio.m4a'));
+    var tracks = await library.list(ownerId: auth.userId, encryptedOnly: true);
 
     // Whenever the account is online, ask the backend to re-check takedowns,
     // territory and current download rights before extending each local lease.
@@ -75,7 +83,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           // A transient network failure does not erase a still-valid offline lease.
         }
       }
-      tracks = await library.list(ownerId: auth.userId);
+      tracks = await library.list(ownerId: auth.userId, encryptedOnly: true);
     }
     var videos = await library.listVideos(ownerId: auth.userId);
     if (api.accessToken != null) {
@@ -126,6 +134,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       _tracks = tracks;
       _videos = videos;
       _storageBytes = storageBytes;
+      _legacyPending = legacyPending;
       _loading = false;
     });
   }
@@ -289,6 +298,18 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
               ],
             ),
           ),
+          if (_legacyPending)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  'Older downloads are locked until they can be encrypted. '
+                  'Unlock device storage and tap Refresh to try again.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ),
           if (!_loading)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
