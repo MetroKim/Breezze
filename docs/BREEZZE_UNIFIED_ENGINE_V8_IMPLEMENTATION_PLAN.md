@@ -74,6 +74,15 @@
 
 **Working implementation:** Draft [PR #83](https://github.com/MetroKim/Breezze/pull/83) contains this cutover, replacement UI components, tests and CI guard. Separate [PR #82](https://github.com/MetroKim/Breezze/pull/82) retires the older V6/V7 master plans; reconcile both before merge. Historical source or brand reference archives are not permission to reintroduce old UI. Last known old PR #83 rights-test failure was a premature Flutter navigation assertion, patched and re-run; no green exact-head claim until the current run proves it.
 
+### V8 unified four-tab header and detail cutover checkpoint (2026-11-26)
+
+- **All four pages** now reference the **same** `BzMorphingBrandHeader`: Home and New use pinned scrollable slivers; Library and Search use a shared header over their existing real, account-scoped content through `NestedScrollView`. Old static round badges in Library/Search headers were retired, and existing search/filter/library actions remain connected.
+- A true desktop **`BzSidebarBrandOwner` inherited scope** controls whether the wordmark is shown in page chrome, so desktop sidebar + content never show two Breezze logos. Standalone pushed pages are outside that scope and retain their own identity. On compact screens the wordmark collapses into an original circular B-note on scroll.
+- A single `BzBrandedAppBar` replaces legacy Material `AppBar` variants in YouTube Music discovery and its nested routes, Browse catalog collections, playlists, song/album details, artist pages, Account, Notifications, and official video player. The Now Playing immersive view retains purpose-built player controls, not an unnecessary toolbar.
+- `BzGlass` is the only blur implementation; `BzGlassContainer` delegates as a compatibility facade so existing gameplay/navigation widgets remain functional. One design system + one audio engine; no vendored third-party Flutter clone and no unnecessary fresh app scaffold.
+- CI source gate now checks all four page header call sites, absence of duplicate brand marks, one glass engine and absence of legacy detail toolbars; regression fixtures cover these. UI widget tests span target-platform themes and 280dp foldable, and are included in macOS and Windows host jobs, with Linux/Android/web plus iOS build workflows separately configured.
+- **Status remains UNVERIFIED ON CURRENT PR SHA:** each change is in development Draft [PR #83](https://github.com/MetroKim/Breezze/pull/83), subject to exact-head CI, true Android/iOS/desktop interactive tests, visual evidence, accessiblity and rights validation. Do not merge old UI wholesale or publish any release without these gates. Fix CI source/test failures rather than removing failing tests.
+
 ## Product contract (single source of truth)
 - **Four top-level tabs in order:** **Home**, **New** (formerly Browse), **Library**, **Search**; no fifth Radio/Downloads/Settings tab.
 - **Home:** listener-scoped history, favorites, follows, personalized shelves with honest source metadata. Do not label algorithmic shelves or charts as official without a real dataset.
