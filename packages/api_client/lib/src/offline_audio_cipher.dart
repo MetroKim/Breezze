@@ -8,7 +8,6 @@
  /// licensed provider-specific DRM remains a separate release requirement.
 library;
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
