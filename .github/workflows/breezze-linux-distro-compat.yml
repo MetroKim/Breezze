@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: breezze-linux-portability-${{ github.ref }}-${{ github.sha }}
+  group: breezze-linux-portability-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

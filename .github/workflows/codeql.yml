@@ -19,6 +19,10 @@ on:
   schedule:
     - cron: '28 19 * * 5'
 
+concurrency:
+  group: breezze-codeql-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})

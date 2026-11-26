@@ -16,6 +16,12 @@ on:
 permissions:
   contents: read
 
+# Preserve the currently executing run's evidence, but keep only the newest
+# pending commit for each branch. A source change still needs fresh green CI.
+concurrency:
+  group: breezze-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   independent_identity:
     name: Breezze independent identity and playback scaffold guard

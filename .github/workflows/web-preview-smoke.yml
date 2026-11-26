@@ -19,6 +19,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: breezze-web-preview-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   preview:
     name: Start headless Flutter web preview
