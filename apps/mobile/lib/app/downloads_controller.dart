@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/auth/auth_session.dart';
 import '../core/audio/authorized_download_grant.dart';
+import '../core/audio/playback_source_policy.dart';
 import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
 import 'bootstrap.dart';
@@ -261,6 +262,12 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
   Future<void> download(BzTrack track) async {
     if (state.containsKey(track.id) || ['downloading', 'downloaded'].contains(ref.read(downloadJobStatusProvider)[track.id])) return;
     _tracks[track.id] = track;
+    // Metadata-only songs and video/preview IDs cannot grant persistent
+    // audio rights; reject before creating a transfer or asking the server.
+    if (!canRequestOfflineDownload(track.id)) {
+      _setStatus(track.id, 'rights_unavailable');
+      return;
+    }
     final cancellation = DownloadCancellation();
     _cancellations[track.id] = cancellation;
     _setStatus(track.id, 'downloading');
@@ -277,12 +284,12 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
 
       final auth = ref.read(authSessionProvider);
       if (auth is! AuthSignedIn) {
-        _setStatus(track.id, 'failed');
+        _setStatus(track.id, 'login_required');
         return;
       }
 
       final api = ref.read(authSessionProvider.notifier).api;
-      if (api.accessToken == null) { _setStatus(track.id, 'failed'); return; }
+      if (api.accessToken == null) { _setStatus(track.id, 'login_required'); return; }
 
       final catalogId = await _resolveCatalogId(api, track);
       if (cancellation.isCancelled) return;
@@ -294,9 +301,9 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       );
       if (cancellation.isCancelled) return;
       if (authorization['allowed'] != true) {
-        _setStatus(track.id, 'failed');
-        // ignore: avoid_print
-        print('download_not_authorized: ${authorization['reason']}');
+        // Authorization denial is not a transient network failure. Expose a
+        // useful UI status without logging server reason/credential details.
+        _setStatus(track.id, 'rights_unavailable');
         return;
       }
 
@@ -305,7 +312,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       // authorization for locally persistent music.
       final grant = AuthorizedDownloadGrant.fromResponse(authorization);
       if (grant == null) {
-        _setStatus(track.id, 'failed');
+        _setStatus(track.id, 'invalid_grant');
         return;
       }
       final downloadUrl = grant.downloadUrl.toString();
@@ -347,26 +354,11 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     }
   }
 
-  Future<String?> _resolveCatalogId(
-    BreezzeApi api,
-    BzTrack track,
-  ) async {
-    if (!track.id.startsWith('bz:')) return track.id;
-
-    final mapDao = ref.read(catalogIdMapDaoProvider);
-    final cached = await mapDao.lookup(track.id);
-    if (cached != null) return cached;
-
-    final resolved = await api.resolveCatalogTrack(
-      externalId: track.id,
-      source: 'youtube',
-      title: track.title,
-      artistName: track.artist,
-      durationSec: track.duration.inSeconds.clamp(1, 86400).toInt(),
-    );
-    final catalogId = resolved['id'] as String?;
-    if (catalogId == null || catalogId.isEmpty) return null;
-    await mapDao.save(track.id, catalogId);
-    return catalogId;
+  /// Offline grants are requested only for internal canonical track IDs.
+  /// Mapping a provider ID to a new internal metadata row does NOT supply
+  /// the license or audio bytes, so never create that mapping here.
+  Future<String?> _resolveCatalogId(BreezzeApi api, BzTrack track) async {
+    if (!canRequestOfflineDownload(track.id)) return null;
+    return track.id;
   }
 }
