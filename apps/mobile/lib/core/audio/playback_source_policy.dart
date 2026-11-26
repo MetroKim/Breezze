@@ -19,8 +19,8 @@ bool isYouTubeSongId(String id) => _youtubeSongId.hasMatch(id);
 /// Deezer 30-second previews are a separate, explicitly requested native
 /// audio action. Other external provider IDs and all videos are metadata.
 bool isMetadataOnlyTrackId(String id) =>
-    id.startsWith('bzv:') ||
-    id.startsWith('bz:');
+    !isDeezerPreview(id) &&
+    (id.startsWith('bzv:') || id.startsWith('bz:'));
 
 bool canQueueTrackId(String id) =>
     id.trim().isNotEmpty &&
