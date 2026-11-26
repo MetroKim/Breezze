@@ -17,6 +17,54 @@ interface DeezerTrack {
   album?: { cover_medium?: string; cover_big?: string };
 }
 interface DeezerEnvelope<T> { data?: T[]; error?: { message?: string }; }
+interface DeezerArtistRecord {
+  id?: number;
+  name?: string;
+  picture_medium?: string;
+  picture_big?: string;
+  link?: string;
+}
+interface DeezerAlbumRecord {
+  id?: number;
+  title?: string;
+  release_date?: string;
+  record_type?: string;
+  cover_medium?: string;
+  cover_big?: string;
+  nb_tracks?: number;
+  link?: string;
+  artist?: { id?: number; name?: string };
+}
+
+export interface DeezerArtistSupplement {
+  matchedArtistId: string;
+  matchedName: string;
+  songs: (ProviderTrack & { providerId: 'deezer' })[];
+  albums: Array<{
+    providerId: 'deezer';
+    id: string;
+    title: string;
+    type: 'album' | 'single';
+    releaseDate: string;
+    trackCount: number;
+    artworkUrl?: string;
+    url: string;
+  }>;
+  relatedArtists: Array<{
+    providerId: 'deezer';
+    id: string;
+    name: string;
+    imageUrl?: string;
+    url: string;
+  }>;
+  songStatus: 'ok' | 'unavailable';
+  albumStatus: 'ok' | 'unavailable';
+  relatedStatus: 'ok' | 'unavailable';
+}
+
+const normalizeArtist = (name: string) =>
+  name.normalize('NFKC').toLocaleLowerCase('en').trim().replace(/\\s+/g, ' ');
+
 
 @Injectable()
 export class DeezerAdapter implements ProviderAdapter {
@@ -98,6 +146,110 @@ export class DeezerAdapter implements ProviderAdapter {
       return result;
     } catch {
       return providerError('DEEZER_SEARCH_FAILED', 'Deezer catalogue search is temporarily unavailable', true);
+    }
+  }
+
+  /**
+   * OPTIONAL artist-page supplement. The Spotify artist remains authoritative.
+   * A Deezer artist is eligible only when the public artist search finds one
+   * unique, exact normalized name; ambiguous same-name artists are rejected.
+   * This does not establish cross-service recording identity or media rights.
+   */
+  async getArtistSupplement(name: string): Promise<ProviderResult<DeezerArtistSupplement>> {
+    if (!this.enabled) return providerUnsupported('DEEZER_NOT_CONFIGURED');
+    const query = name.trim().replace(/\\s+/g, ' ');
+    if (query.length < 2 || query.length > 120) {
+      return providerUnsupported('INVALID_ARTIST_QUERY');
+    }
+    const key = 'provider:deezer:artist-supplement:v1:' +
+      encodeURIComponent(query.toLocaleLowerCase('en'));
+    const cached = await this.cache.get<ProviderResult<DeezerArtistSupplement>>(key);
+    if (cached) return cached;
+    try {
+      const search = await this.request<DeezerEnvelope<DeezerArtistRecord>>(
+        this.url('search/artist', { q: query, limit: '25' }),
+      );
+      if (!Array.isArray(search.data)) {
+        return providerError('DEEZER_ARTIST_SEARCH_INVALID', 'Invalid Deezer artist search', false);
+      }
+      const exact = search.data.filter(artist =>
+        typeof artist.id === 'number' && Number.isSafeInteger(artist.id) &&
+        artist.id > 0 && typeof artist.name === 'string' &&
+        normalizeArtist(artist.name) === normalizeArtist(query));
+      // Exact name alone is weak identity evidence. Never pick the first
+      // of multiple exact artist identities and silently merge their data.
+      const uniqueIds = [...new Set(exact.map(artist => artist.id!))];
+      if (uniqueIds.length !== 1) {
+        return providerUnsupported(uniqueIds.length ? 'DEEZER_ARTIST_AMBIGUOUS' :
+          'DEEZER_ARTIST_NOT_MATCHED');
+      }
+      const artistId = uniqueIds[0];
+      const [songsResult, albumsResult, relatedResult] = await Promise.allSettled([
+        this.request<DeezerEnvelope<DeezerTrack>>(
+          this.url('artist/' + artistId + '/top', { limit: '20' })),
+        this.request<DeezerEnvelope<DeezerAlbumRecord>>(
+          this.url('artist/' + artistId + '/albums', { limit: '30' })),
+        this.request<DeezerEnvelope<DeezerArtistRecord>>(
+          this.url('artist/' + artistId + '/related', { limit: '10' })),
+      ]);
+      const songsData = songsResult.status === 'fulfilled' &&
+        Array.isArray(songsResult.value.data) ? songsResult.value.data : null;
+      const albumData = albumsResult.status === 'fulfilled' &&
+        Array.isArray(albumsResult.value.data) ? albumsResult.value.data : null;
+      const relatedData = relatedResult.status === 'fulfilled' &&
+        Array.isArray(relatedResult.value.data) ? relatedResult.value.data : null;
+      const seenTracks = new Set<string>();
+      const songs = (songsData ?? [])
+        .filter(row => normalizeArtist(row.artist?.name ?? '') === normalizeArtist(query))
+        .map(row => this.mapTrack(row))
+        .filter((row): row is ProviderTrack => row !== null &&
+          !seenTracks.has(row.providerTrackId) &&
+          (seenTracks.add(row.providerTrackId), true))
+        .map(row => ({ ...row, providerId: 'deezer' as const }));
+      const seenAlbums = new Set<string>();
+      const albums = (albumData ?? [])
+        .filter(row => Number.isSafeInteger(row.id) && (row.id ?? 0) > 0 &&
+          typeof row.title === 'string' && row.title.trim() &&
+          (row.artist?.id === undefined || row.artist.id === artistId))
+        .map(row => ({
+          providerId: 'deezer' as const,
+          id: String(row.id!),
+          title: row.title!.trim(),
+          type: row.record_type === 'single' ? 'single' as const : 'album' as const,
+          releaseDate: typeof row.release_date === 'string' &&
+            /^\\d{4}-\\d{2}-\\d{2}$/.test(row.release_date)
+            ? row.release_date : '',
+          trackCount: typeof row.nb_tracks === 'number' ? row.nb_tracks : 0,
+          artworkUrl: row.cover_big ?? row.cover_medium,
+          url: 'https://www.deezer.com/album/' + row.id,
+        }))
+        .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate))
+        .filter(row => !seenAlbums.has(row.id) && (seenAlbums.add(row.id), true));
+      const seenRelated = new Set<string>();
+      const relatedArtists = (relatedData ?? [])
+        .filter(row => typeof row.id === 'number' &&
+          Number.isSafeInteger(row.id) && row.id > 0 && row.id !== artistId &&
+          typeof row.name === 'string' && row.name.trim())
+        .map(row => ({
+          providerId: 'deezer' as const, id: String(row.id!),
+          name: row.name!.trim(),
+          imageUrl: row.picture_big ?? row.picture_medium,
+          url: 'https://www.deezer.com/artist/' + row.id,
+        }))
+        .filter(row => !seenRelated.has(row.id) && (seenRelated.add(row.id), true));
+      const result = providerOk<DeezerArtistSupplement>({
+        matchedArtistId: String(artistId),
+        matchedName: exact[0].name!,
+        songs, albums, relatedArtists,
+        songStatus: songsData === null ? 'unavailable' : 'ok',
+        albumStatus: albumData === null ? 'unavailable' : 'ok',
+        relatedStatus: relatedData === null ? 'unavailable' : 'ok',
+      }, 'Deezer artist metadata only, never a full-song stream authorization');
+      await this.cache.set(key, result, 120);
+      return result;
+    } catch {
+      return providerError('DEEZER_ARTIST_SUPPLEMENT_FAILED',
+        'Deezer artist metadata unavailable', true);
     }
   }
 
