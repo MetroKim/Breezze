@@ -50,3 +50,33 @@ tmp/
 *.ort
 *.safetensors
 *.gguf
+
+# V8: additional platform/cloud credential formats (never commit originals)
+*.jks
+*.asc
+*.gpg
+*.kdbx
+*.credentials.json
+*service-account*.json
+*service_account*.json
+*firebase-adminsdk*.json
+**/google-services.json
+**/GoogleService-Info.plist
+**/android/key.properties
+**/ios/Flutter/Secrets.xcconfig
+**/macos/Flutter/Secrets.xcconfig
+**/fastlane/report.xml
+**/.secrets/**
+**/secrets/**
+credentials/
+secrets/
+*.provisionprofile
+*.cer
+*.p8
+*.p12
+*.pfx
+*.mobileprovision
+
+# Keep example templates committed; only sanitized placeholder values.
+!**/.env.example
+!**/.env.production.example
