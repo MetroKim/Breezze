@@ -13,6 +13,7 @@ import '../video/open_youtube_player.dart';
 import '../search/search_screen.dart';
 import './ytmusic_client_screen.dart';
 import '../../widgets/bz_branded_app_bar.dart';
+import '../../widgets/bz_discovery_action_tile.dart';
 import '../catalog/catalog_detail_screens.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
@@ -266,51 +267,16 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.crossAxisExtent;
-                final columns = width >= 1080 ? 4 : width >= 620 ? 3 : 2;
+                final columns = width >= 1080 ? 4 : width >= 620 ? 3 : width >= 340 ? 2 : 1;
                 return SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final destination = _browseDestinations[index];
-                      return Material(
-                        color: theme.bzSurface1,
-                        borderRadius: BorderRadius.circular(BzRadius.card),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(BzRadius.card),
-                          onTap: () => _openCollection(destination),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(BzRadius.card),
-                              border: Border.all(color: theme.bzSeparator),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: theme.bzSurface2,
-                                    borderRadius: BorderRadius.circular(11),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: BzSvgIcon(name: destination.icon, size: 19, color: theme.bzAccent),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(destination.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge),
-                                      const SizedBox(height: 3),
-                                      Text(destination.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2, fontSize: 10)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      return BzDiscoveryActionTile(
+                        label: destination.title,
+                        description: destination.description,
+                        iconName: destination.icon,
+                        onTap: () => _openCollection(destination),
                       );
                     },
                     childCount: _browseDestinations.length,
@@ -319,7 +285,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                     crossAxisCount: columns,
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
-                    childAspectRatio: width < 380 ? 2.0 : 2.35,
+                    mainAxisExtent: 120,
                   ),
                 );
               },
