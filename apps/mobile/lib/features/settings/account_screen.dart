@@ -7,6 +7,8 @@ import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
 import '../../app/breezze_navigation.dart';
 import '../notifications/notifications_screen.dart';
+import '../onboarding/onboarding_flow.dart';
+import '../onboarding/onboarding_controller.dart';
 import 'settings_screen.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
@@ -225,6 +227,23 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     }
   }
 
+  /// Existing users can repeat the same persisted mood/genre onboarding
+  /// instead of creating a second preference store or resetting their account.
+  void _revisitMusicTastes() {
+    ref.invalidate(onboardingProvider);
+    Navigator.of(context).push(
+      breezzePageRoute<void>(
+        context: context,
+        builder: (routeContext) => OnboardingFlow(
+          onComplete: () {
+            Navigator.of(routeContext).pop();
+            _load();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -347,6 +366,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 FilledButton(
                   onPressed: _saving ? null : _saveProfile,
                   child: Text(_saving ? 'Saving…' : 'Save profile'),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'headphones'),
+                  title: const Text('Update music tastes'),
+                  subtitle: const Text('Choose your region, genres and favorite artists again'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: _saving ? null : _revisitMusicTastes,
                 ),
                 const SizedBox(height: 28),
                 Text('ACTIVE SESSIONS', style: theme.textTheme.labelLarge),
