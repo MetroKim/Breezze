@@ -342,72 +342,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // The Flutter discovery pattern is inspired by editorial music
           // browsers, not copied from the unlicensed reference source.
           Text(_greeting, style: theme.textTheme.displayMedium),
-          const SizedBox(height: 16),
-          BzDiscoverySpotlight(
-            eyebrow: 'Breezze discovery',
-            title: 'Your next favorite starts here',
-            description: 'Explore music, artists and videos from real catalog results.',
-            actionLabel: 'Explore New',
-            onAction: () => ref.read(homeTabHintProvider.notifier).state =
-                MainTab.browse.index,
-          ),
-          const SizedBox(height: 24),
-          Text('Discover in Breezze', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 740
-                  ? 3
-                  : constraints.maxWidth >= 330
-                      ? 2
-                      : 1;
-              final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  SizedBox(
-                    width: width,
-                    child: BzDiscoveryActionTile(
-                      label: 'New releases',
-                      description: 'Music and albums',
-                      iconName: 'disc-3',
-                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
-                          MainTab.browse.index,
-                    ),
-                  ),
-                  SizedBox(
-                    width: width,
-                    child: BzDiscoveryActionTile(
-                      label: 'Music videos',
-                      description: 'Official video search',
-                      iconName: 'video',
-                      onTap: () => Navigator.of(context).push(
-                        breezzePageRoute<void>(
-                          context: context,
-                          builder: (_) => const SearchScreen(
-                            initialQuery: 'official music video',
-                            initialVideoSearch: true,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: width,
-                    child: BzDiscoveryActionTile(
-                      label: 'Find artists',
-                      description: 'Search artist profiles',
-                      iconName: 'user-round',
-                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
-                          MainTab.search.index,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           if (_loading) ...[
             const BzSkeleton(width: 172, height: 16, radius: 5),
             const SizedBox(height: 16),
@@ -481,6 +416,74 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
+          // Render the genuine music sessions before promotional chrome,
+          // following the reference's music-first Home hierarchy.
+          const SizedBox(height: 16),
+          BzDiscoverySpotlight(
+            eyebrow: 'Breezze discovery',
+            title: 'Your next favorite starts here',
+            description: 'Explore music, artists and videos from real catalog results.',
+            actionLabel: 'Explore New',
+            onAction: () => ref.read(homeTabHintProvider.notifier).state =
+                MainTab.browse.index,
+          ),
+          const SizedBox(height: 24),
+          Text('Discover in Breezze', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 740
+                  ? 3
+                  : constraints.maxWidth >= 330
+                      ? 2
+                      : 1;
+              final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'New releases',
+                      description: 'Music and albums',
+                      iconName: 'disc-3',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.browse.index,
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Music videos',
+                      description: 'Official video search',
+                      iconName: 'video',
+                      onTap: () => Navigator.of(context).push(
+                        breezzePageRoute<void>(
+                          context: context,
+                          builder: (_) => const SearchScreen(
+                            initialQuery: 'official music video',
+                            initialVideoSearch: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Find artists',
+                      description: 'Search artist profiles',
+                      iconName: 'user-round',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.search.index,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
           if (!_loading && (_recentlyPlayed.isNotEmpty || _favorites.isNotEmpty)) ...[
             _Rail(
               title: 'Your Mix',
