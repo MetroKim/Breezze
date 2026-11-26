@@ -63,7 +63,7 @@ export interface DeezerArtistSupplement {
 }
 
 const normalizeArtist = (name: string) =>
-  name.normalize('NFKC').toLocaleLowerCase('en').trim().replace(/\\s+/g, ' ');
+  name.normalize('NFKC').toLocaleLowerCase('en').trim().replace(/\s+/g, ' ');
 
 
 @Injectable()
@@ -157,7 +157,7 @@ export class DeezerAdapter implements ProviderAdapter {
    */
   async getArtistSupplement(name: string): Promise<ProviderResult<DeezerArtistSupplement>> {
     if (!this.enabled) return providerUnsupported('DEEZER_NOT_CONFIGURED');
-    const query = name.trim().replace(/\\s+/g, ' ');
+    const query = name.trim().replace(/\s+/g, ' ');
     if (query.length < 2 || query.length > 120) {
       return providerUnsupported('INVALID_ARTIST_QUERY');
     }
@@ -217,7 +217,7 @@ export class DeezerAdapter implements ProviderAdapter {
           title: row.title!.trim(),
           type: row.record_type === 'single' ? 'single' as const : 'album' as const,
           releaseDate: typeof row.release_date === 'string' &&
-            /^\\d{4}-\\d{2}-\\d{2}$/.test(row.release_date)
+            /^\d{4}-\d{2}-\d{2}$/.test(row.release_date)
             ? row.release_date : '',
           trackCount: typeof row.nb_tracks === 'number' ? row.nb_tracks : 0,
           artworkUrl: row.cover_big ?? row.cover_medium,
