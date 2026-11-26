@@ -83,6 +83,29 @@
 - CI source gate now checks all four page header call sites, absence of duplicate brand marks, one glass engine and absence of legacy detail toolbars; regression fixtures cover these. UI widget tests span target-platform themes and 280dp foldable, and are included in macOS and Windows host jobs, with Linux/Android/web plus iOS build workflows separately configured.
 - **Status remains UNVERIFIED ON CURRENT PR SHA:** each change is in development Draft [PR #83](https://github.com/MetroKim/Breezze/pull/83), subject to exact-head CI, true Android/iOS/desktop interactive tests, visual evidence, accessiblity and rights validation. Do not merge old UI wholesale or publish any release without these gates. Fix CI source/test failures rather than removing failing tests.
 
+## V8 reference repo screen-parity follow-up (2026-11-26)
+
+**Active implementation:** [Breezze V8 PR #84](https://github.com/MetroKim/Breezze/pull/84), branch `feat/v8-reference-structure-pinned-moods-20261126`. This is a continuation of **merged PR #83**, not a new UI framework or duplicate shell. `main` is the canonical V8 baseline, and this PR's source changes are **not certified green** without exact-head CI and native OS acceptance.
+
+### Audited upstream structure and exact Breezze routing contract
+| Upstream screen/component | V8 only destination | Implementation and real interaction |
+|---|---|---|
+| Home masthead with choice-chip bar pinned underneath | Home | Existing `BzMorphingBrandHeader` (expanded Breezze wordmark → compact round B-note) immediately followed by **one** `BzPinnedMoodRail` sliver. Remove duplicate in-body mood chips. Moods navigate to `SearchScreen(initialQuery: '<mood> music')` using live search adapter |
+| Upstream session artwork rows and quick songs | Home | Preserve existing authenticated account-scoped recent/personalized rails and playable-source policy. Render unavailable/loading/error states faithfully, no scraped audio or fabricated recommendations |
+| Explore: Releases / Charts / Moods & Genres top-level entries | New | `BrowseScreen` features these **three unique** `BzDiscoveryActionTile` entries at top, each preserving `_openCollection` real provider-backed routes; **exclude** them from the later discovery grid to avoid duplicate visual designs |
+| Explore artist/song/video trends | New and its detail screens | Maintain provider-attributed Deezer charts/official YouTube video discovery plus source-specific artist and track details. Show unsupported ranks as unavailable, not algorithmically fabricated numbers |
+| Library: downloads, playlist, songs, albums, artists | Library | Account-owned existing `All` collection overview with actual shortcut actions and playlist/saved-song stores, followed artists and downloaded media (only when authorized). No fake subscriptions or dead shortcuts |
+| Search: service vs Library, song/video/artist/album filters | Search | Reuse current `Audio / Video / Library / Local` scoped searches and genuine provider+owner result data. No dummy microphone, no duplicate YT Music app identity |
+| Provider branding | All screens | Breezze app wordmark and compact circular B-note on content; source names only as data attribution. Native media player and queue are singular |
+
+**Platform and architecture:** same Flutter/Riverpod code across Android, iOS, Linux, Windows, macOS and web; small-width (280–390dp) scrollable controls, large-font targets (48dp), Reduce Motion, contrast, keyboard semantics and desktop sidebar brand ownership. This change does **not** assert running-device, signed distribution or full media catalog rights acceptance.
+
+### Regression checks for handoff
+- `apps/mobile/test/bz_pinned_mood_rail_test.dart`: rail stays visible after vertical scroll, navigable horizontally on narrow accessible screens; mood callbacks work.
+- `apps/mobile/test/browse_screen_test.dart`: three reference-major categories render exactly once; Moods routes to actual `Focus music` provider query.
+- `tools/check_v8_ui_single_source.py` and `tools/test_v8_ui_single_source.py`: refuse missing/duplicated pinned rail or returning duplicate release/chart/mood sections.
+- **Next:** review exact-commit GitHub CI for PR #84, fix failures, check real emulator/system build matrix and compare screenshots for layout parity. Do not merge failing or call this 100% done.
+
 ## Product contract (single source of truth)
 - **Four top-level tabs in order:** **Home**, **New** (formerly Browse), **Library**, **Search**; no fifth Radio/Downloads/Settings tab.
 - **Home:** listener-scoped history, favorites, follows, personalized shelves with honest source metadata. Do not label algorithmic shelves or charts as official without a real dataset.
