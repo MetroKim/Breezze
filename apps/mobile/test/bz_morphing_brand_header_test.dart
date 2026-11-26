@@ -94,4 +94,38 @@ void main() {
     expect(find.byType(BzCompactBrandMark), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('desktop sidebar prevents duplicated Breezze wordmarks',
+      (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var opens = 0;
+    await tester.pumpWidget(MaterialApp(
+      theme: bzDarkTheme(),
+      home: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            BzMorphingBrandHeader(
+              sidebarBrandOnDesktop: true,
+              actions: [
+                IconButton(
+                  tooltip: 'Search Breezze music',
+                  icon: const Icon(Icons.search),
+                  onPressed: () => opens++,
+                ),
+              ],
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 1100)),
+          ],
+        ),
+      ),
+    ));
+    expect(find.byKey(const Key('breezze-expanded-wordmark')), findsNothing);
+    expect(find.byKey(const Key('breezze-compact-icon')), findsNothing);
+    await tester.tap(find.byTooltip('Search Breezze music'));
+    expect(opens, 1);
+    expect(tester.takeException(), isNull);
+  });
+
 }
