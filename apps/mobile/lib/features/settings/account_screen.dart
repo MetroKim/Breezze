@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
+import '../../app/breezze_navigation.dart';
+import '../notifications/notifications_screen.dart';
+import 'settings_screen.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -185,6 +188,43 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     }
   }
 
+  /// Switch account is an explicit sign-out followed by the existing
+  /// authenticated sign-in gate. Never reuse another account's session,
+  /// queue, downloads or profile cache.
+  Future<void> _switchAccount() async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Switch Breezze account?'),
+        content: const Text(
+          'Playback will stop. Your saved music stays with this account. '
+          'Sign in with the other account to continue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Switch account'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    try {
+      await ref.read(authSessionProvider.notifier).signOut();
+      // BreezzeAppRoot listens to auth and replaces the entire signed-in
+      // shell with the sign-in gate; no manual route duplication.
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not switch accounts. Try again.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -249,6 +289,42 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 const SizedBox(height: 22),
                 Text(_email ?? '', style: theme.textTheme.bodyMedium),
                 const SizedBox(height: 16),
+                Text('ACCOUNT & ACTIVITY', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 6),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'user-round'),
+                  title: const Text('Switch account'),
+                  subtitle: const Text('Sign in with a different Breezze account'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: _switchAccount,
+                ),
+                Divider(color: theme.bzSeparator),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'settings'),
+                  title: const Text('Settings'),
+                  subtitle: const Text('Playback, downloads and accessibility'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: () => Navigator.of(context).push(
+                    breezzePageRoute<void>(
+                      context: context,
+                      builder: (_) => const SettingsScreen(),
+                    ),
+                  ),
+                ),
+                Divider(color: theme.bzSeparator),
+                ListTile(
+                  leading: const BzSvgIcon(name: 'bell'),
+                  title: const Text('Activity & notifications'),
+                  subtitle: const Text('Updates and unread activity'),
+                  trailing: const BzSvgIcon(name: 'chevron-right'),
+                  onTap: () => Navigator.of(context).push(
+                    breezzePageRoute<void>(
+                      context: context,
+                      builder: (_) => const NotificationsScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
                 TextField(
                   controller: _name,
                   maxLength: 80,
