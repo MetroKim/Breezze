@@ -71,7 +71,7 @@ const server = createServer(async (req, res) => {
       return;
     }
     const controller = new AbortController();
-    req.on('close', () => controller.abort());
+    res.on('close', () => controller.abort());
     const response = await fetch(format.url, {
       headers: range ? { Range: range } : {},
       signal: AbortSignal.any([
@@ -79,7 +79,8 @@ const server = createServer(async (req, res) => {
       ]),
       redirect: 'error',
     });
-    if (![200, 206].includes(response.status) || !response.body) {
+    if (![200, 206].includes(response.status) ||
+        (range !== null && response.status !== 206) || !response.body) {
       await response.body?.cancel();
       json(res, 502, { error: 'UPSTREAM_STREAM_UNAVAILABLE' });
       return;
