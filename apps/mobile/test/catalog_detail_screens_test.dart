@@ -66,7 +66,7 @@ void main() {
     expect(await store.isFavorite(song.id), isFalse);
   });
 
-  testWidgets('YouTube song details enable the in-app player', (tester) async {
+  testWidgets('YouTube song details offer official visible video playback', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
@@ -82,7 +82,7 @@ void main() {
       ),
     );
     final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Play on YouTube'),
+      find.widgetWithText(FilledButton, 'Watch on YouTube'),
     );
     expect(button.onPressed, isNotNull);
   });
