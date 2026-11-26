@@ -65,19 +65,65 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   int _requestId = 0;
   final Map<String, String> _featuredArtwork = {};
   int _featuredRequest = 0;
+  int _artistArtworkRequest = 0;
 
-  String? _firstRealArtwork(Map<String, dynamic> response) {
+  // Only genuine https artwork fields returned by active catalog providers;
+  // no stock faces, fabricated artist portraits or external image scraping.
+  List<String> _realArtworkUrls(Map<String, dynamic> response) {
     final rows = response['items'];
-    if (rows is! List) return null;
+    if (rows is! List) return const [];
+    final urls = <String>[];
+    final seen = <String>{};
     for (final row in rows) {
       if (row is! Map) continue;
-      final artwork = row['artworkUrl'];
-      final uri = artwork is String ? Uri.tryParse(artwork) : null;
-      if (uri != null && uri.scheme == 'https' && uri.host.isNotEmpty) {
-        return artwork as String;
+      for (final key in ['artworkUrl', 'pictureUrl', 'imageUrl']) {
+        final raw = row[key];
+        if (raw is! String) continue;
+        final uri = Uri.tryParse(raw);
+        if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+            !seen.add(raw)) continue;
+        urls.add(raw);
+        break;
       }
     }
-    return null;
+    return urls;
+  }
+
+  String? _firstRealArtwork(Map<String, dynamic> response) {
+    final urls = _realArtworkUrls(response);
+    return urls.isEmpty ? null : urls.first;
+  }
+
+  Future<void> _loadGenreArtistArtwork(String genre) async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn) return;
+    final owner = auth.userId;
+    final request = ++_artistArtworkRequest;
+    // Clear the preceding genre's portraits immediately to prevent stale
+    // artist imagery being presented as relevant to the newly chosen genre.
+    setState(() {
+      for (final key in ['Artist Spotlight', 'Browse by Genre', 'Moods & Activities']) {
+        _featuredArtwork.remove(key);
+      }
+    });
+    try {
+      final data = await ref.read(authSessionProvider.notifier).api
+          .discoveryArtistSearch(genre);
+      if (!mounted || request != _artistArtworkRequest ||
+          _selectedGenre != genre) return;
+      final active = ref.read(authSessionProvider);
+      if (active is! AuthSignedIn || active.userId != owner) return;
+      final portraits = _realArtworkUrls(data);
+      if (portraits.isEmpty) return;
+      const destinations = ['Artist Spotlight', 'Browse by Genre', 'Moods & Activities'];
+      setState(() {
+        for (var i = 0; i < portraits.length && i < destinations.length; i++) {
+          _featuredArtwork[destinations[i]] = portraits[i];
+        }
+      });
+    } catch (_) {
+      // Without a provider-backed real portrait, retain an OLED neutral tile.
+    }
   }
 
   Future<void> _loadFeaturedArtwork() async {
@@ -107,8 +153,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
     await Future.wait([
       load('New Releases', api.discoveryNewReleases(country: country)),
-      load('Charts', api.discoverySongsChart(country: country)),
-      load('Moods & Activities', api.discoveryArtistSearch(_selectedGenre)),
+      load('Charts', api.discoverySongsChart(country: country)), 
     ]);
   }
 
@@ -132,6 +177,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       _error = null;
       _tracks = [];
     });
+    _loadGenreArtistArtwork(genre);
 
     try {
       final result = await ref.read(catalogSourceProvider).search('$genre music');
@@ -381,6 +427,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                         label: destination.title,
                         description: destination.description,
                         iconName: destination.icon,
+                        artworkUrl: _featuredArtwork[destination.title],
                         onTap: () => _openCollection(destination),
                       );
                     },
