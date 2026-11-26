@@ -220,3 +220,7 @@ for entitlement_name in ("DebugProfile.entitlements", "Release.entitlements"):
 print("Configured Android loopback-only media transport, media service, iOS background audio and macOS local proxy networking.")
 
 PY
+
+# Flutter recreates the runner shell above; apply the native OLED launch last
+# so generated Android/iOS splash assets cannot revert to Flutter defaults.
+python3 "${SCRIPT_DIR}/configure_native_splash.py" "${APP_DIR}"
