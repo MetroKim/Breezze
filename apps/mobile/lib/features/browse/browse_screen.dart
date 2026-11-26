@@ -618,6 +618,10 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   String? _catalogError;
   String? _catalogTerritory;
   DateTime? _catalogFetchedAt;
+  String? _catalogOwnerId;
+
+  String? _accountId(AuthState auth) =>
+      auth is AuthSignedIn ? auth.userId : null;
 
   bool get _latestSongs => widget.destination.title == 'Latest Songs';
   bool get _deezerChart => widget.destination.title == 'Charts';
@@ -649,6 +653,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   }
 
   Future<void> _loadCatalog() async {
+    final requesterId = _accountId(ref.read(authSessionProvider));
     final generation = ++_generation;
     setState(() {
       _loading = true;
@@ -659,6 +664,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       _catalogTerritory = null;
       _catalogFetchedAt = null;
       _dailyChartFallback = false;
+      _catalogOwnerId = null;
     });
     try {
       final api = ref.read(authSessionProvider.notifier).api;
@@ -679,9 +685,11 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
                   : _videoFeed
                   ? await api.discoveryMusicVideos()
                   : await api.discoveryConcerts(country: territory);
-      if (!mounted || generation != _generation) return;
+      if (!mounted || generation != _generation ||
+          _accountId(ref.read(authSessionProvider)) != requesterId) return;
       final rawItems = data['items'];
       setState(() {
+        _catalogOwnerId = requesterId;
         _catalogItems = rawItems is List
             ? rawItems.whereType<Map>().map((item) =>
                 item.map((key, value) => MapEntry(key.toString(), value))).toList()
@@ -696,8 +704,10 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
         _loading = false;
       });
     } catch (_) {
-      if (!mounted || generation != _generation) return;
+      if (!mounted || generation != _generation ||
+          _accountId(ref.read(authSessionProvider)) != requesterId) return;
       setState(() {
+        _catalogOwnerId = requesterId;
         _catalogError = 'The ${widget.destination.title.toLowerCase()} provider could not be reached. Try again in a moment.';
         _loading = false;
       });
@@ -820,6 +830,7 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
   }
 
   Future<void> _search(String choice) async {
+    final requesterId = _accountId(ref.read(authSessionProvider));
     final generation = ++_generation;
     setState(() {
       _selected = choice;
@@ -829,7 +840,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     });
     try {
       final result = await ref.read(catalogSourceProvider).search('$choice music');
-      if (!mounted || generation != _generation) return;
+      if (!mounted || generation != _generation ||
+          _accountId(ref.read(authSessionProvider)) != requesterId) return;
       if (result is ProviderOk<List<ProviderTrack>>) {
         setState(() {
           _tracks = result.value.map((track) => BzTrack(
@@ -902,6 +914,24 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
 
   @override
   Widget build(BuildContext context) {
+    // Drop late provider responses and refresh the section for the new listener.
+    // The visible catalog is gated immediately on owner changes, so signed-in
+    // user B never sees signed-in user A's licensed video listings.
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      if (_accountId(previous ?? const AuthSignedOut()) == _accountId(next)) {
+        return;
+      }
+      ++_generation;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_liveProviderCatalog) {
+          _loadCatalog();
+        } else if (_searchable) {
+          _search(_selected);
+        }
+      });
+    });
+    final currentOwner = _accountId(ref.watch(authSessionProvider));
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
     return Scaffold(
@@ -919,7 +949,9 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: _liveProviderCatalog
-                ? _deezerCatalogContent(theme)
+                ? currentOwner == _catalogOwnerId
+                    ? _deezerCatalogContent(theme)
+                    : const CircularProgressIndicator()
                 : _searchable
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
