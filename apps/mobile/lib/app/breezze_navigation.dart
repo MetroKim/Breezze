@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:material_ui/material_ui.dart';
 
 /// Breezze navigation policy.
