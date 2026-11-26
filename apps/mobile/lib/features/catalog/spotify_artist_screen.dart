@@ -764,7 +764,7 @@ class _SpotifyArtwork extends StatelessWidget {
     );
     final Widget child = image != null && image.scheme == 'https'
         ? Image.network(url!, width: size, height: size,
-            fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback)
+            fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback)
         : fallback;
     final visual = ClipRRect(
       borderRadius: BorderRadius.circular(circle ? size / 2 : 10),
