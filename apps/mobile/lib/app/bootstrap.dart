@@ -71,23 +71,6 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
     );
   }
 
-  ProviderTrack _localTrackFromJson(Map value) {
-    final id = value['id'] as String? ?? '';
-    final artistData = value['artist'];
-    final artist = artistData is Map
-        ? artistData['name'] as String? ?? 'Unknown artist'
-        : 'Unknown artist';
-    final duration = value['duration'];
-    return ProviderTrack(
-      breezzeTrackId: id,
-      providerTrackId: value['externalId'] as String? ?? id,
-      title: value['title'] as String? ?? '',
-      artist: artist,
-      artworkUrl: value['artworkUrl'] as String?,
-      duration: Duration(seconds: duration is num ? duration.toInt() : 0),
-    );
-  }
-
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
     // Breezze searches Deezer without credentials; Spotify is optional.
