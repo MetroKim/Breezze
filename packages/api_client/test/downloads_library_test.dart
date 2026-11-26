@@ -168,6 +168,53 @@ void main() {
     expect(await File('${folder.path}/audio.part').readAsString(), 'abc');
   });
 
+  test('valid signed asset SHA256 permits a complete authorized offline file', () async {
+    const id = 'catalog-hash-ok';
+    const actualDigest = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentLength = 3
+        ..add(utf8.encode('abc'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+
+    expect(await library.download(
+      BzTrack(id: id, title: 'Verified audio', artist: 'A'),
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: id,
+      assetVersion: actualDigest,
+    ), isTrue);
+    final folder = Directory('${root.path}/$id');
+    expect(await File('${folder.path}/audio.m4a').readAsString(), 'abc');
+  });
+
+  test('wrong signed SHA256 deletes audio and refuses to mark it downloaded', () async {
+    const id = 'catalog-hash-bad';
+    const incorrectDigest = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentLength = 3
+        ..add(utf8.encode('abc'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    expect(await library.download(
+      BzTrack(id: id, title: 'Invalid audio', artist: 'A'),
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: id,
+      assetVersion: incorrectDigest,
+    ), isFalse);
+    expect(await File('${root.path}/$id/audio.m4a').exists(), isFalse);
+    expect(await library.list(ownerId: 'user-1'), isEmpty);
+  });
+
   test('lists only assets owned by the requested account', () async {
     final alice = Directory('${root.path}/bz_alice-track');
     final bob = Directory('${root.path}/bz_bob-track');
