@@ -48,6 +48,12 @@ export class ProvidersController {
     return this.spotify.getArtistPage(artistId);
   }
 
+  @Get('spotify/albums/:albumId')
+  @UseGuards(JwtAuthGuard)
+  spotifyAlbumPage(@Param('albumId') albumId: string) {
+    return this.spotify.getAlbumPage(albumId);
+  }
+
   // Google official video discovery. No YouTube audio extraction endpoint.
   @Get('youtube/videos/search')
   @UseGuards(JwtAuthGuard)
