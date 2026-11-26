@@ -75,6 +75,12 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
     final highContrast = MediaQuery.highContrastOf(context);
     final background = theme.bzBackground;
     final width = 116 - progress * 72;
+    // Very narrow phones/foldables need a functional, unclipped header.
+    // Secondary settings are reachable through Account when hidden.
+    final narrow = MediaQuery.sizeOf(context).width < 360;
+    final visibleActions = narrow && actions.length > 2
+        ? <Widget>[actions.first, actions.last]
+        : actions;
 
     // A pinned sliver must paint its full declared extent. Without the
     // expansion Flutter may measure the action row as 48dp while the sliver
@@ -148,7 +154,7 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
                 ),
               ),
               const Spacer(),
-              ...actions,
+              ...visibleActions,
             ],
           ),
         ),
