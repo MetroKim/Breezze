@@ -24,6 +24,7 @@ const spotifySong = {
 const deezerSupplement: DeezerArtistSupplement = {
   matchedArtistId: '11',
   matchedName: 'Test Singer',
+  artistExtra: { fans: 3400, albumCount: 8, url: 'https://www.deezer.com/artist/11' },
   songs: [{
     providerId: 'deezer',
     providerTrackId: '3135556',
