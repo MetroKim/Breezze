@@ -52,6 +52,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
   bool _toursLoading = false;
   int _tourRequestGeneration = 0;
   String? _toursMessage;
+  String? _concertCountry;
   int _generation = 0;
   String? _initialOwner;
 
@@ -146,7 +147,9 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
   /// Existing JamBase event service is independent of both music catalogs.
   Future<void> _loadTourEvents(String name, String owner, int generation) async {
     final requestGeneration = ++_tourRequestGeneration;
-    final territory = ref.read(outboxTerritoryProvider).trim().toUpperCase();
+    // Touring location is a display filter, NEVER a rights/entitlement region.
+    final territory = (_concertCountry ?? ref.read(outboxTerritoryProvider))
+        .trim().toUpperCase();
     if (!RegExp(r'^[A-Z]{2}$').hasMatch(territory) ||
         territory == 'WW' || territory == 'ZZ') {
       if (mounted && generation == _generation && _owner() == owner &&
@@ -200,7 +203,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
   }
 
   Future<void> _changeTourCountry(String artistName) async {
-    final current = ref.read(outboxTerritoryProvider);
+    final current = _concertCountry ?? ref.read(outboxTerritoryProvider);
     final country = TextEditingController(
       text: RegExp(r'^[A-Z]{2}$').hasMatch(current) &&
           current != 'WW' ? current : '',
@@ -242,7 +245,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
     }
     final owner = _owner();
     if (owner == null || owner != _initialOwner) return;
-    ref.read(outboxTerritoryProvider.notifier).state = normalized;
+    setState(() => _concertCountry = normalized);
     unawaited(_loadTourEvents(artistName, owner, _generation));
   }
 
@@ -502,10 +505,11 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                   _section(theme, 'Tours', [
                     TextButton.icon(
                       onPressed: () => _changeTourCountry(title),
-                      icon: const BzSvgIcon(name: 'globe', size: 18),
+                      icon: const Icon(Icons.public, size: 18),
                       label: Text('Concert country: ' +
-                          (ref.watch(outboxTerritoryProvider) == 'WW'
-                              ? 'Select' : ref.watch(outboxTerritoryProvider))),
+                          ((_concertCountry ?? ref.watch(outboxTerritoryProvider)) == 'WW'
+                              ? 'Select'
+                              : (_concertCountry ?? ref.watch(outboxTerritoryProvider)))),
                     ),
                     if (_toursLoading)
                       const Center(child: Padding(
