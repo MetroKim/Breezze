@@ -19,10 +19,10 @@ import '../features/player/player_controller.dart';
 
 /// Composition root for Breezze app services.
 ///
-/// Spotify owns music playback, while YouTube owns visible videos.
-/// Legacy Deezer metadata remains readable but grants no playback rights.
-/// Downloads remain rights-gated. Lyrics
-/// lookup remains keyless through LRCLIB.
+/// Spotify/Deezer supply metadata discovery; neither public catalog API
+/// grants native Breezze full-track streams. Official YouTube remains a
+/// visible embedded video renderer. Local/rights-cleared streams use the
+/// device audio engine; lyrics lookup is best-effort through LRCLIB.
 
 /// package:http impl of the lyrics HTTP seam.
 class HttpLyrics implements LyricsHttp {
