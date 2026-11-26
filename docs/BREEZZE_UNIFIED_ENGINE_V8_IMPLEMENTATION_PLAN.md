@@ -14,6 +14,66 @@
 - Keep the absolute release, production deployment, downloadable source/artifact and store-publication freeze until every required V8 verification gate and explicit owner approval. Historical CI or implementation source alone is not proof of completion.
 
 
+
+## V8 UI Reference Integration — YTMusic-style structure, Breezze identity (2026-11-26)
+
+**Cross-chat handoff — START HERE for any future Breezze design session.** Owner selected [jogeanmcf/ytmusic_clone](https://github.com/jogeanmcf/ytmusic_clone) as the **complete UX structure and section reference** for Breezze V8, supplemented with premium restrained glassmorphism. The reference's GitHub repository has no declared license (as inspected 2026-11-26), and its README explicitly calls its streaming backend unfinished. **Do not copy source, code, artwork, fonts, YouTube Music marks, layout assets, or package setup into Breezze; independently implement equivalent screen hierarchy and interactions in existing Flutter/Riverpod with original Breezze styling.** Do not add GetX, a second app or an independent player.
+
+### Non-negotiable UI and brand behavior
+1. The **upper-left brand header morphs on vertical scroll**: expanded Breezze wordmark and brand mark becomes a compact **circular black/neutral badge with the genuine Breezze B-note icon** as its visible face. When user scrolls back up it expands to full Breezze identity. Inspired by the compact YouTube Music header behavior, but every word and graphic is Breezze. At desktop sizes the adaptive navigation/sidebar remains consistent, with no duplicate top-level route.
+2. Use the original Breezze symbol/wordmark (assets in `apps/mobile/assets/icons`, `BzBnoteMark`/`BzRibbonLogo`), `BzGlassContainer`, existing design tokens, and accessible contrast. Keep “Breezze” text in headers, settings, nav, player, semantics and any newly added surfaces; no YouTube Music product marks, logos or replacement app identity.
+3. Exactly four global destinations in this order: **Home, New, Library, Search**. Reference's three-tab “Start/Explore/Library”, in-page search, and branded YouTube shell are *structural inspiration*, not replacement navigation. Preserve one global player, queue, audio focus handling and mini-player.
+4. Responsive Flutter UI: editorial home discovery shelves, selected and sticky mood chips; New/Explore release/chart/genre/mood and official music-video sections; Library shortcuts for downloads, playlists, songs, albums, followed artists (and recent activity when real); Search with query suggestions/history, filters and results across available audio metadata, videos, artists, albums and library. For unsupported live datasets (ranking, upcoming releases) show clear real-world availability states rather than fabricated charts.
+5. Every introduced surface has a working interaction: chips trigger scoped searches or real genre fetches; section headers navigate to real existing routes; cards open proper licensed-playback/official-video/catalog detail; profile opens account; search operates over real providers; library sections display account-scoped user data; no empty `onTap` callbacks, decorative “More” links, duplicate player, fake cast/microphone/subscription controls or unimplemented screens.
+6. Glassmorphism belongs **only on selected headers, pinned filters, selected hero cards and global mini-player/nav**, respecting existing blur-performance budget, Reduce Motion, high contrast, 48dp touch targets, safe areas, and text scaling. No full-screen heavy blur or overlay that blocks scrolling/taps. Smooth collapse animation is disabled/reduced when OS accessibility requests it.
+7. Maintain original Breezze design hierarchy and platform idioms. Apple Music-inspired polish may remain; the requested YTMusic-inspired section architecture is the new UX reference. All source/provider music access stays under V8 lawful rights model.
+
+### File and implementation handoff
+- **Primary branch:** `feat/v8-ytmusic-inspired-glass-discovery-20261126` (development PR, **not** a release; rebase/sync with latest main and reconcile other V8 PRs before merging).
+- **Main shell:** `apps/mobile/lib/widgets/bz_shell.dart`; four tabs and shared mini-player remain authoritative.
+- **Home:** `apps/mobile/lib/features/home/home_screen.dart`; move to scroll-aware Breezze morphing header using reusable `BzMorphingBrandHeader` widget; mood chips, scrollable personalized/real rails and glass discovery hero.
+- **New:** `apps/mobile/lib/features/browse/browse_screen.dart`; real interactions for discovery destinations, genre chips and accessible expandable browse sections; avoid false ranking claims.
+- **Library:** `apps/mobile/lib/features/library/library_screen.dart`; functional downloads, playlist, album, artist and saved-song shortcuts; account-owned data.
+- **Search:** `apps/mobile/lib/features/search/search_screen.dart`; existing search history, filters, artist/song/video discovery + error handling should remain wired. Do not replace with a display-only screenshot.
+- **Design components:** `apps/mobile/lib/widgets/bz_brand_icons.dart`, `apps/mobile/lib/widgets/bz_discovery_spotlight.dart`, and `packages/design_system` glass widgets. Implement new reusable widgets without using reference code/assets.
+- **QA:** widget tests for initial expanded/header compact state & scroll reversal, semantic Breezze labels, reduced motion/high contrast, Home mood-chip action, New links and Library shortcuts; exact-commit Flutter analyzer/test/build matrix, then native mobile/desktop visual and accessibility acceptance.
+
+### Work state and acceptance tracking
+- **Reference read:** inspected all four reference screens (Home, Explore, Library, Search) and the search results plus trends, chips and genre components; all designs are **independent reimplementation**.
+- **Implemented before this checkpoint on feature branch:** original `BzDiscoverySpotlight` and Home mood-filter navigation; New already has genre filters and a V8 discovery layout. These are source changes, **not yet verified green on one exact SHA**.
+- **Implemented in draft [PR #83](https://github.com/MetroKim/Breezze/pull/83):** scroll-aware pinned `BzMorphingBrandHeader` in Home and New; original `BzCompactBrandMark` in Library and Search; Home glass spotlight, mood search, actionable New/music-video/artist discovery tiles; New spotlight + live genre/collections; Search optionally opens directly in authorized official-video discovery mode. Uses only Breezze branding/assets and existing Riverpod, catalog sources and native/official player policy. Added scroll reversal, compact marker, action, reduced-motion and tile widget tests. **All remain UNVERIFIED pending current SHA CI/native acceptance.**
+- **Next:** verify CI and repair any failures on the exact PR #83 head, finish interaction coverage across all remaining reference-derived sections (real data only), audit duplicate/obsolete YouTube branding and obtain native/accessibility screenshots. Maintain original licensing and release freeze. Revisit unsupported Cast/mic/artist chart/community playlist paths only after real integrations and rights are established; never render dead buttons.
+- **Completion:** V8 UI is not “100% complete” without checked branch CI, native app interactions and accessibility evidence. No release, deployment, public code archive or installer until owner explicitly approves the final verified build.
+
+## V8 UI single-design-system cutover and six-platform acceptance — 2026-11-26
+
+**Owner mandate:** remove duplicate/obsolete *visual implementations*, use the selected YTMusic-style **screen/section layout as an independently recreated UX reference**, and keep Breezze as the only app brand. Preserve and reconnect functionality rather than deleting working state management, authorization, account data, media players or provider APIs. Do not vendor the third-party Flutter repo because its license is unspecified. **No “100% finished” claim unless exact-head CI and native OS acceptance pass.**
+
+### One UI source of truth — enforced in V8 CI
+| Responsibility | Sole active implementation | Duplicate/retirement rule |
+|---|---|---|
+| Top navigation | `apps/mobile/lib/widgets/bz_shell.dart` | Exactly Home / New / Library / Search; no second shell, no new Radio/YTMusic tabs |
+| Theme + layout tokens | `packages/design_system/lib/src/bz_theme.dart`, `tokens.dart` | `lib/bz_theme.dart` stays a re-export, not a competing palette |
+| Glass rendering | `packages/design_system/lib/src/glass/bz_glass.dart` | **`BzGlassContainer` now delegates to `BzGlass`**, no separate blur/filter renderer; BzGlassBudgetScope in pages and player/tab chrome |
+| Main brand | `bz_brand_icons.dart` and `bz_morphing_brand_header.dart` | Upper-left Breezze wordmark collapses to black circular white B-note, not the YouTube Music mark |
+| Catalog/detail toolbar | `bz_branded_app_bar.dart` | Secondary/YouTube discovery screens use Breezze logo, secondary provider labels only |
+| Source-specific discovery | `features/browse/ytmusic_client_screen.dart` **reachable from New** | Preserve authorized YT metadata, video/account-playlist actions, replace nine old standalone AppBars with shared Breezze toolbar; not a top-level app or duplicate player |
+| Home/New sections | `features/home/home_screen.dart` and `features/browse/browse_screen.dart` | Original glass hero, context rails, genuine working mood/genre/catalog/video actions; no copied source or fake charts |
+| Saved library and search | `features/library/library_screen.dart`, `features/search/search_screen.dart` | Existing account-safe playlists, albums, follows, downloaded assets, artist and video search, never duplicate ownership or media engines |
+
+**CI prevention:** `tools/check_v8_ui_single_source.py` + 6 tests executed from `.github/workflows/breezze-quality.yml`. Reject extra provider tabs, stale duplicated glass filter, missing original logo, old YouTube-branded provider app bars or a vendored reference UI. `apps/mobile/test/v8_cross_device_layout_test.dart` covers responsive layouts for Android, iOS, Windows, macOS and Linux target themes plus 280dp foldable accessibility; **web requires the independent real Flutter web build/smoke workflow**. Static/widget evidence is not hardware certification.
+
+### Feature / interaction cutover acceptance
+- **Home:** real persisted recent plays, follows/favorites and personalized rails where backend source exists; Breezze expanding/collapsing masthead; functional mood searches, new-release and artist routes, official music-video search, actionable original glass hero.
+- **New:** live genre filters, backend-checked release/chart/video/concert collection screens, 100% original Breezze chrome, and linked YouTube Music *metadata* companion for public discovery + separately consented linked playlists. Provider names remain for lawful source attribution only.
+- **Library:** playlists, albums, followed artists, favorites, downloads, pin and edit workflows should stay backed by existing account-scoped stores; no duplicate data stack.
+- **Search:** real catalog/typeahead/history, songs/artists and official video scope, library and explicitly user-selected device audio; original Breezze header, disabled unsupported requests with explanation.
+- **Player:** exactly one native audio controller and Now Playing and official visible YouTube video route; no illegal audio extraction or ungranted offline claims.
+- **Responsive:** test widths 280, 320, 390, 768, 1024 and 1280 logical pixels; iOS/Android safe areas, large Dynamic Type, high contrast/Reduce Motion, Windows/macOS/Linux keyboard and hover, web loading and history. Keep current six-target build workflows; native OS emulator/hardware controls, screenshots and distribution signing are **NOT YET VERIFIED**.
+- **Release:** remains blocked until *all* V8 quality, rights, auth, security, true native interactions and platform packaging gates pass and owner explicitly approves. No new production deployment.
+
+**Working implementation:** Draft [PR #83](https://github.com/MetroKim/Breezze/pull/83) contains this cutover, replacement UI components, tests and CI guard. Separate [PR #82](https://github.com/MetroKim/Breezze/pull/82) retires the older V6/V7 master plans; reconcile both before merge. Historical source or brand reference archives are not permission to reintroduce old UI. Last known old PR #83 rights-test failure was a premature Flutter navigation assertion, patched and re-run; no green exact-head claim until the current run proves it.
+
 ## Product contract (single source of truth)
 - **Four top-level tabs in order:** **Home**, **New** (formerly Browse), **Library**, **Search**; no fifth Radio/Downloads/Settings tab.
 - **Home:** listener-scoped history, favorites, follows, personalized shelves with honest source metadata. Do not label algorithmic shelves or charts as official without a real dataset.
