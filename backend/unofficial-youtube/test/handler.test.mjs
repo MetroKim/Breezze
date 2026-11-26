@@ -33,9 +33,12 @@ async function request(handlerOptions, route = '/v1/audio/' + id, headers = {}) 
   }
 }
 function handlerOptions({ env = safeEnv, status = 'OK', url = sampleUrl,
-                          fetchAudio } = {}) {
+                          fetchAudio, connectionDeadlineMs,
+                          streamIdleTimeoutMs } = {}) {
   return {
     env,
+    ...(connectionDeadlineMs ? { connectionDeadlineMs } : {}),
+    ...(streamIdleTimeoutMs ? { streamIdleTimeoutMs } : {}),
     createClient: async () => ({
       getBasicInfo: async () => ({ playability_status: { status } }),
       getStreamingData: async () => ({
@@ -199,4 +202,37 @@ test('upstream audio request explicitly disables transfer compression', async ()
   }), '/v1/audio/' + id, authHeaders());
   assert.equal(result.status, 200);
   assert.equal(compressionHeader, 'identity');
+});
+
+test('a long audio response outlives the header deadline while bytes keep flowing', async () => {
+  const elapsed = Date.now();
+  const result = await request(handlerOptions({
+    connectionDeadlineMs: 40,
+    streamIdleTimeoutMs: 2000,
+    fetchAudio: async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(fixture.slice(0, 8));
+        setTimeout(() => {
+          controller.enqueue(fixture.slice(8));
+          controller.close();
+        }, 160);
+      },
+    }), { status: 200, headers: { 'content-type': 'audio/webm' } }),
+  }), '/v1/audio/' + id, authHeaders());
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.data, fixture);
+  assert.ok(Date.now() - elapsed >= 120,
+    'the audio body deliberately outlasted the header-only deadline');
+});
+
+test('connection setup exceeding its deadline is rejected without stale media', async () => {
+  const result = await request(handlerOptions({
+    connectionDeadlineMs: 35,
+    fetchAudio: async (_url, requestOptions) => new Promise((_, reject) => {
+      requestOptions.signal.addEventListener('abort', () => {
+        reject(new DOMException('Connection timed out', 'AbortError'));
+      }, { once: true });
+    }),
+  }), '/v1/audio/' + id, authHeaders());
+  assert.equal(result.status, 502);
 });
