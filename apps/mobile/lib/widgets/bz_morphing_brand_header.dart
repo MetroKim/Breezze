@@ -76,7 +76,11 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
     final background = theme.bzBackground;
     final width = 116 - progress * 72;
 
-    return DecoratedBox(
+    // A pinned sliver must paint its full declared extent. Without the
+    // expansion Flutter may measure the action row as 48dp while the sliver
+    // advertises 94dp, violating layoutExtent <= paintExtent.
+    return SizedBox.expand(
+      child: DecoratedBox(
       decoration: BoxDecoration(
         color: background.withValues(
           alpha: highContrast ? 1.0 : 0.97,
@@ -148,6 +152,7 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
             ],
           ),
         ),
+      ),
       ),
     );
   }
