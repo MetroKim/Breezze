@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze/core/audio/background_audio.dart';
 import 'package:breezze/core/audio/audio_service_bridge.dart';
 import 'package:flutter/foundation.dart' show TargetPlatform;
@@ -44,7 +46,41 @@ class _FailingBridge implements BackgroundAudioBridge {
   }
 }
 
+class _DelayedFailingBridge implements BackgroundAudioBridge {
+  final updateFailure = Completer<void>();
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> update({
+    required String title,
+    required String artist,
+    String? artworkUrl,
+    required bool playing,
+  }) => updateFailure.future;
+}
+
 void main() {
+  test('a late OS session error after disposal does not touch dead providers',
+      () async {
+    final container = ProviderContainer();
+    container.read(backgroundSyncProvider);
+    final failing = _DelayedFailingBridge();
+    container.read(backgroundBridgeProvider.notifier).state = failing;
+    await Future<void>.delayed(Duration.zero);
+
+    container.dispose();
+    failing.updateFailure.completeError(
+        StateError('Linux D-Bus disconnected after app shutdown'));
+    await Future<void>.delayed(Duration.zero);
+    // The listener catches the Future rejection and exits safely on dispose.
+  });
+
+
   test('lost OS session falls back to no-op without crashing playback',
       () async {
     final container = ProviderContainer();
