@@ -20,7 +20,9 @@ concurrency:
   # One running plus the newest pending run per ref. Preserve running proof,
   # avoid hundreds of obsolete SHA-specific runs starving current main.
   group: breezze-quality-${{ github.ref }}
-  cancel-in-progress: false
+  # Cancel obsolete runs so the most recent main SHA gets the build agents.
+  # Native device acceptance retains separate non-cancelling workflows.
+  cancel-in-progress: true
 
 jobs:
   flutter:

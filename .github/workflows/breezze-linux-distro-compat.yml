@@ -20,7 +20,9 @@ permissions:
 
 concurrency:
   group: breezze-linux-portability-${{ github.ref }}
-  cancel-in-progress: false
+  # Cancel obsolete runs so the most recent main SHA gets the build agents.
+  # Native device acceptance retains separate non-cancelling workflows.
+  cancel-in-progress: true
 
 jobs:
   linux-x64:
