@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_branded_app_bar.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -70,8 +71,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     final theme = Theme.of(context);
     final unread = _items.where((item) => item['readAt'] == null).length;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(unread == 0 ? 'Notifications' : 'Notifications ($unread)'),
+      appBar: BzBrandedAppBar(
+        title: unread == 0 ? 'Notifications' : 'Notifications ($unread)',
         leading: IconButton(
           icon: BzSvgIcon(name: 'chevron-left'),
           onPressed: () => Navigator.of(context).maybePop(),
