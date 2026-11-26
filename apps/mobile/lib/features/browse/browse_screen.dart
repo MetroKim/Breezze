@@ -18,6 +18,8 @@ import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_discovery_spotlight.dart';
+import '../../widgets/bz_morphing_brand_header.dart';
+import '../settings/account_screen.dart';
 
 /// Provider metadata is not a playable full recording. Until Breezze
 /// receives licensed in-app stream grants, never launch another music app
@@ -177,6 +179,30 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
       child: CustomScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
+          BzMorphingBrandHeader(
+            actions: [
+              IconButton(
+                tooltip: 'Search Breezze music',
+                icon: BzSvgIcon(name: 'search', color: theme.bzText1),
+                onPressed: () => Navigator.of(context).push(
+                  breezzePageRoute<void>(
+                    context: context,
+                    builder: (_) => const SearchScreen(),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Account and profile',
+                icon: BzSvgIcon(name: 'user-round', color: theme.bzText1),
+                onPressed: () => Navigator.of(context).push(
+                  breezzePageRoute<void>(
+                    context: context,
+                    builder: (_) => const AccountScreen(),
+                  ),
+                ),
+              ),
+            ],
+          ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
             sliver: SliverToBoxAdapter(
