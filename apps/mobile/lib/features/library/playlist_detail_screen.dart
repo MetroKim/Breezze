@@ -426,21 +426,21 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         if (value == 'rename') _rename(playlist);
                         if (value == 'delete') _delete(playlist);
                       },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
                           value: 'cover',
                           child: Text('Choose cover photo'),
                         ),
                         if (playlist.coverPngBase64 != null)
-                          PopupMenuItem(
+                          const PopupMenuItem(
                             value: 'restore_cover',
                             child: Text('Use generated cover'),
                           ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'rename',
                           child: Text('Rename'),
                         ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'delete',
                           child: Text('Delete playlist'),
                         ),
