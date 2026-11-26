@@ -88,6 +88,7 @@ include(flutter/generated_plugins.cmake)
 # -Werror. Keep all other warnings as errors; relax ONLY this third-party
 # diagnostic on the one affected plugin target (not the Breezze runner).
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+   CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19 AND
    TARGET flutter_secure_storage_linux_plugin)
   target_compile_options(flutter_secure_storage_linux_plugin PRIVATE
     -Wno-error=deprecated-literal-operator)
