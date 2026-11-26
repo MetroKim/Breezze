@@ -180,6 +180,15 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
+    // Reference Explore section hierarchy, powered by existing Breezze routes.
+    // Each destination renders once, not in two competing browse designs.
+    const featuredTitles = {'New Releases', 'Charts', 'Moods & Activities'};
+    final featuredDestinations = _browseDestinations
+        .where((destination) => featuredTitles.contains(destination.title))
+        .toList();
+    final otherDestinations = _browseDestinations
+        .where((destination) => !featuredTitles.contains(destination.title))
+        .toList();
     return SafeArea(
       child: CustomScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -219,6 +228,40 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                   const SizedBox(height: 6),
                   Text('New releases, music videos, charts, genres and more.', style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 18),
+                  Semantics(
+                    header: true,
+                    child: Text('Explore', style: theme.textTheme.titleLarge),
+                  ),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final columns = constraints.maxWidth >= 860
+                          ? 3
+                          : constraints.maxWidth >= 440
+                              ? 2
+                              : 1;
+                      final width = (constraints.maxWidth -
+                              10 * (columns - 1)) /
+                          columns;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          for (final destination in featuredDestinations)
+                            SizedBox(
+                              width: width,
+                              child: BzDiscoveryActionTile(
+                                label: destination.title,
+                                description: destination.description,
+                                iconName: destination.icon,
+                                onTap: () => _openCollection(destination),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 22),
                   BzDiscoverySpotlight(
                     eyebrow: 'Discover music',
                     title: 'Something new to love',
@@ -256,7 +299,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                     ),
                   ),
                   const SizedBox(height: 22),
-                  Text('Discover', style: theme.textTheme.titleLarge),
+                  Text('More to explore', style: theme.textTheme.titleLarge),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -271,7 +314,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                 return SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final destination = _browseDestinations[index];
+                      final destination = otherDestinations[index];
                       return BzDiscoveryActionTile(
                         label: destination.title,
                         description: destination.description,
@@ -279,7 +322,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                         onTap: () => _openCollection(destination),
                       );
                     },
-                    childCount: _browseDestinations.length,
+                    childCount: otherDestinations.length,
                   ),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columns,
