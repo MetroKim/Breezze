@@ -1,24 +1,24 @@
 import 'dart:async';
-import '../../app/appearance_controller.dart';
+import '../app/appearance_controller.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
-import '../../core/api/breezze_api.dart';
-import '../../features/onboarding/onboarding_controller.dart';
+import '../core/api/breezze_api.dart';
+import '../features/onboarding/onboarding_controller.dart';
 
-import '../../core/auth/auth_session.dart';
-import '../../core/audio/just_audio_engine_adapter.dart';
-import '../../core/audio/encrypted_offline_audio_source.dart';
-import '../../core/audio/audio_service_bridge.dart';
-import '../../core/audio/background_audio.dart';
-import '../../core/audio/playback_queue_store.dart';
-import '../../core/database/migrate_to_drift.dart';
-import '../../core/database/outbox_sync_service.dart';
-import '../../features/player/player_controller.dart';
-import '../../features/authentication/auth_screen.dart';
-import '../../features/onboarding/onboarding_flow.dart';
+import '../core/auth/auth_session.dart';
+import '../core/audio/just_audio_engine_adapter.dart';
+import '../core/audio/encrypted_offline_audio_source.dart';
+import '../core/audio/audio_service_bridge.dart';
+import '../core/audio/background_audio.dart';
+import '../core/audio/playback_queue_store.dart';
+import '../core/database/migrate_to_drift.dart';
+import '../core/database/outbox_sync_service.dart';
+import '../features/player/player_controller.dart';
+import '../features/authentication/auth_screen.dart';
+import '../features/onboarding/onboarding_flow.dart';
 import 'bz_shell.dart';
 import 'bz_brand_icons.dart';
 
