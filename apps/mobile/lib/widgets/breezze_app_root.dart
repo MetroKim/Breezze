@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../app/appearance_controller.dart';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import '../../core/api/breezze_api.dart';
@@ -165,12 +166,29 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
         return;
       }
       _backgroundBridge = bridge;
+      final nativeSupported = supportsBreezzeSystemMediaSession(
+        defaultTargetPlatform,
+        isWeb: kIsWeb,
+      );
+      _container!
+          .read(backgroundSessionAvailabilityProvider.notifier)
+          .state = bridge is NoopBackgroundBridge
+              ? (nativeSupported
+                  ? BackgroundSessionAvailability.unavailable
+                  : BackgroundSessionAvailability.unsupported)
+              : BackgroundSessionAvailability.active;
       _container!.read(backgroundBridgeProvider.notifier).state = bridge;
-      // Start the single state-to-media-session subscription once for the
-      // app lifetime, not every time the authenticated shell is recreated.
+      // Start one state-to-media-session subscription per app lifetime.
       _container!.read(backgroundSyncProvider);
     } catch (error) {
-      debugPrint('Breezze background media session unavailable: $error');
+      if (mounted) {
+        _container!
+            .read(backgroundSessionAvailabilityProvider.notifier)
+            .state = BackgroundSessionAvailability.unavailable;
+      }
+      // Report only the exception type; OAuth and OS plugin errors may
+      // contain user paths or account details unsuitable for public CI logs.
+      debugPrint('Breezze OS media session unavailable: ${error.runtimeType}');
     }
   }
 
