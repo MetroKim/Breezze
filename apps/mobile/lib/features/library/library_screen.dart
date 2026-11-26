@@ -445,15 +445,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
     return SafeArea(
-      child: Column(
+      child: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => const [
+          BzMorphingBrandHeader(sidebarBrandOnDesktop: true),
+        ],
+        body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 22, 12, 12),
             child: Row(
               children: [
-                const BzCompactBrandMark(size: 38),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Text('Library', style: theme.textTheme.displayMedium),
                 ),
@@ -518,6 +520,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             : _buildEmptySection(theme, _selected),
           ),
         ],
+      ),
       ),
     );
   }
