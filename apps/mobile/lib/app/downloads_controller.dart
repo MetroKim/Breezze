@@ -10,7 +10,6 @@ import '../core/auth/auth_session.dart';
 import '../core/audio/authorized_download_grant.dart';
 import '../core/audio/secure_downloads_library.dart';
 import '../core/audio/playback_source_policy.dart';
-import '../core/database/database_providers.dart';
 import '../core/database/outbox_sync_service.dart';
 import 'bootstrap.dart';
 import 'download_preferences.dart';
