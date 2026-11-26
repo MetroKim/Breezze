@@ -4,7 +4,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {
   experimentEnabled, allowlistedVideo, validSecret,
-  safeAudioCdn, safeByteRange,
+  safeAudioCdn, safeByteRange, validUpstreamRange,
 } from './security.mjs';
 
 function reply(res, status, body) {
@@ -78,7 +78,10 @@ export function createExperimentHandler({
         return;
       }
       const request = {
-        headers: range ? { Range: range } : {},
+        headers: {
+          'Accept-Encoding': 'identity',
+          ...(range ? { Range: range } : {}),
+        },
         signal: AbortSignal.any([abort.signal, AbortSignal.timeout(20000)]),
         redirect: 'error',
       };
@@ -87,6 +90,16 @@ export function createExperimentHandler({
           (range !== null && upstream.status !== 206)) {
         await upstream?.body?.cancel().catch(() => {});
         reply(res, 502, { error: 'UPSTREAM_STREAM_UNAVAILABLE' });
+        return;
+      }
+      const contentRange = upstream.headers.get('content-range');
+      const contentLength = upstream.headers.get('content-length');
+      const contentEncoding = upstream.headers.get('content-encoding');
+      if ((contentEncoding && contentEncoding.toLowerCase() !== 'identity') ||
+          (upstream.status === 206 &&
+            !validUpstreamRange(range, contentRange, contentLength))) {
+        await upstream.body.cancel();
+        reply(res, 502, { error: 'INVALID_UPSTREAM_RANGE_OR_ENCODING' });
         return;
       }
       const upstreamMime = (upstream.headers.get('content-type') || '')
@@ -115,11 +128,6 @@ export function createExperimentHandler({
         }
         if (name === 'content-range' && value &&
             /^bytes \d+-\d+\/\d+$/.test(value)) headers[name] = value;
-      }
-      if (upstream.status === 206 && !headers['content-range']) {
-        await upstream.body.cancel();
-        reply(res, 502, { error: 'INVALID_UPSTREAM_RANGE' });
-        return;
       }
       if (abort.signal.aborted || res.destroyed) {
         await upstream.body.cancel();
