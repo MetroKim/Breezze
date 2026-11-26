@@ -13,7 +13,9 @@ video_id = os.environ.get("BREEZZE_PROBE_VIDEO_ID", "aqz-KE-bpKQ")
 report = {
     "source": "ytmusicapi",
     "videoId": video_id,
-    "sample": "Big Buck Bunny / Blender Foundation / CC BY 3.0",
+    "sample": ("Big Buck Bunny / Blender Foundation / CC BY 3.0"
+               if video_id == "aqz-KE-bpKQ"
+               else "Signal to Noise / Scott Buckley / CC BY 4.0"),
     "hasPlayerResponse": False,
     "playabilityStatus": None,
     "directAudioCandidate": False,
