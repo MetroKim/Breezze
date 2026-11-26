@@ -53,14 +53,17 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Future<void> _load() async {
+    final active = ref.read(authSessionProvider);
+    final owner = active is AuthSignedIn ? active.userId : null;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final api = ref.read(authSessionProvider.notifier).api;
+      if (owner == null) throw StateError('SIGN_IN_REQUIRED');
       final results = await Future.wait([api.profile(), api.sessions()]);
-      if (!mounted) return;
+      if (!_currentOwner(owner)) return;
       final profile = results[0] as Map<String, dynamic>;
       final preference = profile['preference'] is Map
           ? Map<String, dynamic>.from(profile['preference'] as Map)
@@ -82,6 +85,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         _loading = false;
       });
     } catch (_) {
+      if (owner != null && !_currentOwner(owner)) return;
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -319,6 +323,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final avatarBytes = _avatarBytes;
     return Scaffold(
       appBar: BzBrandedAppBar(
         title: 'Account',
@@ -363,10 +368,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         ),
                         alignment: Alignment.center,
                         child: ClipOval(
-                          child: _avatarBytes == null
+                          child: avatarBytes == null
                               ? BzBnoteMark(size: 42, color: theme.bzText2)
                               : Image.memory(
-                                  _avatarBytes!,
+                                  avatarBytes,
                                   width: 96,
                                   height: 96,
                                   fit: BoxFit.cover,
