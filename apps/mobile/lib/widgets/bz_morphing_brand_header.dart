@@ -3,6 +3,27 @@ import 'package:material_ui/material_ui.dart';
 
 import 'bz_brand_icons.dart';
 
+/// True only for routes actually rendered beside the persistent desktop
+/// sidebar. Pushed search/detail routes do not inherit this scope and retain
+/// their own Breezze identity even when the desktop window is wide.
+class BzSidebarBrandOwner extends InheritedWidget {
+  const BzSidebarBrandOwner({
+    super.key,
+    required this.visible,
+    required super.child,
+  });
+
+  final bool visible;
+
+  static bool visibleOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BzSidebarBrandOwner>()
+          ?.visible ?? false;
+
+  @override
+  bool updateShouldNotify(covariant BzSidebarBrandOwner oldWidget) =>
+      oldWidget.visible != visible;
+}
+
 /// The same original Breezze circular badge used in compact headers.
 /// This is intentionally never the YouTube Music product mark.
 class BzCompactBrandMark extends StatelessWidget {
@@ -94,7 +115,7 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
         ? <Widget>[actions.first, actions.last]
         : actions;
     final brandAlreadyInSidebar = sidebarBrandOnDesktop &&
-        MediaQuery.sizeOf(context).width >= BzBreakpoints.medium;
+        BzSidebarBrandOwner.visibleOf(context);
 
     // A pinned sliver must paint its full declared extent. Without the
     // expansion Flutter may measure the action row as 48dp while the sliver
