@@ -6,6 +6,7 @@ on:
       - experiment/innertube-stream-probe-20261127
     paths:
       - 'backend/unofficial-youtube/**'
+      - 'backend/ytmusicapi/scripts/probe_audio.py'
       - '.github/workflows/innertube-audio-probe.yml'
   workflow_dispatch:
 
@@ -27,3 +28,18 @@ jobs:
       - name: Probe audio response on CC-BY Blender reference only
         working-directory: backend/unofficial-youtube
         run: npm run test:probe
+
+  probe-existing-python-sidecar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing YT Music adapter
+        working-directory: backend/ytmusicapi
+        run: pip install -r requirements.txt
+      - name: Probe signed audio candidate without persisting media
+        working-directory: backend/ytmusicapi
+        run: PYTHONPATH=. python scripts/probe_audio.py
