@@ -12,6 +12,7 @@ import '../app/breezze_navigation.dart';
 import '../app/main_tab.dart';
 import 'bz_brand_icons.dart';
 import 'bz_playback_scrubber.dart';
+import 'bz_morphing_brand_header.dart';
 import '../features/browse/browse_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
@@ -97,7 +98,9 @@ class _BzHomeState extends ConsumerState<BzHome> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final expanded = constraints.maxWidth >= BzBreakpoints.medium;
-          if (!expanded) return pages;
+          if (!expanded) {
+            return BzSidebarBrandOwner(visible: false, child: pages);
+          }
 
           // Apple Music 7.0 desktop: content fills the pane and the glass
           // player pill floats above it, anchored bottom: 20, centered,
@@ -129,7 +132,10 @@ class _BzHomeState extends ConsumerState<BzHome> {
                         constraints: const BoxConstraints(
                           maxWidth: BzBreakpoints.contentMaxWidth,
                         ),
-                        child: pages,
+                        child: BzSidebarBrandOwner(
+                          visible: true,
+                          child: pages,
+                        ),
                       ),
                     ),
                     if (hasPlayer)
