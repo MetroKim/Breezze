@@ -19,6 +19,7 @@ import '../settings/account_screen.dart';
 import '../search/search_screen.dart';
 import '../../widgets/bz_discovery_spotlight.dart';
 import '../../widgets/bz_morphing_brand_header.dart';
+import '../../widgets/bz_discovery_action_tile.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
 ///
@@ -361,6 +362,62 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ],
             ),
+          ),
+          const SizedBox(height: 24),
+          Text('Discover in Breezze', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 740
+                  ? 3
+                  : constraints.maxWidth >= 330
+                      ? 2
+                      : 1;
+              final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'New releases',
+                      description: 'Music and albums',
+                      iconName: 'disc-3',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.browse.index,
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Music videos',
+                      description: 'Official video search',
+                      iconName: 'video',
+                      onTap: () => Navigator.of(context).push(
+                        breezzePageRoute<void>(
+                          context: context,
+                          builder: (_) => const SearchScreen(
+                            initialQuery: 'official music video',
+                            initialVideoSearch: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: BzDiscoveryActionTile(
+                      label: 'Find artists',
+                      description: 'Search artist profiles',
+                      iconName: 'user-round',
+                      onTap: () => ref.read(homeTabHintProvider.notifier).state =
+                          MainTab.search.index,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 24),
           if (_loading) ...[
