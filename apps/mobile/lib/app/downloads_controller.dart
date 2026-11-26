@@ -330,6 +330,7 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
         ownerId: auth.userId,
         catalogTrackId: catalogId,
         rightsExpiresAtUtc: rightsExpiry,
+        assetVersion: grant.assetVersion,
         cancellation: cancellation,
         onProgress: (progress) {
           if (mounted) state = {...state, track.id: progress};
