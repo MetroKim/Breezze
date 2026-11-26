@@ -14,6 +14,23 @@ permissions:
   contents: read
 
 jobs:
+  sidecar-security-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install experimental dependencies
+        working-directory: backend/unofficial-youtube
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Validate sidecar contracts
+        working-directory: backend/unofficial-youtube
+        run: npm run test:contract
+      - name: Validate Docker Compose development stack
+        run: docker compose -f backend/docker-compose.yml --profile experimental config --quiet
+
   probe-open-licensed-sample:
     runs-on: ubuntu-latest
     timeout-minutes: 8
