@@ -8,6 +8,28 @@ Breezze is the only listener-facing app: one search field, one library, one queu
 
 **Critical distinction:** a catalogue API token, track ID, title, album cover, preview URL or signed-in account does not provide full audio bytes or grant distribution rights. The database's lack of stored audio is fine, but real streaming still needs an authorized delivery integration. NEVER relabel 30-second previews as whole songs.
 
+## Search-first progressive disclosure (implemented in Flutter)
+
+**UI rule (2026-11-26):** On initial entry to Search, show only Breezze's search field, suggested queries, and history. Do **not** show Audio / Video / Library / Local filters. A typed query first runs the Audio search (Spotify primary, Deezer secondary) and displays its results or an honest empty/error state. **Only after that request resolves**, reveal a sticky, horizontally scrollable source selector directly under the search field:
+
+```text
+BREEZZE SEARCH
+[ Search a song or artist                         ]
+     (no media-source choices before the first response)
+
+After results arrive:
+[ Search a song or artist                         ]
+[ AUDIO ] [ VIDEO ] [ LIBRARY ] [ LOCAL ]     <- chosen source is highlighted
+  Spotify / Deezer result rows (source attributed)
+  ...
+```
+
+Selecting a source retains the exact same search text. **Audio** queries the existing Spotify/Deezer endpoint; **Video** switches to YouTube music-video results and opens the official visible YouTube player; **Library** searches only the signed-in account's library; **Local** never contacts the backend and searches only explicitly selected device audio files. The Local button reveals an opt-in **Choose audio files** picker; it is not a blanket permission to enumerate a user's storage. Switching categories must cancel/discard stale requests. The four choices remain accessible even if the selected source returns zero matches. On clearing the query, hide the choices again and show recent/suggested searches.
+
+**Design reference:** BitChord's *post-results filtering and persistent search field* interaction inspired the structure. Breezze's Flutter layout, styling, and components are independently implemented; no GPL-3.0 BitChord source code, assets, or UI component implementations are copied.
+
+**Repository implementation:** `apps/mobile/lib/features/search/search_screen.dart`; coverage `apps/mobile/test/search_typeahead_test.dart`. This is a UI/source-scope feature, **not evidence that Spotify or Deezer full commercial audio streams work**.
+
 ## Four search scopes
 
 | Scope | Discovery / data access | Selection behavior | Status |
@@ -92,7 +114,8 @@ No catalog MP3, FLAC, music video, lyric text or provider credential is required
 - [ ] Verify live authenticated Spotify search with rotated credentials and provider quotas.
 - [ ] Validate commercial Spotify+Deezer combination permission / approval, not just technical API connectivity.
 - [ ] Obtain approved full-song in-app audio licensing/delivery, and test full-length tracks end-to-end.
-- [ ] Implement/index Local search and finish four-scope UI acceptance.
+- [x] Hide source controls until search response; implement Audio / Video / Library / Local filter interaction and explicitly selected local-file title matching in Flutter source.
+- [ ] Verify Flutter search widget tests and emulator UI on the latest commit; extend Local beyond selected files only with explicit platform permission and indexing acceptance.
 - [ ] Verify complete lyric availability, display grants and attribution per recording.
 - [ ] Demonstrate restorable database backups, account isolation, queue switching and current-SHA green CI.
 
