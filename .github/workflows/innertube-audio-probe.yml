@@ -1,0 +1,29 @@
+name: Experimental InnerTube audio byte probe
+
+on:
+  push:
+    branches:
+      - experiment/innertube-stream-probe-20261127
+    paths:
+      - 'backend/unofficial-youtube/**'
+      - '.github/workflows/innertube-audio-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe-open-licensed-sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated experimental client
+        working-directory: backend/unofficial-youtube
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Probe audio response on CC-BY Blender reference only
+        working-directory: backend/unofficial-youtube
+        run: npm run test:probe
