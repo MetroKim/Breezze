@@ -37,6 +37,11 @@ void main() {
     await trackDir.create();
     final partial = File('${trackDir.path}/audio.part');
     await partial.writeAsBytes(utf8.encode('abc'));
+    await File('${trackDir.path}/audio.part.identity.json').writeAsString(jsonEncode({
+      'ownerId': 'user-1',
+      'catalogTrackId': 'catalog-resume',
+      'assetVersion': 'encoded-v1',
+    }));
 
     var receivedRange = '';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -58,12 +63,109 @@ void main() {
       downloadUrl: 'http://${server.address.address}:${server.port}/audio',
       ownerId: 'user-1',
       catalogTrackId: 'catalog-resume',
+      assetVersion: 'encoded-v1',
     );
 
     expect(ok, isTrue);
     expect(receivedRange, 'bytes=3-');
     expect(await File('${trackDir.path}/audio.m4a').readAsString(), 'abcdef');
     expect(await partial.exists(), isFalse);
+  });
+
+  test('stale fragment cannot resume when the authorized asset version changes', () async {
+    const id = 'catalog-versioned';
+    final track = BzTrack(id: id, title: 'Fresh version', artist: 'A');
+    final folder = Directory('${root.path}/$id');
+    await folder.create();
+    await File('${folder.path}/audio.part').writeAsString('oldbytes');
+    await File('${folder.path}/audio.part.identity.json').writeAsString(jsonEncode({
+      'ownerId': 'user-1',
+      'catalogTrackId': id,
+      'assetVersion': 'previous-version',
+    }));
+    String? range;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      range = request.headers.value('range');
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentLength = 5
+        ..add(utf8.encode('fresh'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+
+    expect(await library.download(
+      track,
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: id,
+      assetVersion: 'new-version',
+    ), isTrue);
+    expect(range, isNull);
+    expect(await File('${folder.path}/audio.m4a').readAsString(), 'fresh');
+    final meta = jsonDecode(await File('${folder.path}/meta.json').readAsString());
+    expect(meta['assetVersion'], 'new-version');
+  });
+
+  test('an unversioned partial cannot silently join a different recording', () async {
+    const id = 'catalog-unversioned';
+    final track = BzTrack(id: id, title: 'Replaced', artist: 'A');
+    final folder = Directory('${root.path}/$id');
+    await folder.create();
+    await File('${folder.path}/audio.part').writeAsString('stale');
+    String? range;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      range = request.headers.value('range');
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentLength = 3
+        ..add(utf8.encode('new'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    expect(await library.download(
+      track,
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: id,
+    ), isTrue);
+    expect(range, isNull);
+    expect(await File('${folder.path}/audio.m4a').readAsString(), 'new');
+  });
+
+  test('resume rejects a malformed HTTP Content-Range rather than saving corrupt audio', () async {
+    const id = 'catalog-bad-range';
+    final track = BzTrack(id: id, title: 'Bad range', artist: 'A');
+    final folder = Directory('${root.path}/$id');
+    await folder.create();
+    await File('${folder.path}/audio.part').writeAsString('abc');
+    await File('${folder.path}/audio.part.identity.json').writeAsString(jsonEncode({
+      'ownerId': 'user-1',
+      'catalogTrackId': id,
+      'assetVersion': 'v1',
+    }));
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.partialContent
+        ..headers.set('content-range', 'bytes 4-6/7')
+        ..headers.contentLength = 3
+        ..add(utf8.encode('def'));
+      await request.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+
+    expect(await library.download(
+      track,
+      downloadUrl: 'http://${server.address.address}:${server.port}/audio',
+      ownerId: 'user-1',
+      catalogTrackId: id,
+      assetVersion: 'v1',
+    ), isFalse);
+    expect(await File('${folder.path}/audio.m4a').exists(), isFalse);
+    expect(await File('${folder.path}/audio.part').readAsString(), 'abc');
   });
 
   test('lists only assets owned by the requested account', () async {
