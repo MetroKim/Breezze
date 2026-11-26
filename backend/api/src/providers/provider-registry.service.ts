@@ -54,7 +54,7 @@ export class ProviderRegistry {
     providers: Array<{
       providerId: string;
       displayName: string;
-      result: ProviderResult<import('./provider-adapter.interface').ProviderTrack[]>;
+      result: ProviderResult<ProviderTrack[]>;
     }>;
     partial: boolean;
     tracks: UnifiedMusicTrack[];
