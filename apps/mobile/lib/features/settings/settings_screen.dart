@@ -6,6 +6,7 @@ import '../../app/breezze_navigation.dart';
 import '../../app/download_preferences.dart';
 import '../../app/appearance_controller.dart';
 import '../../app/search_history_store.dart';
+import '../../core/audio/background_audio.dart';
 import '../../core/auth/auth_session.dart';
 import 'account_screen.dart';
 import 'help_support_screen.dart';
@@ -117,6 +118,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final auth = ref.watch(authSessionProvider);
     final email = auth is AuthSignedIn ? auth.email : null;
     final sleepTimerEndsAt = ref.watch(sleepTimerProvider);
+    final osMedia = ref.watch(backgroundSessionAvailabilityProvider);
+    final osMediaDescription = switch (osMedia) {
+      BackgroundSessionAvailability.initializing =>
+        'Connecting to system playback controls…',
+      BackgroundSessionAvailability.active =>
+        'Connected to the operating system media controls.',
+      BackgroundSessionAvailability.unavailable =>
+        'Unavailable here. In-app playback still works.',
+      BackgroundSessionAvailability.unsupported =>
+        'No native OS media controls on this platform.',
+    };
 
     return SafeArea(
       child: ListView(
@@ -301,6 +313,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ]),
           _section(theme, 'Playback', [
+            ListTile(
+              leading: const BzSvgIcon(name: 'music-note'),
+              title: const Text('System media controls'),
+              subtitle: Text(osMediaDescription),
+              // The description reflects the actual bridge, not merely
+              // installed packages. Desktop media-key acceptance is separate.
+            ),
             const ListTile(
               leading: BzSvgIcon(name: 'repeat'),
               title: Text('Gapless playback'),
