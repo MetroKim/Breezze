@@ -256,7 +256,7 @@ export class SpotifyAdapter implements ProviderAdapter {
 
   /** Official Spotify artist search. No Deezer or YouTube artist fallback. */
   async searchArtists(query: string): Promise<ProviderResult<SpotifyArtistView[]>> {
-    const q = query.trim().replace(/\\s+/g, ' ');
+    const q = query.trim().replace(/\s+/g, ' ');
     if (q.length < 2 || q.length > 120) return providerOk([]);
     const key = 'provider:spotify:artists:v1:' +
       crypto.createHash('sha256').update(q.toLowerCase()).digest('hex');
@@ -295,7 +295,7 @@ export class SpotifyAdapter implements ProviderAdapter {
     return {
       id: row.id!, title: row.name.trim(),
       type: row.album_type === 'single' ? 'single' : 'album',
-      releaseDate: /^\\d{4}(-\\d{2}){0,2}$/.test(date) ? date : '',
+      releaseDate: /^\d{4}(-\d{2}){0,2}$/.test(date) ? date : '',
       trackCount: typeof row.total_tracks === 'number' ? row.total_tracks : 0,
       artworkUrl: imageUrl,
       url: 'https://open.spotify.com/album/' + row.id,
