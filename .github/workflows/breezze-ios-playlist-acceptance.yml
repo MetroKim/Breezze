@@ -23,6 +23,18 @@ on:
       - apps/mobile/lib/app/search_history_store.dart
       - apps/mobile/lib/features/library/library_screen.dart
       - apps/mobile/pubspec.yaml
+      - apps/mobile/lib/app/breezze_navigation.dart
+      - apps/mobile/lib/core/audio/just_audio_engine_adapter.dart
+      - apps/mobile/lib/widgets/bz_shell.dart
+      - apps/mobile/lib/widgets/bz_transport_controls.dart
+      - apps/mobile/lib/features/player/now_playing_screen.dart
+      - apps/mobile/lib/features/catalog/spotify_artist_screen.dart
+      - apps/mobile/lib/features/home/home_screen.dart
+      - apps/mobile/lib/features/settings/settings_screen.dart
+      - packages/design_system/lib/src/bz_theme.dart
+      - packages/design_system/lib/src/bz_glass_container.dart
+      - apps/mobile/test/breezze_navigation_test.dart
+      - apps/mobile/test/bz_transport_controls_test.dart
 
 permissions:
   contents: read
