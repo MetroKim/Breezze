@@ -8,11 +8,13 @@ import { SpotifyAdapter } from './spotify.adapter';
 import { MusicBrainzAdapter } from './musicbrainz.adapter';
 import { ProviderCacheService } from './provider-cache.service';
 import { OfficialYouTubeDataService } from './official-youtube-data.service';
+import { ArtistCatalogService } from './artist-catalog.service';
 
 @Module({
   controllers: [ProvidersController],
   providers: [
     ProviderRegistry,
+    ArtistCatalogService,
     InternalCatalogAdapter,
     YtMusicAdapter,
     DeezerAdapter,
