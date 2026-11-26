@@ -331,10 +331,11 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
     );
   }
 
-  Future<void> _openSpotifyUrl(String? raw) async {
+  Future<void> _openCatalogSource(String? raw) async {
     final uri = raw == null ? null : Uri.tryParse(raw);
     if (uri == null || uri.scheme != 'https' ||
-        uri.host != 'open.spotify.com') return;
+        uri.host != 'open.spotify.com' &&
+        uri.host != 'www.deezer.com') return;
     try {
       await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
     } catch (_) {
@@ -467,9 +468,23 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                     if (genres.isEmpty && artist['followers'] is! num)
                       const Text('Spotify has not provided additional artist biography details.'),
                     TextButton(
-                      onPressed: () => _openSpotifyUrl(artist['url'] as String?),
+                      onPressed: () => _openCatalogSource(artist['url'] as String?),
                       child: const Text('Artist details on Spotify'),
                     ),
+                    if (_data?['artistExtra'] is Map) ...[
+                      if (artist['followers'] is! num &&
+                          (_data!['artistExtra'] as Map)['fans'] is num)
+                        Text('Deezer fans: ' +
+                            ((_data!['artistExtra'] as Map)['fans'] as num).toInt().toString()),
+                      if ((_data!['artistExtra'] as Map)['albumCount'] is num)
+                        Text('Deezer catalog albums: ' +
+                            ((_data!['artistExtra'] as Map)['albumCount'] as num).toInt().toString()),
+                      TextButton(
+                        onPressed: () => _openCatalogSource(
+                            (_data!['artistExtra'] as Map)['url'] as String?),
+                        child: const Text('Additional artist data: Deezer'),
+                      ),
+                    ],
                   ]),
                   _section(theme, 'Songs', [
                     if (_data?['songSource'] == 'deezer')
@@ -482,7 +497,14 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                           url: song['artworkUrl'] as String?, size: 50),
                         title: Text(song['title'] as String? ?? 'Song'),
                         subtitle: Text(song['artist'] as String? ?? title),
-                        trailing: const BzSvgIcon(name: 'chevron-right', size: 16),
+                        trailing: song['providerId'] == 'deezer'
+                            ? IconButton(
+                                tooltip: 'Deezer song source',
+                                icon: const Icon(Icons.open_in_new, size: 18),
+                                onPressed: () => _openCatalogSource(
+                                    song['sourceUrl'] as String?),
+                              )
+                            : const BzSvgIcon(name: 'chevron-right', size: 16),
                         onTap: () => widget.onTrackSelected(song),
                       ),
                   ], emptyMessage: _data?['songStatus'] == 'unavailable'
@@ -578,7 +600,9 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                       ),
                   ]),
                 const SizedBox(height: 20),
-                Text('Artist and release metadata: Spotify. Playback requires an authorized source.',
+                Text(_data?['sourceMatch'] == 'unique_exact_name'
+                    ? 'Artist identity: Spotify. Supplemental sections: Deezer where indicated. Playback requires an authorized source.'
+                    : 'Artist and release metadata: Spotify. Playback requires an authorized source.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2)),
               ],
