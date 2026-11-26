@@ -109,7 +109,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       _error = null;
     });
     if (normalized.length < 2) return;
-    _typeaheadTimer = Timer(const Duration(milliseconds: 300), () {
+    _typeaheadTimer = Timer(const Duration(milliseconds: 500), () {
       _search(normalized, recordHistory: false);
     });
   }
@@ -658,8 +658,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final theme = Theme.of(context);
     final progress = ref.watch(downloadProgressProvider);
 
-    return SafeArea(
-      child: Column(
+    // This screen also opens as a standalone route from Browse, where no
+    // surrounding Scaffold may provide the required Material ancestor.
+    return Material(
+      color: theme.scaffoldBackgroundColor,
+      child: SafeArea(
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -1032,6 +1036,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               ),
           ),
         ],
+        ),
       ),
     );
   }
