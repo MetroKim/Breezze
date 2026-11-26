@@ -47,40 +47,62 @@ class OnlineAutomixRenderer {
         !masterVolume.isFinite || masterVolume < 0 || masterVolume > 1) {
       throw ArgumentError('Automix transition outside supported bounds');
     }
-    if (!bothSourcesAuthorized()) throw const AutomixAuthorizationLost();
+    // A grant/session checker can fail when the backend or auth state changes.
+    // Treat both a denied result and a thrown checker as lost permission.
+    bool authorized() {
+      try {
+        return bothSourcesAuthorized();
+      } catch (_) {
+        return false;
+      }
+    }
 
     final wait = delay ?? (Duration d) => Future<void>.delayed(d);
     final transition = Duration(milliseconds: plan.transitionMs);
-    var incomingStarted = false;
     try {
+      if (!authorized()) throw const AutomixAuthorizationLost();
       await incoming.setVolume(0);
-      if (!bothSourcesAuthorized()) throw const AutomixAuthorizationLost();
+      if (!authorized()) throw const AutomixAuthorizationLost();
       await incoming.play();
-      incomingStarted = true;
       for (var i = 1; i <= steps; i++) {
-        if (!bothSourcesAuthorized()) throw const AutomixAuthorizationLost();
+        if (!authorized()) throw const AutomixAuthorizationLost();
         final elapsedBefore = transition.inMicroseconds * (i - 1) ~/ steps;
         final elapsedAfter = transition.inMicroseconds * i ~/ steps;
         await wait(Duration(microseconds: elapsedAfter - elapsedBefore));
-        if (!bothSourcesAuthorized()) throw const AutomixAuthorizationLost();
+        if (!authorized()) throw const AutomixAuthorizationLost();
         final theta = i / steps * math.pi / 2;
         await outgoing.setVolume(math.cos(theta) * masterVolume);
         await incoming.setVolume(math.sin(theta) * masterVolume);
       }
-      if (!bothSourcesAuthorized()) throw const AutomixAuthorizationLost();
+      if (!authorized()) throw const AutomixAuthorizationLost();
+      // Authorization can change while the final volume operation awaits.
+      if (!authorized()) throw const AutomixAuthorizationLost();
       await outgoing.stop();
       await incoming.setVolume(masterVolume);
+      if (!authorized()) throw const AutomixAuthorizationLost();
     } catch (_) {
-      // Never leak a second simultaneously playing deck after any failure.
-      if (incomingStarted) {
-        try { await incoming.stop(); } catch (_) {}
+      // play() may start audio and then throw before its Future completes.
+      // Always attempt to silence the dedicated incoming deck, even if its
+      // initial mute or play operation failed.
+      try {
+        await incoming.stop();
+      } catch (_) {
+        // Cleanup must not mask the original failure.
       }
-      if (bothSourcesAuthorized()) {
+      if (authorized()) {
         // Keep the original authorized recording audible on a transient
         // decoder error. A rights failure must mute BOTH instead.
-        try { await outgoing.setVolume(masterVolume); } catch (_) {}
+        try {
+          await outgoing.setVolume(masterVolume);
+        } catch (_) {
+          // Preserve the original transition error.
+        }
       } else {
-        try { await outgoing.stop(); } catch (_) {}
+        try {
+          await outgoing.stop();
+        } catch (_) {
+          // Preserve the original transition error.
+        }
       }
       rethrow;
     }
