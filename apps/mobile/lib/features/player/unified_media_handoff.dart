@@ -1,4 +1,4 @@
-import 'package:breezze_audio_contracts/audio_contracts.dart';
+import 'player_controller.dart' show TrackInfo;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
