@@ -80,8 +80,8 @@ jobs:
               $install
               test -x /bundle/breezze
               for object in /bundle/breezze /bundle/lib/*.so; do
-                echo checking \\$object
-                ldd \\$object > /tmp/breezze-ldd
+                echo checking \$object
+                ldd \$object > /tmp/breezze-ldd
                 cat /tmp/breezze-ldd
                 if grep -q 'not found' /tmp/breezze-ldd; then exit 1; fi
               done
