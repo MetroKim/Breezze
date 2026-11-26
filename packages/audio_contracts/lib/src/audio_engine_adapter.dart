@@ -5,6 +5,8 @@
 /// Media3, Web Audio); the Dart contract is one.
 library;
 
+import 'dart:async';
+
 import 'playback_state_machine.dart';
 
 /// A resolved, authorized media source returned by the backend resolver.
