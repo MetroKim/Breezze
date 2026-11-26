@@ -63,9 +63,14 @@ class JustAudioEngineAdapter implements AudioEngineAdapter {
       return;
     }
     try {
-      final session = await AudioSession.instance;
+      // Native audio plugins can be unavailable on headless test runners.
+      // A bounded fallback avoids blocking the first song indefinitely;
+      // just_audio retains its own OS focus activation at play().
+      final session = await AudioSession.instance
+          .timeout(const Duration(seconds: 5));
       if (_disposed) return;
-      await session.configure(const AudioSessionConfiguration.music());
+      await session.configure(const AudioSessionConfiguration.music())
+          .timeout(const Duration(seconds: 5));
       if (_disposed) return;
       _interruptionSubscription = session.interruptionEventStream.listen((event) {
         if (_disposed) return;
