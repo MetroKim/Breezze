@@ -38,6 +38,9 @@ jobs:
       - name: Test V8 single UI source guard
         run: python3 -m unittest discover -s tools -p 'test_v8_ui_single_source.py' -v
 
+      - name: Verify original Breezze OLED launch for Android and iOS
+        run: python3 -m unittest discover -s apps/mobile/tool -p 'test_configure_native_splash.py' -v
+
       - name: Enforce one Breezze shell, glass renderer and branding
         run: python3 tools/check_v8_ui_single_source.py
 
