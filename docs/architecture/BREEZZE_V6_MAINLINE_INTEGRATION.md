@@ -272,3 +272,89 @@ playlist while disconnected, the server rejects incompatible membership
 rather than deleting or silently replacing a device's pending changes.
 Those edits remain local until reconciled; automatic collaborative conflict
 resolution is outside this transitional synchronization feature.
+
+
+## 10. Production integration and release-proof contract (25 November 2026)
+
+This section is the **runtime acceptance layer** of unified v6, not a competing
+architecture. It deliberately distinguishes deployed observations, implemented
+source and unverified work. The visual reference is BitChord's interaction
+quality; Breezze retains its original Flutter branding and does not copy
+BitChord's Kotlin/GPL implementation or imply Google endorsement.
+
+### Authority and data flow
+
+| Boundary | Single source of truth | Enforcement and observability |
+| --- | --- | --- |
+| Authentication | Supabase Auth for verified user identity; existing NestJS exchange maps identity to owned Breezze records | Require verified-email/session checks, revocation, secure refresh storage, account-bound API retries; never reuse YouTube OAuth as Breezze login |
+| Client transport | One Breezze API client at `apps/mobile/lib/core/api/breezze_api.dart` | HTTPS in release, bounded network timeouts, one transient GET retry, no mutation retry after network failure, fail-closed account changes |
+| API authority | NestJS at `backend/api`, via Cloudflare Worker | Validation, user-scoped authorization, rights decisions, request IDs; no provider secret in Flutter |
+| Metadata | Deezer public catalog and ytmusicapi sidecar, through typed provider adapters | Isolation, timeouts, Redis cache, provider failure containment; metadata does not imply playback permission |
+| YouTube content playback | Visible official YouTube player or external YouTube Music handoff | Respect iframe/upstream restrictions; never fabricate audio-only, background or download capability |
+| Native audio | One session-authorized Breezze player and licensed R2 media rendition | Territory/action/expiry checks before issuing signed audio URLs; no fallback to third-party extraction |
+| Offline media | Account-encrypted authorized files plus signed download entitlement | Media existence/content-type probe, owner and rendition match, strong ETag resume, expiry/revocation boundary |
+| Library, playlists, history | Existing catalog owner model and durable local outbox | Owner-scoped sync and reconciliation; retain separate database systems until data ownership and restore proof exist |
+
+### Audited runtime facts, not release sign-off
+
+- Railway project Breezze currently reports four running production services:
+  API, Catalog Metadata, Redis, and Postgres (one live replica each at audit).
+  The API deployment source revision does not match current GitHub `main`.
+- Supabase project was `ACTIVE_HEALTHY` and reported no security or health
+  advisor findings at the audit. These checks do not replace tenant-isolation
+  and sign-in-device tests.
+- Cloudflare R2 `breezze-media` contained **zero objects** on the live read.
+  No production full-track streaming or download test can pass from this
+  bucket until approved masters and rights records exist.
+- Railway API variable names still included historical `AUDIUS_*` and
+  `JAMENDO_*` flags. Audit consumers and remove through a reviewed
+  configuration change; never rotate/delete secrets or alter production
+  values merely because a name looks obsolete.
+- The separate YouTube account-link OAuth client ID/secret were not present
+  among the API service's variable names at audit. Supabase Google sign-in
+  is a different grant and cannot fill that gap automatically.
+- Existing GitHub Actions runs failed before runner allocation; all affected
+  jobs have `steps: null`. This is **CI infrastructure blocked**, not a
+  test suite pass or an application assertion failure.
+
+### Release gates (all mandatory)
+
+1. **Reproducible code:** reconcile PR dependencies and source drift; pin
+   dependency versions; create a single reviewed candidate commit and verify
+   the intended API, Worker, sidecar and mobile build reference that SHA.
+2. **Running CI:** resolve GitHub-hosted Actions admission/billing/runner
+   restriction or use a separately authenticated and isolated private runner.
+   Analyze Flutter and generated Drift, run every Flutter/Dart, Jest,
+   Python and Worker test, and verify all targeted platform builds. A run
+   with zero steps is blocked, never green.
+3. **Identity:** Google/Apple only where registered and proven; test email
+   verification, secure token refresh, password recovery, MFA, old-account
+   migration, sign-out, device revocation and simultaneous different accounts.
+   A request created under listener A must not retry or deliver results to B.
+4. **Provider contracts:** exercise actual API edge against deployed NestJS,
+   ytmusicapi, Redis, and database for typed success/empty/error responses.
+   Prove degraded metadata-provider behavior and that no search result
+   becomes a native stream or offline grant without authorization.
+5. **Playback:** validate one player/queue across tabs and screens, audible
+   seek and resume, focus changes, Bluetooth/lock screen, interruptions and
+   route disposal on Android and iOS. Validate visible YouTube iframe
+   behavior separately; it is not proof of native YouTube audio support.
+6. **Offline:** ingest independently rights-cleared full AAC masters with
+   matching canonical catalog and territory/action records; test signed R2
+   range transfer, integrity, account isolation, expiry and airplane mode.
+   Keep unlicensed features disabled until an approved provider grant exists.
+7. **Security and operations:** classify historical possible secret matches
+   privately; rotate genuine credentials; verify backup/restore, RLS,
+   origin/edge allowlists, no token logging, monitoring, safe rollback and
+   current-production parity. Do not expose repository source in Releases.
+8. **Release decision:** app owner reviews evidence and approves an explicit
+   controlled deployment. Until then, preserve private repository, no
+   Releases and no implicit deployment from an unverified draft PR.
+
+### Scope discipline
+
+No duplicate Supabase database or second API gateway, no Android-only
+rewrite, no new subscription/radio tab, no unauthorized YouTube audio
+extraction or third-party offline copy, and no claim of "100% verified"
+without CI execution and device evidence. For each defect, commit its
+smallest validated fix to the existing module and attach a regression test.
