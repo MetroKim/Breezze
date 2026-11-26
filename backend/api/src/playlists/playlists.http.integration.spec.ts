@@ -178,6 +178,35 @@ describePostgres('Authenticated playlist cross-device HTTP integration', () => {
     expect(unpinned.status).toBe(200);
     expect(unpinned.data.isPinned).toBe(false);
 
+    // A real PNG thumbnail from device A must be visible on device B,
+    // never to a different account; repeated or offline cover edits are
+    // independent of the saved playlist's tracks and ordering.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC' +
+      'AAAAC0lEQVR42mP8/x8AAwMCAO+/+5AAAAAASUVORK5CYII=',
+      'base64',
+    ).toString('base64');
+    const coverPath = '/playlists/' + playlistId + '/cover';
+    expect((await api(coverPath, 'PATCH', tokenOther, {
+      coverPngBase64: png,
+    })).status).toBe(404);
+    expect((await api(coverPath, 'PATCH', tokenA, {
+      coverPngBase64: 'not-an-image',
+    })).status).toBe(400);
+    expect((await api(coverPath, 'PATCH', tokenA, {})).status).toBe(400);
+    const savedCover = await api<{ coverPngBase64: string }>(
+      coverPath, 'PATCH', tokenA, { coverPngBase64: png },
+    );
+    expect(savedCover.status).toBe(200);
+    expect(savedCover.data.coverPngBase64).toBe(png);
+    const coverOnDeviceB = await api<Array<{
+      id: string; coverPngBase64: string | null;
+    }>>('/playlists', 'GET', tokenB);
+    expect(coverOnDeviceB.data.find(p => p.id === playlistId)?.coverPngBase64).toBe(png);
+    expect((await api<{ coverPngBase64: string }>(
+      '/playlists/' + playlistId, 'GET', tokenB,
+    )).data.coverPngBase64).toBe(png);
+
     // Persist canonical track metadata and ordered playlist items.
     const addFirst = await api('/playlists/' + playlistId + '/tracks',
       'POST', tokenA, { trackId: first.id });
