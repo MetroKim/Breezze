@@ -71,12 +71,45 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
     );
   }
 
+  // Legacy-API fallback only: the current server returns canonical grouped
+  // entries under `tracks`. Never collapse covers, remixes, edits or songs
+  // lacking duration evidence just because their titles look alike.
+  bool _sameRecording(Map a, Map b) {
+    String normalized(Object? text) =>
+        text is String ? text.toLowerCase().trim()
+            .replaceAll(RegExp(r'\\s+'), ' ') : '';
+    String? isrc(Object? value) {
+      if (value is! String) return null;
+      final code = value.toUpperCase().replaceAll(RegExp(r'[-\\s]'), '');
+      return RegExp(r'^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$').hasMatch(code)
+          ? code : null;
+    }
+    final ia = isrc(a['isrc']);
+    final ib = isrc(b['isrc']);
+    if (ia != null && ib != null) return ia == ib;
+    final ta = normalized(a['title']);
+    final aa = normalized(a['artist']);
+    if (ta.isEmpty || aa.isEmpty ||
+        ta != normalized(b['title']) || aa != normalized(b['artist'])) {
+      return false;
+    }
+    final da = a['durationSec'];
+    final db = b['durationSec'];
+    return da is num && db is num && da > 0 && db > 0 &&
+        (da - db).abs() <= 3;
+  }
+
+  bool _validCatalogId(String name, String id) => switch (name) {
+    'spotify' => RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id),
+    'deezer' => RegExp(r'^[0-9]{1,20}$').hasMatch(id),
+    'musicbrainz' => RegExp(
+        r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'
+      ).hasMatch(id),
+    _ => false,
+  };
+
   @override
   Future<ProviderOp<List<ProviderTrack>>> search(String query) async {
-    // Breezze searches Deezer without credentials; Spotify is optional.
-    // MusicBrainz may supply independently attributed keyless backup data.
-    // Preserve each provider's ranking, identity and attribution. YouTube
-    // tracks never enter the music search or native audio queue.
     final normalized = query.trim();
     if (normalized.length < 2 || normalized.length > 120) {
       return ProviderOk(<ProviderTrack>[]);
@@ -85,41 +118,57 @@ class BackendCatalogSourceAdapter implements ProviderAdapter {
       final response = await _ref.read(authSessionProvider.notifier).api
           .searchMusicCatalogs(normalized);
       final shelves = response['providers'];
-      if (shelves is! List) {
+      final merged = response['tracks'];
+      if (merged is! List && shelves is! List) {
         return ProviderError('invalid_music_catalog_response');
       }
-      final tracks = <ProviderTrack>[];
-      final seen = <String>{};
-      var successful = 0;
-      // Spotify and Deezer results are independent catalog shelves, not
-      // interchangeable full-audio URLs or downloadable files.
-      for (final name in const ['spotify', 'deezer', 'musicbrainz']) {
-        for (final shelf in shelves.whereType<Map>()) {
-          if (shelf['providerId'] != name) continue;
-          final payload = shelf['result'];
-          if (payload is! Map || payload['kind'] != 'ok' ||
-              payload['value'] is! List) continue;
-          successful++;
-          for (final row in (payload['value'] as List).whereType<Map>()) {
-            final id = row['providerTrackId'];
-            if (id is! String) continue;
-            if (name == 'spotify' &&
-                !RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(id)) continue;
-            if (name == 'deezer' &&
-                !RegExp(r'^[0-9]{1,20}$').hasMatch(id)) continue;
-            if (name == 'musicbrainz' &&
-                !RegExp(r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$').hasMatch(id)) continue;
-            final track = _trackFromJson(row, providerId: name);
-            if (track.title.isNotEmpty && track.artist.isNotEmpty &&
-                seen.add(track.breezzeTrackId)) {
-              tracks.add(track);
+
+      // The server owns source selection and returns one representative per
+      // recording. Keep original provider IDs internally for metadata and
+      // contractual attribution; they are never a user-facing source picker.
+      final entries = <(String, Map)>[];
+      if (merged is List) {
+        for (final row in merged.whereType<Map>()) {
+          final providerId = row['providerId'];
+          if (providerId is String) entries.add((providerId, row));
+        }
+      } else if (shelves is List) {
+        // Compatibility during rolling backend deployments.
+        for (final name in const ['spotify', 'deezer', 'musicbrainz']) {
+          for (final shelf in shelves.whereType<Map>()) {
+            if (shelf['providerId'] != name) continue;
+            final payload = shelf['result'];
+            if (payload is! Map || payload['kind'] != 'ok' ||
+                payload['value'] is! List) continue;
+            for (final row in (payload['value'] as List).whereType<Map>()) {
+              if (entries.any((existing) => _sameRecording(existing.$2, row))) {
+                continue;
+              }
+              entries.add((name, row));
             }
           }
         }
       }
-      return successful == 0
-          ? ProviderError('music_catalogs_unavailable')
-          : ProviderOk(tracks);
+
+      final tracks = <ProviderTrack>[];
+      final seen = <String>{};
+      for (final (name, row) in entries) {
+        final id = row['providerTrackId'];
+        if (id is! String || !_validCatalogId(name, id)) continue;
+        final track = _trackFromJson(row, providerId: name);
+        if (track.title.isNotEmpty && track.artist.isNotEmpty &&
+            seen.add(track.breezzeTrackId)) {
+          tracks.add(track);
+        }
+      }
+      final hasValidSource = merged is List ||
+          (shelves is List && shelves.whereType<Map>().any((shelf) {
+            final result = shelf['result'];
+            return result is Map && result['kind'] == 'ok';
+          }));
+      return hasValidSource
+          ? ProviderOk(tracks)
+          : ProviderError('music_catalogs_unavailable');
     } catch (_) {
       return ProviderError('music_catalog_network_error');
     }
