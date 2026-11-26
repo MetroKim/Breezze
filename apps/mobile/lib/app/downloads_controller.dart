@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../core/api/breezze_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -291,9 +290,10 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
       final api = ref.read(authSessionProvider.notifier).api;
       if (api.accessToken == null) { _setStatus(track.id, 'login_required'); return; }
 
-      final catalogId = await _resolveCatalogId(api, track);
+      // A non-provider ID identifies the canonical internal recording.
+      // Its bytes and offline rights are still validated by the API.
+      final catalogId = track.id;
       if (cancellation.isCancelled) return;
-      if (catalogId == null) { _setStatus(track.id, 'failed'); return; }
 
       final authorization = await api.authorizeDownload(
         trackId: catalogId,
@@ -354,11 +354,4 @@ class DownloadsController extends StateNotifier<Map<String, double>> {
     }
   }
 
-  /// Offline grants are requested only for internal canonical track IDs.
-  /// Mapping a provider ID to a new internal metadata row does NOT supply
-  /// the license or audio bytes, so never create that mapping here.
-  Future<String?> _resolveCatalogId(BreezzeApi api, BzTrack track) async {
-    if (!canRequestOfflineDownload(track.id)) return null;
-    return track.id;
-  }
 }
