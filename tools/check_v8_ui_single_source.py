@@ -21,13 +21,21 @@ MORPH = "apps/mobile/lib/widgets/bz_morphing_brand_header.dart"
 DETAIL_BAR = "apps/mobile/lib/widgets/bz_branded_app_bar.dart"
 BROWSE = "apps/mobile/lib/features/browse/browse_screen.dart"
 PROVIDER = "apps/mobile/lib/features/browse/ytmusic_client_screen.dart"
+SECONDARY_PAGES = (
+    "apps/mobile/lib/features/library/playlist_detail_screen.dart",
+    "apps/mobile/lib/features/catalog/catalog_detail_screens.dart",
+    "apps/mobile/lib/features/catalog/spotify_artist_screen.dart",
+    "apps/mobile/lib/features/settings/account_screen.dart",
+    "apps/mobile/lib/features/notifications/notifications_screen.dart",
+    "apps/mobile/lib/features/video/official_music_video_screen.dart",
+)
 
 
 def violations(root: Path = REPO) -> list[str]:
     issues: list[str] = []
     content: dict[str, str] = {}
     for name in (SHELL, TABS, THEME, GLASS_CORE, GLASS_ADAPTER, BRAND,
-                 MORPH, DETAIL_BAR, BROWSE, PROVIDER):
+                 MORPH, DETAIL_BAR, BROWSE, PROVIDER, *SECONDARY_PAGES):
         p = root / name
         if not p.is_file():
             issues.append(f"MISSING_UI_SOURCE: {name}")
@@ -64,6 +72,13 @@ def violations(root: Path = REPO) -> list[str]:
     provider = content.get(PROVIDER, "")
     if re.search(r"appBar:\s*AppBar\(", provider):
         issues.append("LEGACY_PROVIDER_TOOLBAR: " + PROVIDER)
+
+    for page in SECONDARY_PAGES:
+        source = content.get(page, "")
+        if source and re.search(r"appBar:\s*AppBar\(", source):
+            issues.append("LEGACY_DETAIL_TOOLBAR: " + page)
+        if source and "BzBrandedAppBar" not in source:
+            issues.append("UNBRANDED_SECONDARY_PAGE: " + page)
 
     # Reference source may inform screen hierarchy; no external clone code
     # is vendored into Flutter's production UI.
