@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   experimentEnabled, allowlistedVideo, validSecret,
-  safeAudioCdn, safeByteRange,
+  safeAudioCdn, safeByteRange, validUpstreamRange,
 } from '../src/security.mjs';
 
 test('production never enables unofficial audio', () => {
@@ -41,4 +41,17 @@ test('single bounded HTTP range only', () => {
   assert.equal(safeByteRange('bytes=10-2'), false);
   assert.equal(safeByteRange('bytes=0-1,10-20'), false);
   assert.equal(safeByteRange(null), null);
+});
+
+test('206 response must match the exact requested seek offset and length', () => {
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 0-7/16', '8'), true);
+  assert.equal(validUpstreamRange('bytes=8-', 'bytes 8-15/16', '8'), true);
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 8-15/16', '8'), false);
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 0-8/16', '9'), false);
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 0-7/16', '9'), false);
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 0-7/8', '8'), true);
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 0-8/8', '9'), false);
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 0-7/*', null), true);
+  assert.equal(validUpstreamRange('bytes=0-7', null, '8'), false);
+  assert.equal(validUpstreamRange('bytes=0-7', 'bytes 0-7/16', 'invalid'), false);
 });
