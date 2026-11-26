@@ -21,9 +21,10 @@ on:
 
 concurrency:
   group: breezze-codeql-${{ github.ref }}
-  # Cancel obsolete runs so the most recent main SHA gets the build agents.
-  # Native device acceptance retains separate non-cancelling workflows.
-  cancel-in-progress: true
+  # Keep the currently executing verification alive even during rapid commits.
+  # GitHub retains only the newest pending run for this concurrency group.
+  # A completed run does not certify later commits: the newest SHA still runs.
+  cancel-in-progress: false
 
 jobs:
   analyze:
