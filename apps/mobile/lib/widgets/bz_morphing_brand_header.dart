@@ -1,0 +1,127 @@
+import 'package:breezze_design_system/breezze_design_system.dart';
+import 'package:material_ui/material_ui.dart';
+
+import 'bz_brand_icons.dart';
+
+/// Scroll-aware, pinned Breezze identity for discovery pages.
+///
+/// Recreates the useful *interaction pattern* of an expanding/collapsing
+/// music-app masthead. The artwork, wordmark and code belong to Breezze.
+/// The pill gently morphs into a black circular badge containing only our
+/// own B-note mark. No YouTube Music trademarks or clone source are used.
+class BzMorphingBrandHeader extends StatelessWidget {
+  const BzMorphingBrandHeader({
+    super.key,
+    this.actions = const <Widget>[],
+  });
+
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: _BzBrandHeaderDelegate(actions: actions),
+    );
+  }
+}
+
+class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _BzBrandHeaderDelegate({required this.actions});
+
+  final List<Widget> actions;
+
+  @override
+  double get maxExtent => 94;
+
+  @override
+  double get minExtent => 62;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final theme = Theme.of(context);
+    final progress = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
+    final compact = progress >= 0.55;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final highContrast = MediaQuery.highContrastOf(context);
+    final background = theme.bzBackground;
+    final width = 116 - progress * 72;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: background.withValues(
+          alpha: highContrast ? 1.0 : 0.97,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: overlapsContent || compact
+                ? theme.bzSeparator
+                : Colors.transparent,
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Semantics(
+                label: 'Breezze',
+                image: true,
+                child: ExcludeSemantics(
+                  child: AnimatedContainer(
+                    key: const Key('breezze-morphing-brand'),
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 120),
+                    curve: Curves.easeOutCubic,
+                    width: width,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: compact ? Colors.black : Colors.transparent,
+                      borderRadius: BorderRadius.circular(compact ? 22 : 8),
+                      border: compact && highContrast
+                          ? Border.all(color: Colors.white, width: 1.5)
+                          : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: AnimatedSwitcher(
+                      duration: reduceMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 150),
+                      child: compact
+                          ? const BzBnoteMark(
+                              key: Key('breezze-compact-icon'),
+                              size: 25,
+                              color: Colors.white,
+                            )
+                          : SizedBox(
+                              key: const Key('breezze-expanded-wordmark'),
+                              width: 106,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: BzRibbonLogo(
+                                  width: 106,
+                                  color: theme.bzText1,
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              ...actions,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _BzBrandHeaderDelegate oldDelegate) => true;
+}
