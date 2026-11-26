@@ -18,7 +18,9 @@ env:
 
 concurrency:
   group: breezze-quality-${{ github.ref }}
-  cancel-in-progress: true
+  # Preserve long-running platform builds when newer commits are pushed.
+  # Queue newer runs instead of cancelling evidence before it completes.
+  cancel-in-progress: false
 
 jobs:
   flutter:
