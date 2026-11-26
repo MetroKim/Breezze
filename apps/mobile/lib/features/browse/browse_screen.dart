@@ -17,6 +17,7 @@ import '../../core/database/outbox_sync_service.dart';
 import '../../app/downloads_controller.dart';
 import '../../features/player/player_controller.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_discovery_spotlight.dart';
 
 /// Provider metadata is not a playable full recording. Until Breezze
 /// receives licensed in-app stream grants, never launch another music app
@@ -186,6 +187,21 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                   const SizedBox(height: 6),
                   Text('New releases, music videos, charts, genres and more.', style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 18),
+                  BzDiscoverySpotlight(
+                    eyebrow: 'Discover music',
+                    title: 'Something new to love',
+                    description: 'Explore fresh catalog discoveries and official music videos. Availability depends on the source.',
+                    actionLabel: 'Search new releases',
+                    onAction: () => Navigator.of(context).push(
+                      breezzePageRoute<void>(
+                        context: context,
+                        builder: (_) => const SearchScreen(
+                          initialQuery: 'new music releases',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
                   Text('Explore by genre', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 10),
                   // Capsule pill genre rail — spec §2.3 tab indicators use
