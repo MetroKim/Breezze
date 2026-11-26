@@ -75,7 +75,12 @@ void main() {
 
   test('stale fragment cannot resume when the authorized asset version changes', () async {
     const id = 'catalog-versioned';
-    final track = BzTrack(id: id, title: 'Fresh version', artist: 'A', duration: const Duration(minutes: 3));
+    final track = BzTrack(
+      id: id,
+      title: 'Fresh version',
+      artist: 'A',
+      duration: const Duration(minutes: 3),
+    );
     final folder = Directory('${root.path}/$id');
     await folder.create();
     await File('${folder.path}/audio.part').writeAsString('oldbytes');
@@ -111,7 +116,12 @@ void main() {
 
   test('an unversioned partial cannot silently join a different recording', () async {
     const id = 'catalog-unversioned';
-    final track = BzTrack(id: id, title: 'Replaced', artist: 'A', duration: const Duration(minutes: 3));
+    final track = BzTrack(
+      id: id,
+      title: 'Replaced',
+      artist: 'A',
+      duration: const Duration(minutes: 3),
+    );
     final folder = Directory('${root.path}/$id');
     await folder.create();
     await File('${folder.path}/audio.part').writeAsString('stale');
@@ -138,7 +148,12 @@ void main() {
 
   test('resume rejects a malformed HTTP Content-Range rather than saving corrupt audio', () async {
     const id = 'catalog-bad-range';
-    final track = BzTrack(id: id, title: 'Bad range', artist: 'A', duration: const Duration(minutes: 3));
+    final track = BzTrack(
+      id: id,
+      title: 'Bad range',
+      artist: 'A',
+      duration: const Duration(minutes: 3),
+    );
     final folder = Directory('${root.path}/$id');
     await folder.create();
     await File('${folder.path}/audio.part').writeAsString('abc');
@@ -183,7 +198,12 @@ void main() {
     addTearDown(() => server.close(force: true));
 
     expect(await library.download(
-      BzTrack(id: id, title: 'Verified audio', artist: 'A', duration: const Duration(minutes: 3)),
+      BzTrack(
+        id: id,
+        title: 'Verified audio',
+        artist: 'A',
+        duration: const Duration(minutes: 3),
+      ),
       downloadUrl: 'http://${server.address.address}:${server.port}/audio',
       ownerId: 'user-1',
       catalogTrackId: id,
@@ -206,7 +226,12 @@ void main() {
     });
     addTearDown(() => server.close(force: true));
     expect(await library.download(
-      BzTrack(id: id, title: 'Invalid audio', artist: 'A', duration: const Duration(minutes: 3)),
+      BzTrack(
+        id: id,
+        title: 'Invalid audio',
+        artist: 'A',
+        duration: const Duration(minutes: 3),
+      ),
       downloadUrl: 'http://${server.address.address}:${server.port}/audio',
       ownerId: 'user-1',
       catalogTrackId: id,
@@ -218,7 +243,12 @@ void main() {
 
   test('protected download commits only AES-GCM ciphertext and owner metadata', () async {
     const id = 'protected-audio';
-    final track = BzTrack(id: id, title: 'Original song', artist: 'Breezze QA', duration: const Duration(minutes: 3));
+    final track = BzTrack(
+      id: id,
+      title: 'Original song',
+      artist: 'Breezze QA',
+      duration: const Duration(minutes: 3),
+    );
     final cipher = BreezzeOfflineAudioCipher(
       SecretKey(List<int>.filled(32, 0x23)),
     );
@@ -299,7 +329,12 @@ void main() {
     });
     addTearDown(() => server.close(force: true));
     expect(await protectedLibrary.download(
-      BzTrack(id: id, title: 'Fail secure', artist: 'Breezze', duration: const Duration(minutes: 3)),
+      BzTrack(
+        id: id,
+        title: 'Fail secure',
+        artist: 'Breezze',
+        duration: const Duration(minutes: 3),
+      ),
       downloadUrl: 'http://${server.address.address}:${server.port}/audio',
       ownerId: 'listener-a',
       catalogTrackId: id,
