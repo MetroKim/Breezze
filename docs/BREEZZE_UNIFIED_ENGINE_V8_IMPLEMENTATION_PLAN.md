@@ -292,3 +292,9 @@ See the same-sha evidence links and outstanding blockers in [master issue #27](h
 5. Complete Android/iOS interruption and accessibility acceptance, desktop MPRIS/media-key transport, physical-device evidence and signed platform packages. Keep release **BLOCKED** until the owner explicitly authorizes it after all gates.
 
 **Acceptance ledger rule:** A commit or merge means source changed; an individual CI job PASS means only that job passed on its exact SHA; device, licensing, database, media and deployment acceptance must be evidenced independently.
+
+### V8.3 owner correction — transport behavior (2026-11-27)
+
+**Final design decision:** Breezze Now Playing uses **Previous Track / Play-Pause / Next Track** only for its three primary transports, with Shuffle and Repeat remaining secondary options. **No separate rewind or 10-second seek-back button.** Track navigation remains attached to the single global `PlayerController`. This explicitly supersedes the brief rewind experiment and prevents future UI agents from restoring it.
+
+**Main source fixes:** `f83145f2824241f6636a66785512285ddf7d80f0` removes the rewind SVG; `9e1a6079a8e0a209752ea892e1c6c2344f263ab5` removes the rewind transport control; `6fa9c085dc40917ff0685187e2a21064c10343eb` removes the rewind callback from Now Playing; `02c43426a5f4ab1e5ded0e906f8362173032b4c7` replaces the rewind test with checks for independent Previous/Next callbacks and the absence of a rewind button. **Source committed; exact-head widget/CI acceptance still pending.**
