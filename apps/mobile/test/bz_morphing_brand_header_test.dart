@@ -103,7 +103,9 @@ void main() {
     var opens = 0;
     await tester.pumpWidget(MaterialApp(
       theme: bzDarkTheme(),
-      home: Scaffold(
+      home: BzSidebarBrandOwner(
+        visible: true,
+        child: Scaffold(
         body: CustomScrollView(
           slivers: [
             BzMorphingBrandHeader(
@@ -119,6 +121,7 @@ void main() {
             const SliverToBoxAdapter(child: SizedBox(height: 1100)),
           ],
         ),
+      ),
       ),
     ));
     expect(find.byKey(const Key('breezze-expanded-wordmark')), findsNothing);
