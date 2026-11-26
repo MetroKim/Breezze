@@ -158,3 +158,45 @@ test('range cannot silently degrade to whole-file 200', async () => {
   }), '/v1/audio/' + id, authHeaders({ Range: 'bytes=0-7' }));
   assert.equal(missingContentRange.status, 502);
 });
+
+test('rejects upstream 206 if Content-Range does not match requested seek', async () => {
+  const wrongOffset = await request(handlerOptions({
+    fetchAudio: async () => new Response(fixture.slice(0, 8), {
+      status: 206,
+      headers: {
+        'content-type': 'audio/webm',
+        'content-length': '8',
+        'content-range': 'bytes 8-15/16',
+      },
+    }),
+  }), '/v1/audio/' + id, authHeaders({ Range: 'bytes=0-7' }));
+  assert.equal(wrongOffset.status, 502);
+});
+
+test('rejects transformed HTTP content-encoding for byte-exact playback', async () => {
+  const compressed = await request(handlerOptions({
+    fetchAudio: async () => new Response(fixture, {
+      status: 200,
+      headers: {
+        'content-type': 'audio/webm',
+        'content-encoding': 'gzip',
+      },
+    }),
+  }), '/v1/audio/' + id, authHeaders());
+  assert.equal(compressed.status, 502);
+});
+
+test('upstream audio request explicitly disables transfer compression', async () => {
+  let compressionHeader;
+  const result = await request(handlerOptions({
+    fetchAudio: async (_url, options) => {
+      compressionHeader = options.headers['Accept-Encoding'];
+      return new Response(fixture, {
+        status: 200,
+        headers: { 'content-type': 'audio/webm' },
+      });
+    },
+  }), '/v1/audio/' + id, authHeaders());
+  assert.equal(result.status, 200);
+  assert.equal(compressionHeader, 'identity');
+});
