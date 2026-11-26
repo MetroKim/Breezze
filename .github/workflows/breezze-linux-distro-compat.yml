@@ -120,7 +120,7 @@ jobs:
                 install='export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -y -qq libgtk-3-0 libsecret-1-0 libblkid1 liblzma5 libstdc++6 >/dev/null'
                 ;;
               fedora:*)
-                install='dnf -y -q install gtk3 libsecret util-linux-libs xz-libs libstdc++ >/dev/null'
+                install='dnf -y -q install gtk3 libsecret libblkid libmount xz-libs libstdc++ >/dev/null'
                 ;;
               archlinux:*)
                 install='pacman -Sy --noconfirm --needed gtk3 libsecret util-linux xz gcc-libs >/dev/null'
