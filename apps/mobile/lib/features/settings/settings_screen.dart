@@ -2,6 +2,7 @@ import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/breezze_navigation.dart';
 import '../../app/download_preferences.dart';
 import '../../app/appearance_controller.dart';
 import '../../app/search_history_store.dart';
@@ -130,7 +131,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: Text('Breezze — free for everyone',
                   style: theme.textTheme.bodySmall),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AccountScreen()),
+                breezzePageRoute<void>(
+              context: context,builder: (_) => const AccountScreen()),
               ),
             ),
             ListTile(
@@ -138,7 +140,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Account details and sessions'),
               trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AccountScreen()),
+                breezzePageRoute<void>(
+              context: context,builder: (_) => const AccountScreen()),
               ),
             ),
             ListTile(
@@ -146,7 +149,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Notifications'),
               trailing: BzSvgIcon(name: 'chevron-right', color: theme.bzText2),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                breezzePageRoute<void>(
+              context: context,builder: (_) => const NotificationsScreen()),
               ),
             ),
             ListTile(
@@ -393,7 +397,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: const Text('Review account and service updates.'),
               trailing: const BzSvgIcon(name: 'chevron-right'),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                breezzePageRoute<void>(
+              context: context,builder: (_) => const NotificationsScreen()),
               ),
             ),
             ListTile(
@@ -402,7 +407,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: const Text('Playback, downloads, account and privacy answers.'),
               trailing: const BzSvgIcon(name: 'chevron-right'),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+                breezzePageRoute<void>(
+              context: context,builder: (_) => const HelpSupportScreen()),
               ),
             ),
             ListTile(
@@ -411,7 +417,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: const Text('Share feedback with the Breezze team.'),
               trailing: const BzSvgIcon(name: 'chevron-right'),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+                breezzePageRoute<void>(
+              context: context,builder: (_) => const HelpSupportScreen()),
               ),
             ),
           ]),
