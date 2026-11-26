@@ -600,6 +600,10 @@ class BreezzeApi {
   // ---- account and sessions ----
 
   Future<Map<String, dynamic>> profile() => _get('/users/me');
+  /// Private profile avatar, never a public music service URL.
+  Future<Map<String, dynamic>> setAvatarPhoto(String? avatarPngBase64) =>
+      _patch('/users/me/avatar', {'avatarPngBase64': avatarPngBase64});
+
 
   Future<Map<String, dynamic>> updateProfile({
     required String displayName,
