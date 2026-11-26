@@ -5,6 +5,8 @@ import 'package:breezze/app/recent_store.dart';
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/features/home/home_screen.dart';
+import 'package:breezze/app/main_tab.dart';
+import 'package:breezze/features/search/search_screen.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -150,5 +152,39 @@ void main() {
     expect(find.text('Could not load your saved music'), findsNothing);
     expect(find.text('Find your first song'), findsOneWidget);
     expect(find.byType(BzSkeletonTrackRow), findsNothing);
+  });
+
+  testWidgets('Home New releases tile selects the real New tab',
+      (tester) async {
+    await _renderHome(
+      tester,
+      guest: true,
+      loadRecent: (_) async => <RecentEntry>[],
+      favorites: _HomeFavorites(),
+    );
+    await tester.pump();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(HomeScreen)),
+    );
+    await tester.tap(find.text('New releases'));
+    expect(container.read(homeTabHintProvider), MainTab.browse.index);
+  });
+
+  testWidgets('Home Music videos opens actual Search in official video mode',
+      (tester) async {
+    await _renderHome(
+      tester,
+      guest: true,
+      loadRecent: (_) async => <RecentEntry>[],
+      favorites: _HomeFavorites(),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Music videos'));
+    await tester.pump();
+    final search = tester.widget<SearchScreen>(find.byType(SearchScreen));
+    expect(search.initialVideoSearch, isTrue);
+    expect(search.initialQuery, contains('official music video'));
   });
 }
