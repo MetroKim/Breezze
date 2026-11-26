@@ -40,6 +40,45 @@ def elf_machine(path: Path) -> int:
     return struct.unpack_from("<H", header, 18)[0]
 
 
+def strip_unneeded_linux_jni_bridge(bundle: Path) -> bool:
+    """Remove Android's JNI bridge only if no packaged ELF links against it.
+
+    The Flutter dependency graph may copy libdartjni.so into Linux bundles
+    even though Linux playback uses its own media engine and no JVM.
+    We cannot waive unresolved dependencies in the final bundle audit:
+    instead, prove no ELF DT_NEEDED references before removing the exact
+    unused bridge. A live launch/MPRIS probe follows in CI.
+    Dynamic FFI/Java use still needs separate playback acceptance.
+    """
+    bundle = bundle.resolve()
+    bridge = bundle / "lib" / "libdartjni.so"
+    if not bridge.exists() and not bridge.is_symlink():
+        return False
+    if bridge.is_symlink() or not bridge.is_file():
+        raise BundleAuditError("JNI bridge must be a regular bundled file")
+    native_objects = [bundle / "breezze"]
+    native_objects.extend(sorted(
+        path for path in (bundle / "lib").rglob("*")
+        if path.is_file() and path != bridge
+        and (path.name.endswith(".so") or ".so." in path.name)
+    ))
+    for path in native_objects:
+        result = subprocess.run(
+            ["readelf", "-d", str(path)],
+            text=True, capture_output=True, check=False,
+        )
+        if result.returncode != 0:
+            raise BundleAuditError(
+                f"Cannot inspect native dependencies for {path.name}"
+            )
+        if "Shared library: [libdartjni.so]" in result.stdout:
+            raise BundleAuditError(
+                f"Required JNI bridge cannot be stripped: {path.name}"
+            )
+    bridge.unlink()
+    return True
+
+
 def audit_bundle(bundle: Path, arch: str, check_linker: bool = False) -> dict:
     bundle = bundle.resolve()
     if not bundle.is_dir():
@@ -130,9 +169,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--arch", choices=sorted(MACHINES), required=True)
     parser.add_argument("--check-linker", action="store_true")
+    parser.add_argument(
+        "--strip-unused-linux-jni", action="store_true",
+        help="Prove no ELF uses the Android-only JNI bridge, then remove it",
+    )
     args = parser.parse_args(argv)
     try:
+        stripped = False
+        if args.strip_unused_linux_jni:
+            # Validate the original artifact before changing its contents.
+            audit_bundle(args.bundle, args.arch)
+            stripped = strip_unneeded_linux_jni_bridge(args.bundle)
         report = audit_bundle(args.bundle, args.arch, args.check_linker)
+        report["stripped_unused_linux_jni"] = stripped
     except (BundleAuditError, OSError) as exc:
         print(f"LINUX BUNDLE FAIL: {exc}", file=sys.stderr)
         return 1

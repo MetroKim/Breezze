@@ -2,6 +2,14 @@ name: Breezze Linux Distro Compatibility (no distribution)
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/breezze-linux-distro-compat.yml'
+      - 'apps/mobile/tool/linux_portability_audit.py'
+      - 'apps/mobile/tool/test_linux_portability_audit.py'
+      - 'apps/mobile/pubspec.yaml'
+      - 'packages/**'
   push:
     branches: [main]
     paths:
@@ -39,7 +47,7 @@ jobs:
       - name: Prepare Linux build toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libblkid-dev xvfb xauth dbus-x11 libgl1-mesa-dri libegl1 gnome-keyring libglib2.0-bin libmpv-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libblkid-dev xvfb xauth dbus-x11 libgl1-mesa-dri libegl1 gnome-keyring libglib2.0-bin libmpv-dev binutils
       - name: Run offline Linux auditor unit tests
         run: python3 -m unittest discover -s apps/mobile/tool -p 'test_linux_portability_audit.py' -v
       - name: Generate Flutter platform runners
@@ -53,6 +61,15 @@ jobs:
       - name: Build Linux release bundle locally (never publish)
         working-directory: apps/mobile
         run: flutter build linux --release
+      - name: Drop unused Android JNI bridge only after dependency proof
+        run: |
+          # Flutter can package libdartjni.so for Android-only plugin code.
+          # Do NOT waive ldd failures: prove the executable and every other
+          # packaged ELF do not DT_NEEDED the bridge, then remove it.
+          # The next steps verify the final bundle's ELF linkage and launch.
+          python3 apps/mobile/tool/linux_portability_audit.py \
+            --bundle apps/mobile/build/linux/x64/release/bundle \
+            --arch x86_64 --strip-unused-linux-jni
       - name: Verify bundle ELF architecture and security
         run: |
           python3 apps/mobile/tool/linux_portability_audit.py \
@@ -103,7 +120,7 @@ jobs:
                 install='export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -y -qq libgtk-3-0 libsecret-1-0 libblkid1 liblzma5 libstdc++6 >/dev/null'
                 ;;
               fedora:*)
-                install='dnf -y -q install gtk3 libsecret util-linux-libs xz-libs libstdc++ >/dev/null'
+                install='dnf -y -q install gtk3 libsecret libblkid libmount xz-libs libstdc++ >/dev/null'
                 ;;
               archlinux:*)
                 install='pacman -Sy --noconfirm --needed gtk3 libsecret util-linux xz gcc-libs >/dev/null'

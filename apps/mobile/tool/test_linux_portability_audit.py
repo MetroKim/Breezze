@@ -3,8 +3,11 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from linux_portability_audit import BundleAuditError, audit_bundle
+from linux_portability_audit import (
+    BundleAuditError, audit_bundle, strip_unneeded_linux_jni_bridge,
+)
 
 
 def fake_elf(machine=62):
@@ -59,6 +62,46 @@ class LinuxBundleAuditTest(unittest.TestCase):
         (self.bundle / "lib" / "libcodec.so.2").write_bytes(fake_elf(183))
         with self.assertRaisesRegex(BundleAuditError, "Wrong ELF machine"):
             audit_bundle(self.bundle, "x86_64")
+
+    @patch("linux_portability_audit.subprocess.run")
+    def test_android_jni_bridge_only_removed_after_dependency_audit(self, run):
+        bridge = self.bundle / "lib" / "libdartjni.so"
+        bridge.write_bytes(fake_elf())
+        run.return_value.returncode = 0
+        run.return_value.stdout = (
+            "0x0000000000000001 (NEEDED) Shared library: [libc.so.6]"
+        )
+        self.assertTrue(strip_unneeded_linux_jni_bridge(self.bundle))
+        self.assertFalse(bridge.exists())
+        self.assertGreaterEqual(run.call_count, 2)
+        self.assertEqual(audit_bundle(self.bundle, "x86_64")["checked_native_objects"], 2)
+
+    @patch("linux_portability_audit.subprocess.run")
+    def test_required_jni_linkage_stops_strip_and_preserves_bridge(self, run):
+        bridge = self.bundle / "lib" / "libdartjni.so"
+        bridge.write_bytes(fake_elf())
+        run.return_value.returncode = 0
+        run.return_value.stdout = (
+            "0x0000000000000001 (NEEDED) Shared library: [libdartjni.so]"
+        )
+        with self.assertRaisesRegex(BundleAuditError, "Required JNI bridge"):
+            strip_unneeded_linux_jni_bridge(self.bundle)
+        self.assertTrue(bridge.exists())
+
+    @patch("linux_portability_audit.subprocess.run")
+    def test_failed_elf_dependency_scan_cannot_strip_bridge(self, run):
+        bridge = self.bundle / "lib" / "libdartjni.so"
+        bridge.write_bytes(fake_elf())
+        run.return_value.returncode = 1
+        run.return_value.stdout = ""
+        with self.assertRaisesRegex(BundleAuditError, "Cannot inspect"):
+            strip_unneeded_linux_jni_bridge(self.bundle)
+        self.assertTrue(bridge.exists())
+
+    @patch("linux_portability_audit.subprocess.run")
+    def test_missing_android_bridge_is_safe_noop(self, run):
+        self.assertFalse(strip_unneeded_linux_jni_bridge(self.bundle))
+        run.assert_not_called()
 
     def test_rejects_symlink_escaping_release_bundle(self):
         (self.bundle / "lib" / "libescape.so").symlink_to("/etc/passwd")
