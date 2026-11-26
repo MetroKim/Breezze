@@ -158,16 +158,23 @@ class _BzBrandHeaderDelegate extends SliverPersistentHeaderDelegate {
                       duration: reduceMotion
                           ? Duration.zero
                           : const Duration(milliseconds: 150),
-                      child: compact
-                          ? const BzBrandLockup(
-                              key: Key('breezze-compact-icon'),
-                              markHeight: 27,
-                              compact: true,
-                            )
-                          : const BzBrandLockup(
-                              key: Key('breezze-expanded-wordmark'),
-                              markHeight: 34,
-                            ),
+                      // Header width is capped on narrow phones. Scale the
+                      // ORIGINAL symbol + name together rather than clipping
+                      // the text or overflowing the action buttons.
+                      child: FittedBox(
+                        alignment: Alignment.centerLeft,
+                        fit: BoxFit.scaleDown,
+                        child: compact
+                            ? const BzBrandLockup(
+                                key: Key('breezze-compact-icon'),
+                                markHeight: 27,
+                                compact: true,
+                              )
+                            : const BzBrandLockup(
+                                key: Key('breezze-expanded-wordmark'),
+                                markHeight: 34,
+                              ),
+                      ),
                     ),
                   ),
                 ),
