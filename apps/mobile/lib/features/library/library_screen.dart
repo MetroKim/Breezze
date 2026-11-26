@@ -16,6 +16,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_morphing_brand_header.dart';
+import '../../widgets/bz_discovery_action_tile.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
 import 'add_to_playlists_sheet.dart';
@@ -44,7 +45,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   ];
 
   Set<String> _visibleSections = {'Playlists', 'Artists', 'Albums', 'Songs'};
-  String _selected = 'Playlists';
+  // The V8 Library opens on its collection overview, not an old tab-only list.
+  String _selected = 'All';
   String? _activeGenre;
   final _playlistStore = PlaylistStore();
   String _ownerId = 'guest';
@@ -197,7 +199,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       _albums = savedAlbums;
       _followedArtists = followedArtists;
       _visibleSections = visibleSections;
-      if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
+      if (_selected != 'All' && _selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
         _selected = _allSections.firstWhere(_visibleSections.contains);
       }
       _loading = false;
@@ -429,7 +431,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     if (!mounted) return;
     setState(() {
       _visibleSections = result;
-      if (_selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
+      if (_selected != 'All' && _selected != 'Downloaded' && !_visibleSections.contains(_selected)) {
         _selected = _visibleSections.first;
       }
     });
@@ -442,7 +444,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     ref.listen<int>(savedAlbumRefreshProvider, (previous, next) => _refresh());
     ref.listen<int>(favoritesRefreshProvider, (previous, next) => _refresh());
     final theme = Theme.of(context);
-    final sections = [..._allSections.where(_visibleSections.contains), 'Downloaded'];
+    final sections = ['All', ..._allSections.where(_visibleSections.contains), 'Downloaded'];
 
     return SafeArea(
       child: NestedScrollView(
@@ -498,7 +500,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: _selected == 'Downloaded'
+            child: _selected == 'All'
+                ? _buildOverview(theme)
+                : _selected == 'Downloaded'
                 ? const DownloadsScreen()
                 : _selected == 'Songs'
                     ? _buildSongs(theme)
@@ -521,6 +525,155 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
         ],
       ),
+      ),
+    );
+  }
+
+  /// V8 overview inspired by music-discovery library structure.
+  /// Existing account-scoped stores and section widgets remain authoritative;
+  /// the overview only routes into them, so no duplicate data/persistence UI.
+  Widget _buildOverview(ThemeData theme) {
+    final shortcuts = <({String title, String detail, String icon, String section})>[
+      (
+        title: 'Playlists',
+        detail: _loading ? 'Loading saved playlists' : '${_playlists.length} saved',
+        icon: 'list-music',
+        section: 'Playlists',
+      ),
+      (
+        title: 'Songs',
+        detail: _loading ? 'Loading songs' : '${_favorites.length} saved',
+        icon: 'music-note',
+        section: 'Songs',
+      ),
+      (
+        title: 'Albums',
+        detail: _loading ? 'Loading albums' : '${_albums.length} saved',
+        icon: 'album',
+        section: 'Albums',
+      ),
+      (
+        title: 'Artists',
+        detail: _loading ? 'Loading artists' : '${_followedArtists.length} followed',
+        icon: 'user-round',
+        section: 'Artists',
+      ),
+      (
+        title: 'Downloads',
+        detail: 'Available offline',
+        icon: 'download',
+        section: 'Downloaded',
+      ),
+    ];
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        key: const Key('breezze-v8-library-overview'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          16, 10, 16,
+          BzBreakpoints.bottomClearance(context, compact: 180),
+        ),
+        children: [
+          Semantics(
+            header: true,
+            child: Text('Quick access', style: theme.textTheme.titleLarge),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cols = constraints.maxWidth >= 900
+                  ? 3
+                  : constraints.maxWidth >= 340
+                      ? 2
+                      : 1;
+              final itemWidth =
+                  (constraints.maxWidth - (cols - 1) * 10) / cols;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final shortcut in shortcuts)
+                    SizedBox(
+                      width: itemWidth,
+                      child: BzDiscoveryActionTile(
+                        label: shortcut.title,
+                        description: shortcut.detail,
+                        iconName: shortcut.icon,
+                        onTap: () => setState(
+                          () => _selected = shortcut.section,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 28),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Your collections',
+                    style: theme.textTheme.titleLarge),
+              ),
+              TextButton(
+                onPressed: _createPlaylist,
+                child: const Text('New playlist'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (_loading)
+            const BzSkeletonTrackRow()
+          else if (_playlists.isEmpty && _albums.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                'Save music or create a playlist to start your Breezze library.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.bzText2,
+                ),
+              ),
+            )
+          else ...[
+            for (final playlist in _playlists.take(4))
+              ListTile(
+                key: Key('breezze-overview-playlist-${playlist.id}'),
+                contentPadding: EdgeInsets.zero,
+                leading: BzSvgIcon(
+                  name: 'list-music',
+                  size: 26,
+                  color: theme.bzAccent,
+                ),
+                title: Text(
+                  playlist.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text('${playlist.tracks.length} songs'),
+                trailing: const BzSvgIcon(
+                  name: 'chevron-right', size: 18,
+                ),
+                onTap: () => _openPlaylist(playlist),
+              ),
+            if (_albums.isNotEmpty)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: BzSvgIcon(
+                  name: 'album',
+                  size: 26,
+                  color: theme.bzAccent,
+                ),
+                title: Text('${_albums.length} saved albums'),
+                subtitle: const Text('Explore saved albums'),
+                trailing: const BzSvgIcon(
+                  name: 'chevron-right', size: 18,
+                ),
+                onTap: () => setState(() => _selected = 'Albums'),
+              ),
+          ],
+        ],
       ),
     );
   }
