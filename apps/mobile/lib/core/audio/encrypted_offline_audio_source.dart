@@ -13,6 +13,9 @@ import 'package:just_audio/just_audio.dart' as ja;
 
 import 'offline_device_key.dart';
 
+// StreamAudioSource is experimental in just_audio but required for encrypted
+// byte-range decoding without plaintext on disk. Native acceptance is gated.
+// ignore: experimental_member_use
 class BreezzeEncryptedOfflineAudioSource extends ja.StreamAudioSource {
   BreezzeEncryptedOfflineAudioSource._({
     required File file,
@@ -79,6 +82,7 @@ class BreezzeEncryptedOfflineAudioSource extends ja.StreamAudioSource {
   }
 
   @override
+  // ignore: experimental_member_use
   Future<ja.StreamAudioResponse> request([int? start, int? end]) async {
     if (!_rightsExpiresAtUtc.isAfter(DateTime.now().toUtc())) {
       throw StateError('OFFLINE_LICENSE_EXPIRED');
@@ -88,6 +92,7 @@ class BreezzeEncryptedOfflineAudioSource extends ja.StreamAudioSource {
     if (from < 0 || until < from || until > _size) {
       throw RangeError('Offline audio requested out of bounds');
     }
+    // ignore: experimental_member_use
     return ja.StreamAudioResponse(
       sourceLength: _size,
       contentLength: until - from,
