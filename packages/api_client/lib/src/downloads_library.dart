@@ -245,7 +245,7 @@ class DownloadsLibrary {
             rangeTotal == null || rangeEnd < rangeStart! ||
             rangeTotal <= rangeEnd ||
             (responseBytes >= 0 &&
-                responseBytes != rangeEnd - rangeStart + 1)) {
+                responseBytes != rangeEnd - rangeStart! + 1)) {
           await response.drain<void>();
           throw const HttpException('invalid_resume_content_range');
         }
