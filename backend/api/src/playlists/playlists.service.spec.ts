@@ -82,11 +82,11 @@ describe('PlaylistsService tenant isolation and ordering', () => {
 
   it('rejects fake PNG/base64 and oversized cover before database writes', async () => {
     await expect(service.setCover('user-a', 'playlist-a', 'YWJj'))
-      .rejects.toThrow('PLAYLIST_COVER_INVALID_PNG');
+      .rejects.toThrow('IMAGE_INVALID_PNG');
     await expect(service.setCover('user-a', 'playlist-a', '*'))
-      .rejects.toThrow('PLAYLIST_COVER_INVALID_ENCODING');
+      .rejects.toThrow('IMAGE_INVALID_ENCODING');
     await expect(service.setCover('user-a', 'playlist-a', 'A'.repeat(350001)))
-      .rejects.toThrow('PLAYLIST_COVER_INVALID_ENCODING');
+      .rejects.toThrow('IMAGE_INVALID_ENCODING');
     expect(prisma.playlist.updateMany).not.toHaveBeenCalled();
   });
 
