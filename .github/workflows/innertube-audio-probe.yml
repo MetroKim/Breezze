@@ -1,4 +1,4 @@
-name: Experimental InnerTube audio byte probe
+name: Experimental InnerTube transport gates (live audio manual)
 
 on:
   push:
@@ -9,6 +9,12 @@ on:
       - 'backend/ytmusicapi/scripts/probe_audio.py'
       - '.github/workflows/innertube-audio-probe.yml'
   workflow_dispatch:
+    inputs:
+      run_live:
+        description: 'Run external YouTube audio probes (may fail on LOGIN_REQUIRED)'
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -32,6 +38,7 @@ jobs:
         run: docker compose -f backend/docker-compose.yml --profile experimental config --quiet
 
   probe-open-licensed-sample:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     strategy:
@@ -67,6 +74,7 @@ jobs:
         run: npm run test:probe
 
   probe-existing-python-sidecar:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     strategy:
