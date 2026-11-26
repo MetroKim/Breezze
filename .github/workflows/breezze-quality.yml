@@ -35,6 +35,11 @@ jobs:
 
       - name: Verify recovered Breezze design source archives
         run: python3 tools/verify_design_handoff_archives.py
+      - name: Test V8 single UI source guard
+        run: python3 -m unittest discover -s tools -p 'test_v8_ui_single_source.py' -v
+
+      - name: Enforce one Breezze shell, glass renderer and branding
+        run: python3 tools/check_v8_ui_single_source.py
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
