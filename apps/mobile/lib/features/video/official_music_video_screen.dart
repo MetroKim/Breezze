@@ -344,7 +344,7 @@ class _OfficialMusicVideoScreenState
                     children: [
                       IconButton(
                         tooltip: 'Previous YouTube video',
-                        icon: const Icon(Icons.skip_previous),
+                        icon: const BzSvgIcon(name: 'skip-previous', size: 24),
                         onPressed: _queuePosition == 0
                             ? null : () => _jumpToQueueItem(_queuePosition - 1),
                       ),
@@ -357,7 +357,7 @@ class _OfficialMusicVideoScreenState
                       ),
                       IconButton(
                         tooltip: 'Next YouTube video',
-                        icon: const Icon(Icons.skip_next),
+                        icon: const BzSvgIcon(name: 'skip-next', size: 24),
                         onPressed: _queuePosition + 1 >= _watchQueue.length
                             ? null : () => _jumpToQueueItem(_queuePosition + 1),
                       ),
