@@ -330,7 +330,14 @@ ThemeData bzDarkTheme({TargetPlatform? platform}) =>
 /// Reads the Breezze colors off any BuildContext — the one accessor every
 /// screen uses.
 extension BzThemeX on ThemeData {
-  BzThemeColors get bz => extension<BzThemeColors>()!;
+  /// Secondary routes and host widget tests may have a plain Material theme.
+  /// Never crash on a missing extension; use the same semantic palette
+  /// selected by brightness until the root Breezze theme is available.
+  BzThemeColors get bz =>
+      extension<BzThemeColors>() ??
+      (brightness == Brightness.dark
+          ? BzThemeColors.dark
+          : BzThemeColors.light);
 
   // Short aliases used across the screens.
   Color get bzBackground => bz.background;
