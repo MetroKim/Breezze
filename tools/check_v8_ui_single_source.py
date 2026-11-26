@@ -62,8 +62,9 @@ def violations(root: Path = REPO) -> list[str]:
     has(GLASS_CORE, r"BackdropFilter\(", "CANONICAL_GLASS_MISSING")
     has(GLASS_ADAPTER, r"return BzGlass\(", "GLASS_FACADE_NOT_DELEGATED")
     has(BRAND, r"class BzBnoteMark", "ORIGINAL_BRAND_MISSING")
+    has(BRAND, r"class BzBrandLockup", "ORIGINAL_TRANSPARENT_BRAND_MISSING")
     has(MORPH, r"class BzMorphingBrandHeader", "MORPH_HEADER_MISSING")
-    has(MORPH, r"BzBnoteMark", "MORPH_OWN_SYMBOL_MISSING")
+    has(MORPH, r"BzBrandLockup", "MORPH_TRANSPARENT_BRAND_MISSING")
     has(MOOD, r"class BzPinnedMoodRail", "PINNED_MOOD_SOURCE_MISSING")
     has(PRIMARY_PAGES[0], r"BzPinnedMoodRail\(", "HOME_PINNED_MOODS_MISSING")
     has(BROWSE, r"featuredDestinations", "FEATURED_NEW_SECTIONS_MISSING")
@@ -88,6 +89,10 @@ def violations(root: Path = REPO) -> list[str]:
             home.index("BzDiscoverySpotlight(") <
             home.index("title: 'Recently Played'")):
         issues.append("HOME_PROMO_ABOVE_MUSIC: " + PRIMARY_PAGES[0])
+
+    morph = content.get(MORPH, "")
+    if "color: compact ? Colors.black" in morph:
+        issues.append("OBSOLETE_BLACK_BADGE_BRAND: " + MORPH)
 
     old_glass = content.get(GLASS_ADAPTER, "")
     if re.search(r"\bBackdropFilter\s*\(|\bImageFilter\.blur\s*\(", old_glass):
