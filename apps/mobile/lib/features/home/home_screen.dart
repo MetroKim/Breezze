@@ -506,6 +506,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
           ],
+          // A compact vertical list follows the horizontal shelves. Every
+          // title, artist and thumbnail comes from this owner's real history.
+          if (!_loading && _recentlyPlayed.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Continue listening',
+                style: theme.textTheme.titleLarge),
+            const SizedBox(height: 12),
+            for (var i = 0; i < _recentlyPlayed.length && i < 8; i++)
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(BzRadius.artwork),
+                  child: _recentlyPlayed[i].artworkUrl == null
+                      ? SizedBox(
+                          width: 52, height: 52,
+                          child: Center(
+                            child: BzBnoteMark(
+                              size: 26, color: theme.bzText2,
+                            ),
+                          ),
+                        )
+                      : Image.network(
+                          _recentlyPlayed[i].artworkUrl!,
+                          width: 52, height: 52, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              BzBnoteMark(size: 52, color: theme.bzText2),
+                        ),
+                ),
+                title: Text(
+                  _recentlyPlayed[i].title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  _recentlyPlayed[i].artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: BzSvgIcon(
+                  name: 'play', size: 18, color: theme.bzText2,
+                ),
+                onTap: () {
+                  final queue = [
+                    for (final item in _recentlyPlayed)
+                      TrackInfo(
+                        id: item.id,
+                        title: item.title,
+                        artist: item.artist,
+                        artworkUrl: item.artworkUrl,
+                        duration: item.duration,
+                      ),
+                  ];
+                  _play(queue[i], queue, i);
+                },
+              ),
+            const SizedBox(height: 22),
+          ],
           if (!_loading && !_localDataUnavailable && _recentlyPlayed.isEmpty && _favorites.isEmpty)
             _FirstRunCard(
               onSearch: () => ref.read(homeTabHintProvider.notifier).state = MainTab.search.index,
