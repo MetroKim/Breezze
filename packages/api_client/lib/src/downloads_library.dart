@@ -452,7 +452,7 @@ class DownloadedVideo {
         final receivedLength = response.contentLength;
         if (start != existingBytes || end == null || total == null ||
             end < start! || total <= end ||
-            (receivedLength >= 0 && receivedLength != end - start + 1)) {
+            (receivedLength >= 0 && receivedLength != end - start! + 1)) {
           await response.drain<void>();
           throw const HttpException('invalid_resume_content_range');
         }
