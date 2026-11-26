@@ -236,3 +236,88 @@ test('connection setup exceeding its deadline is rejected without stale media', 
   }), '/v1/audio/' + id, authHeaders());
   assert.equal(result.status, 502);
 });
+
+
+// An original generated PCM waveform is a genuine playable WAV file, unlike
+// a four-byte WebM header. It is not media fetched from YouTube.
+function makeOriginalWav() {
+  const sampleRate = 8000;
+  const samples = 16000; // 2 seconds of original 440 Hz test tone.
+  const bytes = samples * 2;
+  const wav = Buffer.alloc(44 + bytes);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(36 + bytes, 4);
+  wav.write('WAVE', 8);
+  wav.write('fmt ', 12);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20); // PCM
+  wav.writeUInt16LE(1, 22); // mono
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(bytes, 40);
+  for (let i = 0; i < samples; i++) {
+    const sample = Math.round(Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 10000);
+    wav.writeInt16LE(sample, 44 + i * 2);
+  }
+  return wav;
+}
+
+test('original PCM WAV full audio bytes survive authenticated HTTP proxy', async () => {
+  const wav = makeOriginalWav();
+  const result = await request({
+    ...handlerOptions({
+      fetchAudio: async () => new Response(wav, {
+        status: 200,
+        headers: {
+          'content-type': 'audio/wav',
+          'content-length': String(wav.length),
+        },
+      }),
+    }),
+    createClient: async () => ({
+      getBasicInfo: async () => ({ playability_status: { status: 'OK' } }),
+      getStreamingData: async () => ({ url: sampleUrl, mime_type: 'audio/wav' }),
+    }),
+  }, '/v1/audio/' + id, authHeaders());
+
+  assert.equal(result.status, 200);
+  assert.equal(result.headers.get('content-type'), 'audio/wav');
+  const bytes = Buffer.from(result.data);
+  assert.deepEqual(bytes, wav);
+  assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(bytes.toString('ascii', 8, 12), 'WAVE');
+  assert.equal(bytes.readUInt16LE(20), 1); // actual PCM format
+  assert.equal(bytes.readUInt32LE(24), 8000);
+  assert.equal(bytes.readUInt32LE(40), 32000);
+  assert.notEqual(bytes.readInt16LE(46), 0);
+});
+
+test('original PCM audio seek returns precisely the requested 206 bytes', async () => {
+  const wav = makeOriginalWav();
+  const from = 44, to = 4095;
+  const result = await request({
+    ...handlerOptions({
+      fetchAudio: async (_url, options) => {
+        assert.equal(options.headers.Range, 'bytes=44-4095');
+        return new Response(wav.subarray(from, to + 1), {
+          status: 206,
+          headers: {
+            'content-type': 'audio/wav',
+            'content-range': `bytes ${from}-${to}/${wav.length}`,
+            'content-length': String(to - from + 1),
+          },
+        });
+      },
+    }),
+    createClient: async () => ({
+      getBasicInfo: async () => ({ playability_status: { status: 'OK' } }),
+      getStreamingData: async () => ({ url: sampleUrl, mime_type: 'audio/wav' }),
+    }),
+  }, '/v1/audio/' + id, authHeaders({ Range: 'bytes=44-4095' }));
+  assert.equal(result.status, 206);
+  assert.equal(result.headers.get('content-range'), `bytes 44-4095/${wav.length}`);
+  assert.deepEqual(Buffer.from(result.data), wav.subarray(from, to + 1));
+});
