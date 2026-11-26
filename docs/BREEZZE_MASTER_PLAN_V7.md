@@ -72,11 +72,15 @@ Official references: https://docs.flutter.dev/reference/supported-platforms , ht
 | Windows / Linux / Android / web builds | **PENDING** per-host CI build jobs; no release verification implied |
 | macOS and iOS builds | **PENDING** macOS runner build/Flutter target generation |
 | Linux cross-distro ELF gate | **PENDING** new multi-image compatibility workflow; cannot infer GUI/audio parity |
+| Linux portability auditor — Python unit tests | **PASS 7/7, independently executed 26 Nov 2026:** Python 3.13.5 compiled and ran tests after verifying local copies matched Git blob hashes `c1f6ffd3e19c3a559d8c3344b3186026caef5de9` (audit) and `ddac69b80847c74ff03cf73ab98bc41d84e8b410` (tests). This proves only audit logic and security rejection cases, **not a Linux release build** |
+| Desktop media-session disconnection and late-disposal tests | **IMPLEMENTED, UNVERIFIED:** `background_audio_sync_test.dart` now checks OS projection fallback and late failures, plus actual status is shown under Settings > Playback. Requires Flutter CI and native OS tests |
 | Android/iOS emulators | **PENDING** exact-head integration runs, explicit test paths and log artifacts |
 | Real devices and OS services | **NOT VERIFIED** VoiceOver/TalkBack, Bluetooth physical routes, AirPlay/MPRIS/SMTC, mobile interruptions, native store sign-ins |
 | Full-track streaming/offline catalog | **BLOCKED BY RIGHTS/REAL ASSETS** until approved recordings, grants, revocation and end-to-end delivery are verified |
 | Production deployment + DB reconciliation | **UNVERIFIED ON CURRENT HEAD**; must compare Railway, Supabase, Cloudflare and DB migrations without changing prod blindly |
 | Security and launch | **FROZEN** until owner approves after every P0/P1 evidence gate |
+
+**Local test evidence (narrow and reproducible):** `python3 -m py_compile linux_portability_audit.py test_linux_portability_audit.py` succeeded, and `python3 -m unittest discover -s <audit-directory> -p 'test_linux_portability_audit.py' -v` reported **7 tests in 0.015s, OK**. Each copied file's Git-object SHA-1 was checked against the GitHub API result before testing. Do not represent this as a Flutter compile, emulation, distro GUI or user playback PASS.
 
 **Status vocabulary:** `IMPLEMENTED` = source present; `PASS` = supported automated/device evidence on matching SHA; `FAIL` = reproducible failed assertion; `QUEUED` = job hasn't run; `BLOCKED` = external dependency/rights/credentials; `UNVERIFIED` = missing evidence. Never convert `QUEUED` to `PASS`.
 
