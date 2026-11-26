@@ -376,6 +376,48 @@ export class SpotifyAdapter implements ProviderAdapter {
     return response;
   }
 
+  /** Spotify album detail, with native Spotify metadata only (no stream URLs). */
+  async getAlbumPage(id: string): Promise<ProviderResult<{
+    album: SpotifyArtistRelease;
+    tracks: ProviderTrack[];
+    tracksStatus: 'ok' | 'unavailable';
+  }>> {
+    if (!spotifyTrackId.test(id)) {
+      return providerError('INVALID_SPOTIFY_ALBUM_ID', 'Invalid Spotify album ID');
+    }
+    const key = 'provider:spotify:album-page:v1:' + id;
+    const cached = await this.cache.get<ProviderResult<{
+      album: SpotifyArtistRelease; tracks: ProviderTrack[];
+      tracksStatus: 'ok' | 'unavailable';
+    }>>(key);
+    if (cached) return cached;
+    const albumResponse = await this.request<SpotifyAlbum>('albums/' + id);
+    if (albumResponse.kind !== 'ok') return albumResponse;
+    const creditedArtist = albumResponse.value.artists?.find(a => spotifyTrackId.test(a.id ?? ''));
+    const album = creditedArtist
+      ? this.mapRelease(albumResponse.value, creditedArtist.id!) : null;
+    if (!album) return providerError('SPOTIFY_ALBUM_INVALID', 'Album metadata unavailable');
+    const listing = await this.request<{ items?: SpotifyTrack[] }>(
+      'albums/' + id + '/tracks', new URLSearchParams({ limit: '50' }),
+    );
+    const seen = new Set<string>();
+    const tracks = listing.kind === 'ok' && Array.isArray(listing.value.items)
+      ? listing.value.items
+        .map(row => this.mapTrack({
+          ...row, album: { images: albumResponse.value.images },
+        }))
+        .filter((row): row is ProviderTrack => row !== null &&
+          !seen.has(row.providerTrackId) &&
+          (seen.add(row.providerTrackId), true))
+      : [];
+    const response = providerOk({
+      album, tracks,
+      tracksStatus: listing.kind === 'ok' ? 'ok' as const : 'unavailable' as const,
+    }, 'Spotify album metadata only');
+    await this.cache.set(key, response, 120);
+    return response;
+  }
+
   async getTrack(providerTrackId: string): Promise<ProviderResult<ProviderTrack>> {
     if (!spotifyTrackId.test(providerTrackId)) {
       return providerError('INVALID_SPOTIFY_TRACK_ID', 'Invalid Spotify track ID');
