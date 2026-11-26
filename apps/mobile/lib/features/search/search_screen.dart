@@ -354,6 +354,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
   }
 
+  List<String> _relatedArtistSearches() {
+    if (_artistMatches.isEmpty) return const [];
+    final artist = _artistMatches.first;
+    final name = artist['name'];
+    if (name is! String || name.trim().isEmpty) return const [];
+    final genres = artist['genres'];
+    final terms = <String>[
+      '$' + '{name.trim()} new releases',
+      '$' + '{name.trim()} albums',
+      if (genres is List)
+        for (final genre in genres.whereType<String>().take(2))
+          '$' + '{name.trim()} $' + 'genre',
+    ];
+    return terms.toSet().toList();
+  }
+
   void _openArtist(Map<String, dynamic> record) {
     final id = record['id'];
     final name = record['name'];
@@ -1005,7 +1021,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 padding:
                                     const EdgeInsets.fromLTRB(0, 8, 0, 220),
                                 itemCount: _results.length +
-                                    (_artistMatches.isEmpty ? 0 : _artistMatches.length + 2),
+                                    (_artistMatches.isEmpty ? 0 : _artistMatches.length + 3),
                                 itemBuilder: (context, index) {
                                   if (_artistMatches.isNotEmpty) {
                                     if (index == 0) {
@@ -1040,6 +1056,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       );
                                     }
                                     index -= _artistMatches.length + 2;
+                                    if (index == _results.length) {
+                                      final suggestions = _relatedArtistSearches();
+                                      if (suggestions.isEmpty) return const SizedBox.shrink();
+                                      return Padding(
+                                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text('Similar searches',
+                                                style: theme.textTheme.titleLarge),
+                                            const SizedBox(height: 10),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                for (final query in suggestions)
+                                                  ActionChip(
+                                                    label: Text(query),
+                                                    onPressed: () => _reuseSearch(query),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }
                                   }
                                   final track = _results[index];
                                   final value = progress[track.id];
