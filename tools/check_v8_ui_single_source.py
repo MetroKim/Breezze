@@ -21,6 +21,12 @@ MORPH = "apps/mobile/lib/widgets/bz_morphing_brand_header.dart"
 DETAIL_BAR = "apps/mobile/lib/widgets/bz_branded_app_bar.dart"
 BROWSE = "apps/mobile/lib/features/browse/browse_screen.dart"
 PROVIDER = "apps/mobile/lib/features/browse/ytmusic_client_screen.dart"
+PRIMARY_PAGES = (
+    "apps/mobile/lib/features/home/home_screen.dart",
+    "apps/mobile/lib/features/browse/browse_screen.dart",
+    "apps/mobile/lib/features/library/library_screen.dart",
+    "apps/mobile/lib/features/search/search_screen.dart",
+)
 SECONDARY_PAGES = (
     "apps/mobile/lib/features/library/playlist_detail_screen.dart",
     "apps/mobile/lib/features/catalog/catalog_detail_screens.dart",
@@ -35,7 +41,8 @@ def violations(root: Path = REPO) -> list[str]:
     issues: list[str] = []
     content: dict[str, str] = {}
     for name in (SHELL, TABS, THEME, GLASS_CORE, GLASS_ADAPTER, BRAND,
-                 MORPH, DETAIL_BAR, BROWSE, PROVIDER, *SECONDARY_PAGES):
+                 MORPH, DETAIL_BAR, BROWSE, PROVIDER, *PRIMARY_PAGES,
+                 *SECONDARY_PAGES):
         p = root / name
         if not p.is_file():
             issues.append(f"MISSING_UI_SOURCE: {name}")
@@ -60,6 +67,13 @@ def violations(root: Path = REPO) -> list[str]:
     has(DETAIL_BAR, r"BzCompactBrandMark", "UNIFIED_BRAND_MISSING")
     has(BROWSE, r"YouTubeMusicClientScreen\(", "YT_CATALOG_NOT_IN_NEW")
     has(PROVIDER, r"BzBrandedAppBar", "PROVIDER_OLD_BRANDING")
+
+    for page in PRIMARY_PAGES:
+        source = content.get(page, "")
+        if source and "BzMorphingBrandHeader(" not in source:
+            issues.append("OLD_PAGE_HEADER: " + page)
+        if source and "BzCompactBrandMark(" in source:
+            issues.append("DUPLICATE_PAGE_BRAND: " + page)
 
     old_glass = content.get(GLASS_ADAPTER, "")
     if re.search(r"\bBackdropFilter\s*\(|\bImageFilter\.blur\s*\(", old_glass):
