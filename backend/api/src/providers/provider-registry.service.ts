@@ -5,6 +5,7 @@ import { DeezerAdapter } from './deezer.adapter';
 import { MusicBrainzAdapter } from './musicbrainz.adapter';
 import { ProviderAdapter, ProviderTrack } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
+import { unifiedMusicResults, UnifiedMusicTrack } from './unified-music-results';
 
 // The registry owns provider identity, capabilities, and health.
 // Metadata discovery is separate from playback authorization: only providers
@@ -56,20 +57,19 @@ export class ProviderRegistry {
       result: ProviderResult<import('./provider-adapter.interface').ProviderTrack[]>;
     }>;
     partial: boolean;
+    tracks: UnifiedMusicTrack[];
   }>>();
 
   /**
-   * Two independent music shelves for Breezze Search. Query Spotify and
-   * Deezer concurrently, isolate provider failures, and dedupe simultaneous
-   * typeahead requests (without storing cross-provider Spotify metadata).
-   *
-   * Spotify's catalog must stay in its own visibly attributed section rather
-   * than being blended into Deezer rows; neither source authorizes playback.
+   * Query both audio catalogs independently and preserve their raw shelves.
+   * Return a separate search-only representative list where exact recording
+   * matches are shown once (Spotify first, then Deezer for missing songs).
+   * Never synthesize a playback URL or erase provider attribution obligations.
    */
   searchMusic(query: string) {
     const normalized = (query ?? '').trim().replace(/\s+/g, ' ');
     if (normalized.length < 2 || normalized.length > 120) {
-      return Promise.resolve({ query: normalized, providers: [], partial: false });
+      return Promise.resolve({ query: normalized, providers: [], tracks: [], partial: false });
     }
     const key = normalized.toLowerCase();
     const current = this.musicSearchInFlight.get(key);
@@ -164,6 +164,7 @@ export class ProviderRegistry {
     return {
       query,
       providers: shelves,
+      tracks: unifiedMusicResults(shelves),
       partial: shelves.some(shelf => shelf.result.kind !== 'ok'),
     };
   }
