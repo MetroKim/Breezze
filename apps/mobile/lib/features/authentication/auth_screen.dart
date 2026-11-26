@@ -587,7 +587,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           color: theme.bzText1, fontWeight: FontWeight.w600, fontSize: 13,
         )),
         const SizedBox(height: 8),
-        TextField(
+        Semantics(
+          label: label,
+          child: TextField(
           controller: controller,
           obscureText: obscure,
           autofillHints: hints,
@@ -607,6 +609,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: theme.bzSeparator),
             ),
+          ),
           ),
         ),
       ],
@@ -900,7 +903,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     TextInputType? keyboard,
   }) {
     final theme = Theme.of(context);
-    return TextField(
+    return Semantics(
+      label: hint,
+      child: TextField(
       controller: controller,
       obscureText: obscure,
       keyboardType: keyboard,
@@ -913,6 +918,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           borderRadius: BorderRadius.circular(BzRadius.input),
           borderSide: BorderSide(color: theme.bzSeparator),
         ),
+      ),
       ),
     );
   }
@@ -932,32 +938,46 @@ class _SubmitButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: busy ? null : onPressed,
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: theme.bzText1,
+    // Preserve the original 48dp Breezze button surface, but expose a
+    // real focusable control and loading/disabled state to assistive tech.
+    return Semantics(
+      button: true,
+      enabled: !busy,
+      label: busy ? '$label, in progress' : label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: busy ? null : onPressed,
+          excludeFromSemantics: true,
           borderRadius: BorderRadius.circular(BzRadius.button),
-        ),
-        child: Center(
-          child: busy
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.bzBackground,
-                  ),
-                )
-              : Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: BzType.subheadline,
-                    fontWeight: FontWeight.w600,
-                    color: theme.bzBackground,
-                  ),
-                ),
+          child: ExcludeSemantics(
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: theme.bzText1,
+                borderRadius: BorderRadius.circular(BzRadius.button),
+              ),
+              child: Center(
+                child: busy
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: theme.bzBackground,
+                        ),
+                      )
+                    : Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: BzType.subheadline,
+                          fontWeight: FontWeight.w600,
+                          color: theme.bzBackground,
+                        ),
+                      ),
+              ),
+            ),
+          ),
         ),
       ),
     );
