@@ -29,7 +29,7 @@
 7. Maintain original Breezze design hierarchy and platform idioms. Apple Music-inspired polish may remain; the requested YTMusic-inspired section architecture is the new UX reference. All source/provider music access stays under V8 lawful rights model.
 
 ### File and implementation handoff
-- **Primary branch:** `main` (single canonical V8 baseline). PR #83 merged its unified UI; [PR #84](https://github.com/MetroKim/Breezze/pull/84) contains follow-up pinned moods and reference section parity, **not yet verified or merged**.
+- **Primary branch:** `main` (single canonical V8 baseline). PR #83 merged its unified UI; [PR #84](https://github.com/MetroKim/Breezze/pull/84) merged on 2026-11-26 at `6055db1b40b4d3bc0fb20a0eb23ae24fdf4af048`, bringing pinned moods and reference section parity. **Native acceptance and final exact-head CI remain unverified**.
 - **Main shell:** `apps/mobile/lib/widgets/bz_shell.dart`; four tabs and shared mini-player remain authoritative.
 - **Home:** `apps/mobile/lib/features/home/home_screen.dart`; move to scroll-aware Breezze morphing header using reusable `BzMorphingBrandHeader` widget; mood chips, scrollable personalized/real rails and glass discovery hero.
 - **New:** `apps/mobile/lib/features/browse/browse_screen.dart`; real interactions for discovery destinations, genre chips and accessible expandable browse sections; avoid false ranking claims.
@@ -42,7 +42,7 @@
 - **Reference read:** inspected all four reference screens (Home, Explore, Library, Search) and the search results plus trends, chips and genre components; all designs are **independent reimplementation**.
 - **Implemented in merged PR #83:** original `BzDiscoverySpotlight`, Home mood searches, unified four-tab shell, real New/Library/Search destinations, original Breezze branded header and common glass renderer. Merge is verified as a Git operation; exact-platform functional acceptance is still open.
 - **Integrated on main via merged [PR #83](https://github.com/MetroKim/Breezze/pull/83):** scroll-aware pinned `BzMorphingBrandHeader` in Home and New; original `BzCompactBrandMark` in Library and Search; Home glass spotlight, mood search, actionable New/music-video/artist discovery tiles; New spotlight + live genre/collections; Search optionally opens directly in authorized official-video discovery mode. Uses only Breezze branding/assets and existing Riverpod, catalog sources and native/official player policy. Added scroll reversal, compact marker, action, reduced-motion and tile widget tests. **All remain UNVERIFIED pending current SHA CI/native acceptance.**
-- **Next:** validate [PR #84](https://github.com/MetroKim/Breezze/pull/84) exact-head CI, fix failures, merge only after acceptance, then obtain native/accessibility evidence across Android, iOS, Linux, Windows, macOS and web. Keep the release freeze. Revisit unsupported Cast/mic/artist chart/community playlist paths only after real integrations and rights are established; never render dead buttons.
+- **Next:** validate merged [PR #84](https://github.com/MetroKim/Breezze/pull/84) against the final `main` SHA, repair any test failures, then obtain native/accessibility evidence across Android, iOS, Linux, Windows, macOS and web. Keep the release freeze. Revisit unsupported Cast/mic/artist chart/community playlist paths only after real integrations and rights are established; never render dead buttons.
 - **Completion:** V8 UI is not “100% complete” without checked branch CI, native app interactions and accessibility evidence. No release, deployment, public code archive or installer until owner explicitly approves the final verified build.
 
 ## V8 UI single-design-system cutover and six-platform acceptance — 2026-11-26
@@ -81,11 +81,11 @@
 - A single `BzBrandedAppBar` replaces legacy Material `AppBar` variants in YouTube Music discovery and its nested routes, Browse catalog collections, playlists, song/album details, artist pages, Account, Notifications, and official video player. The Now Playing immersive view retains purpose-built player controls, not an unnecessary toolbar.
 - `BzGlass` is the only blur implementation; `BzGlassContainer` delegates as a compatibility facade so existing gameplay/navigation widgets remain functional. One design system + one audio engine; no vendored third-party Flutter clone and no unnecessary fresh app scaffold.
 - CI source gate now checks all four page header call sites, absence of duplicate brand marks, one glass engine and absence of legacy detail toolbars; regression fixtures cover these. UI widget tests span target-platform themes and 280dp foldable, and are included in macOS and Windows host jobs, with Linux/Android/web plus iOS build workflows separately configured.
-- **Status remains UNVERIFIED FOR FULL NATIVE ACCEPTANCE:** PR #83 source is merged, whereas PR #84 is in development and subject to exact-head CI, true Android/iOS/desktop interactive tests, visual evidence, accessibility and rights validation. Do not merge old UI wholesale or publish any release without these gates. Fix failing tests rather than removing them.
+- **Status remains UNVERIFIED FOR FULL NATIVE ACCEPTANCE:** PR #83 source is merged, and PR #84 is merged but remains subject to exact-head CI, true Android/iOS/desktop interactive tests, visual evidence, accessibility and rights validation. Do not merge old UI wholesale or publish any release without these gates. Fix failing tests rather than removing them.
 
 ## V8 reference repo screen-parity follow-up (2026-11-26)
 
-**Active implementation:** [Breezze V8 PR #84](https://github.com/MetroKim/Breezze/pull/84), branch `feat/v8-reference-structure-pinned-moods-20261126`. This is a continuation of **merged PR #83**, not a new UI framework or duplicate shell. `main` is the canonical V8 baseline, and this PR's source changes are **not certified green** without exact-head CI and native OS acceptance.
+**Merged implementation:** [Breezze V8 PR #84](https://github.com/MetroKim/Breezze/pull/84), merged into `main` as `6055db1b40b4d3bc0fb20a0eb23ae24fdf4af048`. This is a continuation of **merged PR #83**, not a new UI framework or duplicate shell. `main` is the canonical V8 baseline, and this PR's source changes are **not certified green** without exact-head CI and native OS acceptance.
 
 ### Audited upstream structure and exact Breezze routing contract
 | Upstream screen/component | V8 only destination | Implementation and real interaction |
@@ -104,13 +104,13 @@
 - `apps/mobile/test/bz_pinned_mood_rail_test.dart`: rail stays visible after vertical scroll, navigable horizontally on narrow accessible screens; mood callbacks work.
 - `apps/mobile/test/browse_screen_test.dart`: three reference-major categories render exactly once; Moods routes to actual `Focus music` provider query.
 - `tools/check_v8_ui_single_source.py` and `tools/test_v8_ui_single_source.py`: refuse missing/duplicated pinned rail or returning duplicate release/chart/mood sections.
-- **Next:** review exact-commit GitHub CI for PR #84, fix failures, check real emulator/system build matrix and compare screenshots for layout parity. Do not merge failing or call this 100% done.
+- **Next:** review exact-commit GitHub CI on `main` after PR #84 merge, fix failures, check real emulator/system build matrix and compare screenshots for layout parity. Do not call this 100% done.
 
 ## V8 OLED Black + Listener Experience Upgrade — 22-point design contract (2026-11-26)
 
 **Owner-approved superseding visual directive:** the Breezze design is always **true-black OLED (#000000), white/silent controls**, original transparent **B-note mark + Breezze** wordmark (not the black app icon tile), artwork-first shelves, provider-backed artists/songs, subtle *real-cover* ambient effects, and one full-player shell. This directive overrides previous red/pink accents, promotional/mockup artwork and circular black brand badges.
 
-**Engineering PR:** [#84](https://github.com/MetroKim/Breezze/pull/84), branch `feat/v8-reference-structure-pinned-moods-20261126`; new commits remain **UNVERIFIED** until exact-head GitHub Actions and OS acceptance. Continue the V8-only architecture; no second UI, brand, audio engine, artist database or media rights workaround.
+**Engineering PR:** [#84](https://github.com/MetroKim/Breezze/pull/84), branch `feat/v8-reference-structure-pinned-moods-20261126`; merged source remains **UNVERIFIED** until exact-head GitHub Actions and OS acceptance. Continue the V8-only architecture; no second UI, brand, audio engine, artist database or media rights workaround.
 
 | # | Requirement | Implementation/evidence and precise remaining acceptance |
 |---|---|---|
@@ -268,3 +268,26 @@ See the same-sha evidence links and outstanding blockers in [master issue #27](h
 - **External release dependencies:** a valid per-recording streaming/offline license manifest and actual recordings/territories; authorized Android/iOS/Windows/macOS signing identities and stores; physical-device telephone and Bluetooth tests; real TalkBack, VoiceOver and Linux hardware-key evidence. Neither generated synthetic QA audio nor Spotify/YouTube catalog metadata supplies commercial distribution rights.
 
 **V8.2 acceptance priority:** green exact-head CI → native BZA8 decoder + interruption/accessible controls → connect and test authorized dual-deck AutoMix with two playback sessions → licensed catalog inventory and R2 delivery → signed installers + physical-device evidence → explicit release approval.
+
+
+## V8.3 checkpoint — PR #84 merged, New/Home wiring and CI recovery (2026-11-27)
+
+**Owner instruction:** Continue integrating the full Breezze project on \`main\`, report each verified change here and in [master issue #27](https://github.com/MetroKim/Breezze/issues/27), preserve the OLED-black / silent-white official Breezze brand, keep the release and production-deployment freeze. Only V8 is authoritative.
+
+### Confirmed GitHub facts (not release certification)
+
+- **UI source merge:** [PR #84](https://github.com/MetroKim/Breezze/pull/84) was explicitly moved from Draft to Ready and merged into \`main\` as [\`6055db1b40b4d3bc0fb20a0eb23ae24fdf4af048\`](https://github.com/MetroKim/Breezze/commit/6055db1b40b4d3bc0fb20a0eb23ae24fdf4af048). This was a source merge, **not** an app release, deployment, or native acceptance.
+- **Home/New route contract:** \`apps/mobile/lib/widgets/bz_shell.dart\` still owns exactly four destinations in this order: Home → New (\`BrowseScreen\`) → Library → Search. The merged Home screen uses the pinned mood rail and the New screen promotes New Releases, Charts, Moods & Activities while excluding duplicate tiles from the remaining discovery grid. This is source inspection, **not** a claim that end-to-end user interaction has passed.
+- **PR-head checks:** [CI run 45894645120](https://github.com/MetroKim/Breezze/actions/runs/45894645120) on PR head \`5e1f3b93d39dfa04e73994b8b2f4b395fdfa6330\` passed the identity, NestJS/Prisma, Windows build and Cloudflare Worker jobs, but **Flutter analysis/tests failed** in job \`140167365400\`. The immediate failure was \`invalid_null_aware_operator\` at \`apps/mobile/lib/app/playlist_store.dart:353\`. macOS/iOS and Linux/Android/web build jobs were still in progress when inspected. Separate PR-head CodeQL, Gitleaks history guard, media delivery verification and web preview smoke finished successful; these do not override the failing full CI job.
+- **First repair on main:** [\`5e245326375c536303ad8dda35d6555683370479\`](https://github.com/MetroKim/Breezze/commit/5e245326375c536303ad8dda35d6555683370479) replaces unnecessary \`coverPngBase64?.length\` with \`coverPngBase64.length\` inside an already non-null-guarded playlist-cover validation block. The source-specific analyzer cause is removed; **new main-head analyzer, Flutter tests and builds have not been certified green here**.
+- **Production separation:** No Railway/Cloudflare/Supabase production cutover, signing or public application release is authorized by this merge/fix. Any production backend remains subject to DB migration reconciliation and previously recorded deployment drift.
+
+### Required next verification and wiring work
+
+1. Observe **completed** GitHub Actions for the final \`main\` SHA: Flutter analyzer and all unit/widget/integration tests, backend/Prisma, CodeQL, secret guard, both Cloudflare Workers, Android/iOS/macOS/Windows/Linux/Web builds. Repair fresh failures with file/line evidence; never use the successful PR SHA as a substitute for newer \`main\`.
+2. Test Home pinned moods → real scoped search, New release/chart/mood cards → actual provider-backed destinations, Library and Search routes, back stack, OLED/high-contrast text, reduced motion, 280dp/390dp touch layouts, account switching and original Breezze mark across mobile/desktop/web. Where providers return no data, show truthful empty/error states.
+3. Validate end-to-end auth → backend catalog → resolver → signed worker → player with **rights-cleared audio objects** and working Postgres migrations; verify denial on missing/expired/territory-mismatched grants and bytes/seek with real 200/206 responses. Existing Spotify/Google credentials or Deezer discovery endpoints are not audio redistribution licenses.
+4. Wire and accept the current isolated dual-deck AutoMix renderer in the **one** active player only after explicit authorized-source tests; certify offline ciphertext-at-rest, transient-file handling, account isolation and expiry/revocation on actual devices.
+5. Complete Android/iOS interruption and accessibility acceptance, desktop MPRIS/media-key transport, physical-device evidence and signed platform packages. Keep release **BLOCKED** until the owner explicitly authorizes it after all gates.
+
+**Acceptance ledger rule:** A commit or merge means source changed; an individual CI job PASS means only that job passed on its exact SHA; device, licensing, database, media and deployment acceptance must be evidenced independently.
