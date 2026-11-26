@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/breezze_navigation.dart';
 import '../../app/bootstrap.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../video/official_music_video_screen.dart';
@@ -108,7 +109,8 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   void _openCollection(_BrowseDestination destination) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      breezzePageRoute<void>(
+              context: context,
         builder: (_) => destination.title == 'Music'
             ? const SearchScreen()
             : _BrowseCollectionScreen(destination: destination),
@@ -586,7 +588,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
     final artwork = item['artworkUrl'] as String?;
     if (_deezerReleases && itemId != null &&
         RegExp(r'^[0-9]{1,20}$').hasMatch(itemId)) {
-      Navigator.of(context).push(MaterialPageRoute(
+      Navigator.of(context).push(breezzePageRoute<void>(
+              context: context,
         builder: (_) => DeezerAlbumCatalogScreen(
           albumId: itemId, title: title, artist: artist,
           artworkUrl: artwork, deezerUrl: item['url'] as String?,
@@ -595,7 +598,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       return;
     }
     if ((_latestSongs || _deezerChart || _dailyChart) && itemId != null) {
-      Navigator.of(context).push(MaterialPageRoute(
+      Navigator.of(context).push(breezzePageRoute<void>(
+              context: context,
         builder: (_) => TrackDetailScreen(
           track: TrackInfo(
             id: 'bz:deezer:$itemId',
@@ -642,7 +646,8 @@ class _BrowseCollectionScreenState extends ConsumerState<_BrowseCollectionScreen
       }
       await ref.read(playerControllerProvider.notifier).pause();
       if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(
+      await Navigator.of(context).push(breezzePageRoute<void>(
+              context: context,
         builder: (_) => OfficialMusicVideoScreen(
           videoId: itemId,
           title: title,
