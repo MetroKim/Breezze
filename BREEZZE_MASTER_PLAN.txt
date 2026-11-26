@@ -1,15 +1,19 @@
-BREEZZE — UNIFIED v6
+BREEZZE — UNIFIED MASTER PLAN v7 (2026-11-26)
 
-Single authoritative source for the combined v5 + v6 architecture, conflict decisions,
-module paths, requirements and verification-gated execution roadmap:
+Current authoritative completion plan, exact-SHA verification evidence,
+six-platform Flutter architecture and broad Linux distribution matrix:
 
+docs/BREEZZE_MASTER_PLAN_V7.md
+
+Repository: MetroKim/Breezze; default branch: main.
+Product: free, no ads/subscriptions, listener-first; four tabs:
+Home, Browse, Library, Search. One global player.
+STATUS: IN DEVELOPMENT / RELEASE FROZEN.
+
+Older v5+v6 architecture decisions and implementation details remain in:
 docs/architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md
+Older test checkmarks are historical and do NOT certify current main.
 
-Repository: MetroKim/Breezze (branch: main)
-Product: Free, ad-free, no subscription, four tabs, one global player.
-
-The prior v5 and v6 proposals are merged into that existing document.
-They are not separate implementations and are not permission to create
-unverified model folders, duplicate package names, app engines or schemas.
-See docs/audit/gap-register.md for historical gaps; use live CI and source
-inspection, not old checkmarks, for completed-feature status.
+Never mark functionality verified merely because code exists. All mandatory
+CI, device, rights, cross-OS and security gates must pass on the release
+candidate SHA. Do not publish source archives, installers or GitHub Releases.

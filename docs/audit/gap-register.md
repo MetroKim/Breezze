@@ -1,3 +1,5 @@
+> **26 Nov 2026 status supersession:** The current authoritative roadmap, evidence and platform matrix is [Breezze Master Plan v7](../BREEZZE_MASTER_PLAN_V7.md). This document retains historic audit detail and old CI references, but those are not proof of a passing build on today's main branch. No five-tab Radio, Audius, unapproved provider audio extraction, or unverified production rights are current product approval.
+
 # Breezze Current Implementation Gap Register
 
 > **v6 superseding decision:** The agreed current product has **four** primary tabs (Home, Browse, Library, Search); remove Radio from navigation. This older register contains historical five-tab and Audius-first decisions. The approved *target* is Supabase Auth with a staged migration, plus licensed/approved sources; Deezer previews are not full-stream grants. See [Breezze v6 mainline integration](../architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md). Existing features must not be removed until replacement and regression tests pass.
