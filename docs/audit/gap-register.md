@@ -1,4 +1,4 @@
-> **26 Nov 2026 status supersession:** The current authoritative roadmap, evidence and platform matrix is [Breezze Master Plan v7](../BREEZZE_MASTER_PLAN_V7.md). This document retains historic audit detail and old CI references, but those are not proof of a passing build on today's main branch. No five-tab Radio, Audius, unapproved provider audio extraction, or unverified production rights are current product approval.
+> **26 Nov 2026 status supersession:** The only authoritative roadmap, evidence and platform matrix is [Breezze Unified Engine V8](../BREEZZE_UNIFIED_ENGINE_V8_IMPLEMENTATION_PLAN.md). This document retains historic audit detail and old CI references, but those are not proof of a passing build on today's main branch. No five-tab Radio, Audius, unapproved provider audio extraction, or unverified production rights are current product approval.
 
 # Breezze Current Implementation Gap Register
 
