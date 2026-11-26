@@ -1,7 +1,9 @@
 import 'package:breezze/app/breezze_navigation.dart';
 import 'package:breezze/app/main_tab.dart';
+// Flutter 3.50 deprecates this import, while the current Material UI/Cupertino
+// compatibility layer still uses these native route/sheet APIs.
+// ignore: deprecated_member_use
 import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
-import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
