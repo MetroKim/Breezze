@@ -85,6 +85,11 @@ class DownloadsLibrary {
         } catch (_) {}
       }
       if (await output.exists() && !versionMatches) await output.delete();
+      if (protectAudio != null && await partial.exists()) {
+        // Until resumable fragments themselves are authenticated/encrypted,
+        // discard plaintext remnants rather than persisting them on disk.
+        await partial.delete();
+      }
       if (await partial.exists()) {
         var samePartial = false;
         if (assetVersion != null && await identity.exists()) {
@@ -190,6 +195,20 @@ class DownloadsLibrary {
 
       return true;
     } catch (_) {
+      if (protectAudio != null) {
+        // A failed/cancelled transfer must not leave unencrypted media or
+        // a reusable plaintext fragment behind between app launches.
+        for (final name in [
+          'audio.m4a',
+          'audio.part',
+          'audio.part.identity.json',
+        ]) {
+          final candidate = File('${dir.path}/$name');
+          try {
+            if (await candidate.exists()) await candidate.delete();
+          } catch (_) {}
+        }
+      }
       return false;
     }
   }
