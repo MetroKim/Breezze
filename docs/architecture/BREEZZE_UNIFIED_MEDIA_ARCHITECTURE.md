@@ -4,7 +4,7 @@
 
 ## Product intent
 
-Breezze is the only listener-facing app: one search field, one library, one queue coordinator, and one Now Playing experience. Spotify and Deezer are candidate AUDIO catalogue backends (Spotify primary; Deezer secondary). YouTube Data API supplies VIDEO discovery, and the official visible YouTube embedded player plays embeddable videos in Breezze. LOCAL means user-selected device files; LIBRARY means the signed-in user's saved tracks and playlists. A provider app handoff is **not** the requested product.
+Breezze is the only listener-facing app: one search field, one library, one queue coordinator, and one Now Playing experience. Spotify and Deezer are candidate AUDIO catalogue backends (Spotify primary; Deezer secondary). YouTube Data API supplies VIDEO discovery, and the official visible YouTube embedded player plays embeddable videos in Breezze. LOCAL means user-selected device files; LIBRARY means the signed-in user's saved tracks and playlists. A provider app handoff is **not** the requested product. The user should choose only **Audio, Video, Library or Local**; no Spotify/Deezer picker or separate source shelf is part of the interaction.
 
 **Critical distinction:** a catalogue API token, track ID, title, album cover, preview URL or signed-in account does not provide full audio bytes or grant distribution rights. The database's lack of stored audio is fine, but real streaming still needs an authorized delivery integration. NEVER relabel 30-second previews as whole songs.
 
@@ -20,11 +20,11 @@ BREEZZE SEARCH
 After results arrive:
 [ Search a song or artist                         ]
 [ AUDIO ] [ VIDEO ] [ LIBRARY ] [ LOCAL ]     <- chosen source is highlighted
-  Spotify / Deezer result rows (source attributed)
+  One deduplicated song list (provider is not a user-selectable filter)
   ...
 ```
 
-Selecting a source retains the exact same search text. **Audio** queries the existing Spotify/Deezer endpoint; **Video** switches to YouTube music-video results and opens the official visible YouTube player; **Library** searches only the signed-in account's library; **Local** never contacts the backend and searches only explicitly selected device audio files. The Local button reveals an opt-in **Choose audio files** picker; it is not a blanket permission to enumerate a user's storage. Switching categories must cancel/discard stale requests. The four choices remain accessible even if the selected source returns zero matches. On clearing the query, hide the choices again and show recent/suggested searches.
+Selecting a media kind retains the exact same search text. Spotify and Deezer are internal audio catalog backends, **not user-selectable music apps or source filters**. **Audio** queries the existing Spotify/Deezer endpoint; **Video** switches to YouTube music-video results and opens the official visible YouTube player; **Library** searches only the signed-in account's library; **Local** never contacts the backend and searches only explicitly selected device audio files. The Local button reveals an opt-in **Choose audio files** picker; it is not a blanket permission to enumerate a user's storage. Switching categories must cancel/discard stale requests. The four choices remain accessible even if the selected source returns zero matches. On clearing the query, hide the choices again and show recent/suggested searches.
 
 **Design reference:** BitChord's *post-results filtering and persistent search field* interaction inspired the structure. Breezze's Flutter layout, styling, and components are independently implemented; no GPL-3.0 BitChord source code, assets, or UI component implementations are copied.
 
@@ -34,10 +34,12 @@ Selecting a source retains the exact same search text. **Audio** queries the exi
 
 | Scope | Discovery / data access | Selection behavior | Status |
 | --- | --- | --- | --- |
-| **Audio** | Breezze API -> Spotify Web API first, Deezer catalogue fallback; separately attributed, provider-scoped results | Queue *only* after exact recording and current playback entitlement are verified; metadata-only results show availability honestly | Backend parallel search exists; full Spotify/Deezer songs not authorized |
+| **Audio** | Breezze API -> Spotify Web API first, Deezer catalogue fallback; one deduplicated recording list while retaining legally required source provenance | Queue *only* after exact recording and current playback entitlement are verified; metadata-only results show availability honestly | Backend parallel search, ISRC/title/artist/duration dedup and fallback exist; full Spotify/Deezer songs not authorized |
 | **Video** | Breezze API -> official YouTube Data API | Open official visible embedded YouTube IFrame player inside Breezze, no audio extraction, background-only hidden player or caching | Backend and in-app video integration exist; live acceptance remains required |
 | **Local** | On-device file picker and future permission-scoped indexed local media | Native decoder via Breezze audio/video control surface; never upload the file merely to search | File pickers exist; full local indexing/search is future work |
 | **Library** | Authenticated Breezze saved-item references, account-scoped local cache and durable backend sync | Resolve fresh playback permission when played; preserve previously saved provider IDs | Existing user-owned data; verify complete sync and restore |
+
+**Current unified music response:** `GET /api/v1/providers/music/search?q=...` returns `tracks: [{ providerId, providerTrackId, title, artist, durationSec, isrc?, alternateCatalogIds }]` together with the legacy `providers` array. Flutter uses `tracks` preferentially; during rolling deployments it conservatively deduplicates the older provider shelves. The first catalog's identity and artwork are never silently substituted with those of a competing catalog. `alternateCatalogIds` are **discovery-only** associations, not audio URLs or playback fallbacks. Exact ISRC takes precedence; without it title, artist and a duration difference within three seconds must match. Distinct ISRCs, remixes and differing lengths are not merged.
 
 Search with less than two characters skips remote provider requests. Preserve typed source IDs (`bz:spotify:<id>`, `bz:deezer:<id>`, `bzv:<youtubeId>`), separate attribution, timeouts, rate limits, request coalescing, and partial-failure behavior. Do not silently rewrite Spotify attribution as Deezer or blend provider catalogues to circumvent restrictions.
 
@@ -89,12 +91,20 @@ The coordinator exposes a consistent Now Playing UI, play/pause intent, queue/se
 - LRCLIB client lookup via `HttpLyrics`; server's own lyrics endpoint currently reads stored rights-gated rows. Neither proves every recording has licensed lyrics.
 
 **Needed:**
-1. Four explicit source tabs and a permissions-respecting local catalogue/search index (the picker is an interim Local action).
+1. Expand the existing four post-results media-kind filters with permission-scoped device media indexing (the picker is the current Local action).
 2. A provider-agnostic `MediaIntent` envelope: `mediaKind` (audio, video, local), `catalogueProvider`, `providerTrackId`, `canonicalId`, `authorizationMode`, `playbackStatus`, `expiresAt`, `attribution`; user/library ID cannot act as an audio grant.
 3. Rights/entitlement/territory-aware full audio partner integration, tested on each OS, **before** advertising commercial full songs. If unavailable, return `FULL_TRACK_NOT_AUTHORIZED` and preserve the metadata item.
 4. Exact-match audio/video association (recording ID, ISRC where available, version and user confirmation), no silent remix/cover substitutions.
 5. Lyrics API authorization/attribution/availability checks and synched-versus-unsynched UI states. Do not scrape or silently persist restricted lyric text.
 6. Signed-out/signed-in auth and account isolation tests, emulator media focus and queue switching tests, real authorized media start/seek/pause tests, recovery, CI on current commit, staged deployment review.
+
+## Source visibility versus non-negotiable platform attribution
+
+**User-facing preference:** Breezze is the only app, and search must not ask the user whether to choose Spotify, Deezer or YouTube. One search result represents a confidently matched recording; the selected media kind determines its behavior. This is independent of the external providers' commercial rights.
+
+**Platform constraint:** Spotify's Developer Policy and Branding Guidelines require visible Spotify attribution and a link when Spotify metadata or artwork appears, and restrict mixed-source layouts. YouTube's API Services Developer Policies require YouTube attribution for official video results and prohibit hiding the official player's branding. Therefore the requested **completely unbranded** Spotify and YouTube results cannot be shipped with standard public API credentials. Keep legally required attribution, obtain written partner permission for a different treatment, or use an independently licensed catalogue with approved display rights. Removing the provider picker/shelf is a UX implementation, **not** approval to suppress mandatory brand marks.
+
+Breezze's application databases need **no global audio/video/lyrics file library** for this design. Spotify/Deezer/YouTube API calls provide dynamic searchable metadata; the permitted YouTube embed supplies video playback; LRCLIB provides best-effort synced/plain lyrics under its own terms. Supabase/Railway persist user library references, access state, normalized ID mappings and optional lawful cache; they are **not** a substitute for licensed full-song streaming or lyrics reproduction rights.
 
 ## Durable data: preserve, do not rebuild
 
@@ -114,7 +124,9 @@ No catalog MP3, FLAC, music video, lyric text or provider credential is required
 - [ ] Verify live authenticated Spotify search with rotated credentials and provider quotas.
 - [ ] Validate commercial Spotify+Deezer combination permission / approval, not just technical API connectivity.
 - [ ] Obtain approved full-song in-app audio licensing/delivery, and test full-length tracks end-to-end.
-- [x] Hide source controls until search response; implement Audio / Video / Library / Local filter interaction and explicitly selected local-file title matching in Flutter source.
+- [x] Hide media-kind controls until search response; implement Audio / Video / Library / Local filters and explicitly selected local-file title matching.
+- [x] Add one backend music `tracks` list (ISRC-first, safe title/artist/duration fallback) and remove per-provider headings from Flutter Search; preserve originating source IDs and mandatory attribution.
+- [ ] Obtain written partner authorization for displaying Spotify and Deezer in the desired combined list and finalize required Spotify-brand logo/link treatment; today's metadata preview is not release-cleared.
 - [ ] Verify Flutter search widget tests and emulator UI on the latest commit; extend Local beyond selected files only with explicit platform permission and indexing acceptance.
 - [ ] Verify complete lyric availability, display grants and attribution per recording.
 - [ ] Demonstrate restorable database backups, account isolation, queue switching and current-SHA green CI.
