@@ -1,0 +1,93 @@
+name: Breezze Linux Distro Compatibility (no distribution)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/breezze-linux-distro-compat.yml'
+      - 'apps/mobile/lib/**'
+      - 'apps/mobile/linux/**'
+      - 'apps/mobile/pubspec.yaml'
+      - 'apps/mobile/tool/linux_portability_audit.py'
+      - 'apps/mobile/tool/test_linux_portability_audit.py'
+      - 'apps/mobile/tool/generate_platform_targets.sh'
+      - 'packages/**'
+      - 'docs/BREEZZE_MASTER_PLAN_V7.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: breezze-linux-portability-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  linux-x64:
+    name: Linux release ELF plus cross-distro native-library compatibility
+    # Older glibc build host broadens, but does not guarantee, portability.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare Linux build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libblkid-dev
+      - name: Run offline Linux auditor unit tests
+        run: python3 -m unittest discover -s apps/mobile/tool -p 'test_linux_portability_audit.py' -v
+      - name: Generate Flutter platform runners
+        working-directory: apps/mobile
+        run: bash tool/generate_platform_targets.sh
+      - name: Resolve dependencies and generate Drift
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Build Linux release bundle locally (never publish)
+        working-directory: apps/mobile
+        run: flutter build linux --release
+      - name: Verify bundle ELF architecture and security
+        run: |
+          python3 apps/mobile/tool/linux_portability_audit.py \
+            --bundle apps/mobile/build/linux/x64/release/bundle \
+            --arch x86_64 --check-linker
+      - name: Inspect runtime linkage on mainstream glibc distros
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$(pwd)/apps/mobile/build/linux/x64/release/bundle"
+          # These checks validate ELF linkage ONLY, not graphical launch or
+          # full audio functionality. No installer or source archive is uploaded.
+          for image in ubuntu:22.04 debian:12 fedora:latest archlinux:latest; do
+            echo "::group::Runtime dependency check on $image"
+            case "$image" in
+              ubuntu:*|debian:*)
+                install='export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -y -qq libgtk-3-0 libsecret-1-0 libblkid1 liblzma5 libstdc++6 >/dev/null'
+                ;;
+              fedora:*)
+                install='dnf -y -q install gtk3 libsecret util-linux-libs xz-libs libstdc++ >/dev/null'
+                ;;
+              archlinux:*)
+                install='pacman -Sy --noconfirm --needed gtk3 libsecret util-linux xz gcc-libs >/dev/null'
+                ;;
+            esac
+            docker run --rm -v "$bundle:/bundle:ro" "$image" sh -ec "
+              $install
+              test -x /bundle/breezze
+              for object in /bundle/breezze /bundle/lib/*.so; do
+                echo checking \\$object
+                ldd \\$object > /tmp/breezze-ldd
+                cat /tmp/breezze-ldd
+                if grep -q 'not found' /tmp/breezze-ldd; then exit 1; fi
+              done
+            "
+            echo "::endgroup::"
+          done
+      - name: Confirm no distribution was published
+        run: |
+          echo 'Compatibility proof only: no GitHub Release, artifact, store or installer publication.'
