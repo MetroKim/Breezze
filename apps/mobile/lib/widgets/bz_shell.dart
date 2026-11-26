@@ -80,13 +80,16 @@ class _BzHomeState extends ConsumerState<BzHome> {
     final player = ref.watch(playerControllerProvider);
     final hasPlayer = player.playbackState != PlaybackState.idle;
 
+    // One glass budget per active page. IndexedStack retains the four pages
+    // for user state, but hidden pages cannot spend the visible page's blur
+    // budget. Shared player/tab chrome gets its own two-surface scope.
     final pages = IndexedStack(
       index: _index,
       children: const [
-        HomeScreen(),
-        BrowseScreen(),
-        LibraryScreen(),
-        SearchScreen(),
+        BzGlassBudgetScope(child: HomeScreen()),
+        BzGlassBudgetScope(child: BrowseScreen()),
+        BzGlassBudgetScope(child: LibraryScreen()),
+        BzGlassBudgetScope(child: SearchScreen()),
       ],
     );
 
@@ -147,7 +150,8 @@ class _BzHomeState extends ConsumerState<BzHome> {
       ),
       bottomNavigationBar: MediaQuery.sizeOf(context).width >= BzBreakpoints.medium
           ? null
-          : SafeArea(
+          : BzGlassBudgetScope(
+              child: SafeArea(
               top: false,
               child: Padding(
                 // Floating Liquid Glass bottom chrome: wider margins so the
@@ -168,6 +172,7 @@ class _BzHomeState extends ConsumerState<BzHome> {
                     ),
                   ],
                 ),
+              ),
               ),
             ),
     );
