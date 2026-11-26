@@ -62,6 +62,7 @@ export function createExperimentHandler({
     const abort = new AbortController();
     const disconnect = () => abort.abort();
     res.once('close', disconnect);
+    let connectionTimeout;
     try {
       const client = await createClient();
       const info = await client.getBasicInfo(trackId);
@@ -77,15 +78,24 @@ export function createExperimentHandler({
         reply(res, 422, { error: 'AUDIO_FORMAT_UNAVAILABLE' });
         return;
       }
+      // Restrict *connection establishment*, not total track duration:
+      // AbortSignal.timeout(20s) on the entire fetch would end a long song.
+      connectionTimeout = setTimeout(() => abort.abort(), 20000);
+      connectionTimeout.unref?.();
       const request = {
         headers: {
           'Accept-Encoding': 'identity',
           ...(range ? { Range: range } : {}),
         },
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(20000)]),
+        signal: abort.signal,
         redirect: 'error',
       };
       const upstream = await fetchAudio(format.url, request);
+      clearTimeout(connectionTimeout);
+      connectionTimeout = undefined;
+      // A stalled stream may not keep sockets open forever. This is an
+      // inactivity timeout (refreshes as bytes arrive), not a song limit.
+      res.setTimeout(45000, () => abort.abort());
       if (!upstream?.body || ![200, 206].includes(upstream.status) ||
           (range !== null && upstream.status !== 206)) {
         await upstream?.body?.cancel().catch(() => {});
@@ -142,6 +152,7 @@ export function createExperimentHandler({
         res.destroy();
       }
     } finally {
+      clearTimeout(connectionTimeout);
       res.off('close', disconnect);
     }
   };
