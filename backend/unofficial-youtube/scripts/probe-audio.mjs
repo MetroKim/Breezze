@@ -40,8 +40,8 @@ try {
   if (!format?.url) throw new Error('NO_AUDIO_STREAM_URL');
   const uri = new URL(format.url);
   if (uri.protocol !== 'https:' ||
-      !(/(^|\\.)googlevideo\\.com$/.test(uri.hostname) ||
-        /(^|\\.)youtube\\.com$/.test(uri.hostname))) {
+      !(/(^|\.)googlevideo\.com$/.test(uri.hostname) ||
+        /(^|\.)youtube\.com$/.test(uri.hostname))) {
     throw new Error('UNEXPECTED_AUDIO_CDN');
   }
   verdict.audioFormat = true;
@@ -80,7 +80,7 @@ try {
 } catch (error) {
   // Errors may embed signed media URLs. Report only bounded diagnostics.
   verdict.failure = error instanceof Error
-    ? (error.message.match(/^(NO_VIDEO_METADATA|NO_AUDIO_STREAM_URL|UNEXPECTED_AUDIO_CDN|AUDIO_HTTP_\\d+|EMPTY_AUDIO_BODY|NOT_VERIFIED_AUDIO_BYTES)$/)
+    ? (error.message.match(/^(NO_VIDEO_METADATA|NO_AUDIO_STREAM_URL|UNEXPECTED_AUDIO_CDN|AUDIO_HTTP_\d+|EMPTY_AUDIO_BODY|NOT_VERIFIED_AUDIO_BYTES)$/)
       ? error.message : error.name)
     : 'UNKNOWN_ERROR';
   report();
