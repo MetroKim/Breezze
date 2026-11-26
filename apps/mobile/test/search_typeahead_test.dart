@@ -111,6 +111,50 @@ class _VideoSearchSession extends AuthSessionController {
   BreezzeApi get api => videoApi;
 }
 
+class _SpotifyArtistSearchApi extends BreezzeApi {
+  _SpotifyArtistSearchApi() : super(baseUrl: 'https://breezze.example.test');
+
+  @override
+  Future<Map<String, dynamic>> searchSpotifyArtists(String query) async => {
+    'kind': 'ok',
+    'value': [
+      {
+        'id': '0TnOYISbd1XYRBk9myaseg',
+        'name': 'Test Singer',
+      },
+    ],
+  };
+
+  @override
+  Future<Map<String, dynamic>> spotifyArtistPage(String id) async => {
+    'kind': 'ok',
+    'value': {
+      'artist': {
+        'id': id, 'name': 'Test Singer',
+        'url': 'https://open.spotify.com/artist/$id',
+        'genres': <String>[],
+      },
+      'songs': <Object>[], 'albums': <Object>[],
+      'newReleases': <Object>[], 'searchSuggestions': <Object>[],
+      'songStatus': 'ok', 'albumStatus': 'ok',
+      'tours': {'status': 'unsupported', 'events': <Object>[]},
+    },
+  };
+}
+
+class _SpotifySearchSignedIn extends AuthSessionController {
+  _SpotifySearchSignedIn(this.source);
+  final BreezzeApi source;
+
+  @override
+  AuthState build() => const AuthSignedIn(
+    userId: 'spotify-artist-search-qa', email: 'search@breezze.example',
+  );
+
+  @override
+  BreezzeApi get api => source;
+}
+
 void main() {
   testWidgets('typeahead debounces and discards older results', (tester) async {
     final source = _SearchSource();
@@ -332,6 +376,49 @@ void main() {
     for (final scope in ['Audio', 'Video', 'Library', 'Local']) {
       expect(find.widgetWithText(BzFilterPill, scope), findsOneWidget);
     }
+  });
+
+  testWidgets('Spotify artist result appears before songs and opens the artist page',
+      (tester) async {
+    final source = _SearchSource();
+    final artistApi = _SpotifyArtistSearchApi();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        catalogSourceProvider.overrideWithValue(source),
+        authSessionProvider.overrideWith(() => _SpotifySearchSignedIn(artistApi)),
+      ],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const Scaffold(body: SearchScreen()),
+      ),
+    ));
+    await tester.enterText(find.byType(TextField), 'Test Singer');
+    await tester.pump(const Duration(milliseconds: 500));
+    source.pending['Test Singer']!.complete(ProviderOk([
+      ProviderTrack(
+        breezzeTrackId: 'bz:spotify:4iV5W9uYEdYUVa79Axb7Rh',
+        providerTrackId: 'spotify:4iV5W9uYEdYUVa79Axb7Rh',
+        title: 'Test Singer Song',
+        artist: 'Test Singer',
+        duration: const Duration(seconds: 180),
+      ),
+    ]));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('Artists'), findsOneWidget);
+    expect(find.text('Test Singer'), findsOneWidget);
+    expect(find.text('Test Singer Song'), findsOneWidget);
+    final list = find.byType(ListTile);
+    expect(list, findsWidgets);
+    final artistRow = find.ancestor(
+      of: find.text('Test Singer'), matching: find.byType(ListTile),
+    );
+    expect(artistRow, findsOneWidget);
+    await tester.tap(artistRow);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Test Singer'), findsWidgets);
+    expect(find.text('Popular Songs'), findsOneWidget);
   });
 
   testWidgets('Music Videos filter renders external video action and honest empty state',
