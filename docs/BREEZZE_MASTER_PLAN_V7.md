@@ -94,6 +94,15 @@ Official references: https://docs.flutter.dev/reference/supported-platforms , ht
 - **Railway deployment drift:** Latest observed successful production Breezze API deployment points to commit `13b6c9e7407bfa576a02b94b2b569f8f79cc5b03` (25 November), **not** the current v7 mainline. Do not blindly promote new commits while release freeze / build failures remain. Current API tests cover a source state newer than production.
 - **GitHub:** repository remains public with zero published Releases. Public source remains accessible to anyone with the URL; owner approval is necessary for visibility changes. All latest-SHA Actions still need verified conclusions.
 
+### 26 November — P0 remediation implementation and remaining evidence
+
+- **Linux hard compile failure:** Linux [run 45798705250](https://github.com/MetroKim/Breezze/actions/runs/45798705250) failed due to Clang rejecting the GCC-only `-Wno-error=deprecated-literal-operator`. In commit [`7afd616b`](https://github.com/MetroKim/Breezze/commit/7afd616bd7c9f8755a16b4139ffe77c6d12d6a29), CMake now selects this flag only for appropriate GNU compilers, removing the workflow's unsafe sed patch. **Source fixed, rerun not yet verified PASS.**
+- **OS audio interruptions:** In `just_audio_engine_adapter.dart`, route/focus interruption is now signalled before native pause; the app still never auto-resumes without a user action. Physical-call/headphone tests remain mandatory.
+- **Accessibility:** Flutter guideline checks added for Android/iOS tap targets and semantic labels on transport controls; physical VoiceOver/TalkBack verification remains open. [Physical QA protocol](qa/PHYSICAL_DEVICE_AND_ACCESSIBILITY_ACCEPTANCE.md).
+- **Linux D-Bus:** `apps/mobile/tool/check_linux_mpris_session.sh` now probes the actual exported MPRIS Player interface; CI attempts this inside an isolated X11/D-Bus session. A detected interface is not full media-key validation. Tests may still fail until underlying plugin initialization works.
+- **Rights-cleared complete recordings:** The isolated `media-live-qa.yml` workflow now targets 125-second original AAC, R2 full byte integrity and far ranges. This verifies a permissible infrastructure test, not any commercial music license. [Authorized media roadmap](architecture/BREEZZE_AUTHORIZED_FULL_TRACK_PATH.md).
+- **External blockers:** physical test devices/headsets, verified OAuth registrations, owner-controlled signing certificates, independent label/master/composition licenses, and passing build/emulator CI remain explicit dependencies. No status is silently promoted from source present to PASS.
+
 ## 5. Ordered engineering execution (one owner, one backlog)
 
 ### P0-A — Stable CI and regression gate [OPEN]
