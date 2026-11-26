@@ -1,10 +1,16 @@
 import 'package:breezze/app/breezze_navigation.dart';
+import 'package:breezze/app/main_tab.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
+  test('V8 primary navigation has exactly Home, New, Library and Search', () {
+    expect(MainTab.values.length, 4);
+    expect(breezzeMainTabLabels, ['Home', 'New', 'Library', 'Search']);
+  });
+
   for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
     testWidgets('Breezze details follow $platform navigation conventions',
         (tester) async {
