@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:material_ui/material_ui.dart';
 
 import 'tokens.dart';
@@ -143,38 +144,54 @@ class BzThemeColors extends ThemeExtension<BzThemeColors> {
 /// Keeping control geometry and focus cues here prevents authentication,
 /// discovery, library, search, settings and player sheets from drifting apart.
 /// Semantic colors come from [BzThemeColors]; no duplicated screen palettes.
-ThemeData _bzTheme({required bool dark}) {
+ThemeData _bzTheme({required bool dark, TargetPlatform? platform}) {
+  final effectivePlatform = platform ?? defaultTargetPlatform;
   final base = dark
       ? ThemeData.dark(useMaterial3: true)
       : ThemeData.light(useMaterial3: true);
   final c = dark ? BzThemeColors.dark : BzThemeColors.light;
+
+  // Flutter's CupertinoSystem* font proxies resolve to the OS-installed
+  // Apple system fonts on iPhone/iPad/Mac. No SF Pro files are bundled, and
+  // Android/Linux/Windows keep their normal platform typography. Breezze
+  // preserves its own type sizes, weights and layout hierarchy.
+  final onApple = effectivePlatform == TargetPlatform.iOS ||
+      effectivePlatform == TargetPlatform.macOS;
+  final displayFont = onApple ? 'CupertinoSystemDisplay' : null;
+  final readingFont = onApple ? 'CupertinoSystemText' : null;
   final typography = base.textTheme.copyWith(
     displayMedium: base.textTheme.displayMedium?.copyWith(
+      fontFamily: displayFont,
       fontSize: BzType.display,
       fontWeight: FontWeight.w800,
       letterSpacing: -1.2,
       height: 1.10,
     ),
     headlineLarge: base.textTheme.headlineLarge?.copyWith(
+      fontFamily: displayFont,
       fontSize: BzType.largeTitle,
       fontWeight: FontWeight.w700,
       letterSpacing: -0.9,
       height: 1.15,
     ),
     titleLarge: base.textTheme.titleLarge?.copyWith(
+      fontFamily: displayFont,
       fontSize: BzType.title2,
       fontWeight: FontWeight.w700,
       letterSpacing: -0.4,
     ),
     titleMedium: base.textTheme.titleMedium?.copyWith(
+      fontFamily: readingFont,
       fontSize: BzType.headline,
       fontWeight: FontWeight.w600,
     ),
     bodyLarge: base.textTheme.bodyLarge?.copyWith(
+      fontFamily: readingFont,
       fontSize: BzType.body,
       height: 1.35,
     ),
     bodyMedium: base.textTheme.bodyMedium?.copyWith(
+      fontFamily: readingFont,
       fontSize: BzType.subheadline,
       height: 1.35,
     ),
@@ -187,6 +204,7 @@ ThemeData _bzTheme({required bool dark}) {
   );
 
   return base.copyWith(
+    platform: effectivePlatform,
     extensions: [c],
     scaffoldBackgroundColor: c.background,
     colorScheme: base.colorScheme.copyWith(
@@ -304,8 +322,10 @@ ThemeData _bzTheme({required bool dark}) {
 }
 
 /// Semantic light and dark modes share identical component geometry.
-ThemeData bzLightTheme() => _bzTheme(dark: false);
-ThemeData bzDarkTheme() => _bzTheme(dark: true);
+ThemeData bzLightTheme({TargetPlatform? platform}) =>
+    _bzTheme(dark: false, platform: platform);
+ThemeData bzDarkTheme({TargetPlatform? platform}) =>
+    _bzTheme(dark: true, platform: platform);
 
 /// Reads the Breezze colors off any BuildContext — the one accessor every
 /// screen uses.
