@@ -87,7 +87,7 @@ void main() {
     expect(button.onPressed, isNotNull);
   });
 
-  testWidgets('saved artist page shows real saved songs and honest catalog gaps',
+  testWidgets('saved artist stays accessible when Spotify profile cannot be loaded',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -110,14 +110,9 @@ void main() {
 
     expect(find.text('Test Artist'), findsWidgets);
     expect(find.text('Saved Song'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Deezer catalog discography'), 260);
-    expect(find.text('Deezer catalog discography'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Upcoming Concerts'), 260);
-    expect(find.text('Upcoming Concerts'), findsOneWidget);
-    expect(
-      find.text('Retry concert listings'),
-      findsOneWidget,
-    );
+    expect(find.text('Sign in to view this Spotify artist profile.'), findsOneWidget);
+    expect(find.text('Deezer catalog discography'), findsNothing);
+    expect(find.text('Concert data provided by JamBase'), findsNothing);
   });
 
   testWidgets('track detail shows song metadata without inventing an album',
