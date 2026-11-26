@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
+import '../../widgets/bz_picked_thumbnail.dart';
 import '../../app/breezze_navigation.dart';
 import '../notifications/notifications_screen.dart';
 import '../onboarding/onboarding_flow.dart';
@@ -29,6 +33,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   bool _saving = false;
   String? _error;
   String? _email;
+  String? _avatarPngBase64;
+  bool _photoBusy = false;
 
   @override
   void initState() {
@@ -69,6 +75,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             (preference['favoriteArtists'] as List<dynamic>? ?? const [])
                 .whereType<String>().join(', ');
         _email = profile['email'] as String?;
+        _avatarPngBase64 = profile['avatarPngBase64'] is String
+            ? profile['avatarPngBase64'] as String
+            : null;
         _sessions = results[1] as List<Map<String, dynamic>>;
         _loading = false;
       });
@@ -227,6 +236,69 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     }
   }
 
+  bool _currentOwner(String userId) {
+    if (!mounted) return false;
+    final auth = ref.read(authSessionProvider);
+    return auth is AuthSignedIn && auth.userId == userId;
+  }
+
+  Uint8List? get _avatarBytes {
+    final raw = _avatarPngBase64;
+    if (raw == null || raw.length > 350000) return null;
+    try {
+      final bytes = base64Decode(raw);
+      return bytes.isNotEmpty && bytes.length <= 256000 ? bytes : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _chooseProfilePhoto() async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || _photoBusy) return;
+    final owner = auth.userId;
+    setState(() => _photoBusy = true);
+    try {
+      final png = await pickBreezzePngThumbnail(
+        label: 'Profile picture', side: 160,
+      );
+      if (png == null || !_currentOwner(owner)) return;
+      await ref.read(authSessionProvider.notifier).api.setAvatarPhoto(png);
+      if (!_currentOwner(owner)) return;
+      setState(() => _avatarPngBase64 = png);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo saved to your account.')),
+      );
+    } catch (_) {
+      if (_currentOwner(owner)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not save this photo. Choose a PNG, JPEG or WebP smaller than 10 MB.'),
+        ));
+      }
+    } finally {
+      if (_currentOwner(owner)) setState(() => _photoBusy = false);
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || _photoBusy) return;
+    final owner = auth.userId;
+    setState(() => _photoBusy = true);
+    try {
+      await ref.read(authSessionProvider.notifier).api.setAvatarPhoto(null);
+      if (_currentOwner(owner)) setState(() => _avatarPngBase64 = null);
+    } catch (_) {
+      if (_currentOwner(owner)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not remove your profile photo.')),
+        );
+      }
+    } finally {
+      if (_currentOwner(owner)) setState(() => _photoBusy = false);
+    }
+  }
+
   /// Existing users can repeat the same persisted mood/genre onboarding
   /// instead of creating a second preference store or resetting their account.
   void _revisitMusicTastes() {
@@ -290,17 +362,38 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           border: Border.all(color: theme.bzSeparator),
                         ),
                         alignment: Alignment.center,
-                        child: BzBnoteMark(size: 42, color: theme.bzText2),
+                        child: ClipOval(
+                          child: _avatarBytes == null
+                              ? BzBnoteMark(size: 42, color: theme.bzText2)
+                              : Image.memory(
+                                  _avatarBytes!,
+                                  width: 96,
+                                  height: 96,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  errorBuilder: (_, __, ___) =>
+                                      BzBnoteMark(size: 42, color: theme.bzText2),
+                                ),
+                        ),
                       ),
                       const SizedBox(height: 10),
-                      Text(
-                        'Profile photo',
-                        style: theme.textTheme.labelLarge,
-                      ),
-                      Text(
-                        'Photo editing will be available when profile media support is connected.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.bzText2),
+                      Text('Profile photo', style: theme.textTheme.labelLarge),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _photoBusy ? null : _chooseProfilePhoto,
+                            icon: const BzSvgIcon(name: 'user-round', size: 18),
+                            label: Text(_photoBusy ? 'Saving…' : 'Choose photo'),
+                          ),
+                          if (_avatarPngBase64 != null)
+                            TextButton(
+                              onPressed: _photoBusy ? null : _removeProfilePhoto,
+                              child: const Text('Remove photo'),
+                            ),
+                        ],
                       ),
                     ],
                   ),
