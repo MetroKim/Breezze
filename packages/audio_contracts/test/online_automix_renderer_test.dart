@@ -6,15 +6,21 @@ class _Deck implements OnlineAutomixDeck {
   var plays = 0;
   var stops = 0;
   bool failVolume = false;
+  bool failPlayAfterStart = false;
+  void Function(double)? onVolume;
 
   @override
   Future<void> setVolume(double value) async {
     if (failVolume) throw StateError('decoder failed');
     levels.add(value);
+    onVolume?.call(value);
   }
 
   @override
-  Future<void> play() async { plays++; }
+  Future<void> play() async {
+    plays++;
+    if (failPlayAfterStart) throw StateError('native play failed after start');
+  }
 
   @override
   Future<void> stop() async { stops++; }
@@ -128,5 +134,84 @@ void main() {
       ),
       throwsArgumentError,
     );
+  });
+
+  test('native play throwing after start still silences incoming deck', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck()..failPlayAfterStart = true;
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () => true,
+      ),
+      throwsStateError,
+    );
+    expect(incoming.plays, 1);
+    expect(incoming.stops, 1);
+    expect(outgoing.stops, 0);
+    expect(outgoing.levels.last, 1);
+  });
+
+  test('checker exceptions are denied and both decks are stopped', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    var checkerUnavailable = false;
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () {
+          if (checkerUnavailable) throw StateError('auth service unavailable');
+          return true;
+        },
+        steps: 4,
+        delay: (_) async { checkerUnavailable = true; },
+      ),
+      throwsA(isA<AutomixAuthorizationLost>()),
+    );
+    expect(incoming.stops, 1);
+    expect(outgoing.stops, 1);
+  });
+
+  test('rights denial before overlap stops the outgoing recording', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () => false,
+      ),
+      throwsA(isA<AutomixAuthorizationLost>()),
+    );
+    expect(incoming.plays, 0);
+    expect(incoming.stops, 1);
+    expect(outgoing.stops, 1);
+  });
+
+  test('last-step grant revocation stops both decks after their gain writes', () async {
+    final outgoing = _Deck();
+    final incoming = _Deck();
+    var authorized = true;
+    incoming.onVolume = (level) {
+      if (level >= 1) authorized = false;
+    };
+    await expectLater(
+      const OnlineAutomixRenderer().render(
+        outgoing: outgoing,
+        incoming: incoming,
+        plan: _transition,
+        bothSourcesAuthorized: () => authorized,
+        steps: 4,
+        delay: (_) async {},
+      ),
+      throwsA(isA<AutomixAuthorizationLost>()),
+    );
+    expect(incoming.stops, 1);
+    expect(outgoing.stops, 1);
   });
 }
