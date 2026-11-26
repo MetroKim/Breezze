@@ -22,11 +22,13 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.GLASS_ADAPTER, "return BzGlass(")
         self.write(guard.BRAND, "class BzBnoteMark")
         self.write(guard.MORPH, "class BzMorphingBrandHeader BzBnoteMark")
+        self.write(guard.MOOD, "class BzPinnedMoodRail")
         self.write(guard.DETAIL_BAR, "class BzBrandedAppBar BzCompactBrandMark")
-        self.write(guard.BROWSE, "YouTubeMusicClientScreen(")
+        self.write(guard.BROWSE, "YouTubeMusicClientScreen( featuredDestinations otherDestinations")
         self.write(guard.PROVIDER, "BzBrandedAppBar(")
         for page in guard.PRIMARY_PAGES:
             self.write(page, "BzMorphingBrandHeader(")
+        self.write(guard.PRIMARY_PAGES[0], "BzMorphingBrandHeader( BzPinnedMoodRail(")
         for page in guard.SECONDARY_PAGES:
             self.write(page, "appBar: BzBrandedAppBar(")
 
@@ -53,6 +55,23 @@ class V8SingleUiSourceTests(unittest.TestCase):
     def test_provider_legacy_appbar_is_rejected(self):
         self.write(guard.PROVIDER, "BzBrandedAppBar( appBar: AppBar(")
         self.assertIn("LEGACY_PROVIDER_TOOLBAR", str(guard.violations(self.root)))
+
+    def test_old_home_without_pinned_moods_is_rejected(self):
+        self.write(guard.PRIMARY_PAGES[0], "BzMorphingBrandHeader(")
+        self.assertIn("HOME_PINNED_MOODS_MISSING",
+                      str(guard.violations(self.root)))
+
+    def test_two_mood_rails_are_rejected(self):
+        self.write(guard.PRIMARY_PAGES[0],
+                   "BzMorphingBrandHeader( BzPinnedMoodRail( BzPinnedMoodRail(")
+        self.assertIn("DUPLICATE_HOME_MOOD_RAIL",
+                      str(guard.violations(self.root)))
+
+    def test_new_cannot_reintroduce_duplicate_destinations(self):
+        self.write(guard.BROWSE,
+                   "YouTubeMusicClientScreen( featuredDestinations")
+        self.assertIn("NEW_DUPLICATE_DESTINATIONS",
+                      str(guard.violations(self.root)))
 
     def test_legacy_static_primary_header_is_rejected(self):
         self.write(guard.PRIMARY_PAGES[0], "BzCompactBrandMark(")
