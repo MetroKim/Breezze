@@ -2,7 +2,7 @@
 
 # Breezze Current Implementation Gap Register
 
-> **v6 superseding decision:** The agreed current product has **four** primary tabs (Home, Browse, Library, Search); remove Radio from navigation. This older register contains historical five-tab and Audius-first decisions. The approved *target* is Supabase Auth with a staged migration, plus licensed/approved sources; Deezer previews are not full-stream grants. See [Breezze v6 mainline integration](../architecture/BREEZZE_V6_MAINLINE_INTEGRATION.md). Existing features must not be removed until replacement and regression tests pass.
+> **V8 current decision:** Exactly four tabs: **Home, New, Library, Search**; New replaces Browse, and Radio is not a destination. This is an historical register with old five-tab and Audius-first statements; none overrides the [sole V8 implementation and acceptance plan](../BREEZZE_UNIFIED_ENGINE_V8_IMPLEMENTATION_PLAN.md). Supabase Auth requires tested migration, and Deezer/Spotify/YouTube Music catalog data or previews cannot grant full-song/native-offline rights. Preserve working user data until replacement and regression tests pass.
 
 
 **Last reconciled:** 2026-11-22  
