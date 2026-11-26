@@ -1,9 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:ui' as ui;
-
-import 'package:file_selector/file_selector.dart';
-
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:material_ui/material_ui.dart';
@@ -16,6 +11,7 @@ import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
 import '../../widgets/bz_playlist_artwork.dart';
+import '../../widgets/bz_picked_thumbnail.dart';
 import '../player/player_controller.dart';
 import '../video/open_youtube_player.dart';
 import '../video/official_youtube_queue_policy.dart';
@@ -241,36 +237,12 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   Future<void> _chooseCover(UserPlaylist playlist) async {
     if (!_ownerStillActive()) return;
     try {
-      final file = await openFile(
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'Playlist cover image',
-              extensions: ['png', 'jpg', 'jpeg', 'webp']),
-        ],
-      );
-      if (file == null || !_ownerStillActive()) return;
-      final original = await file.readAsBytes();
-      if (original.isEmpty || original.length > 10 * 1024 * 1024) {
-        throw const FormatException('Image must be smaller than 10 MB');
-      }
-      final codec = await ui.instantiateImageCodec(
-        original, targetWidth: 224, targetHeight: 224,
-        allowUpscaling: false,
-      );
-      final frame = await codec.getNextFrame();
-      final png = await frame.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      frame.image.dispose();
-      codec.dispose();
-      if (png == null || png.lengthInBytes > 256000) {
-        throw const FormatException('Choose a smaller image');
-      }
+      final cover = await pickBreezzePngThumbnail(label: 'Playlist cover');
+      if (cover == null || !_ownerStillActive()) return;
       if (!_ownerStillActive()) return;
       final saved = await _store.setLocalCover(
         widget.ownerId, playlist.id,
-        base64Encode(png.buffer.asUint8List(
-          png.offsetInBytes, png.lengthInBytes,
-        )),
+        cover,
       );
       if (!_ownerStillActive() || !saved) return;
       await _load(sync: false);
