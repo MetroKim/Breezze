@@ -200,6 +200,13 @@ class BreezzeApi {
   Future<Map<String, dynamic>> searchMusicCatalogs(String query) =>
       _get('/providers/music/search?q=${Uri.encodeQueryComponent(query)}');
 
+  /// Spotify-only artist discovery and discography. No Deezer artist data.
+  Future<Map<String, dynamic>> searchSpotifyArtists(String query) =>
+      _get('/providers/spotify/artists/search?q=${Uri.encodeQueryComponent(query)}');
+
+  Future<Map<String, dynamic>> spotifyArtistPage(String artistId) =>
+      _get('/providers/spotify/artists/${Uri.encodeComponent(artistId)}');
+
   Future<Map<String, dynamic>> searchSpotify(String query) =>
       _get('/providers/spotify/search?q=${Uri.encodeQueryComponent(query)}');
 
