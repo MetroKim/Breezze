@@ -22,6 +22,8 @@ export function createExperimentHandler({
   env = process.env,
   createClient,
   fetchAudio = fetch,
+  connectionDeadlineMs = 20000,
+  streamIdleTimeoutMs = 45000,
 } = {}) {
   if (typeof createClient !== 'function') {
     throw new TypeError('createClient must be provided');
@@ -80,7 +82,7 @@ export function createExperimentHandler({
       }
       // Restrict *connection establishment*, not total track duration:
       // AbortSignal.timeout(20s) on the entire fetch would end a long song.
-      connectionTimeout = setTimeout(() => abort.abort(), 20000);
+      connectionTimeout = setTimeout(() => abort.abort(), connectionDeadlineMs);
       connectionTimeout.unref?.();
       const request = {
         headers: {
@@ -95,7 +97,7 @@ export function createExperimentHandler({
       connectionTimeout = undefined;
       // A stalled stream may not keep sockets open forever. This is an
       // inactivity timeout (refreshes as bytes arrive), not a song limit.
-      res.setTimeout(45000, () => abort.abort());
+      res.setTimeout(streamIdleTimeoutMs, () => abort.abort());
       if (!upstream?.body || ![200, 206].includes(upstream.status) ||
           (range !== null && upstream.status !== 206)) {
         await upstream?.body?.cancel().catch(() => {});
