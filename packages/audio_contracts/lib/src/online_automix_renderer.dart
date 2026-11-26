@@ -77,9 +77,12 @@ class OnlineAutomixRenderer {
       if (!authorized()) throw const AutomixAuthorizationLost();
       // Authorization can change while the final volume operation awaits.
       if (!authorized()) throw const AutomixAuthorizationLost();
-      await outgoing.stop();
+      // Commit the handoff only after the incoming deck has reached full
+      // level and the grant has been rechecked. A decoder failure here must
+      // leave the outgoing deck available for safe restoration.
       await incoming.setVolume(masterVolume);
       if (!authorized()) throw const AutomixAuthorizationLost();
+      await outgoing.stop();
     } catch (_) {
       // play() may start audio and then throw before its Future completes.
       // Always attempt to silence the dedicated incoming deck, even if its
