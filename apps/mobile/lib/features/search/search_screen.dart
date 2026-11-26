@@ -284,6 +284,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         duration: track.duration,
                       ))
                   ];
+          _rankSongsForArtist();
           if (_results.isEmpty && _artistMatches.isEmpty &&
               op is! ProviderOk<List<ProviderTrack>>) {
             _error = 'Music catalog search is temporarily unavailable. '
@@ -304,6 +305,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   /// This query uses only Spotify for artist identity/profile metadata.
   /// Audio catalog results continue independently if Spotify is unavailable.
+  /// Keep source relevance stable but put this artist's direct songs first.
+  void _rankSongsForArtist() {
+    if (_artistMatches.isEmpty || _results.isEmpty) return;
+    final primary = (_artistMatches.first['name'] as String? ?? '')
+        .trim().toLowerCase();
+    if (primary.isEmpty) return;
+    int rank(BzTrack track) {
+      final name = track.artist.trim().toLowerCase();
+      if (name == primary) return 2;
+      return name.contains(primary) ? 1 : 0;
+    }
+    final ranked = _results.asMap().entries.toList()
+      ..sort((a, b) => rank(b.value) - rank(a.value) ||
+          a.key.compareTo(b.key));
+    _results = ranked.map((entry) => entry.value).toList();
+  }
+
   Future<void> _findArtists(String query, int generation) async {
     final before = ref.read(authSessionProvider);
     if (before is! AuthSignedIn) return;
@@ -328,6 +346,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       if (matches.isEmpty) return;
       setState(() {
         _artistMatches = matches;
+        _rankSongsForArtist();
         _error = null;
       });
     } catch (_) {
