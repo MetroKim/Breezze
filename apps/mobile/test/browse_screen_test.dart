@@ -4,6 +4,8 @@ import 'package:breezze/app/bootstrap.dart';
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
 import 'package:breezze/features/browse/browse_screen.dart';
+import 'package:breezze/features/browse/ytmusic_client_screen.dart';
+import 'package:breezze/widgets/bz_branded_app_bar.dart';
 import 'package:breezze_api_client/breezze_api_client.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,6 +48,30 @@ ProviderOp<List<ProviderTrack>> _tracks(String title, {String id = 'bz:youtube_m
 
 class _BrowseChartApi extends BreezzeApi {
   _BrowseChartApi() : super(baseUrl: 'https://breezze.example.test');
+
+  @override
+  Future<Map<String, dynamic>> ytMusicExplore() async => {
+        'kind': 'ok',
+        'value': {
+          'source': 'youtube_music',
+          'newReleases': <Map<String, dynamic>>[],
+          'trending': <Map<String, dynamic>>[],
+          'newVideos': <Map<String, dynamic>>[],
+        },
+      };
+
+  @override
+  Future<Map<String, dynamic>> ytMusicMoods() async => {
+        'kind': 'ok',
+        'value': {
+          'source': 'youtube_music',
+          'sections': <Map<String, dynamic>>[],
+        },
+      };
+
+  @override
+  Future<Map<String, dynamic>> youtubeAccountStatus() async =>
+      {'available': false, 'connected': false};
 
   @override
   Future<Map<String, dynamic>> discoveryMusicVideos({
@@ -235,7 +261,7 @@ void main() {
     expect(find.text('Not available yet'), findsOneWidget);
     expect(find.textContaining('Search results cannot be used as rankings'),
         findsOneWidget);
-    expect(find.text('Back to Browse'), findsOneWidget);
+    expect(find.text('Back to New'), findsOneWidget);
   });
 
   testWidgets('Browse does not launch malformed external music-video IDs',
@@ -254,6 +280,24 @@ void main() {
     await tester.pump();
     expect(find.text('This video has no valid YouTube playback ID.'),
         findsOneWidget);
+  });
+
+  testWidgets('New reaches YouTube Music metadata through one Breezze branded UI',
+      (tester) async {
+    final source = _BrowseSource();
+    await _mountBrowse(tester, source, api: _BrowseChartApi());
+    source.requests[0].complete(ProviderOk(<ProviderTrack>[]));
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('YouTube Music discovery'));
+    await tester.tap(find.text('YouTube Music discovery'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(YouTubeMusicClientScreen), findsOneWidget);
+    expect(find.byType(BzBrandedAppBar), findsOneWidget);
+    expect(find.text('Breezze'), findsOneWidget);
+    expect(find.text('Discover'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
 
