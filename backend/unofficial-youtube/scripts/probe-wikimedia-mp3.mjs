@@ -12,7 +12,8 @@ const report = {
   artist: 'Keith Adler',
   codec: 'mp3_transcode',
   status: null, hasMp3Header: false, bytes: 0, decodedPcmBytes: 0,
-  decoded: false, failure: null,
+  decoded: false, verifiedDurationSeconds: null,
+  midpointDecodedPcmBytes: 0, midpointSeekPassed: false, failure: null,
 };
 try {
   const response = await fetch(source, {
@@ -45,9 +46,46 @@ try {
   clearTimeout(deadline);
   report.decoded = exit === 0 && report.decodedPcmBytes >= 240000;
   if (!report.decoded) throw Error('MP3_DECODE_UNAVAILABLE');
+
+  // Probe metadata duration from actual remote MP3, not from our fixture.
+  const probe = spawn('ffprobe', [
+    '-v', 'error', '-user_agent', ua,
+    '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    source,
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let durationText = '';
+  probe.stdout.on('data', b => { durationText += b.toString().slice(0, 100); });
+  const probeTimer = setTimeout(() => probe.kill('SIGKILL'), 65000);
+  const probeExit = await new Promise((resolve,reject) => {
+    probe.once('close', resolve); probe.once('error', reject);
+  });
+  clearTimeout(probeTimer);
+  report.verifiedDurationSeconds = Number.parseFloat(durationText);
+  if (probeExit !== 0 || !(report.verifiedDurationSeconds > 140 &&
+                             report.verifiedDurationSeconds < 155)) {
+    throw Error('FULL_DURATION_UNAVAILABLE');
+  }
+
+  // Actual seek into the second minute. Decode to PCM, never save a copy.
+  const midpoint = spawn('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error', '-nostdin',
+    '-ss', '60', '-user_agent', ua, '-i', source,
+    '-t', '8', '-vn', '-ac', '1', '-ar', '16000',
+    '-acodec', 'pcm_s16le', '-f', 's16le', 'pipe:1',
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const midpointTimer = setTimeout(() => midpoint.kill('SIGKILL'), 65000);
+  midpoint.stdout.on('data', b => { report.midpointDecodedPcmBytes += b.length; });
+  const midpointExit = await new Promise((resolve,reject) => {
+    midpoint.once('close', resolve); midpoint.once('error', reject);
+  });
+  clearTimeout(midpointTimer);
+  report.midpointSeekPassed = midpointExit === 0 &&
+    report.midpointDecodedPcmBytes >= 240000;
+  if (!report.midpointSeekPassed) throw Error('MIDPOINT_SEEK_UNAVAILABLE');
 } catch (error) {
-  report.failure = error instanceof Error && /^(HTTP_\d+|NOT_MP3|MP3_DECODE_UNAVAILABLE)$/.test(error.message)
+  report.failure = error instanceof Error && /^(HTTP_\d+|NOT_MP3|MP3_DECODE_UNAVAILABLE|FULL_DURATION_UNAVAILABLE|MIDPOINT_SEEK_UNAVAILABLE)$/.test(error.message)
     ? error.message : error?.name || 'UnknownError';
 }
 console.log('BREEZZE_WIKIMEDIA_MP3_PROBE=' + JSON.stringify(report));
-if (!report.decoded) process.exitCode = 1;
+if (!report.decoded || !report.midpointSeekPassed) process.exitCode = 1;
