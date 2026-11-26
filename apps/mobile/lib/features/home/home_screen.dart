@@ -285,6 +285,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             BzMorphingBrandHeader(
+              sidebarBrandOnDesktop: true,
               actions: [
                 IconButton(
                   tooltip: 'Create playlist',
