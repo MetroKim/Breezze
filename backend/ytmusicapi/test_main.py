@@ -4,7 +4,6 @@ These tests stub all upstream calls. They prove response normalization and
 bounds, not the availability of YouTube Music or a native playback licence.
 """
 import json
-from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 
@@ -141,83 +140,41 @@ class PublicCatalogContractTest(unittest.TestCase):
                              "YTMUSIC_CATALOG_UPSTREAM_UNAVAILABLE")
 
 
-class ExperimentalAudioCandidateTest(unittest.TestCase):
-    """Only direct, unexpired YouTube audio URLs may reach the dev experiment."""
+class NoSignedAudioDisclosureTest(unittest.TestCase):
+    """The metadata adapter must not offer signed media URL extraction."""
 
-    def _response(self, urls):
-        return {
-            "playabilityStatus": {"status": "OK"},
-            "streamingData": {
-                "adaptiveFormats": [
-                    {"url": url, "mimeType": "audio/mp4; codecs=mp4a.40.2",
-                     "bitrate": 128000 + index * 1000}
-                    for index, url in enumerate(urls)
-                ],
-            },
-        }
+    def test_audio_candidate_endpoint_not_registered(self):
+        paths = {route.path for route in main.app.routes}
+        self.assertNotIn("/tracks/{video_id}/audio-candidate", paths)
 
-    def test_selects_the_direct_unexpired_audio_url(self):
-        expiry = int(datetime.now(timezone.utc).timestamp()) + 600
-        urls = [
-            f"https://rr4---sn-x.googlevideo.com/videoplayback?expire={expiry}",
-            f"https://malicious.example.com/stream?expire={expiry}",
-        ]
-        candidate = main.select_audio_candidate(self._response(urls))
-        self.assertIsNotNone(candidate)
-        self.assertEqual(candidate["streamUrl"], urls[0])
-        self.assertEqual(candidate["mimeType"], "audio/mp4")
+    def test_audio_candidate_implementation_not_exposed(self):
+        self.assertFalse(hasattr(main, "get_audio_candidate"))
+        self.assertFalse(hasattr(main, "select_audio_candidate"))
 
-    def test_rejects_expired_untrusted_video_and_cipher_only_formats(self):
-        now = int(datetime.now(timezone.utc).timestamp())
-        song = self._response([
-            f"https://evilgooglevideo.com/stream?expire={now+600}",
-            f"http://rr4.googlevideo.com/videoplayback?expire={now+600}",
-            f"https://rr4.googlevideo.com/videoplayback?expire={now-30}",
-        ])
-        song["streamingData"]["adaptiveFormats"].extend([
-            {"mimeType": "audio/mp4", "bitrate": 128000,
-             "signatureCipher": "secret"},
-            {"mimeType": "video/mp4", "bitrate": 240000,
-             "url": f"https://rr4.googlevideo.com/videoplayback?expire={now+600}"},
-        ])
-        self.assertIsNone(main.select_audio_candidate(song))
-        song["playabilityStatus"] = {"status": "LOGIN_REQUIRED"}
-        self.assertIsNone(main.select_audio_candidate(song))
+    def test_track_metadata_strips_upstream_streaming_data(self):
+        class SampleMusic:
+            def get_song(self, video_id):
+                return {
+                    "videoDetails": {
+                        "title": "Example song", "author": "Artist",
+                        "lengthSeconds": "180",
+                    },
+                    "streamingData": {
+                        "adaptiveFormats": [{
+                            "url": "https://rr4.googlevideo.com/private?signature=SENSITIVE",
+                            "signatureCipher": "SHOULD_NOT_LEAK",
+                        }],
+                    },
+                }
 
-    def test_endpoint_disabled_by_default_and_in_production(self):
-        with patch.dict(main.os.environ, {
-            "BREEZZE_YTMUSIC_AUDIO_EXPERIMENT": "false",
-            "RAILWAY_ENVIRONMENT_NAME": "staging",
-        }):
-            with self.assertRaises(HTTPException) as caught:
-                main.get_audio_candidate(SONG_ID)
-            self.assertEqual(caught.exception.detail, "EXPERIMENT_DISABLED")
-
-        with patch.dict(main.os.environ, {
-            "BREEZZE_YTMUSIC_AUDIO_EXPERIMENT": "true",
-            "RAILWAY_ENVIRONMENT_NAME": "production",
-        }):
-            with self.assertRaises(HTTPException) as caught:
-                main.get_audio_candidate(SONG_ID)
-            self.assertEqual(caught.exception.status_code, 404)
-
-    def test_dev_probe_returns_candidate_but_no_raw_song_metadata(self):
-        expiry = int(datetime.now(timezone.utc).timestamp()) + 600
-        song = self._response([
-            f"https://rr4.googlevideo.com/videoplayback?expire={expiry}",
-        ])
-        song["cookie"] = "SENSITIVE_DO_NOT_EXPOSE"
-        with patch.dict(main.os.environ, {
-            "BREEZZE_YTMUSIC_AUDIO_EXPERIMENT": "true",
-            "RAILWAY_ENVIRONMENT_NAME": "staging",
-        }):
-            with patch.object(main, "YTMusic") as yt_music:
-                yt_music.return_value.get_song.return_value = song
-                result = main.get_audio_candidate(SONG_ID)
-        self.assertTrue(result["experimental"])
-        self.assertIn("googlevideo.com", result["candidate"]["streamUrl"])
-        self.assertNotIn("SENSITIVE_DO_NOT_EXPOSE", json.dumps(result))
-        yt_music.return_value.get_song.assert_called_once_with(SONG_ID)
+        with patch.object(main, "YTMusic", SampleMusic):
+            result = main.get_track(SONG_ID)
+        serialized = json.dumps(result)
+        self.assertEqual(result["track"]["title"], "Example song")
+        self.assertNotIn("streamingData", serialized)
+        self.assertNotIn("googlevideo.com", serialized)
+        self.assertNotIn("SENSITIVE", serialized)
+        self.assertNotIn("SHOULD_NOT_LEAK", serialized)
 
 
 if __name__ == "__main__":
