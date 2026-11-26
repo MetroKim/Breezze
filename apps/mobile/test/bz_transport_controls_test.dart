@@ -118,4 +118,43 @@ void main() {
       semantics.dispose();
     }
   });
+  testWidgets('rewind 10 seconds stays visible and dispatches separately',
+      (tester) async {
+    var rewinds = 0;
+    var previous = 0;
+    var next = 0;
+    await tester.pumpWidget(MaterialApp(
+      theme: bzDarkTheme(),
+      home: Scaffold(
+        body: Center(child: SizedBox(
+          width: 280,
+          child: BzTransportControls(
+            playing: true,
+            onPrevious: () => previous++,
+            onNext: () => next++,
+            onRewind: () => rewinds++,
+            onTogglePlayPause: () {},
+            onShuffle: () {},
+            onRepeat: () {},
+          ),
+        )),
+      ),
+    ));
+    expect(find.byTooltip('Rewind 10 seconds'), findsOneWidget);
+    await tester.tap(find.byTooltip('Rewind 10 seconds'));
+    await tester.pump();
+    expect(rewinds, 1);
+    expect(previous, 0);
+    expect(next, 0);
+    await tester.tap(find.byTooltip('Previous track'));
+    await tester.tap(find.byTooltip('Next track'));
+    expect(previous, 1);
+    expect(next, 1);
+    final rewindTop = tester.getTopLeft(find.byTooltip('Rewind 10 seconds'));
+    final nextTop = tester.getTopLeft(find.byTooltip('Next track'));
+    expect(rewindTop.dy, greaterThan(nextTop.dy),
+        reason: 'Rewind remains accessible in the small-screen secondary row');
+    expect(tester.takeException(), isNull);
+  });
+
 }
