@@ -33,10 +33,12 @@ void main() {
     expect(container.read(downloadJobStatusProvider), contains('catalog-private-a'));
 
     session.switchTo('listener-b');
+    await Future<void>.delayed(Duration.zero);
     expect(container.read(downloadJobStatusProvider), isEmpty);
     expect(container.read(downloadProgressProvider), isEmpty);
 
     session.signOutForTest();
+    await Future<void>.delayed(Duration.zero);
     expect(container.read(downloadJobStatusProvider), isEmpty);
   });
 }
