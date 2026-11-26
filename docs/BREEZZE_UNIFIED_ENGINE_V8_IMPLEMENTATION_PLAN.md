@@ -2,6 +2,35 @@
 
 **Owner:** Breezze engineering | **Branch:** `main` | **Baseline:** `cb71606a124d94281a75402651455964d3a96f92` | **Started:** 2026-11-26 | **Release state:** BLOCKED until verified.
 
+## V8 UI Reference Integration — YTMusic-style structure, Breezze identity (2026-11-26)
+
+**Cross-chat handoff — START HERE for any future Breezze design session.** Owner selected [jogeanmcf/ytmusic_clone](https://github.com/jogeanmcf/ytmusic_clone) as the **complete UX structure and section reference** for Breezze V8, supplemented with premium restrained glassmorphism. The reference's GitHub repository has no declared license (as inspected 2026-11-26), and its README explicitly calls its streaming backend unfinished. **Do not copy source, code, artwork, fonts, YouTube Music marks, layout assets, or package setup into Breezze; independently implement equivalent screen hierarchy and interactions in existing Flutter/Riverpod with original Breezze styling.** Do not add GetX, a second app or an independent player.
+
+### Non-negotiable UI and brand behavior
+1. The **upper-left brand header morphs on vertical scroll**: expanded Breezze wordmark and brand mark becomes a compact **circular black/neutral badge with the genuine Breezze B-note icon** as its visible face. When user scrolls back up it expands to full Breezze identity. Inspired by the compact YouTube Music header behavior, but every word and graphic is Breezze. At desktop sizes the adaptive navigation/sidebar remains consistent, with no duplicate top-level route.
+2. Use the original Breezze symbol/wordmark (assets in `apps/mobile/assets/icons`, `BzBnoteMark`/`BzRibbonLogo`), `BzGlassContainer`, existing design tokens, and accessible contrast. Keep “Breezze” text in headers, settings, nav, player, semantics and any newly added surfaces; no YouTube Music product marks, logos or replacement app identity.
+3. Exactly four global destinations in this order: **Home, New, Library, Search**. Reference's three-tab “Start/Explore/Library”, in-page search, and branded YouTube shell are *structural inspiration*, not replacement navigation. Preserve one global player, queue, audio focus handling and mini-player.
+4. Responsive Flutter UI: editorial home discovery shelves, selected and sticky mood chips; New/Explore release/chart/genre/mood and official music-video sections; Library shortcuts for downloads, playlists, songs, albums, followed artists (and recent activity when real); Search with query suggestions/history, filters and results across available audio metadata, videos, artists, albums and library. For unsupported live datasets (ranking, upcoming releases) show clear real-world availability states rather than fabricated charts.
+5. Every introduced surface has a working interaction: chips trigger scoped searches or real genre fetches; section headers navigate to real existing routes; cards open proper licensed-playback/official-video/catalog detail; profile opens account; search operates over real providers; library sections display account-scoped user data; no empty `onTap` callbacks, decorative “More” links, duplicate player, fake cast/microphone/subscription controls or unimplemented screens.
+6. Glassmorphism belongs **only on selected headers, pinned filters, selected hero cards and global mini-player/nav**, respecting existing blur-performance budget, Reduce Motion, high contrast, 48dp touch targets, safe areas, and text scaling. No full-screen heavy blur or overlay that blocks scrolling/taps. Smooth collapse animation is disabled/reduced when OS accessibility requests it.
+7. Maintain original Breezze design hierarchy and platform idioms. Apple Music-inspired polish may remain; the requested YTMusic-inspired section architecture is the new UX reference. All source/provider music access stays under V8 lawful rights model.
+
+### File and implementation handoff
+- **Primary branch:** `feat/v8-ytmusic-inspired-glass-discovery-20261126` (development PR, **not** a release; rebase/sync with latest main and reconcile other V8 PRs before merging).
+- **Main shell:** `apps/mobile/lib/widgets/bz_shell.dart`; four tabs and shared mini-player remain authoritative.
+- **Home:** `apps/mobile/lib/features/home/home_screen.dart`; move to scroll-aware Breezze morphing header using reusable `BzMorphingBrandHeader` widget; mood chips, scrollable personalized/real rails and glass discovery hero.
+- **New:** `apps/mobile/lib/features/browse/browse_screen.dart`; real interactions for discovery destinations, genre chips and accessible expandable browse sections; avoid false ranking claims.
+- **Library:** `apps/mobile/lib/features/library/library_screen.dart`; functional downloads, playlist, album, artist and saved-song shortcuts; account-owned data.
+- **Search:** `apps/mobile/lib/features/search/search_screen.dart`; existing search history, filters, artist/song/video discovery + error handling should remain wired. Do not replace with a display-only screenshot.
+- **Design components:** `apps/mobile/lib/widgets/bz_brand_icons.dart`, `apps/mobile/lib/widgets/bz_discovery_spotlight.dart`, and `packages/design_system` glass widgets. Implement new reusable widgets without using reference code/assets.
+- **QA:** widget tests for initial expanded/header compact state & scroll reversal, semantic Breezze labels, reduced motion/high contrast, Home mood-chip action, New links and Library shortcuts; exact-commit Flutter analyzer/test/build matrix, then native mobile/desktop visual and accessibility acceptance.
+
+### Work state and acceptance tracking
+- **Reference read:** inspected all four reference screens (Home, Explore, Library, Search) and the search results plus trends, chips and genre components; all designs are **independent reimplementation**.
+- **Implemented before this checkpoint on feature branch:** original `BzDiscoverySpotlight` and Home mood-filter navigation; New already has genre filters and a V8 discovery layout. These are source changes, **not yet verified green on one exact SHA**.
+- **Next:** commit this plan first; create scroll-aware circular Breezze brand header and real Home/New navigation; extend section completeness, tests, and CI. Revisit unsupported Cast/mic/artist chart/community playlist paths only when actual integrations and rights are present. Do not represent them as working.
+- **Completion:** V8 UI is not “100% complete” without checked branch CI, native app interactions and accessibility evidence. No release, deployment, public code archive or installer until owner explicitly approves the final verified build.
+
 ## Product contract (single source of truth)
 - **Four top-level tabs in order:** **Home**, **New** (formerly Browse), **Library**, **Search**; no fifth Radio/Downloads/Settings tab.
 - **Home:** listener-scoped history, favorites, follows, personalized shelves with honest source metadata. Do not label algorithmic shelves or charts as official without a real dataset.
