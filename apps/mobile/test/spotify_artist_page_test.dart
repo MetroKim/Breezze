@@ -1,5 +1,6 @@
 import 'package:breezze/core/api/breezze_api.dart';
 import 'package:breezze/core/auth/auth_session.dart';
+import 'package:breezze/core/database/outbox_sync_service.dart';
 import 'package:breezze/features/catalog/catalog_detail_screens.dart';
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,6 +63,31 @@ class _SpotifyApi extends BreezzeApi {
   }
 
   @override
+  Future<Map<String, dynamic>> discoveryConcerts({
+    String country = 'TZ',
+    String? city,
+  }) async => {
+    'source': 'JamBase Data',
+    'items': [
+      {
+        'title': 'Test Singer Live',
+        'artist': 'Test Singer',
+        'date': DateTime.now().toUtc()
+            .add(const Duration(days: 14)).toIso8601String(),
+        'venue': 'Test Arena',
+        'city': 'Dar es Salaam',
+        'ticketUrl': 'https://example.com/tickets',
+      },
+      {
+        'title': 'Other Artist Live',
+        'artist': 'Other Artist',
+        'date': DateTime.now().toUtc()
+            .add(const Duration(days: 14)).toIso8601String(),
+      },
+    ],
+  };
+
+  @override
   Future<Map<String, dynamic>> spotifyAlbumPage(String id) async {
     albumCalls++;
     expect(id, albumId);
@@ -89,7 +115,7 @@ class _SpotifySession extends AuthSessionController {
 }
 
 void main() {
-  testWidgets('artist page uses Spotify only for songs, albums, releases and data',
+  testWidgets('artist page uses Spotify-primary songs, albums, releases and data',
       (tester) async {
     final api = _SpotifyApi();
     await tester.pumpWidget(ProviderScope(
@@ -119,6 +145,29 @@ void main() {
     expect(find.text('Deezer catalog discography'), findsNothing);
     await tester.scrollUntilVisible(find.text('Related Searches'), 220);
     expect(find.text('Test Singer Afrobeats'), findsOneWidget);
+  });
+
+  testWidgets('artist Tours shows verified upcoming JamBase events, not other performers',
+      (tester) async {
+    final api = _SpotifyApi();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authSessionProvider.overrideWith(() => _SpotifySession(api)),
+        outboxTerritoryProvider.overrideWith((ref) => 'TZ'),
+      ],
+      child: MaterialApp(
+        theme: bzLightTheme(),
+        home: const ArtistDetailScreen(
+          artist: 'Test Singer', spotifyArtistId: artistId, savedTracks: [],
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.scrollUntilVisible(find.text('Tours'), 220);
+    expect(find.text('Test Singer Live'), findsOneWidget);
+    expect(find.text('Other Artist Live'), findsNothing);
+    expect(find.text('Concert data provided by JamBase'), findsOneWidget);
   });
 
   testWidgets('legacy saved artist resolves Spotify identity by exact name',
