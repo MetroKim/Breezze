@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/breezze_navigation.dart';
 import '../../app/bootstrap.dart';
 import '../../app/followed_artist_store.dart';
 import '../../core/auth/auth_session.dart';
@@ -385,7 +386,8 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
           return;
         }
         Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => SpotifyReleaseScreen(
+          breezzePageRoute<void>(
+            context: context,builder: (_) => SpotifyReleaseScreen(
             albumId: id,
             title: title,
             onTrackSelected: widget.onTrackSelected,
