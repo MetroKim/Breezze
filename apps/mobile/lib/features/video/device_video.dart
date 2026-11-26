@@ -86,6 +86,7 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
   bool _closing = false;
   // User opt-in only; never repeat protected media automatically by default.
   bool _repeat = false;
+  bool _fillVideo = false;
 
   @override
   void initState() {
@@ -170,15 +171,25 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
                 return Column(
                   children: [
                     Expanded(
-                      child: ColoredBox(
-                        color: Colors.black,
-                        child: Center(
-                          child: AspectRatio(
-                            aspectRatio: value.aspectRatio > 0
-                                ? value.aspectRatio : 16 / 9,
-                            child: VideoPlayer(_player),
-                          ),
-                        ),
+                      child: LayoutBuilder(
+                        builder: (context, bounds) {
+                          final videoSize = value.size;
+                          return ClipRect(
+                            child: SizedBox(
+                              width: bounds.maxWidth,
+                              height: bounds.maxHeight,
+                              child: FittedBox(
+                                alignment: Alignment.center,
+                                fit: _fillVideo ? BoxFit.cover : BoxFit.contain,
+                                child: SizedBox(
+                                  width: videoSize.width > 0 ? videoSize.width : 16,
+                                  height: videoSize.height > 0 ? videoSize.height : 9,
+                                  child: VideoPlayer(_player),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     VideoProgressIndicator(
@@ -191,8 +202,11 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      runSpacing: 4,
                       children: [
                         IconButton(
                           tooltip: value.isPlaying ? 'Pause video' : 'Play video',
@@ -203,11 +217,16 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
                           ),
                           onPressed: value.isPlaying ? _player.pause : _player.play,
                         ),
-                        const SizedBox(width: 16),
                         TextButton.icon(
                           onPressed: _toggleRepeat,
                           icon: const BzSvgIcon(name: 'repeat', size: 20),
                           label: Text(_repeat ? 'Repeat on' : 'Repeat off'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => _fillVideo = !_fillVideo),
+                          icon: const BzSvgIcon(name: 'video', size: 20),
+                          label: Text(_fillVideo ? 'Fit video' : 'Fill screen'),
                         ),
                       ],
                     ),
