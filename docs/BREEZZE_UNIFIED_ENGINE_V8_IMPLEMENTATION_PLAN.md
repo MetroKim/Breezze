@@ -134,3 +134,8 @@ See the same-sha evidence links and outstanding blockers in [master issue #27](h
 - **Validation required:** exact PR-head `flutter test test/online_automix_renderer_test.dart` from `packages/audio_contracts`, package analysis, full current-head CI and CodeQL, then Android/iOS authorized *dual* playback with interruption, decoder failure, rights expiry, queue handoff and measured audible transition. No signed or published release from this candidate.
 - **Not yet solved by this change:** global PlayerController wiring, per-track BPM/key DSP and pitch-preserving stretch, real approved recording bytes/streaming rights, encrypted offline-device acceptance, actual OS hardware/accessibility tests and signed packaging.
 
+
+
+### V8.3 API-client analyzer regression on the latest CI candidate
+
+PR #79 CI [run 45817293030](https://github.com/MetroKim/Breezze/actions/runs/45817293030), job `139900206420`, successfully analyzed and tested Flutter mobile but failed at `packages/api_client` analysis: seven `BzTrack` fixtures in `downloads_library_test.dart` had no required `duration`, and `downloads_library.dart` used a redundant `rangeStart!` after non-null promotion. Commits `61b6a3f`, `fd3de34` and `7a458a2` correct and format those sites. **Source repair is pending a subsequent complete exact-head CI; the earlier failed run remains failed.**
