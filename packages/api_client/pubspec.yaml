@@ -8,6 +8,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  crypto: ^3.0.6
   breezze_audio_contracts:
     path: ../audio_contracts
 
