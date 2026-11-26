@@ -90,4 +90,32 @@ void main() {
     final repeat = tester.getTopLeft(find.byTooltip('Repeat'));
     expect(repeat.dy, greaterThan(previous.dy));
   });
+
+  testWidgets('transport meets Android/iOS tap targets and semantic labels',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(MaterialApp(
+        theme: bzLightTheme(),
+        home: Scaffold(
+          body: Center(child: SizedBox(
+            width: 380,
+            child: BzTransportControls(
+              playing: true,
+              onPrevious: () {},
+              onNext: () {},
+              onTogglePlayPause: () {},
+              onShuffle: () {},
+              onRepeat: () {},
+            ),
+          )),
+        ),
+      ));
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    } finally {
+      semantics.dispose();
+    }
+  });
 }
