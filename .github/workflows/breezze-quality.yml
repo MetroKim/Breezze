@@ -17,7 +17,8 @@ env:
   BREEZZE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ZloCmmQPo86OqHbH3Yqgsw_xZGPqSi3
 
 concurrency:
-  group: breezze-quality-${{ github.ref }}
+  # Key by commit to avoid GitHub replacing an older pending build on each push.
+  group: breezze-quality-${{ github.ref }}-${{ github.sha }}
   # Preserve long-running platform builds when newer commits are pushed.
   # Queue newer runs instead of cancelling evidence before it completes.
   cancel-in-progress: false
