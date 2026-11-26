@@ -26,6 +26,11 @@ class V8SingleUiSourceTests(unittest.TestCase):
         self.write(guard.DETAIL_BAR, "class BzBrandedAppBar BzCompactBrandMark")
 
         self.write(guard.PROVIDER, "BzBrandedAppBar(")
+        self.write(guard.DEVICE_VIDEO,
+                   "BzBrandedAppBar setLooping(next) if (!_repeat && !_closing")
+        self.write(guard.OFFICIAL_VIDEO,
+                   "BzBrandedAppBar BzSvgIcon(name: 'skip-previous' "
+                   "BzSvgIcon(name: 'skip-next'")
         for page in guard.PRIMARY_PAGES:
             self.write(page, "BzMorphingBrandHeader(")
         self.write(guard.PRIMARY_PAGES[0], "BzMorphingBrandHeader( BzPinnedMoodRail(")
@@ -56,6 +61,17 @@ class V8SingleUiSourceTests(unittest.TestCase):
     def test_provider_legacy_appbar_is_rejected(self):
         self.write(guard.PROVIDER, "BzBrandedAppBar( appBar: AppBar(")
         self.assertIn("LEGACY_PROVIDER_TOOLBAR", str(guard.violations(self.root)))
+
+    def test_licensed_video_must_keep_opt_in_loop_and_svg_controls(self):
+        self.write(guard.DEVICE_VIDEO, "BzBrandedAppBar setLooping(next)")
+        self.assertIn("LOCAL_VIDEO_REPEAT_DEFAULT_MISSING",
+                      str(guard.violations(self.root)))
+
+    def test_official_video_keeps_svg_previous_next(self):
+        self.write(guard.OFFICIAL_VIDEO, "BzBrandedAppBar Icons.skip_next")
+        issues = str(guard.violations(self.root))
+        self.assertIn("OFFICIAL_VIDEO_PREVIOUS_SVG_MISSING", issues)
+        self.assertIn("OFFICIAL_VIDEO_NEXT_SVG_MISSING", issues)
 
     def test_old_black_badge_brand_is_rejected(self):
         self.write(guard.MORPH,
