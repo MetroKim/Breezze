@@ -14,10 +14,10 @@ class _Deck implements OnlineAutomixDeck {
   }
 
   @override
-  Future<void> play() async => plays++;
+  Future<void> play() async { plays++; }
 
   @override
-  Future<void> stop() async => stops++;
+  Future<void> stop() async { stops++; }
 }
 
 const _transition = MixTransition(
