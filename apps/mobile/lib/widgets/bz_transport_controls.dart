@@ -16,6 +16,9 @@ class BzTransportControls extends StatelessWidget {
   final VoidCallback onTogglePlayPause;
   final VoidCallback onShuffle;
   final VoidCallback onRepeat;
+  /// Optional ten-second jumps. Previous/next still change queue tracks.
+  final VoidCallback? onRewindTen;
+  final VoidCallback? onForwardTen;
 
   const BzTransportControls({
     super.key,
@@ -25,6 +28,8 @@ class BzTransportControls extends StatelessWidget {
     required this.onTogglePlayPause,
     required this.onShuffle,
     required this.onRepeat,
+    this.onRewindTen,
+    this.onForwardTen,
   });
 
   @override
@@ -87,14 +92,31 @@ class BzTransportControls extends StatelessWidget {
                 ),
               ),
             ),
-            if (compact)
-              // Do not hide secondary actions behind an inaccessible swipe
-              // gesture: they stay visible, focusable and at least 44pt tall.
+            if (compact || onRewindTen != null || onForwardTen != null)
+              // Scrubbing and skip-track controls are separate commands:
+              // ten-second jumps never change the playlist queue.
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [shuffle, repeat],
+                  children: [
+                    if (compact) shuffle,
+                    if (onRewindTen != null)
+                      IconButton(
+                        tooltip: 'Rewind 10 seconds',
+                        icon: const BzSvgIcon(name: 'rewind-10', size: 24),
+                        onPressed: onRewindTen,
+                        color: theme.bzText1,
+                      ),
+                    if (onForwardTen != null)
+                      IconButton(
+                        tooltip: 'Forward 10 seconds',
+                        icon: const BzSvgIcon(name: 'forward-10', size: 24),
+                        onPressed: onForwardTen,
+                        color: theme.bzText1,
+                      ),
+                    if (compact) repeat,
+                  ],
                 ),
               ),
           ],
