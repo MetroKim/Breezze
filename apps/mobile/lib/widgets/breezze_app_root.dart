@@ -10,6 +10,7 @@ import '../../features/onboarding/onboarding_controller.dart';
 
 import '../../core/auth/auth_session.dart';
 import '../../core/audio/just_audio_engine_adapter.dart';
+import '../../core/audio/encrypted_offline_audio_source.dart';
 import '../../core/audio/audio_service_bridge.dart';
 import '../../core/audio/background_audio.dart';
 import '../../core/audio/playback_queue_store.dart';
@@ -90,7 +91,20 @@ class _BreezzeAppRootState extends ConsumerState<BreezzeAppRoot> with WidgetsBin
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _container = ProviderScope.containerOf(context, listen: false);
-    _audioEngine = JustAudioEngineAdapter();
+    _audioEngine = JustAudioEngineAdapter(
+      encryptedSourceFactory: (path) async {
+        // A stored path is never authority to decrypt another listener's
+        // media. Check the currently signed-in account on every prepare.
+        final auth = _container!.read(authSessionProvider);
+        if (auth is! AuthSignedIn) {
+          throw StateError('OFFLINE_SIGN_IN_REQUIRED');
+        }
+        return BreezzeEncryptedOfflineAudioSource.open(
+          path: path,
+          signedInUserId: auth.userId,
+        );
+      },
+    );
     _container!.read(playerControllerProvider.notifier).attachEngine(_audioEngine!);
     _queueSubscription = ref.listenManual<PlayerState>(
       playerControllerProvider,
