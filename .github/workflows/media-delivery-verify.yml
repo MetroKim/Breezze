@@ -28,9 +28,11 @@ permissions:
   contents: read
 
 # Independent of full Flutter builds; never deploys or publishes media.
+# New main commits supersede older *queued* media checks; verify the latest
+# revision, rather than leaving it indefinitely behind stale queued jobs.
 concurrency:
   group: breezze-media-verification-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   backend:
@@ -51,9 +53,9 @@ jobs:
       - name: Typecheck backend
         run: npm run typecheck
       - name: Test download grants, audio-ingest rights and offline lease revocation
-        run: npx jest --runInBand src/downloads/downloads.service.spec.ts src/admin/audio-catalog.service.spec.ts src/playback/playback-resolve.service.spec.ts src/playback/signed-media-presence.spec.ts
+        run: npx jest --runInBand src/downloads/downloads.service.spec.ts src/admin/audio-catalog.service.spec.ts src/playback/playback-resolve.service.spec.ts src/playback/signed-media-presence.spec.ts src/playback/media-signer.service.spec.ts
       - name: Test Spotify and Deezer music plus official YouTube video isolation
-        run: npx jest --runInBand src/providers/official-youtube-data.service.spec.ts src/providers/ytmusic.adapter.spec.ts src/providers/spotify.adapter.spec.ts src/providers/deezer.adapter.spec.ts src/providers/provider-registry.service.spec.ts
+        run: npx jest --runInBand src/providers/official-youtube-data.service.spec.ts src/providers/ytmusic.adapter.spec.ts src/providers/spotify.adapter.spec.ts src/providers/deezer.adapter.spec.ts src/providers/musicbrainz.adapter.spec.ts src/providers/provider-registry.service.spec.ts
 
   worker:
     name: Private R2 signed-byte delivery
