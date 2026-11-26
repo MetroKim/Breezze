@@ -50,6 +50,7 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
   FollowedArtist? _following;
   List<Map<String, dynamic>> _tourEvents = [];
   bool _toursLoading = false;
+  int _tourRequestGeneration = 0;
   String? _toursMessage;
   int _generation = 0;
   String? _initialOwner;
@@ -144,10 +145,12 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
 
   /// Existing JamBase event service is independent of both music catalogs.
   Future<void> _loadTourEvents(String name, String owner, int generation) async {
+    final requestGeneration = ++_tourRequestGeneration;
     final territory = ref.read(outboxTerritoryProvider).trim().toUpperCase();
     if (!RegExp(r'^[A-Z]{2}$').hasMatch(territory) ||
         territory == 'WW' || territory == 'ZZ') {
-      if (mounted && generation == _generation && _owner() == owner) {
+      if (mounted && generation == _generation && _owner() == owner &&
+          requestGeneration == _tourRequestGeneration) {
         setState(() => _toursMessage =
             'Set your country to look for upcoming concerts.');
       }
@@ -160,7 +163,8 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
     try {
       final response = await ref.read(authSessionProvider.notifier).api
           .discoveryConcerts(country: territory);
-      if (!mounted || generation != _generation || _owner() != owner) return;
+      if (!mounted || generation != _generation || _owner() != owner ||
+          requestGeneration != _tourRequestGeneration) return;
       final raw = response['items'];
       final artist = name.trim().toLowerCase();
       final today = DateTime.now().toUtc();
@@ -186,12 +190,60 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
             : null;
       });
     } catch (_) {
-      if (!mounted || generation != _generation || _owner() != owner) return;
+      if (!mounted || generation != _generation || _owner() != owner ||
+          requestGeneration != _tourRequestGeneration) return;
       setState(() {
         _toursLoading = false;
         _toursMessage = 'Concert listings are unavailable right now.';
       });
     }
+  }
+
+  Future<void> _changeTourCountry(String artistName) async {
+    final current = ref.read(outboxTerritoryProvider);
+    final country = TextEditingController(
+      text: RegExp(r'^[A-Z]{2}$').hasMatch(current) &&
+          current != 'WW' ? current : '',
+    );
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Concert country'),
+        content: TextField(
+          controller: country,
+          maxLength: 2,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(
+            hintText: 'TZ, KE, US…',
+            labelText: 'Two-letter country code',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(country.text),
+            child: const Text('Show concerts'),
+          ),
+        ],
+      ),
+    );
+    country.dispose();
+    if (!mounted || selected == null) return;
+    final normalized = selected.trim().toUpperCase();
+    if (!RegExp(r'^[A-Z]{2}$').hasMatch(normalized) ||
+        normalized == 'WW' || normalized == 'ZZ') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a valid two-letter country code.'),
+      ));
+      return;
+    }
+    final owner = _owner();
+    if (owner == null || owner != _initialOwner) return;
+    ref.read(outboxTerritoryProvider.notifier).state = normalized;
+    unawaited(_loadTourEvents(artistName, owner, _generation));
   }
 
   Future<void> _refreshFollow(String id, String owner, int generation) async {
@@ -448,6 +500,13 @@ class _SpotifyArtistScreenState extends ConsumerState<SpotifyArtistScreen> {
                       ? 'Discography temporarily unavailable.'
                       : 'No releases in the selected catalog.'),
                   _section(theme, 'Tours', [
+                    TextButton.icon(
+                      onPressed: () => _changeTourCountry(title),
+                      icon: const BzSvgIcon(name: 'globe', size: 18),
+                      label: Text('Concert country: ' +
+                          (ref.watch(outboxTerritoryProvider) == 'WW'
+                              ? 'Select' : ref.watch(outboxTerritoryProvider))),
+                    ),
                     if (_toursLoading)
                       const Center(child: Padding(
                         padding: EdgeInsets.all(14),
