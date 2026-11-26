@@ -1,6 +1,6 @@
 # Breezze
 
-Breezze is a free, listener-first music app built with one Flutter/Dart application codebase. It has five primary destinations: Home, Browse, Radio, Library and Search. Downloads live inside Library. There is no artist portal, artist upload workflow, subscription, membership, billing or paywall.
+Breezze is a free, listener-first music app built with one Flutter/Dart application codebase. It has four primary destinations: Home, Browse, Library and Search. Downloads live inside Library. There is no artist portal, artist upload workflow, subscription, membership, billing or paywall.
 
 ## Current client capabilities
 
@@ -13,8 +13,9 @@ Breezze is a free, listener-first music app built with one Flutter/Dart applicat
 - Local playlists with account-scoped storage and optional backend synchronization.
 - Offline downloads through backend authorization and signed media URLs.
 - LRCLIB lyrics lookup with track-change-safe loading.
-- Radio station and schedule information; live station playback remains disabled until station streams are connected to the shared audio engine.
 - Responsive layouts for compact phones through expanded desktop windows.
+- Apple-inspired platform UX without proprietary assets: four stable tabs, adaptive glass transport, native iOS detail transitions and action sheets, Android/desktop platform parity, Dynamic Type and reduced-motion fallbacks.
+- Mobile music-session setup precedes playback source preparation. Interruption and route-loss handlers pause without automatically restarting a song after a phone call.
 - Original Breezze SVG interface icons, light/dark themes and reduced-motion-aware loading states.
 
 Discovery metadata is not a playback license. The app never treats a YouTube Music metadata result as a directly playable or downloadable stream.
@@ -81,6 +82,10 @@ flutter build ios --no-codesign
 
 Linux builds require the Flutter Linux desktop dependencies (including GTK development headers, CMake, Ninja and Clang). macOS and iOS builds require macOS with Xcode; Windows builds require Windows desktop build tools. Each target must be built and tested on its supported host.
 
+## Apple-inspired experience
+
+Breezze uses Apple's [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/) for discoverability, content hierarchy, modality and accessibility **without** copying the Apple Music app or using private Apple media APIs. Details are routed through `app/breezze_navigation.dart` (native iOS back gestures, reduced-motion fallback), and Now Playing uses `widgets/bz_transport_controls.dart` for responsive transport controls. Only one `PlayerController` is allowed; `just_audio` plus `audio_session` interfaces with AVFoundation/ExoPlayer and `audio_service` mirrors state to the lock screen. See [architecture contract](../../docs/architecture/BREEZZE_APPLE_PLATFORM_EXPERIENCE.md).
+
 ## Architecture
 
 ```
@@ -91,6 +96,8 @@ packages/api_client/         Typed Breezze API transport and client contracts
 backend/api/                 Auth, catalog, rights, playback and library APIs
 infra/cloudflare/            Edge API and media delivery workers
 docs/design/                 Interface contract and responsive visual spec
+docs/architecture/BREEZZE_APPLE_PLATFORM_EXPERIENCE.md
+                             Apple-inspired UX / native media session architecture and QA gates
 ```
 
 ## Product and rights boundaries
