@@ -11,6 +11,7 @@ import '../../core/audio/playback_source_policy.dart';
 import '../../core/auth/auth_session.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
+import '../../widgets/bz_playlist_artwork.dart';
 import '../player/player_controller.dart';
 import '../video/open_youtube_player.dart';
 import '../video/official_youtube_queue_policy.dart';
@@ -325,12 +326,6 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       );
     }
 
-    final artworks = playlist.tracks
-        .where((item) => item.artworkUrl != null)
-        .map((item) => item.artworkUrl!)
-        .toList();
-    final artwork = artworks.isEmpty ? null : artworks.first;
-
     return Scaffold(
       backgroundColor: theme.bzBackground,
       body: SafeArea(
@@ -375,35 +370,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(BzRadius.modal),
-                        child: artwork == null
-                            ? Container(
-                                width: 220,
-                                height: 220,
-                                color: theme.bzSurface1,
-                                alignment: Alignment.center,
-                                child: BzBnoteMark(
-                                  size: 72,
-                                  color: theme.bzText2,
-                                ),
-                              )
-                            : Image.network(
-                                artwork,
-                                width: 220,
-                                height: 220,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  width: 220,
-                                  height: 220,
-                                  color: theme.bzSurface1,
-                                  alignment: Alignment.center,
-                                  child: BzBnoteMark(
-                                    size: 72,
-                                    color: theme.bzText2,
-                                  ),
-                                ),
-                              ),
+                      child: BzPlaylistArtwork(
+                        size: 220,
+                        artworkUrls: [
+                          for (final track in playlist.tracks) track.artworkUrl,
+                        ],
                       ),
                     ),
                     const SizedBox(height: 22),
