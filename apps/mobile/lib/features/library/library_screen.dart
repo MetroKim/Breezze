@@ -15,6 +15,7 @@ import '../../app/library_section_preferences_store.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
+import '../../widgets/bz_morphing_brand_header.dart';
 import '../downloads/downloads_screen.dart';
 import 'playlist_detail_screen.dart';
 import 'add_to_playlists_sheet.dart';
@@ -451,6 +452,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             padding: const EdgeInsets.fromLTRB(18, 22, 12, 12),
             child: Row(
               children: [
+                const BzCompactBrandMark(size: 38),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text('Library', style: theme.textTheme.displayMedium),
                 ),
