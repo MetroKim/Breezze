@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ArrayUnique, IsArray, IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsBoolean, IsDefined, IsOptional, IsString, IsUUID, MaxLength, ValidateIf } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PlaylistsService } from './playlists.service';
@@ -32,6 +32,15 @@ export class RenamePlaylistDto {
 export class PinPlaylistDto {
   @IsBoolean()
   pinned!: boolean;
+}
+
+export class PlaylistCoverDto {
+  // Explicit null restores the generated cover; omitted fields are invalid.
+  @ValidateIf((dto: PlaylistCoverDto) => dto.coverPngBase64 !== null)
+  @IsDefined()
+  @IsString()
+  @MaxLength(350000)
+  coverPngBase64!: string | null;
 }
 
 export class AddTrackDto {
@@ -85,6 +94,15 @@ export class PlaylistsController {
     @Body() dto: RenamePlaylistDto,
   ) {
     return this.playlists.rename(userId, id, dto.name);
+  }
+
+  @Patch(':id/cover')
+  setCover(
+    @CurrentUser() userId: string,
+    @Param('id') id: string,
+    @Body() dto: PlaylistCoverDto,
+  ) {
+    return this.playlists.setCover(userId, id, dto.coverPngBase64);
   }
 
   @Delete(':id')
