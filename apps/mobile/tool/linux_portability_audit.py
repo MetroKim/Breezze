@@ -53,8 +53,29 @@ def audit_bundle(bundle: Path, arch: str, check_linker: bool = False) -> dict:
     if not assets.is_dir():
         raise BundleAuditError("flutter_assets must be a directory")
 
+    # No packaged symlink may escape the bundle. That would both break
+    # portability and potentially dereference host files in an installer.
+    for candidate in bundle.rglob("*"):
+        if candidate.is_symlink():
+            try:
+                target = candidate.resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise BundleAuditError(
+                    f"Broken or cyclic release symlink: {candidate}"
+                ) from exc
+            if not target.is_relative_to(bundle):
+                raise BundleAuditError(
+                    f"Release symlink escapes bundle: {candidate}"
+                )
+
     elf_paths = [bundle / "breezze"]
-    elf_paths.extend(sorted((bundle / "lib").rglob("*.so")))
+    # Check versioned ELF libraries too, not just '*.so' soname symlinks.
+    elf_paths.extend(sorted(
+        path for path in (bundle / "lib").rglob("*")
+        if path.is_file() and (
+            path.name.endswith(".so") or ".so." in path.name
+        )
+    ))
     for path in elf_paths:
         actual = elf_machine(path)
         if actual != MACHINES[arch]:

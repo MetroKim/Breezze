@@ -80,7 +80,7 @@ flutter build windows
 flutter build ios --no-codesign
 ```
 
-Linux builds require the Flutter Linux desktop dependencies (including GTK development headers, CMake, Ninja and Clang). macOS and iOS builds require macOS with Xcode; Windows builds require Windows desktop build tools. Each target must be built and tested on its supported host.
+Linux builds require the Flutter Linux desktop dependencies (including GTK development headers, CMake, Ninja and Clang). A signed-in Linux desktop session additionally requires a running/unlocked Secret Service keyring such as GNOME Keyring or KWallet; no plaintext token fallback is authorized. macOS and iOS builds require macOS with Xcode; Windows builds require Windows desktop build tools. Each target must be built and tested on its supported host.
 
 ## Apple-inspired experience
 

@@ -52,6 +52,19 @@ class LinuxBundleAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(BundleAuditError, "Not an ELF"):
             audit_bundle(self.bundle, "x86_64")
 
+    def test_versioned_shared_library_is_validated(self):
+        (self.bundle / "lib" / "libcodec.so.2").write_bytes(fake_elf())
+        report = audit_bundle(self.bundle, "x86_64")
+        self.assertEqual(report["checked_native_objects"], 3)
+        (self.bundle / "lib" / "libcodec.so.2").write_bytes(fake_elf(183))
+        with self.assertRaisesRegex(BundleAuditError, "Wrong ELF machine"):
+            audit_bundle(self.bundle, "x86_64")
+
+    def test_rejects_symlink_escaping_release_bundle(self):
+        (self.bundle / "lib" / "libescape.so").symlink_to("/etc/passwd")
+        with self.assertRaisesRegex(BundleAuditError, "symlink escapes"):
+            audit_bundle(self.bundle, "x86_64")
+
 
 if __name__ == "__main__":
     unittest.main()
