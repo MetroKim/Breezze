@@ -425,12 +425,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           playing: playing,
                           onPrevious: controller.previous,
                           onNext: controller.next,
-                          // Seek in this recording; never enqueue another source.
-                          onRewind: () {
-                            final back = player.position - const Duration(seconds: 10);
-                            controller.seekTo(back < Duration.zero
-                                ? Duration.zero : back);
-                          },
                           onTogglePlayPause: controller.togglePlayPause,
                           onShuffle: controller.toggleShuffle,
                           onRepeat: controller.cycleRepeat,
