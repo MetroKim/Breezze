@@ -106,6 +106,42 @@
 - `tools/check_v8_ui_single_source.py` and `tools/test_v8_ui_single_source.py`: refuse missing/duplicated pinned rail or returning duplicate release/chart/mood sections.
 - **Next:** review exact-commit GitHub CI for PR #84, fix failures, check real emulator/system build matrix and compare screenshots for layout parity. Do not merge failing or call this 100% done.
 
+## V8 OLED Black + Listener Experience Upgrade — 22-point design contract (2026-11-26)
+
+**Owner-approved superseding visual directive:** the Breezze design is always **true-black OLED (#000000), white/silent controls**, original transparent **B-note mark + Breezze** wordmark (not the black app icon tile), artwork-first shelves, provider-backed artists/songs, subtle *real-cover* ambient effects, and one full-player shell. This directive overrides previous red/pink accents, promotional/mockup artwork and circular black brand badges.
+
+**Engineering PR:** [#84](https://github.com/MetroKim/Breezze/pull/84), branch `feat/v8-reference-structure-pinned-moods-20261126`; new commits remain **UNVERIFIED** until exact-head GitHub Actions and OS acceptance. Continue the V8-only architecture; no second UI, brand, audio engine, artist database or media rights workaround.
+
+| # | Requirement | Implementation/evidence and precise remaining acceptance |
+|---|---|---|
+| 1, 22 | Exact original backgroundless mark and name | `BzBnoteMark` renders `breezze-symbol-white.svg`, which contains exactly the **vector paths inside** `breezze-app-icon.svg` and no opaque outer rectangle. `BzBrandLockup` combines it with Breezze text in auth, onboarding, Home/New and desktop; source tests added. Must visually certify screen captures |
+| 2 | Previous / Play-Pause / Next | Existing one `BzTransportControls` and mini-player have wired `controller.previous` / `togglePlayPause` / `next`. Verify each on real native/emulator player |
+| 3 | Real songs and artists from providers | Keep `catalogSourceProvider`, Deezer/Spotify search, canonical source IDs and provider artwork, **never mock catalog records in production UI**. Provider metadata and Deezer previews are real but **do not license full-track playback/downloads**. Authorized media catalogue, grants, territory and delivered bytes remain P0 blockers |
+| 4 | Full account/profile page + Switch account + Settings | Existing profile fields, active sessions, revoke and delete account remain. New real `Switch account` signs out with confirmation and uses existing sign-in gate; Settings and Activity navigation wired. Reauthentication is required; do not imply concurrent multi-account session manager. Cross-account tests required |
+| 5 | Playlist 2×2 artwork and editable cover upload | `BzPlaylistArtwork` composes **four distinct genuine saved-track HTTPS images**, full-bleed single cover if only one, original mark if unavailable; Library list and detail use this. **User-uploaded custom cover and cloud storage/sync are NOT YET IMPLEMENTED**; require owner-scoped upload, image processing, RLS, signed storage and persistence |
+| 6 | Artist/photo backgrounds on Explore | `BzDiscoveryActionTile(artworkUrl: ...)` supports restrained black-veiled **real provider artwork**. Featured cards request Deezer releases/charts and a catalog artist image; empty provider results retain dark tile, not fake stock models |
+| 7 | Home section diversity and vertical listening feed | Existing source-backed Made for You, Trending, Recently Played, Mix, Favorites artwork rails. V8 adds pinned mood rail and a **vertical Continue listening** section wired to actual player/queue after the horizontal shelves. Additional algorithmic home categories require supported provider/rights inputs and tests |
+| 8, 15 | OLED black on all pages, minimal dark UI | Root `MaterialApp` forces `ThemeMode.dark` and `bzDarkTheme` uses `#000000`; Settings reports always-on OLED. Check every modal/sheet/third-party embed for unintended colored surfaces |
+| 9 | Silent-white interaction accent | `BzColorsDark.accent` and `accentOnTint` are `#FFFFFF`; navigation and controls consume semantic tokens. Decorative artwork colors must not become interactive-state red/pink |
+| 10, 14 | Smooth album-art ambient glow and blurred mesh | Canonical `BzAmbientBackdrop` already draws actual cover-art blur plus two radial soft washes; V8 adds 420ms crossfades and zero-duration Reduce Motion. Performance budget and dynamic artwork tests remain |
+| 11 | Subtle Home top ambience + elevated shelves | Home adds a very dark neutral top gradient fading to true black; existing elevated `bzSurface1` cards keep hairline separation. Verify on OLED/high contrast |
+| 12 | Full-bleed artwork and looping video | Large artwork exists in `NowPlayingScreen`; full-bleed video and controlled looping are **NOT VERIFIED**. Only licensed video/official YouTube embed may be used, subject to each provider's terms and device capability. Never extract/cache YouTube audiovisual media |
+| 13 | Song/video switch mode with quiet SVGs | Now Playing adds **Find video** with first-party SVG, pauses native audio and opens the existing official-video search with the current song/artist query. It does **not** claim an unverified one-tap identical video match; seamless inline player switching remains |
+| 16 | Subtle top-bar gradient | Home page top gradient added; distinct transparent-scrolled header gradient and device testing still pending |
+| 17 | OLED cold-start splash | Before auth restoration, full-black startup renders original backgroundless mark + Breezze title with white loader. Native Android/iOS launch-screens before Flutter boot still require matching asset setup and simulator screenshots |
+| 18 | Shimmer/skeletons | Existing `BzSkeleton`, `BzSkeletonTrackRow` and `BzSkeletonArtworkGrid` respect Reduced Motion; account/activity/home state placeholders wired |
+| 19 | First-use/reset onboarding and mood prompts | Existing authenticated first-use/404 reset detection, regional/genre preference store and onboarding overlay retained. Dedicated **mood prompt/persistence and favorite artist choice** not yet implemented; must be stored on backend preference model, not faked in UI |
+| 20 | Activity unread/read split + suggested follows | `NotificationsScreen` uses real backend notifications and `markNotificationRead`, clear Unread/Earlier groups, unread white indicator, separators. Suggested artists are fetched from real Deezer artist results keyed to the owner's onboarding interests and Follow uses owner-scoped `FollowedArtistStore`. No fabricated suggestions |
+| 21 | Every section fully functional | **NOT COMPLETE.** Requires exact-head Flutter static analysis and widget tests, native desktop/mobile OS and accessibility screenshots, auth/account isolation, full-song rights-granted playback/offline delivery and reliable AutoMix acceptance. Never label source-only code "100%" |
+
+**Explicit retained restrictions:** keep four tabs Home/New/Library/Search, native previous/pause/next and one Now Playing, Supabase authentication, owner-scoped storage, authorized media delivery, emulator/native quality gates and no release or production deployment. No unauthorized use of upstream `ytmusic_clone` source/assets. The earlier generated mockup uses decorative imagery/colors and is **not a screenshot or verification of actual Breezze UI**.
+
+### V8 OLED acceptance tests
+- Widget tests: `bz_brand_lockup_test.dart`, `bz_morphing_brand_header_test.dart`, `bz_playlist_artwork_test.dart`; design-system `bz_theme_fallback_test.dart`, `bz_ambient_backdrop_test.dart`; `browse_screen_test.dart` and `home_screen_test.dart` for source-backed navigation.
+- CI: `tools/check_v8_ui_single_source.py` + Python unit regression, `flutter analyze`, `flutter test`, and Android debug/release, iOS, macOS, Linux, Windows and Web builds. Distinguish source/compilation from actual device appearance and playback.
+- Account acceptance: switch/sign-out session isolation; cloud and offline follows/favorites/cover ownership; do not surface previous owner's activity during a slow network response.
+- **Release remains blocked** pending full native and authorized playback tests.
+
 ## Product contract (single source of truth)
 - **Four top-level tabs in order:** **Home**, **New** (formerly Browse), **Library**, **Search**; no fifth Radio/Downloads/Settings tab.
 - **Home:** listener-scoped history, favorites, follows, personalized shelves with honest source metadata. Do not label algorithmic shelves or charts as official without a real dataset.
