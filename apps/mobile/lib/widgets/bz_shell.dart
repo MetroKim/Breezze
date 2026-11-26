@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/breezze_navigation.dart';
+import '../app/main_tab.dart';
 import 'bz_brand_icons.dart';
 import 'bz_playback_scrubber.dart';
 import '../features/browse/browse_screen.dart';
@@ -56,11 +57,11 @@ class _BzHomeState extends ConsumerState<BzHome> {
     }
   }
 
-  static const _tabs = [
-    _TabDestination('Home', 'assets/icons/home.svg'),
-    _TabDestination('Browse', 'assets/icons/new.svg'),
-    _TabDestination('Library', 'assets/icons/library.svg'),
-    _TabDestination('Search', 'assets/icons/search.svg'),
+  static final _tabs = <_TabDestination>[
+    _TabDestination(breezzeMainTabLabels[0], 'assets/icons/home.svg'),
+    _TabDestination(breezzeMainTabLabels[1], 'assets/icons/new.svg'),
+    _TabDestination(breezzeMainTabLabels[2], 'assets/icons/library.svg'),
+    _TabDestination(breezzeMainTabLabels[3], 'assets/icons/search.svg'),
   ];
 
   @override
