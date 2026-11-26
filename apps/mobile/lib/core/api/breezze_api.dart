@@ -207,6 +207,9 @@ class BreezzeApi {
   Future<Map<String, dynamic>> spotifyArtistPage(String artistId) =>
       _get('/providers/spotify/artists/${Uri.encodeComponent(artistId)}');
 
+  Future<Map<String, dynamic>> spotifyAlbumPage(String albumId) =>
+      _get('/providers/spotify/albums/${Uri.encodeComponent(albumId)}');
+
   Future<Map<String, dynamic>> searchSpotify(String query) =>
       _get('/providers/spotify/search?q=${Uri.encodeQueryComponent(query)}');
 
