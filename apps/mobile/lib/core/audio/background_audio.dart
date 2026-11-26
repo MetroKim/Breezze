@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -47,6 +49,20 @@ class NoopBackgroundBridge implements BackgroundAudioBridge {
 final backgroundBridgeProvider =
     StateProvider<BackgroundAudioBridge>((ref) => NoopBackgroundBridge());
 
+/// Visible, non-secret diagnostic for media controls. It reports whether
+/// the OS bridge actually started, not whether the Dart package exists.
+enum BackgroundSessionAvailability {
+  initializing,
+  active,
+  unavailable,
+  unsupported,
+}
+
+final backgroundSessionAvailabilityProvider =
+    StateProvider<BackgroundSessionAvailability>(
+        (ref) => BackgroundSessionAvailability.initializing);
+
+
 /// Keeps the OS media session in sync with the player state — one
 /// subscription, app-wide.
 class BackgroundAudioSync {
@@ -54,6 +70,34 @@ class BackgroundAudioSync {
   ProviderSubscription<PlayerState>? _subscription;
 
   BackgroundAudioSync({required this.ref});
+
+  void _publish(
+    BackgroundAudioBridge bridge, {
+    required String title,
+    required String artist,
+    String? artworkUrl,
+    required bool playing,
+  }) {
+    // A desktop D-Bus/SMTC server may vanish *after* initialization. Future
+    // failures must never escape an unawaited listener and crash playback.
+    // The single controller remains authoritative; only its OS projection
+    // becomes temporarily unavailable.
+    unawaited(
+      bridge.update(
+        title: title,
+        artist: artist,
+        artworkUrl: artworkUrl,
+        playing: playing,
+      ).catchError((Object error, StackTrace stackTrace) {
+        if (ref.read(backgroundBridgeProvider) != bridge) return;
+        ref.read(backgroundSessionAvailabilityProvider.notifier).state =
+            BackgroundSessionAvailability.unavailable;
+        ref.read(backgroundBridgeProvider.notifier).state =
+            NoopBackgroundBridge();
+      }),
+    );
+  }
+
 
   void start() {
     // Native media-session initialization can finish after the player has
@@ -79,10 +123,11 @@ class BackgroundAudioSync {
       if (next.playbackState == PlaybackState.idle || track == null) {
         // Clear OS metadata without invoking the handler's user-requested
         // stop action (which also stops the PlayerController).
-        bridge.update(title: '', artist: '', playing: false);
+        _publish(bridge, title: '', artist: '', playing: false);
         return;
       }
-      bridge.update(
+      _publish(
+        bridge,
         title: track.title ?? 'Unknown track',
         artist: track.artist ?? '',
         artworkUrl: track.artworkUrl,
