@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:ui' as ui;
+
+import 'package:file_selector/file_selector.dart';
 
 import 'package:breezze_design_system/breezze_design_system.dart';
 import 'package:breezze_audio_contracts/audio_contracts.dart';
@@ -231,6 +235,78 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         );
   }
 
+  /// The user explicitly selects the image. Downsample the picture to a
+  /// bounded local thumbnail rather than persisting a multi-megabyte original.
+  /// Account switching during the native file chooser cancels the update.
+  Future<void> _chooseCover(UserPlaylist playlist) async {
+    if (!_ownerStillActive()) return;
+    try {
+      final file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Playlist cover image',
+              extensions: ['png', 'jpg', 'jpeg', 'webp']),
+        ],
+      );
+      if (file == null || !_ownerStillActive()) return;
+      final original = await file.readAsBytes();
+      if (original.isEmpty || original.length > 10 * 1024 * 1024) {
+        throw const FormatException('Image must be smaller than 10 MB');
+      }
+      final codec = await ui.instantiateImageCodec(
+        original, targetWidth: 320, targetHeight: 320,
+        allowUpscaling: false,
+      );
+      final frame = await codec.getNextFrame();
+      final png = await frame.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      frame.image.dispose();
+      codec.dispose();
+      if (png == null || png.lengthInBytes > 560000) {
+        throw const FormatException('Choose a smaller image');
+      }
+      if (!_ownerStillActive()) return;
+      final saved = await _store.setLocalCover(
+        widget.ownerId, playlist.id,
+        base64Encode(png.buffer.asUint8List(
+          png.offsetInBytes, png.lengthInBytes,
+        )),
+      );
+      if (!_ownerStillActive() || !saved) return;
+      await _load(sync: false);
+      widget.onChanged?.call();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Playlist cover saved on this device.'),
+        ));
+      }
+    } catch (_) {
+      if (_ownerStillActive()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Unable to save this image. Choose a PNG, JPEG or WebP under 10 MB.'),
+        ));
+      }
+    }
+  }
+
+  Future<void> _restoreArtwork(UserPlaylist playlist) async {
+    if (!_ownerStillActive()) return;
+    try {
+      final saved = await _store.setLocalCover(
+        widget.ownerId, playlist.id, null,
+      );
+      if (!_ownerStillActive() || !saved) return;
+      await _load(sync: false);
+      widget.onChanged?.call();
+    } catch (_) {
+      if (_ownerStillActive()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not restore generated playlist artwork.'),
+        ));
+      }
+    }
+  }
+
   Future<void> _rename(UserPlaylist playlist) async {
     final controller = TextEditingController(text: playlist.name);
     final name = await showDialog<String>(
@@ -345,10 +421,21 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     PopupMenuButton<String>(
                       icon: BzSvgIcon(name: 'more-vertical'),
                       onSelected: (value) {
+                        if (value == 'cover') _chooseCover(playlist);
+                        if (value == 'restore_cover') _restoreArtwork(playlist);
                         if (value == 'rename') _rename(playlist);
                         if (value == 'delete') _delete(playlist);
                       },
                       itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'cover',
+                          child: Text('Choose cover photo'),
+                        ),
+                        if (playlist.coverPngBase64 != null)
+                          PopupMenuItem(
+                            value: 'restore_cover',
+                            child: Text('Use generated cover'),
+                          ),
                         PopupMenuItem(
                           value: 'rename',
                           child: Text('Rename'),
@@ -372,6 +459,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     Center(
                       child: BzPlaylistArtwork(
                         size: 220,
+                        customArtworkBase64: playlist.coverPngBase64,
                         artworkUrls: [
                           for (final track in playlist.tracks) track.artworkUrl,
                         ],
