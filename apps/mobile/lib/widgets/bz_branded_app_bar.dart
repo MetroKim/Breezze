@@ -28,6 +28,8 @@ class BzBrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final condensed = MediaQuery.textScalerOf(context).scale(1) >= 1.4 ||
+        MediaQuery.sizeOf(context).width < 380;
     return AppBar(
       toolbarHeight: preferredSize.height,
       automaticallyImplyLeading: leading == null,
@@ -39,7 +41,20 @@ class BzBrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
           const BzCompactBrandMark(size: 34),
           const SizedBox(width: 10),
           Flexible(
-            child: Column(
+            child: Semantics(
+              header: true,
+              label: 'Breezze, $title${subtitle == null ? '' : ', $subtitle'}',
+              child: ExcludeSemantics(
+                child: condensed
+                    ? Text(
+                        'Breezze · $title',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
+                    : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -71,6 +86,8 @@ class BzBrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
               ],
+            ),
+              ),
             ),
           ),
         ],
