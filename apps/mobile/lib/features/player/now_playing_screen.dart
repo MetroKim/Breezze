@@ -425,6 +425,15 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           playing: playing,
                           onPrevious: controller.previous,
                           onNext: controller.next,
+                          onRewindTen: () {
+                            final target = player.position - const Duration(seconds: 10);
+                            controller.seekTo(target < Duration.zero ? Duration.zero : target);
+                          },
+                          onForwardTen: () {
+                            final target = player.position + const Duration(seconds: 10);
+                            controller.seekTo(player.duration > Duration.zero && target > player.duration
+                                ? player.duration : target);
+                          },
                           onTogglePlayPause: controller.togglePlayPause,
                           onShuffle: controller.toggleShuffle,
                           onRepeat: controller.cycleRepeat,
