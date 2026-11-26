@@ -7,7 +7,7 @@ external entities, DTDs, or network resources.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from xml.parsers import expat
+import pyexpat as expat  # Built-in native parser; all DTD/entity handlers reject
 
 
 class SafeXmlError(ValueError):
