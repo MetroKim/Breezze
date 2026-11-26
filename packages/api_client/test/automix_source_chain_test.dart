@@ -64,6 +64,19 @@ void main() {
       expect(results.single.artist, 'Kavinsky');
     });
 
+    test('keeps a different recording length even with the same song and artist', () async {
+      final first = _StubSource('primary');
+      final later = _StubSource('fallback', track: ProviderTrack(
+        breezzeTrackId: 'bz-2',
+        providerTrackId: 'provider-track-2',
+        title: 'Nightcall',
+        artist: 'Kavinsky',
+        duration: const Duration(seconds: 290),
+      ));
+      final result = await SourceChain([first, later]).searchAll('Nightcall');
+      expect(result.map((track) => track.id), ['bz-1', 'bz-2']);
+    });
+
     test('skips unsupported metadata adapters without failing the chain',
         () async {
       final unavailable = _StubSource(
@@ -82,10 +95,11 @@ void main() {
 }
 
 class _StubSource implements ProviderAdapter {
-  _StubSource(this.id, {this.result});
+  _StubSource(this.id, {this.result, this.track});
 
   final String id;
   final ProviderOp<List<ProviderTrack>>? result;
+  final ProviderTrack? track;
   String? lastQuery;
 
   @override
@@ -99,7 +113,7 @@ class _StubSource implements ProviderAdapter {
     lastQuery = query;
     return result ??
         ProviderOk([
-          ProviderTrack(
+          if (track != null) track! else ProviderTrack(
             breezzeTrackId: 'bz-1',
             providerTrackId: 'provider-track-1',
             title: 'Nightcall',
