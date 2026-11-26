@@ -31,7 +31,7 @@ Use a **Breezze-owned, generated 125-second synthetic recording** stored locally
 2. Start the authorized synthetic 125-second recording. Confirm 125s duration, seek to 100s, elapsed playback increases, and the track reaches its end naturally.
 3. While playing, press Home, lock screen, change screen orientation, use the notification and headset/lock-screen controls for pause, resume, seek, previous/next. Confirm queue and playback state are consistent.
 4. With audio playing on a Bluetooth headset, **physically disconnect it**. Audio must pause *before* falling back to the speaker. Reconnect: it must not resume without an explicit Play.
-5. Interrupt audio using a real phone call, another exclusive audio-focus app and voice assistant. Confirm that the app does not auto-resume and that explicit Play works afterwards. Inspect `adb shell dumpsys media_session` and `adb logcat` without including access tokens in evidence.
+5. With audio **playing**, receive a real phone call: pause immediately and **auto-resume after OS audio focus returns**, only if no user pause/stop/track change intervened. Repeat while already paused (must stay paused), then pause manually during the call (must stay paused), then switch tracks during the call (must not restart old audio). Test a short call while the backend pause RPC is delayed: a late pause must never defeat resume. Siri/voice assistants and other exclusive audio-focus interruptions may have indistinguishable OS event types; record their observed behavior separately and treat unwanted restarts as release failures. Inspect `adb shell dumpsys media_session` and redacted `adb logcat`.
 6. Turn on TalkBack. In sign-in, Home, Search, Library, Now Playing, queue and downloads, verify spoken labels, logical focus order, 200%+ text, 48dp touch targets, and actions without drag-only gestures.
 7. Switch accounts and verify cached queues, downloads and metadata never leak between users. Sign out and confirm grants are unusable.
 8. Record device model/OS **without persistent device serials**, source SHA, test time, test account ID pseudonym, expected/actual results, screenshots with redaction and operator signature.
@@ -40,7 +40,7 @@ Use a **Breezze-owned, generated 125-second synthetic recording** stored locally
 
 1. Install a development-signed build on an actual iPhone via Xcode/test distribution; record its candidate SHA and signing identity without private key.
 2. Start the 125s original recording and seek near end. Lock the phone; use Lock Screen, Control Center and physical headset buttons.
-3. Trigger a real phone/FaceTime call, Siri and AirPods/AirPlay route handoff. Confirm a paused state and **no auto-resume** after focus returns or an output device disappears.
+3. Trigger a real phone/FaceTime call: playback must pause immediately, then **auto-resume after focus returns** only if it was playing before interruption and no manual pause/stop/track switch occurred. Re-test while already paused and after manually pausing mid-call (no auto-resume). A disconnected AirPods/AirPlay output must always pause **without** auto-resuming or playing on the speaker. Test Siri and other exclusive focus separately because iOS audio-session event types do not reliably identify the initiating app.
 4. Enable VoiceOver and Dynamic Type. Verify semantic labels, rotor navigation, reading order, large-text clipping, accessible queue reorder alternatives and all account/streaming error messages.
 5. Run Xcode Accessibility Inspector Audit on primary screens, recording unresolved findings as failures. Test VoiceOver on the physical iPhone rather than claiming simulator semantics is equivalent.
 6. Document verified email/Google/Apple sign-in only for activated providers, protected Keychain tokens, logout and account switch.
@@ -49,7 +49,7 @@ Use a **Breezze-owned, generated 125-second synthetic recording** stored locally
 
 - Start a release **bundle** inside a real graphical user session with Secret Service keyring and PulseAudio/PipeWire available.
 - From the user's session run `bash apps/mobile/tool/check_linux_mpris_session.sh`. This checks MPRIS interface registration only.
-- With original QA audio playing, use `playerctl -p breezze play-pause` (or the MPRIS bus name detected by the probe), hardware media keys, headset disconnect, sleep/resume and window close/minimize. Verify actual audio, playback status, pause/skip, and no unauthorized auto-resume.
+- With original QA audio playing and `playerctl` installed, run `bash apps/mobile/tool/check_linux_mpris_transport.sh` to verify **real pause/play/PlayPause state changes** (not just interface existence). Then use hardware media keys, headset disconnect, sleep/resume and window close/minimize. Verify actual audio, playback status, pause/skip and no unauthorized route-change auto-resume.
 - Current `audio_service_mpris` does **not implement the MPRIS Seek method**; do not mark Linux desktop seek-from-OS PASS until a tested replacement/extension implements it. SetPosition can work independently.
 - Test package formats individually (.deb, .rpm, AppImage, Flatpak, Snap and portable bundle). On sandboxed builds retest desktop portals, credential keyrings, R2 HTTPS, media permissions, MPRIS and libmpv codecs. Alpine/musl requires a separately validated runtime; do not describe a glibc bundle as universally compatible.
 
@@ -60,7 +60,7 @@ Use a **Breezze-owned, generated 125-second synthetic recording** stored locally
 
 ## Evidence required for a PASS
 
-For **each** target/OS profile: `git_sha`, exact test case, app version/build ID, physical/simulator designation, OS release, CPU arch, observed output/behavior, required screenshot/log (redacted), tester/date, explicit result PASS/FAIL/BLOCKED, and issue or retest link for any failure. A CI status of queued, cancelled or timed out is never PASS.
+For **each** target/OS profile: `git_sha`, exact test case, app version/build ID, physical/simulator designation, OS release, CPU arch, observed output/behavior, required screenshot/log (redacted), tester/date, explicit result PASS/FAIL/BLOCKED, and issue or retest link for any failure. A CI status of queued, cancelled or timed out is never PASS. The V8 mock call-resume tests validate *controller sequencing*, not telephony permission/focus events on real Android/iOS hardware. The Linux transport script verifies MPRIS state changes only while an authorized track is playing; it does not certify hardware keys, waveform, `Seek` support or physical Bluetooth.
 
 The release gate closes only if (1) the same SHA passes code/build/unit/CI, (2) all required physical and accessibility acceptance evidence exists, (3) signed package verification passes, (4) rights/licensing approval exists for offered tracks/territories and offline rights, and (5) the owner explicitly lifts the freeze.
 
