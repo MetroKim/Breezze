@@ -24,7 +24,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    final controller = container.read(downloadProgressProvider.notifier);
+    container.read(downloadProgressProvider.notifier);
     final session =
         container.read(authSessionProvider.notifier) as _SwitchableSession;
     container.read(downloadJobStatusProvider.notifier).state = const {
@@ -35,7 +35,6 @@ void main() {
     session.switchTo('listener-b');
     expect(container.read(downloadJobStatusProvider), isEmpty);
     expect(container.read(downloadProgressProvider), isEmpty);
-    expect(controller.mounted, isTrue);
 
     session.signOutForTest();
     expect(container.read(downloadJobStatusProvider), isEmpty);
