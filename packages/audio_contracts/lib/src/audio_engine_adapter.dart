@@ -83,6 +83,17 @@ abstract interface class AudioEngineAdapter {
   Stream<PlaybackState> get engineStateStream;
 }
 
+/// Optional native focus-restoration capability. Only the global player
+/// may act on requests, after validating the active grant and session.
+abstract interface class CallInterruptionResumeSource {
+  /// Emits a one-shot true signal only after a matching phone/exclusive
+  /// interruption ended; never on Bluetooth/headphone disconnection.
+  Stream<bool> get callResumeRequests;
+
+  /// A manual pause, stop, track change or sign-out cancels a pending resume.
+  void cancelPendingCallResume();
+}
+
 /// Queue entries must have stable IDs, source context, version and
 /// origin (§53.4) — they are NOT bare track references.
 class QueueEntry {
