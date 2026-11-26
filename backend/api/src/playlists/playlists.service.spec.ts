@@ -62,6 +62,44 @@ describe('PlaylistsService tenant isolation and ordering', () => {
     });
   });
 
+  it('saves a real small PNG thumbnail only on an owned playlist', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC' +
+      'AAAAC0lEQVR42mP8/x8AAwMCAO+/+5AAAAAASUVORK5CYII=',
+      'base64',
+    ).toString('base64');
+    prisma.playlist.updateMany.mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    await expect(service.setCover('user-a', 'playlist-a', png))
+      .resolves.toEqual({ id: 'playlist-a', coverPngBase64: png });
+    expect(prisma.playlist.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-a', id: 'playlist-a' },
+      data: { coverPngBase64: png },
+    });
+    await expect(service.setCover('user-b', 'playlist-a', png))
+      .rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects fake PNG/base64 and oversized cover before database writes', async () => {
+    await expect(service.setCover('user-a', 'playlist-a', 'YWJj'))
+      .rejects.toThrow('PLAYLIST_COVER_INVALID_PNG');
+    await expect(service.setCover('user-a', 'playlist-a', '*'))
+      .rejects.toThrow('PLAYLIST_COVER_INVALID_ENCODING');
+    await expect(service.setCover('user-a', 'playlist-a', 'A'.repeat(350001)))
+      .rejects.toThrow('PLAYLIST_COVER_INVALID_ENCODING');
+    expect(prisma.playlist.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('clears the cover only for its owner', async () => {
+    prisma.playlist.updateMany.mockResolvedValue({ count: 1 });
+    await expect(service.setCover('user-a', 'playlist-a', null))
+      .resolves.toEqual({ id: 'playlist-a', coverPngBase64: null });
+    expect(prisma.playlist.updateMany).toHaveBeenCalledWith({
+      where: { id: 'playlist-a', userId: 'user-a' },
+      data: { coverPngBase64: null },
+    });
+  });
+
   it('pins only an owned playlist and rejects cross-account changes',
       async () => {
     prisma.playlist.updateMany.mockResolvedValueOnce({ count: 1 })
