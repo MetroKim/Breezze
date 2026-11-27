@@ -145,6 +145,8 @@ class _YouTubeMusicClientScreenState
   int _accountGeneration = 0;
   bool _accountLoading = true;
   bool _accountBusy = false;
+  bool _accountDiagnosticBusy = false;
+  String? _accountDiagnosticStatus;
   String? _accountError;
   Map<String, dynamic>? _account;
   String? _accountOwnerId;
@@ -196,6 +198,8 @@ class _YouTubeMusicClientScreenState
       _accountOwnerId = current.userId;
       _account = null;
       _accountPlaylists = [];
+      _accountDiagnosticStatus = null;
+      _accountDiagnosticBusy = false;
       _accountLoading = true;
       _accountError = null;
     });
@@ -271,6 +275,71 @@ class _YouTubeMusicClientScreenState
     }
   }
 
+  /// Verify the separately consented Google YouTube Data API login.
+  /// Never reuse its token as an unofficial YouTube Music audio credential.
+  Future<void> _diagnoseYouTubeLogin() async {
+    final owner = ref.read(authSessionProvider);
+    if (owner is! AuthSignedIn || _accountDiagnosticBusy ||
+        _accountBusy || _account?['connected'] != true) return;
+    final requestGeneration = _accountGeneration;
+    setState(() {
+      _accountDiagnosticBusy = true;
+      _accountDiagnosticStatus = null;
+    });
+    try {
+      final data = await ref.read(authSessionProvider.notifier)
+          .api.youtubeAccountDiagnostics();
+      final authorization = data['googleAuthorization'];
+      if (data['provider'] != 'youtube_data_api' ||
+          data['directAudioGrant'] != false ||
+          !const [
+            'verified',
+            'reconnect_required',
+            'provider_unavailable',
+            'channel_mismatch',
+            'not_connected',
+          ].contains(authorization)) {
+        throw const FormatException('UNEXPECTED_AUTH_DIAGNOSTIC');
+      }
+      if (!mounted || requestGeneration != _accountGeneration) return;
+      final latest = ref.read(authSessionProvider);
+      if (latest is! AuthSignedIn || latest.userId != owner.userId) return;
+      setState(() => _accountDiagnosticStatus = authorization as String);
+    } catch (_) {
+      if (!mounted || requestGeneration != _accountGeneration) return;
+      final latest = ref.read(authSessionProvider);
+      if (latest is! AuthSignedIn || latest.userId != owner.userId) return;
+      setState(() => _accountDiagnosticStatus = 'provider_unavailable');
+    } finally {
+      if (mounted && requestGeneration == _accountGeneration) {
+        final latest = ref.read(authSessionProvider);
+        if (latest is AuthSignedIn && latest.userId == owner.userId) {
+          setState(() => _accountDiagnosticBusy = false);
+        }
+      }
+    }
+  }
+
+  String _youtubeLoginExplanation(String status) {
+    switch (status) {
+      case 'verified':
+        return 'Google YouTube login verified for your read-only account '
+            'and playlists. This is NOT an InnerTube session or a native '
+            'YouTube Music audio grant.';
+      case 'reconnect_required':
+        return 'Google authorization expired or was revoked. Disconnect '
+            'and connect YouTube again to restore read-only access.';
+      case 'channel_mismatch':
+        return 'The connected channel did not match the authorized Google '
+            'account. Reconnect to verify the correct channel.';
+      case 'not_connected':
+        return 'No separate Google YouTube account is connected.';
+      default:
+        return 'Google YouTube login could not be verified right now. '
+            'Try again when the backend and Google API are available.';
+    }
+  }
+
   Future<void> _disconnectAccount() async {
     final current = ref.read(authSessionProvider);
     if (current is! AuthSignedIn || _accountBusy) return;
@@ -306,6 +375,8 @@ class _YouTubeMusicClientScreenState
       setState(() {
         _account = {'available': true, 'connected': false};
         _accountPlaylists = [];
+        _accountDiagnosticStatus = null;
+        _accountDiagnosticBusy = false;
         _accountError = null;
       });
     } catch (_) {
@@ -386,12 +457,27 @@ class _YouTubeMusicClientScreenState
                   child: const Text('Refresh connection'),
                 ),
                 if (connected)
+                  OutlinedButton(
+                    onPressed: _accountDiagnosticBusy || _accountBusy
+                        ? null : _diagnoseYouTubeLogin,
+                    child: Text(_accountDiagnosticBusy
+                        ? 'Checking Google login...' : 'Check Google login'),
+                  ),
+                if (connected)
                   TextButton(
                     onPressed: _accountBusy ? null : _disconnectAccount,
                     child: const Text('Disconnect'),
                   ),
               ],
             ),
+            if (sameOwner && _accountDiagnosticStatus != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _youtubeLoginExplanation(_accountDiagnosticStatus!),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.bzText2),
+              ),
+            ],
             if (sameOwner && _accountError != null) ...[
               const SizedBox(height: 8),
               Text(_accountError!,
@@ -473,6 +559,8 @@ class _YouTubeMusicClientScreenState
         _account = null;
         _accountOwnerId = null;
         _accountPlaylists = [];
+        _accountDiagnosticStatus = null;
+        _accountDiagnosticBusy = false;
         _accountError = null;
         _accountLoading = true;
         _accountBusy = false;
