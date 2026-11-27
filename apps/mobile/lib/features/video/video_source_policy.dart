@@ -1,7 +1,7 @@
 /// The video player accepts only explicitly configured Breezze media origins
 /// and fresh server-signed stream grants. Never treat a valid URL shape from
 /// another host as evidence that Breezze owns or can stream that recording.
-const defaultBreezzeVideoCdnOrigin = 'https://media.breezze.app';
+const defaultBreezzeVideoCdnOrigin = 'https://breezze-media.ykw8vmq7ph.workers.dev';
 
 const configuredBreezzeVideoCdnOrigin = String.fromEnvironment(
   'BREEZZE_VIDEO_CDN_ORIGIN',
