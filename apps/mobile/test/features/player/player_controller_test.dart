@@ -71,6 +71,11 @@ void main() {
     await playPending;
     expect(engine.prepareCount, 0);
     expect(engine.playCount, 0);
+    // A delayed native callback from the previous item cannot turn a
+    // cancelled/restored queue back into playing without a fresh grant.
+    engine.emit(PlaybackState.playing);
+    await Future<void>.delayed(Duration.zero);
+    expect(player.state.playbackState, PlaybackState.paused);
 
     // An explicit Resume obtains a NEW grant, not the cancelled URL.
     await player.resume();
@@ -109,6 +114,10 @@ void main() {
     await Future.wait([playPending, pausePending]);
     expect(engine.playCount, 0);
     expect(engine.stopCount, 1);
+    engine.emit(PlaybackState.ended);
+    await Future<void>.delayed(Duration.zero);
+    expect(player.state.playbackState, PlaybackState.paused);
+    expect(resolver.calls, 1);
 
     await player.resume();
     expect(resolver.calls, 2);

@@ -373,9 +373,11 @@ class PlayerController extends Notifier<PlayerState> {
       // Ignore events emitted by the previous media item while the new
       // source is being resolved/prepared.
       if (state.playbackState == PlaybackState.idle ||
+          // A cancelled preparation/restored queue has no attached source.
+          // Late callbacks from the previous native item must not flip it
+          // into playing, failed, or ended after the listener pressed Pause.
           (_activeSource == null &&
-              state.playbackState == PlaybackState.paused &&
-              engineState == PlaybackState.idle) ||
+              state.playbackState == PlaybackState.paused) ||
           state.playbackState == PlaybackState.resolving ||
           state.playbackState == PlaybackState.loading ||
           state.playbackState == PlaybackState.transitioning) {
