@@ -93,8 +93,42 @@ jobs:
           print(phones[0]["udid"])
           ')
           echo "id=$simulator" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$simulator" || true
-          xcrun simctl bootstatus "$simulator" -b
+          SIMULATOR_ID="$simulator" python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          simulator = os.environ["SIMULATOR_ID"]
+
+          def boot():
+              state = subprocess.run(
+                  ["xcrun", "simctl", "list", "devices", "-j"],
+                  check=True, capture_output=True, text=True, timeout=35)
+              devices = json.loads(state.stdout)["devices"]
+              matches = [d for group in devices.values() for d in group
+                         if d["udid"] == simulator]
+              if not matches:
+                  raise RuntimeError("Simulator became unavailable")
+              if matches[0]["state"] != "Booted":
+                  subprocess.run(["xcrun", "simctl", "boot", simulator],
+                                 check=True, timeout=70)
+              subprocess.run(["xcrun", "simctl", "bootstatus", simulator, "-b"],
+                             check=True, timeout=200)
+
+          for attempt in (1, 2):
+              try:
+                  boot()
+                  print("iPhone simulator boot completed", flush=True)
+                  break
+              except (subprocess.SubprocessError, OSError, RuntimeError) as e:
+                  print(f"iPhone simulator startup attempt {attempt} failed: {type(e).__name__}",
+                        flush=True)
+                  subprocess.run(["xcrun", "simctl", "shutdown", simulator],
+                                 check=False, timeout=35)
+                  if attempt == 2:
+                      sys.exit("SIMULATOR_BOOT_UNAVAILABLE")
+          PY
       - name: Verify actual AVFoundation MP4 initialization, seek and replay
         timeout-minutes: 30
         working-directory: apps/mobile
