@@ -22,6 +22,13 @@ export class YoutubeAccountController {
     return this.accounts.status(userId);
   }
 
+  @Get('diagnostics')
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(JwtAuthGuard)
+  diagnostics(@CurrentUser() userId: string) {
+    return this.accounts.diagnostics(userId);
+  }
+
   @Post('start')
   @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', 'private, no-store')

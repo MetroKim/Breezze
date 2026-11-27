@@ -19,6 +19,7 @@ import { ReplayModule } from './replay/replay.module';
 import { ClassicalModule } from './classical/classical.module';
 import { AdminModule } from './admin/admin.module';
 import { ProvidersModule } from './providers/providers.module';
+import { AudioProofModule } from './audio-proof/audio-proof.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ModerationModule } from './moderation/moderation.module';
 import { DiscoveryModule } from './discovery/discovery.module';
@@ -47,6 +48,7 @@ import { CloudflareAwareThrottlerGuard } from './cloudflare-aware-throttler.guar
     ClassicalModule,
     AdminModule,
     ProvidersModule,
+    AudioProofModule,
     YoutubeAccountModule,
     NotificationsModule,
     ModerationModule,

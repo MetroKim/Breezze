@@ -326,6 +326,55 @@ export class YoutubeAccountService {
     return payload.access_token;
   }
 
+  /**
+   * User-triggered read-only OAuth connectivity diagnostic.
+   * Confirms Google authorized our YouTube Data API client; it deliberately
+   * does NOT pass OAuth credentials to InnerTube or request native audio.
+   */
+  async diagnostics(userId: string) {
+    const result = {
+      provider: 'youtube_data_api',
+      oauthScope: 'youtube.readonly',
+      googleAuthorization: 'not_connected',
+      innerTubeUserSession: 'not_tested',
+      directAudioGrant: false,
+      officialPlaybackMode: 'visible_youtube_player',
+    };
+    const record = await this.prisma.youtubeAccountConnection.findUnique({
+      where: { userId },
+      select: { channelId: true },
+    });
+    if (!record) return result;
+    try {
+      const token = await this.refreshedToken(userId);
+      const response = await fetch(CHANNEL_ENDPOINT, {
+        headers: { Authorization: 'Bearer ' + token },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.status === 401) {
+        return { ...result, googleAuthorization: 'reconnect_required' };
+      }
+      if (!response.ok) {
+        return { ...result, googleAuthorization: 'provider_unavailable' };
+      }
+      const payload = await response.json() as {
+        items?: Array<{ id?: unknown }>;
+      };
+      const ownChannel = Array.isArray(payload.items) &&
+        payload.items.some(item => item?.id === record.channelId);
+      return {
+        ...result,
+        googleAuthorization: ownChannel ? 'verified' : 'channel_mismatch',
+      };
+    } catch (error) {
+      return {
+        ...result,
+        googleAuthorization: error instanceof UnauthorizedException
+          ? 'reconnect_required' : 'provider_unavailable',
+      };
+    }
+  }
+
   async playlists(userId: string) {
     const access = await this.refreshedToken(userId);
     const response = await fetch(PLAYLIST_ENDPOINT, {

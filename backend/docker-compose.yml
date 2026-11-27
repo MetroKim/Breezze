@@ -69,6 +69,25 @@ services:
       timeout: 5s
       retries: 3
 
+  # Offline by default. Enable only for nonproduction experiments with
+  # explicitly rights-cleared test media. No anonymous audio proxy.
+  unofficial-youtube:
+    profiles: ["experimental"]
+    build:
+      context: ./unofficial-youtube
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: "8181"
+      BREEZZE_INNERTUBE_AUDIO_EXPERIMENT: ${BREEZZE_INNERTUBE_AUDIO_EXPERIMENT:-false}
+      BREEZZE_AUDIO_TEST_ALLOWLIST: ${BREEZZE_AUDIO_TEST_ALLOWLIST:-}
+      BREEZZE_INTERNAL_AUDIO_TEST_TOKEN: ${BREEZZE_INTERNAL_AUDIO_TEST_TOKEN:-}
+    ports:
+      - "127.0.0.1:8181:8181"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8181/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 6s
+      retries: 3
 
 volumes:
   pgdata:

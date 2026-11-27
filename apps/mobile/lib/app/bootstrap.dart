@@ -237,6 +237,40 @@ class LiveResolver implements PlaybackResolver {
     final api = _ref.read(authSessionProvider.notifier).api;
     if (api.accessToken == null) return null;
 
+    if (isPublicAudioProofTrackId(track.id)) {
+      // Explicit nonproduction proof only; a genuine public-domain recording
+      // tested live from Commons. No YouTube metadata or audio extraction.
+      const proofEnabled = bool.fromEnvironment(
+        'BREEZZE_PUBLIC_AUDIO_PROOF',
+        defaultValue: false,
+      );
+      if (!proofEnabled) return null;
+      try {
+        final grant = await api.audioProofPlayback();
+        final url = grant['streamUrl'] as String?;
+        final expiry = DateTime.tryParse(grant['expiresAt'] as String? ?? '');
+        const expectedUrl =
+            'https://upload.wikimedia.org/wikipedia/commons/transcoded/'
+            '1/1f/Promise.ogg/Promise.ogg.mp3';
+        if (grant['id'] != track.id ||
+            grant['source'] != 'wikimedia_commons' ||
+            grant['offlineAllowed'] != false ||
+            url != expectedUrl ||
+            expiry == null ||
+            !isUsableRemoteAudioGrant(url!, expiry)) {
+          return null;
+        }
+        return PlayableSource(
+          trackId: track.id,
+          streamUrl: url,
+          expiresAtUtc: expiry.toUtc(),
+          codec: 'mp3',
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+
     // YouTube is VIDEO ONLY. Never resolve video metadata to native audio,
     // including previously matched local copies or device-side extraction.
     // The visible official YouTube player is opened by the UI coordinator.

@@ -213,6 +213,15 @@ class BreezzeApi {
   Future<Map<String, dynamic>> searchSpotify(String query) =>
       _get('/providers/spotify/search?q=${Uri.encodeQueryComponent(query)}');
 
+  // The only experimental full-track source is a public-domain track
+  // independently verified with Wikimedia's live MP3 transcode. This is
+  // not an upgrade for YouTube, Spotify or Deezer catalog metadata.
+  Future<Map<String, dynamic>> audioProofTrack() =>
+      _get('/audio-proof/track');
+
+  Future<Map<String, dynamic>> audioProofPlayback() =>
+      _get('/audio-proof/playback');
+
   Future<Map<String, dynamic>> searchDeezer(String query) =>
       _get('/providers/deezer/search?q=${Uri.encodeQueryComponent(query)}');
 
@@ -227,6 +236,11 @@ class BreezzeApi {
   // These routes never receive Supabase Google OAuth credentials directly.
   Future<Map<String, dynamic>> youtubeAccountStatus() =>
       _get('/youtube-account/status');
+
+  // On-demand verification of the *official YouTube Data API* OAuth token.
+  // Never returns Google credentials or grants a raw YouTube Music stream.
+  Future<Map<String, dynamic>> youtubeAccountDiagnostics() =>
+      _get('/youtube-account/diagnostics');
 
   Future<Map<String, dynamic>> youtubeAccountStart() =>
       _post('/youtube-account/start', const {});

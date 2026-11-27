@@ -1,0 +1,113 @@
+name: Experimental InnerTube transport gates (live audio manual)
+
+on:
+  push:
+    branches:
+      - experiment/innertube-stream-probe-20261127
+    paths:
+      - 'backend/unofficial-youtube/**'
+      - 'backend/ytmusicapi/scripts/probe_audio.py'
+      - '.github/workflows/innertube-audio-probe.yml'
+  workflow_dispatch:
+    inputs:
+      run_live:
+        description: 'Run external YouTube audio probes (may fail on LOGIN_REQUIRED)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  sidecar-security-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install experimental dependencies
+        working-directory: backend/unofficial-youtube
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Validate sidecar contracts
+        working-directory: backend/unofficial-youtube
+        run: npm run test:contract
+      - name: Install FFmpeg native audio decoder if missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version >/dev/null
+      - name: Decode original PCM audio over real authenticated HTTP
+        working-directory: backend/unofficial-youtube
+        run: npm run test:decode
+      - name: Validate Docker Compose development stack
+        run: docker compose -f backend/docker-compose.yml --profile experimental config --quiet
+
+  probe-open-licensed-sample:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: film-web
+            id: aqz-KE-bpKQ
+            client: WEB
+          - name: music-web
+            id: x43OJXk8idI
+            client: WEB
+          - name: music-mweb
+            id: x43OJXk8idI
+            client: MWEB
+    name: audio ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated experimental client
+        working-directory: backend/unofficial-youtube
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify sidecar authorization and streaming safety contracts
+        working-directory: backend/unofficial-youtube
+        run: npm run test:contract
+      - name: Probe audio response on CC-BY source video
+        working-directory: backend/unofficial-youtube
+        env:
+          BREEZZE_PROBE_VIDEO_ID: ${{ matrix.id }}
+          BREEZZE_PROBE_CLIENT: ${{ matrix.client }}
+        run: npm run test:probe
+
+  probe-existing-python-sidecar:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: film
+            id: aqz-KE-bpKQ
+          - name: music
+            id: x43OJXk8idI
+    name: ytmusicapi ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing YT Music adapter
+        working-directory: backend/ytmusicapi
+        run: pip install -r requirements.txt
+      - name: Probe signed audio candidate without persisting media
+        working-directory: backend/ytmusicapi
+        env:
+          BREEZZE_PROBE_VIDEO_ID: ${{ matrix.id }}
+        run: PYTHONPATH=. python scripts/probe_audio.py
