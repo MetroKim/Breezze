@@ -79,7 +79,11 @@ def violations(root: Path = REPO) -> list[str]:
     has(DEVICE_VIDEO, r"BzBrandedAppBar", "LOCAL_VIDEO_OLD_BRANDING")
     has(DEVICE_VIDEO, r"setLooping\(next\)", "LOCAL_VIDEO_REPEAT_MISSING")
     has(DEVICE_VIDEO, r"_fillVideo \? BoxFit.cover : BoxFit.contain", "LOCAL_VIDEO_FULLBLEED_MODE_MISSING")
-    has(DEVICE_VIDEO, r"if \(!_repeat && !_closing", "LOCAL_VIDEO_REPEAT_DEFAULT_MISSING")
+    has(DEVICE_VIDEO, r"bool _repeat = false", "LOCAL_VIDEO_REPEAT_DEFAULT_MISSING")
+    has(DEVICE_VIDEO, r"if \(value\.isCompleted\)", "LOCAL_VIDEO_REPLAY_MISSING")
+    has(DEVICE_VIDEO, r"onPressed: _togglePlayback", "LOCAL_VIDEO_REPLAY_CONTROL_MISSING")
+    if "_player.addListener(_onFrame)" in content.get(DEVICE_VIDEO, ""):
+        issues.append("LOCAL_VIDEO_AUTO_DISMISS_FORBIDDEN")
     has(OFFICIAL_VIDEO, r"BzSvgIcon\(name: 'skip-previous'", "OFFICIAL_VIDEO_PREVIOUS_SVG_MISSING")
     has(OFFICIAL_VIDEO, r"BzSvgIcon\(name: 'skip-next'", "OFFICIAL_VIDEO_NEXT_SVG_MISSING")
 
