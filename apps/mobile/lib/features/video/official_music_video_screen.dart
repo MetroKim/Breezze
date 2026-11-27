@@ -43,6 +43,7 @@ class _OfficialMusicVideoScreenState
   YoutubePlayerController? _controller;
   StreamSubscription<YoutubePlayerValue>? _playerEvents;
   String? _autoAdvancedVideoId;
+  bool _queueTransitionBusy = false;
   late String _currentVideoId;
   late String _currentTitle;
   late String _currentArtist;
@@ -131,16 +132,20 @@ class _OfficialMusicVideoScreenState
       currentIndex: _queuePosition,
       queueLength: _watchQueue.length,
     );
-    if (next == null || _autoAdvancedVideoId == currentId) return;
+    if (next == null || _autoAdvancedVideoId == currentId ||
+        _queueTransitionBusy) return;
     _autoAdvancedVideoId = currentId;
     unawaited(_jumpToQueueItem(next));
   }
 
   Future<void> _jumpToQueueItem(int position) async {
-    if (position < 0 || position >= _watchQueue.length) return;
+    if (!mounted || _queueTransitionBusy ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        position < 0 || position >= _watchQueue.length) return;
     final item = _watchQueue[position];
     final id = item['videoId'];
     if (id == null || !YoutubePlayerHandoff.isValidProviderTrackId(id)) return;
+    setState(() => _queueTransitionBusy = true);
     try {
       if (_controller == null) {
         final opened = await YoutubePlayerHandoff.openProviderTrackId(id);
@@ -159,11 +164,15 @@ class _OfficialMusicVideoScreenState
         _currentArtworkUrl = item['artworkUrl'];
       });
     } catch (_) {
+      // A failed automatic transition must not permanently suppress retry.
+      _autoAdvancedVideoId = null;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This YouTube video cannot be opened.')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _queueTransitionBusy = false);
     }
   }
 
@@ -345,7 +354,7 @@ class _OfficialMusicVideoScreenState
                       IconButton(
                         tooltip: 'Previous YouTube video',
                         icon: const BzSvgIcon(name: 'skip-previous', size: 24),
-                        onPressed: _queuePosition == 0
+                        onPressed: _queueTransitionBusy || _queuePosition == 0
                             ? null : () => _jumpToQueueItem(_queuePosition - 1),
                       ),
                       Expanded(
@@ -358,7 +367,8 @@ class _OfficialMusicVideoScreenState
                       IconButton(
                         tooltip: 'Next YouTube video',
                         icon: const BzSvgIcon(name: 'skip-next', size: 24),
-                        onPressed: _queuePosition + 1 >= _watchQueue.length
+                        onPressed: _queueTransitionBusy ||
+                                _queuePosition + 1 >= _watchQueue.length
                             ? null : () => _jumpToQueueItem(_queuePosition + 1),
                       ),
                     ],
