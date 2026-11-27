@@ -213,6 +213,14 @@ class BreezzeApi {
   Future<Map<String, dynamic>> searchSpotify(String query) =>
       _get('/providers/spotify/search?q=${Uri.encodeQueryComponent(query)}');
 
+  // An explicitly enabled nonproduction public-domain full-song acceptance.
+  // This is not a grant for metadata from YouTube, Spotify or Deezer.
+  Future<Map<String, dynamic>> audioProofTrack() =>
+      _get('/audio-proof/track');
+
+  Future<Map<String, dynamic>> audioProofPlayback() =>
+      _get('/audio-proof/playback');
+
   Future<Map<String, dynamic>> searchDeezer(String query) =>
       _get('/providers/deezer/search?q=${Uri.encodeQueryComponent(query)}');
 

@@ -12,6 +12,7 @@ import '../video/device_video.dart';
 import '../video/open_youtube_player.dart';
 import '../search/search_screen.dart';
 import './ytmusic_client_screen.dart';
+import './audio_proof_screen.dart';
 import '../../widgets/bz_branded_app_bar.dart';
 import '../../widgets/bz_discovery_action_tile.dart';
 import '../catalog/catalog_detail_screens.dart';
@@ -384,6 +385,23 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                       ),
                     ),
                   ),
+                  if (const bool.fromEnvironment(
+                    'BREEZZE_PUBLIC_AUDIO_PROOF',
+                    defaultValue: false,
+                  )) ...[
+                    const SizedBox(height: 16),
+                    BzDiscoveryActionTile(
+                      label: 'Full-song playback proof',
+                      description: 'Real public-domain music in the Breezze player.',
+                      iconName: 'music-note',
+                      onTap: () => Navigator.of(context).push(
+                        breezzePageRoute<void>(
+                          context: context,
+                          builder: (_) => const AudioProofScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 22),
                   Text('Explore by genre', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 10),
