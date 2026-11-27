@@ -67,10 +67,6 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 600
-          script: |
-            set -e
-            VIDEO_QA_BASE64="$(base64 -w 0 "$RUNNER_TEMP/breezze-video-qa.mp4")"
-            cd apps/mobile
-            flutter test integration_test/video_native_decode_on_emulator_test.dart \
-              -d emulator-5554 --reporter expanded \
-              --dart-define=BREEZZE_VIDEO_QA_BASE64="$VIDEO_QA_BASE64"
+          # This action invokes each script line in a fresh shell; keep cd and
+          # base64 generation inside ONE shell command.
+          script: cd apps/mobile && flutter test integration_test/video_native_decode_on_emulator_test.dart -d emulator-5554 --reporter expanded --dart-define=BREEZZE_VIDEO_QA_BASE64="$(base64 -w 0 "$RUNNER_TEMP/breezze-video-qa.mp4")"
