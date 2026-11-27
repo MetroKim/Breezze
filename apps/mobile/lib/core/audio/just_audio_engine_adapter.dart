@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, kReleaseMode, TargetPlatform;
 import 'package:breezze_audio_contracts/audio_contracts.dart';
 import 'package:just_audio/just_audio.dart' as ja;
+
+import 'native_source_guard.dart';
 
 /// Native audio engine — implements the Breezze engine contract over
 /// just_audio, which wraps ExoPlayer (Android) and AVFoundation (iOS).
@@ -133,6 +135,13 @@ class JustAudioEngineAdapter implements AudioEngineAdapter, CallInterruptionResu
     _callResumePolicy.cancel();
     await _sessionReady;
     if (_disposed) throw StateError('Breezze audio engine is disposed');
+    // Recheck the grant immediately before the native decoder opens it.
+    // Authorization at the resolver alone does not prevent expiry during
+    // session setup or prevent a mislabeled URL from reaching just_audio.
+    validateNativeAudioSource(
+      source,
+      allowDevelopmentLoopback: !kReleaseMode,
+    );
     if (source.isLocal && source.streamUrl.endsWith('.bza')) {
       final factory = encryptedSourceFactory;
       if (factory == null) throw StateError('ENCRYPTED_MEDIA_ENGINE_UNAVAILABLE');
