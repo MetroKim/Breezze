@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:video_player/video_player.dart';
 
 import 'open_youtube_player.dart';
+import 'video_source_policy.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../widgets/bz_branded_app_bar.dart';
 
@@ -13,6 +14,14 @@ bool get supportsDeviceVideo => kIsWeb ||
     [TargetPlatform.android, TargetPlatform.iOS, TargetPlatform.macOS].contains(defaultTargetPlatform);
 
 Future<void> pickDeviceVideo(BuildContext context) async {
+  if (!supportsDeviceVideo) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device video is not supported on this platform.')),
+      );
+    }
+    return;
+  }
   try {
     final file = await openFile(acceptedTypeGroups: const [
       XTypeGroup(label: 'MP4 video', extensions: ['mp4', 'm4v'],
@@ -32,13 +41,14 @@ Future<void> openAuthorizedBreezzeVideo(
   required Uri streamUrl,
   required String title,
 }) async {
-  final segments = streamUrl.pathSegments;
-  if (streamUrl.scheme != 'https' || segments.length != 3 ||
-      segments.first != 'video' || segments.last != 'stream' ||
-      !RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(segments[1]) ||
-      streamUrl.queryParameters['e'] == null ||
-      streamUrl.queryParameters['s'] == null) {
-    throw ArgumentError.value(streamUrl, 'streamUrl', 'invalid licensed video source');
+  final trustedOrigin = Uri.tryParse(configuredBreezzeVideoCdnOrigin);
+  if (trustedOrigin == null ||
+      !isValidBreezzeVideoStreamUrl(
+        streamUrl, trustedOrigin: trustedOrigin,
+      )) {
+    throw ArgumentError.value(
+      streamUrl, 'streamUrl', 'untrusted or expired Breezze video grant',
+    );
   }
   if (!context.mounted) return;
   await openVideoSurface(context, (_) => _DeviceVideo.remote(
@@ -53,6 +63,9 @@ Future<void> openDownloadedBreezzeVideo(
   required String title,
   required DateTime rightsExpiresAtUtc,
 }) async {
+  if (!supportsDeviceVideo || kIsWeb) {
+    throw UnsupportedError('Offline file video is not available on this platform');
+  }
   if (!rightsExpiresAtUtc.toUtc().isAfter(DateTime.now().toUtc())) {
     throw StateError('VIDEO_OFFLINE_LEASE_EXPIRED');
   }
@@ -83,7 +96,6 @@ class _DeviceVideo extends StatefulWidget {
 class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver {
   late final VideoPlayerController _player;
   late final Future<void> _ready;
-  bool _closing = false;
   // User opt-in only; never repeat protected media automatically by default.
   bool _repeat = false;
   bool _fillVideo = false;
@@ -101,7 +113,6 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
                 ? VideoPlayerController.contentUri(Uri.parse(path))
                 : VideoPlayerController.file(File(path));
     _ready = _player.initialize();
-    _player.addListener(_onFrame);
   }
 
   Future<void> _toggleRepeat() async {
@@ -118,11 +129,40 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
     }
   }
 
-  void _onFrame() {
-    if (!_repeat && !_closing && mounted && _player.value.isCompleted &&
-        ModalRoute.of(context)?.isCurrent == true) {
-      _closing = true;
-      Navigator.of(context).pop();
+  Future<void> _seekBy(Duration delta) async {
+    if (!_player.value.isInitialized) return;
+    try {
+      await _player.seekTo(videoSeekTarget(
+        _player.value.position,
+        delta,
+        _player.value.duration,
+      ));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not seek in this video.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _togglePlayback() async {
+    try {
+      final value = _player.value;
+      if (value.isCompleted) {
+        await _player.seekTo(Duration.zero);
+        await _player.play();
+      } else if (value.isPlaying) {
+        await _player.pause();
+      } else {
+        await _player.play();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video playback is unavailable.')),
+        );
+      }
     }
   }
 
@@ -134,7 +174,6 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _player.removeListener(_onFrame);
     _player.dispose();
     super.dispose();
   }
@@ -209,13 +248,29 @@ class _DeviceVideoState extends State<_DeviceVideo> with WidgetsBindingObserver 
                       runSpacing: 4,
                       children: [
                         IconButton(
-                          tooltip: value.isPlaying ? 'Pause video' : 'Play video',
+                          tooltip: 'Rewind 10 seconds',
+                          icon: const BzSvgIcon(name: 'rewind', size: 26),
+                          onPressed: () => _seekBy(const Duration(seconds: -10)),
+                        ),
+                        IconButton(
+                          tooltip: value.isCompleted
+                              ? 'Replay video'
+                              : value.isPlaying ? 'Pause video' : 'Play video',
                           icon: BzSvgIcon(
                             name: value.isPlaying ? 'pause' : 'play',
                             color: theme.colorScheme.onSurface,
                             size: 28,
                           ),
-                          onPressed: value.isPlaying ? _player.pause : _player.play,
+                          onPressed: _togglePlayback,
+                        ),
+                        IconButton(
+                          tooltip: 'Forward 10 seconds',
+                          icon: const BzSvgIcon(name: 'fast-forward', size: 26),
+                          onPressed: () => _seekBy(const Duration(seconds: 10)),
+                        ),
+                        Text(
+                          '${videoClock(value.position)} / ${videoClock(value.duration)}',
+                          style: theme.textTheme.bodySmall,
                         ),
                         TextButton.icon(
                           onPressed: _toggleRepeat,
