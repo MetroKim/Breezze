@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   bool canRestore({
     bool wasPlaying = true,
+    String? openedUserId = 'listener-a',
+    String? currentUserId = 'listener-a',
     String? openedEntryId = 'queue-entry-1',
     String? currentEntryId = 'queue-entry-1',
     String? openedTrackId = 'track-a',
@@ -15,6 +17,8 @@ void main() {
   }) =>
       shouldResumeAudioAfterVideo(
         wasPlaying: wasPlaying,
+        openedUserId: openedUserId,
+        currentUserId: currentUserId,
         openedEntryId: openedEntryId,
         openedTrackId: openedTrackId,
         currentEntryId: currentEntryId,
@@ -29,6 +33,12 @@ void main() {
 
   test('does not resume audio that was paused before video opened', () {
     expect(canRestore(wasPlaying: false), isFalse);
+  });
+
+  test('does not resume after a listener account switch or sign-out', () {
+    expect(canRestore(currentUserId: 'listener-b'), isFalse);
+    expect(canRestore(currentUserId: null), isFalse);
+    expect(canRestore(openedUserId: null), isFalse);
   });
 
   test('does not resume a different queue entry selected during video', () {
