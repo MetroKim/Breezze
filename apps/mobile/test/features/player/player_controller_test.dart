@@ -71,6 +71,9 @@ void main() {
     await playPending;
     expect(engine.prepareCount, 0);
     expect(engine.playCount, 0);
+    await player.seekTo(const Duration(seconds: 42));
+    expect(player.state.position, const Duration(seconds: 42));
+    expect(engine.lastSeekPosition, isNull);
     // A delayed native callback from the previous item cannot turn a
     // cancelled/restored queue back into playing without a fresh grant.
     engine.emit(PlaybackState.playing);
@@ -82,6 +85,7 @@ void main() {
     expect(resolver.calls, 2);
     expect(engine.prepareCount, 1);
     expect(engine.playCount, 1);
+    expect(engine.lastSeekPosition, const Duration(seconds: 42));
     expect(player.state.playbackState, PlaybackState.playing);
   });
 

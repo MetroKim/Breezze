@@ -704,6 +704,20 @@ class PlayerController extends Notifier<PlayerState> {
     final wasPaused = state.playbackState == PlaybackState.paused;
     if (engine == null || (!wasPlaying && !wasPaused)) return;
 
+    // Restored or cancelled playback has no prepared native source yet.
+    // Seeking the stopped engine would fail and corrupt the paused queue;
+    // store the requested offset for the next fresh authorized resolve.
+    if (wasPaused && _activeSource == null) {
+      final maximum = state.duration;
+      final bounded = position.isNegative
+          ? Duration.zero
+          : (maximum > Duration.zero && position > maximum
+              ? maximum
+              : position);
+      state = state.copyWith(position: bounded);
+      return;
+    }
+
     if (wasPlaying) _machine.dispatch(SeekRequested(position));
     try {
       await _serializeEngineOperation(() => engine.seek(position));
