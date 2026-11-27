@@ -562,6 +562,34 @@ class PlayerController extends Notifier<PlayerState> {
       }
       return;
     }
+    // A user can press Pause before the resolver or native prepare finishes.
+    // Cancel that request rather than allowing its future completion to
+    // autoplay a song after the listener asked for silence.
+    if (state.playbackState == PlaybackState.resolving ||
+        state.playbackState == PlaybackState.loading ||
+        state.playbackState == PlaybackState.buffering) {
+      final track = state.currentTrack;
+      if (track == null) return;
+      final cancelledRequestId = ++_requestGeneration;
+      _activeSource = null;
+      _machine.dispatch(StopRequested(requestId: cancelledRequestId));
+      _machine.dispatch(RestorePaused(track.id));
+      _pauseHeartbeatTimer();
+      await _closePlaybackSession();
+      try {
+        // Native prepare and stop are serialized. An immediate Resume starts
+        // a new request, so its source cannot be stopped by this old command.
+        await _serializeEngineOperation(() async {
+          if (cancelledRequestId == _requestGeneration &&
+              identical(_engine, engine)) {
+            await engine.stop();
+          }
+        });
+      } catch (_) {
+        // The cancelled generation is already unable to begin playback.
+      }
+      return;
+    }
     if (state.playbackState != PlaybackState.playing) return;
     _machine.dispatch(PausePressed());
     _pauseHeartbeatTimer();

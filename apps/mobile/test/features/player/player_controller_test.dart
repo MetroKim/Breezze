@@ -39,6 +39,83 @@ void main() {
     expect(player.state.playbackState, PlaybackState.idle);
   });
 
+  test('Pause during slow resolution prevents late autoplay', () async {
+    final pendingSource = Completer<PlayableSource?>();
+    final resolver = _FakeResolver()..firstResolveGate = pendingSource;
+    final engine = _FakeAudioEngine();
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+    ]);
+    addTearDown(() async {
+      if (!pendingSource.isCompleted) pendingSource.complete(null);
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    final playPending = player.playTrack(
+      trackId: 'catalog-qa:slow-resolution',
+      title: 'Slow source',
+    );
+    expect(player.state.playbackState, PlaybackState.resolving);
+
+    await player.pause();
+    expect(player.state.playbackState, PlaybackState.paused);
+    expect(player.state.currentTrack?.id, 'catalog-qa:slow-resolution');
+    pendingSource.complete(PlayableSource(
+      trackId: 'catalog-qa:slow-resolution',
+      streamUrl: 'https://media.example/slow.mp3',
+      expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+    ));
+    await playPending;
+    expect(engine.prepareCount, 0);
+    expect(engine.playCount, 0);
+
+    // An explicit Resume obtains a NEW grant, not the cancelled URL.
+    await player.resume();
+    expect(resolver.calls, 2);
+    expect(engine.prepareCount, 1);
+    expect(engine.playCount, 1);
+    expect(player.state.playbackState, PlaybackState.playing);
+  });
+
+  test('Pause during native prepare prevents late autoplay', () async {
+    final prepareGate = Completer<void>();
+    final resolver = _FakeResolver();
+    final engine = _FakeAudioEngine()..prepareGate = prepareGate;
+    final container = ProviderContainer(overrides: [
+      playbackResolverProvider.overrideWithValue(resolver),
+    ]);
+    addTearDown(() async {
+      if (!prepareGate.isCompleted) prepareGate.complete();
+      container.dispose();
+      await engine.dispose();
+    });
+
+    final player = container.read(playerControllerProvider.notifier);
+    player.attachEngine(engine);
+    final playPending = player.playTrack(
+      trackId: 'catalog-qa:slow-prepare',
+      title: 'Slow native prepare',
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(engine.prepareCount, 1);
+    expect(player.state.playbackState, PlaybackState.loading);
+
+    final pausePending = player.pause();
+    expect(player.state.playbackState, PlaybackState.paused);
+    prepareGate.complete();
+    await Future.wait([playPending, pausePending]);
+    expect(engine.playCount, 0);
+    expect(engine.stopCount, 1);
+
+    await player.resume();
+    expect(resolver.calls, 2);
+    expect(engine.playCount, 1);
+    expect(player.state.playbackState, PlaybackState.playing);
+  });
+
   test('paused playback refreshes an expired authorized grant before resume', () async {
     final resolver = _FakeResolver()
       ..sources = [
@@ -662,10 +739,14 @@ class _FakePlaybackSessionClient implements PlaybackSessionClient {
 class _FakeResolver implements PlaybackResolver {
   int calls = 0;
   List<PlayableSource> sources = [];
+  Completer<PlayableSource?>? firstResolveGate;
 
   @override
   Future<PlayableSource?> resolve(TrackInfo track) async {
     final index = calls++;
+    if (index == 0 && firstResolveGate != null) {
+      return firstResolveGate!.future;
+    }
     if (sources.isEmpty) {
       return PlayableSource(
         trackId: track.id,
@@ -681,6 +762,9 @@ class _FakeAudioEngine implements AudioEngineAdapter {
   final _positions = StreamController<Duration>.broadcast();
   final _states = StreamController<PlaybackState>.broadcast();
   int prepareCount = 0;
+  int playCount = 0;
+  int stopCount = 0;
+  Completer<void>? prepareGate;
   Duration? lastSeekPosition;
   Duration _position = Duration.zero;
   Duration _duration = const Duration(minutes: 3);
@@ -701,12 +785,15 @@ class _FakeAudioEngine implements AudioEngineAdapter {
   Future<void> prepare(PlayableSource source) async {
     prepareCount++;
     _position = Duration.zero;
+    final gate = prepareGate;
+    if (gate != null) await gate.future;
   }
 
   bool failPlay = false;
 
   @override
   Future<void> play() async {
+    playCount++;
     if (failPlay) throw StateError('native play failed');
   }
 
@@ -722,6 +809,7 @@ class _FakeAudioEngine implements AudioEngineAdapter {
 
   @override
   Future<void> stop() async {
+    stopCount++;
     _position = Duration.zero;
   }
 
