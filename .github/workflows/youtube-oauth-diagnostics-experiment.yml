@@ -1,0 +1,39 @@
+name: Experimental YouTube OAuth diagnostics
+
+on:
+  push:
+    branches:
+      - experiment/innertube-stream-probe-20261127
+    paths:
+      - 'backend/api/src/youtube-account/**'
+      - 'backend/api/src/audio-proof/**'
+      - 'apps/mobile/lib/features/browse/ytmusic_client_screen.dart'
+      - 'apps/mobile/lib/core/api/breezze_api.dart'
+      - 'apps/mobile/lib/features/browse/audio_proof_screen.dart'
+      - '.github/workflows/youtube-oauth-diagnostics-experiment.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-google-oauth-contract:
+    name: Validate owner-bound YouTube login diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: backend/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated API dev dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma types
+        run: npm run prisma:generate
+      - name: Typecheck NestJS and OAuth diagnostic
+        run: npm run typecheck
+      - name: Run scoped YouTube OAuth security tests
+        run: npm test -- --runInBand youtube-account.service.spec.ts
