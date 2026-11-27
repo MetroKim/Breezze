@@ -2,14 +2,14 @@ import 'package:breezze/features/video/video_source_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final trustedOrigin = Uri.parse('https://media.breezze.app');
+  final trustedOrigin = Uri.parse('https://breezze-media.ykw8vmq7ph.workers.dev');
   final now = DateTime.utc(2026, 11, 27, 11, 0);
   const id = '123e4567-e89b-42d3-a456-426614174000';
   final expires = now.millisecondsSinceEpoch + const Duration(minutes: 10).inMilliseconds;
   final signature = List.filled(43, 'A').join();
 
   Uri videoGrant({
-    String origin = 'https://media.breezze.app',
+    String origin = 'https://breezze-media.ykw8vmq7ph.workers.dev',
     String? path,
     String? query,
   }) => Uri.parse(
@@ -26,7 +26,7 @@ void main() {
     );
     expect(
       isValidBreezzeVideoStreamUrl(
-        videoGrant(), trustedOrigin: Uri.parse('https://media.breezze.app/'),
+        videoGrant(), trustedOrigin: Uri.parse('https://breezze-media.ykw8vmq7ph.workers.dev/'),
         nowUtc: now,
       ),
       isTrue,
@@ -43,10 +43,10 @@ void main() {
   test('rejects attacker, typo, userinfo and fragment URL variants', () {
     for (final origin in [
       'https://evil.example',
-      'https://media.breezze.app.evil.example',
+      'https://breezze-media.ykw8vmq7ph.workers.dev.evil.example',
       'http://media.breezze.app',
       'https://user:secret@media.breezze.app',
-      'https://media.breezze.app:8443',
+      'https://breezze-media.ykw8vmq7ph.workers.dev:8443',
     ]) {
       expect(isValidBreezzeVideoStreamUrl(
         videoGrant(origin: origin), trustedOrigin: trustedOrigin, nowUtc: now,
