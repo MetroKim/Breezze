@@ -1,0 +1,91 @@
+name: Breezze Native Full-Track and Encrypted Offline Audio Acceptance
+
+on:
+  push:
+    branches:
+      - fix/audio-native-fulltrack-e2e-20261127
+    paths:
+      - 'apps/mobile/lib/core/audio/native_source_guard.dart'
+      - 'apps/mobile/lib/core/audio/just_audio_engine_adapter.dart'
+      - 'apps/mobile/test/core/audio/**'
+      - 'apps/mobile/integration_test/authorized_audio_on_emulator_test.dart'
+      - '.github/workflows/audio-native-e2e-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-native-audio:
+    name: Real MP3 streaming and AES-GCM offline Android decoder
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate original rights-owned AAC offline fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo grep -rl 'packages.microsoft.com' /etc/apt/sources.list.d \
+              | xargs -r sudo rm -f || true
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -hide_banner -loglevel error -nostdin \
+            -f lavfi -i 'sine=frequency=440:sample_rate=16000:duration=12' \
+            -t 12 -c:a aac -b:a 48k -movflags +faststart \
+            -y "$RUNNER_TEMP/breezze-original-audio-qa.m4a"
+          ffprobe -v error -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 \
+            "$RUNNER_TEMP/breezze-original-audio-qa.m4a" \
+            | awk '{exit !($1 > 11 && $1 < 13)}'
+          test "$(stat -c%s "$RUNNER_TEMP/breezze-original-audio-qa.m4a")" -lt 85000
+      - name: Generate Android platform project
+        working-directory: apps/mobile
+        run: bash tool/generate_platform_targets.sh
+      - name: Install dependencies and generate Drift
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Analyze changed audio implementation and acceptance tests
+        working-directory: apps/mobile
+        run: |
+          dart analyze lib/core/audio/native_source_guard.dart
+          dart analyze lib/core/audio/just_audio_engine_adapter.dart
+          dart analyze test/core/audio/native_source_guard_test.dart
+          dart analyze integration_test/authorized_audio_on_emulator_test.dart
+      - name: Verify source/grant, interruption, offline crypto and recovery units
+        working-directory: apps/mobile
+        run: >
+          flutter test --reporter expanded
+          test/core/audio/native_source_guard_test.dart
+          test/core/audio/encrypted_offline_audio_source_test.dart
+          test/core/audio/offline_lease_policy_test.dart
+          test/core/audio/remote_audio_grant_test.dart
+          test/core/audio/authorized_download_grant_test.dart
+          test/core/audio/playback_recovery_policy_test.dart
+          test/core/audio/background_audio_sync_test.dart
+      - name: Allow Android emulator KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Test real HTTPS full-song and encrypted offline audio on ExoPlayer
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 600
+          # One shell command is essential: the emulator runner launches
+          # each script line separately. Keep CWD + --dart-define together.
+          script: cd apps/mobile && flutter test integration_test/authorized_audio_on_emulator_test.dart -d emulator-5554 --reporter expanded --no-pub --dart-define=BREEZZE_AUDIO_QA_AAC_BASE64="$(base64 -w 0 "$RUNNER_TEMP/breezze-original-audio-qa.m4a")"

@@ -1,0 +1,131 @@
+name: Breezze Native iOS Full-Track and Encrypted Offline Audio Acceptance
+
+on:
+  push:
+    branches:
+      - fix/audio-native-fulltrack-e2e-20261127
+    paths:
+      - 'apps/mobile/lib/core/audio/**'
+      - 'apps/mobile/integration_test/authorized_audio_on_emulator_test.dart'
+      - '.github/workflows/audio-native-ios-simulator-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-native-audio:
+    name: Real public-domain MP3 and offline AAC on AVFoundation
+    runs-on: macos-15-intel
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          xcodes=(/Applications/Xcode_26*.app)
+          if (( ${#xcodes[@]} == 0 )); then
+            echo 'Xcode 26 is not installed on the hosted runner' >&2
+            exit 1
+          fi
+          selected=$(printf '%s\n' "${xcodes[@]}" | sort | tail -n 1)
+          sudo xcode-select --switch "$selected/Contents/Developer"
+          xcodebuild -version
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Apply upstream stable Flutter simulator log-readiness fix when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_file="$FLUTTER_ROOT/packages/flutter_tools/lib/src/ios/simulators.dart"
+          if ! grep -Fq "await logReader._ready.future;" "$sdk_file"; then
+            curl --fail --location --retry 3 --silent --show-error \
+              'https://github.com/flutter/flutter/commit/c3ed85ef987759ee54a6bce275490cde2a238dc1.patch' \
+              --output "$RUNNER_TEMP/breezze-ios-vm-log.patch"
+            cd "$FLUTTER_ROOT"
+            git apply --check --include="packages/flutter_tools/lib/src/ios/simulators.dart" \
+              "$RUNNER_TEMP/breezze-ios-vm-log.patch"
+            git apply --include="packages/flutter_tools/lib/src/ios/simulators.dart" \
+              "$RUNNER_TEMP/breezze-ios-vm-log.patch"
+            rm -f bin/cache/flutter_tools.snapshot bin/cache/flutter_tools.stamp
+            flutter --version
+          fi
+      - name: Generate original AAC in a local MP4 container
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          ffmpeg -hide_banner -loglevel error -nostdin \
+            -f lavfi -i 'sine=frequency=440:sample_rate=16000:duration=12' \
+            -t 12 -c:a aac -b:a 48k -movflags +faststart \
+            -y "$RUNNER_TEMP/breezze-original-audio-ios.m4a"
+          ffprobe -v error -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 \
+            "$RUNNER_TEMP/breezze-original-audio-ios.m4a" \
+            | awk '{exit !($1 > 11 && $1 < 13)}'
+          test "$(stat -f%z "$RUNNER_TEMP/breezze-original-audio-ios.m4a")" -lt 85000
+      - name: Generate iOS Flutter project and database
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tool/generate_platform_targets.sh
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Boot iPhone simulator with bounded retries
+        id: sim
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data=json.load(sys.stdin)["devices"]
+          phones=[d for runtime, ds in data.items()
+                  if "iOS" in runtime for d in ds
+                  if d.get("isAvailable") and "iPhone" in d.get("name", "")]
+          if not phones: raise SystemExit("IOS_DEVICE_UNAVAILABLE")
+          print(phones[0]["udid"])
+          ')"
+          echo "id=$simulator" >> "$GITHUB_OUTPUT"
+          SIMULATOR_ID="$simulator" python3 - <<'PY'
+          import json, os, subprocess, sys
+          device=os.environ["SIMULATOR_ID"]
+          for attempt in (1, 2):
+              try:
+                  data=json.loads(subprocess.run(
+                      ["xcrun","simctl","list","devices","-j"],
+                      check=True,capture_output=True,text=True,timeout=30).stdout)
+                  devices=[d for group in data["devices"].values() for d in group
+                           if d.get("udid")==device]
+                  if not devices: raise RuntimeError("IOS_DEVICE_DISAPPEARED")
+                  if devices[0]["state"] != "Booted":
+                      subprocess.run(["xcrun","simctl","boot",device],
+                                     check=True,timeout=70)
+                  subprocess.run(["xcrun","simctl","bootstatus",device,"-b"],
+                                 check=True,timeout=200)
+                  print("IOS_AUDIO_SIMULATOR_BOOTED",flush=True)
+                  break
+              except (subprocess.SubprocessError, OSError, RuntimeError) as err:
+                  print(f"iOS boot attempt {attempt} failed: {type(err).__name__}",
+                        flush=True)
+                  subprocess.run(["xcrun","simctl","shutdown",device],
+                                 check=False,timeout=35)
+                  if attempt == 2:
+                      sys.exit("IOS_SIMULATOR_BOOT_UNAVAILABLE")
+          PY
+      - name: Verify real HTTPS music and AES-GCM native offline decoding
+        timeout-minutes: 32
+        shell: bash
+        working-directory: apps/mobile
+        env:
+          SIMULATOR_ID: ${{ steps.sim.outputs.id }}
+        run: |
+          set -euo pipefail
+          original_audio="$(base64 -i "$RUNNER_TEMP/breezze-original-audio-ios.m4a" | tr -d '\r\n')"
+          flutter test integration_test/authorized_audio_on_emulator_test.dart \
+            -d "$SIMULATOR_ID" --reporter expanded --no-pub \
+            --dart-define=BREEZZE_AUDIO_QA_AAC_BASE64="$original_audio"
