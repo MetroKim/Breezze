@@ -67,7 +67,7 @@ Duration videoSeekTarget(Duration position, Duration delta, Duration duration) {
   if (duration <= Duration.zero) return Duration.zero;
   final desired = position.inMilliseconds + delta.inMilliseconds;
   return Duration(
-    milliseconds: desired.clamp(0, duration.inMilliseconds),
+    milliseconds: desired.clamp(0, duration.inMilliseconds).toInt(),
   );
 }
 
