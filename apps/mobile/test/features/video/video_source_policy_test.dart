@@ -6,7 +6,7 @@ void main() {
   final now = DateTime.utc(2026, 11, 27, 11, 0);
   const id = '123e4567-e89b-42d3-a456-426614174000';
   final expires = now.millisecondsSinceEpoch + const Duration(minutes: 10).inMilliseconds;
-  final signature = 'A' * 43;
+  final signature = List.filled(43, 'A').join();
 
   Uri videoGrant({
     String origin = 'https://media.breezze.app',
