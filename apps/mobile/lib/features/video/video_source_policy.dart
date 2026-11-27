@@ -24,7 +24,7 @@ bool isValidBreezzeVideoStreamUrl(
 }) {
   if (trustedOrigin.scheme != 'https' ||
       trustedOrigin.host.isEmpty ||
-      trustedOrigin.path != '/' ||
+      (trustedOrigin.path.isNotEmpty && trustedOrigin.path != '/') ||
       trustedOrigin.hasQuery ||
       trustedOrigin.hasFragment ||
       trustedOrigin.userInfo.isNotEmpty ||
