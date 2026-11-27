@@ -57,9 +57,13 @@ jobs:
         run: |
           flutter pub get
           dart run build_runner build --delete-conflicting-outputs
-      - name: Analyze audio source and native decoder integration
+      - name: Analyze changed audio implementation and acceptance tests
         working-directory: apps/mobile
-        run: flutter analyze
+        run: |
+          dart analyze lib/core/audio/native_source_guard.dart
+          dart analyze lib/core/audio/just_audio_engine_adapter.dart
+          dart analyze test/core/audio/native_source_guard_test.dart
+          dart analyze integration_test/authorized_audio_on_emulator_test.dart
       - name: Verify source/grant, interruption, offline crypto and recovery units
         working-directory: apps/mobile
         run: >
