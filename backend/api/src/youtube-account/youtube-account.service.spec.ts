@@ -330,4 +330,75 @@ describe('YoutubeAccountService owner-bound OAuth authorization', () => {
       .toHaveBeenCalledWith({ where: { userId } });
     expect(requests.at(-1)?.url).toBe('https://oauth2.googleapis.com/revoke');
   });
+
+  it('diagnoses missing separate YouTube login without touching Google or InnerTube', async () => {
+    prisma.youtubeAccountConnection.findUnique.mockResolvedValue(null);
+    const diagnostic = await service.diagnostics(userId);
+    expect(diagnostic).toEqual({
+      provider: 'youtube_data_api',
+      oauthScope: 'youtube.readonly',
+      googleAuthorization: 'not_connected',
+      innerTubeUserSession: 'not_tested',
+      directAudioGrant: false,
+      officialPlaybackMode: 'visible_youtube_player',
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('verifies real read-only Google OAuth without treating it as an audio session', async () => {
+    const { state } = await beginConsent();
+    mockGoogleAuthorized();
+    expect(await service.callback(state, 'google-auth-code-123456')).toBe(true);
+    const stored = prisma.youtubeAccountConnection.upsert.mock.calls[0][0].create;
+    prisma.youtubeAccountConnection.findUnique.mockResolvedValue({
+      ...stored, userId, channelId,
+    });
+
+    const diagnostic = await service.diagnostics(userId);
+    expect(diagnostic.googleAuthorization).toBe('verified');
+    expect(diagnostic.directAudioGrant).toBe(false);
+    expect(diagnostic.innerTubeUserSession).toBe('not_tested');
+    expect(diagnostic.officialPlaybackMode).toBe('visible_youtube_player');
+    expect(requests.at(-1)?.url).toContain('/youtube/v3/channels');
+    const publicJson = JSON.stringify(diagnostic);
+    expect(publicJson).not.toContain(accessToken);
+    expect(publicJson).not.toContain(refreshToken);
+    expect(publicJson).not.toContain('ciphertext');
+  });
+
+  it('diagnoses a revoked Google OAuth token as reconnect-required', async () => {
+    const { state } = await beginConsent();
+    mockGoogleAuthorized();
+    expect(await service.callback(state, 'google-auth-code-123456')).toBe(true);
+    const stored = prisma.youtubeAccountConnection.upsert.mock.calls[0][0].create;
+    prisma.youtubeAccountConnection.findUnique.mockResolvedValue({
+      ...stored, userId, channelId,
+      accessExpiresAt: new Date(Date.now() - 10_000),
+    });
+    global.fetch = jest.fn(async (url: URL | string, init?: RequestInit) => {
+      requests.push({ url: String(url), init });
+      return response({}, 400);
+    }) as typeof global.fetch;
+    const diagnostic = await service.diagnostics(userId);
+    expect(diagnostic.googleAuthorization).toBe('reconnect_required');
+    expect(diagnostic.directAudioGrant).toBe(false);
+    expect(JSON.stringify(diagnostic)).not.toContain(refreshToken);
+  });
+
+  it('does not misclassify Google quota or access failures as a playable audio grant', async () => {
+    const { state } = await beginConsent();
+    mockGoogleAuthorized();
+    expect(await service.callback(state, 'google-auth-code-123456')).toBe(true);
+    const stored = prisma.youtubeAccountConnection.upsert.mock.calls[0][0].create;
+    prisma.youtubeAccountConnection.findUnique.mockResolvedValue({
+      ...stored, userId, channelId,
+    });
+    global.fetch = jest.fn(async () => response({}, 403)) as typeof global.fetch;
+    expect(await service.diagnostics(userId)).toMatchObject({
+      googleAuthorization: 'provider_unavailable',
+      innerTubeUserSession: 'not_tested',
+      directAudioGrant: false,
+    });
+  });
+
 });
