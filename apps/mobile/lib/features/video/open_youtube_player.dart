@@ -78,8 +78,6 @@ Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async
           wasPlaying: resumeAudio,
           openedUserId: openedUserId,
           currentUserId: currentUserId(),
-          openedUserId: openedUserId,
-          currentUserId: currentUserId(),
           openedEntryId: entry,
           openedTrackId: trackId,
           currentEntryId: controller.queue.current?.entryId,
@@ -101,6 +99,8 @@ Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async
     if (context.mounted &&
         shouldResumeAudioAfterVideo(
           wasPlaying: resumeAudio,
+          openedUserId: openedUserId,
+          currentUserId: currentUserId(),
           openedEntryId: entry,
           openedTrackId: trackId,
           currentEntryId: controller.queue.current?.entryId,
