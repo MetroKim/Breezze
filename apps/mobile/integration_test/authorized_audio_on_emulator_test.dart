@@ -34,7 +34,7 @@ void main() {
     // Source: https://commons.wikimedia.org/wiki/File:Promise.ogg
     // This asserts actual network audio and native MP3 decoding, NOT a
     // YouTube Music, Spotify or commercial-catalog entitlement.
-    expect(defaultTargetPlatform, TargetPlatform.android);
+    expect(defaultTargetPlatform, anyOf(TargetPlatform.android, TargetPlatform.iOS));
     const fullSongUrl =
         'https://upload.wikimedia.org/wikipedia/commons/transcoded/'
         '1/1f/Promise.ogg/Promise.ogg.mp3';
@@ -73,7 +73,7 @@ void main() {
 
   testWidgets('native player decrypts and seeks protected offline AAC, no plaintext persisted',
       (tester) async {
-    expect(defaultTargetPlatform, TargetPlatform.android);
+    expect(defaultTargetPlatform, anyOf(TargetPlatform.android, TargetPlatform.iOS));
     const encoded = String.fromEnvironment('BREEZZE_AUDIO_QA_AAC_BASE64');
     expect(encoded, isNotEmpty,
         reason: 'CI must generate original AAC audio rather than use catalog content');
