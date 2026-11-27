@@ -237,6 +237,11 @@ class BreezzeApi {
   Future<Map<String, dynamic>> youtubeAccountStatus() =>
       _get('/youtube-account/status');
 
+  // On-demand verification of the *official YouTube Data API* OAuth token.
+  // Never returns Google credentials or grants a raw YouTube Music stream.
+  Future<Map<String, dynamic>> youtubeAccountDiagnostics() =>
+      _get('/youtube-account/diagnostics');
+
   Future<Map<String, dynamic>> youtubeAccountStart() =>
       _post('/youtube-account/start', const {});
 
