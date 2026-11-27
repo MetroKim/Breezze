@@ -20,7 +20,7 @@ terms, create unauthorized streams, or give us rights to third-party recordings.
 
 ## Secure media origin
 
-Set the Flutter build-time option `--dart-define=BREEZZE_VIDEO_CDN_ORIGIN=https://media.breezze.app`.
+Set the Flutter build-time option `--dart-define=BREEZZE_VIDEO_CDN_ORIGIN=https://breezze-media.ykw8vmq7ph.workers.dev`.
 The app defaults to that production hostname. In a private staging build, set
 this to the isolated trusted **HTTPS origin only** for the QA media Worker, e.g.
 `https://breezze-media-qa.ykw8vmq7ph.workers.dev`. Never point an
