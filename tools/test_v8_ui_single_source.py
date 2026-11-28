@@ -27,7 +27,8 @@ class V8SingleUiSourceTests(unittest.TestCase):
 
         self.write(guard.PROVIDER, "BzBrandedAppBar(")
         self.write(guard.DEVICE_VIDEO,
-                   "BzBrandedAppBar setLooping(next) if (!_repeat && !_closing "
+                   "BzBrandedAppBar setLooping(next) bool _repeat = false "
+                   "if (value.isCompleted) onPressed: _togglePlayback "
                    "_fillVideo ? BoxFit.cover : BoxFit.contain")
         for page in guard.PRIMARY_PAGES:
             self.write(page, "BzMorphingBrandHeader(")
@@ -71,9 +72,32 @@ class V8SingleUiSourceTests(unittest.TestCase):
     def test_native_video_must_keep_fill_fit_selection(self):
         self.write(
             guard.DEVICE_VIDEO,
-            "BzBrandedAppBar setLooping(next) if (!_repeat && !_closing",
+            "BzBrandedAppBar setLooping(next) bool _repeat = false "
+            "if (value.isCompleted) onPressed: _togglePlayback",
         )
         self.assertIn("LOCAL_VIDEO_FULLBLEED_MODE_MISSING",
+                      str(guard.violations(self.root)))
+
+    def test_video_replay_stays_available_after_completion(self):
+        self.write(
+            guard.DEVICE_VIDEO,
+            "BzBrandedAppBar setLooping(next) bool _repeat = false "
+            "_fillVideo ? BoxFit.cover : BoxFit.contain",
+        )
+        self.assertIn("LOCAL_VIDEO_REPLAY_MISSING",
+                      str(guard.violations(self.root)))
+        self.assertIn("LOCAL_VIDEO_REPLAY_CONTROL_MISSING",
+                      str(guard.violations(self.root)))
+
+    def test_old_auto_dismiss_video_is_rejected(self):
+        self.write(
+            guard.DEVICE_VIDEO,
+            "BzBrandedAppBar setLooping(next) bool _repeat = false "
+            "_fillVideo ? BoxFit.cover : BoxFit.contain "
+            "if (value.isCompleted) onPressed: _togglePlayback "
+            "_player.addListener(_onFrame)",
+        )
+        self.assertIn("LOCAL_VIDEO_AUTO_DISMISS_FORBIDDEN",
                       str(guard.violations(self.root)))
 
     def test_official_video_keeps_svg_previous_next(self):

@@ -1,0 +1,45 @@
+name: Breezze Video Reliability Acceptance
+
+on:
+  push:
+    branches:
+      - fix/video-reliability-security-20261127
+    paths:
+      - 'apps/mobile/lib/features/video/**'
+      - 'apps/mobile/test/features/video/**'
+      - 'apps/mobile/lib/widgets/bz_brand_icons.dart'
+      - 'tools/check_v8_ui_single_source.py'
+      - 'tools/test_v8_ui_single_source.py'
+      - 'docs/VIDEO_PLAYBACK_ACCEPTANCE.md'
+      - '.github/workflows/video-reliability-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  video-policy-player-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject old auto-dismiss video and verify V8 replay contract
+        run: |
+          python3 -m unittest discover -s tools -p 'test_v8_ui_single_source.py' -v
+          python3 tools/check_v8_ui_single_source.py
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Fetch Flutter dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+      - name: Generate local database sources
+        working-directory: apps/mobile
+        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Analyze Breezze mobile video changes
+        working-directory: apps/mobile
+        run: flutter analyze
+      - name: Test signed video grants, seek behavior, watch queue and audio handoff
+        working-directory: apps/mobile
+        run: flutter test --reporter expanded test/features/video test/core/audio/youtube_player_handoff_test.dart

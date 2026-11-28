@@ -2,6 +2,7 @@ import 'package:breezze_audio_contracts/audio_contracts.dart' show PlaybackState
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/auth/auth_session.dart';
 import '../player/player_controller.dart';
 import 'official_music_video_screen.dart';
 import 'official_youtube_queue_policy.dart';
@@ -27,6 +28,8 @@ Future<void> openYouTubePlayer({
 /// Never resurrect a superseded track or override a user/OS pause.
 bool shouldResumeAudioAfterVideo({
   required bool wasPlaying,
+  required String? openedUserId,
+  required String? currentUserId,
   required String? openedEntryId,
   required String? openedTrackId,
   required String? currentEntryId,
@@ -35,6 +38,8 @@ bool shouldResumeAudioAfterVideo({
   required AppLifecycleState? lifecycleState,
 }) =>
     wasPlaying &&
+    openedUserId != null &&
+    openedUserId == currentUserId &&
     openedEntryId != null &&
     openedEntryId == currentEntryId &&
     openedTrackId != null &&
@@ -46,6 +51,12 @@ Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async
   final container = ProviderScope.containerOf(context, listen: false);
   final controller = container.read(playerControllerProvider.notifier);
   final previous = container.read(playerControllerProvider);
+  final openedAuth = container.read(authSessionProvider);
+  final openedUserId = openedAuth is AuthSignedIn ? openedAuth.userId : null;
+  String? currentUserId() {
+    final auth = container.read(authSessionProvider);
+    return auth is AuthSignedIn ? auth.userId : null;
+  }
   if (previous.playbackState == PlaybackState.resolving ||
       previous.playbackState == PlaybackState.buffering ||
       previous.playbackState == PlaybackState.loading ||
@@ -65,6 +76,8 @@ Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async
     if (!context.mounted ||
         !shouldResumeAudioAfterVideo(
           wasPlaying: resumeAudio,
+          openedUserId: openedUserId,
+          currentUserId: currentUserId(),
           openedEntryId: entry,
           openedTrackId: trackId,
           currentEntryId: controller.queue.current?.entryId,
@@ -86,6 +99,8 @@ Future<void> openVideoSurface(BuildContext context, WidgetBuilder builder) async
     if (context.mounted &&
         shouldResumeAudioAfterVideo(
           wasPlaying: resumeAudio,
+          openedUserId: openedUserId,
+          currentUserId: currentUserId(),
           openedEntryId: entry,
           openedTrackId: trackId,
           currentEntryId: controller.queue.current?.entryId,

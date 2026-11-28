@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
@@ -154,6 +154,115 @@ try {
   const race = await Promise.all([raceUpload(), raceUpload()]);
   assert.deepEqual(race.map(r => r.status).sort(), [201, 409],
     'Concurrent ingest must have exactly one immutable winner');
+
+  // Video rights-path acceptance: an original H.264/AAC MP4 travels
+  // through signed ingest -> local Worker/R2 -> byte-preserving playback.
+  // No commercial recording or unofficial YouTube source is involved.
+  const videoFixture = join(storageDir, 'breezze-original-test-video.mp4');
+  execFileSync('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error', '-nostdin',
+    '-f', 'lavfi', '-i', 'testsrc2=size=64x64:rate=8:duration=4',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=16000:duration=4',
+    '-t', '4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    '-profile:v', 'baseline', '-preset', 'ultrafast', '-crf', '35',
+    '-c:a', 'aac', '-b:a', '24k', '-movflags', '+faststart',
+    '-y', videoFixture,
+  ], { timeout: 30000 });
+  const videoBytes = readFileSync(videoFixture);
+  assert(videoBytes.length > 2048, 'Original MP4 fixture must be non-empty');
+  assert.equal(videoBytes.subarray(4, 8).toString(), 'ftyp');
+
+  const videoId = randomUUID();
+  const videoExpires = Date.now() + 120_000;
+  const videoIngestPayload =
+    'ingest:video:' + videoId + ':video/mp4:' + videoBytes.length + ':' + videoExpires;
+  const videoIngest = base + '/ingest/video/' + videoId +
+    '?b=' + videoBytes.length + '&e=' + videoExpires +
+    '&s=' + signature(videoIngestPayload);
+  const videoPut = await fetch(videoIngest, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'video/mp4',
+               'Content-Length': String(videoBytes.length) },
+    body: videoBytes,
+  });
+  assert.equal(videoPut.status, 201, 'Video ingest: ' + await shortBody(videoPut));
+
+  const videoStream = grant('/video/' + videoId + '/stream',
+    'video:' + videoId + ':stream', videoExpires);
+  const videoHead = await fetch(videoStream, { method: 'HEAD' });
+  assert.equal(videoHead.status, 200, 'Signed video HEAD');
+  assert.equal(videoHead.headers.get('content-type'), 'video/mp4');
+  assert.equal(Number(videoHead.headers.get('content-length')), videoBytes.length);
+  assert.equal(videoHead.headers.get('accept-ranges'), 'bytes');
+
+  const videoFull = await fetch(videoStream);
+  assert.equal(videoFull.status, 200);
+  assert.equal(videoFull.headers.get('cache-control'), 'private, no-store');
+  const videoDelivered = Buffer.from(await videoFull.arrayBuffer());
+  assert.deepEqual(videoDelivered, videoBytes, 'Full video must be byte exact');
+  const deliveredFile = join(storageDir, 'breezze-video-delivered.mp4');
+  writeFileSync(deliveredFile, videoDelivered);
+  const playableSeconds = Number(execFileSync('ffprobe', [
+    '-v', 'error', '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1', deliveredFile,
+  ], { encoding: 'utf8', timeout: 15000 }).trim());
+  assert(playableSeconds > 3 && playableSeconds < 5,
+    'Video delivered via R2 must decode for the full recording');
+
+  const videoSeek = await fetch(videoStream, {
+    headers: { Range: 'bytes=128-1023' },
+  });
+  assert.equal(videoSeek.status, 206);
+  assert.equal(videoSeek.headers.get('content-range'),
+    'bytes 128-1023/' + videoBytes.length);
+  assert.deepEqual(Buffer.from(await videoSeek.arrayBuffer()),
+    videoBytes.subarray(128, 1024));
+
+  const videoTail = await fetch(videoStream, {
+    headers: { Range: 'bytes=-256' },
+  });
+  assert.equal(videoTail.status, 206);
+  assert.deepEqual(Buffer.from(await videoTail.arrayBuffer()),
+    videoBytes.subarray(-256));
+
+  const staleVideoValidator = await fetch(videoStream, {
+    headers: { Range: 'bytes=0-511', 'If-Range': '"old-video-etag"' },
+  });
+  assert.equal(staleVideoValidator.status, 200,
+    'Stale video validator must fetch the entire asset');
+  assert.deepEqual(Buffer.from(await staleVideoValidator.arrayBuffer()), videoBytes);
+
+  const videoUnsatisfiable = await fetch(videoStream, {
+    headers: { Range: 'bytes=999999999-' },
+  });
+  assert.equal(videoUnsatisfiable.status, 416);
+  assert.equal(videoUnsatisfiable.headers.get('content-range'),
+    'bytes */' + videoBytes.length);
+  assert.equal((await fetch(videoStream.replace(/s=[^&]+/, 's=forged'))).status, 403);
+  assert.equal((await fetch(grant('/video/' + videoId + '/stream',
+    'video:' + videoId + ':stream', Date.now() - 1000))).status, 403);
+  assert.equal((await fetch(base + '/video/' + videoId + '/download' +
+    new URL(videoStream).search)).status, 403,
+    'Stream authorization must not grant video downloading');
+
+  const videoDownloadUrl = grant('/video/' + videoId + '/download',
+    'video:' + videoId + ':download', videoExpires);
+  const videoDownload = await fetch(videoDownloadUrl);
+  assert.equal(videoDownload.status, 200);
+  assert.match(videoDownload.headers.get('content-disposition') || '',
+    /attachment; filename="breezze-video.mp4"/);
+  assert.deepEqual(Buffer.from(await videoDownload.arrayBuffer()), videoBytes);
+
+  const videoDuplicate = await fetch(videoIngest, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'video/mp4',
+               'Content-Length': String(videoBytes.length) },
+    body: videoBytes,
+  });
+  assert.equal(videoDuplicate.status, 409,
+    'Uploaded MP4 must never overwrite an existing object');
+
+  console.log('PASS: local Worker/R2 signed H.264 MP4 ingest, full original video delivery, ffprobe duration, HEAD, HTTP 206 seeks, 416, expiry and purpose isolation');
 
   console.log('PASS: real local workerd/R2 AAC HTTP ingest, HEAD, seek, purpose-bound grants and atomic uploads');
 } catch (error) {

@@ -37,6 +37,8 @@ class BzSvgIcon extends StatelessWidget {
     'shuffle': '<path d="m16 3 5 5-5 5M3 7h2.5a5 5 0 0 1 4 2l5 6a5 5 0 0 0 4 2H21M16 21l5-5-5-5M3 17h2.5a5 5 0 0 0 3.3-1.25"/>',
     'skip-previous': '<path d="M5 5v14M19 5.5 8 12l11 6.5v-13Z"/>',
     'skip-next': '<path d="M19 5v14M5 5.5 16 12 5 18.5v-13Z"/>',
+    'rewind': '<path d="M11.5 6 3 12l8.5 6V6Zm9.5 0-8.5 6 8.5 6V6Z"/>',
+    'fast-forward': '<path d="M3 6v12l8.5-6L3 6Zm9.5 0v12l8.5-6-8.5-6Z"/>',
     'repeat': '<path d="m17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3"/>',
     'pause': '<path d="M7 5.5A1.5 1.5 0 0 1 8.5 4h1A1.5 1.5 0 0 1 11 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-1A1.5 1.5 0 0 1 7 18.5v-13Zm6 0A1.5 1.5 0 0 1 14.5 4h1A1.5 1.5 0 0 1 17 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5v-13Z"/>',
     'play': '<path d="M7.5 4.8a1 1 0 0 1 1.5-.86l10.1 7.06a1.2 1.2 0 0 1 0 2l-10.1 7.06a1 1 0 0 1-1.5-.86V4.8Z" fill="currentColor" stroke="none"/>',

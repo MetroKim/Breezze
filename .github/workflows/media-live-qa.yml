@@ -59,6 +59,9 @@ jobs:
           QA_OBJECT="audio/$QA_ID/AAC_256"
           cleanup() {
             npx wrangler r2 object delete "breezze-media-qa/$QA_OBJECT" --remote >/dev/null 2>&1 || true
+            if [ -n "${QA_VIDEO_OBJECT:-}" ]; then
+              npx wrangler r2 object delete "breezze-media-qa/$QA_VIDEO_OBJECT" --remote >/dev/null 2>&1 || true
+            fi
             rm -f "$RUNNER_TEMP/breezze-qa-media-secret"
           }
           trap cleanup EXIT
@@ -93,3 +96,42 @@ jobs:
           # QA proves Worker + R2 are capable of licensed full-length delivery.
           # It does NOT prove any artist rights, mobile decoder or offline grant.
           echo 'PASS: synthetic 125s AAC signed full-byte delivery, ffprobe duration, 206 far seek, forged-signature denial'
+          # Licensed-video transport QA is isolated from commercial YouTube.
+          # Generate our own H.264/AAC clip and exercise the REAL deployed QA
+          # Worker and R2 bucket with purpose-bound video HMACs.
+          QA_VIDEO_ID="$(node -e "console.log(require('node:crypto').randomUUID())")"
+          QA_VIDEO_OBJECT="video/$QA_VIDEO_ID/original.mp4"
+          export QA_VIDEO_ID
+          ffmpeg -hide_banner -loglevel error -nostdin \
+            -f lavfi -i 'testsrc2=size=64x64:rate=8:duration=4' \
+            -f lavfi -i 'sine=frequency=440:sample_rate=16000:duration=4' \
+            -t 4 -c:v libx264 -pix_fmt yuv420p -profile:v baseline \
+            -preset ultrafast -crf 35 -c:a aac -b:a 24k \
+            -movflags +faststart -y "$RUNNER_TEMP/breezze-qa-video.mp4"
+          QA_VIDEO_BYTES="$(stat -c%s "$RUNNER_TEMP/breezze-qa-video.mp4")"
+          test "$QA_VIDEO_BYTES" -gt 2048
+          test "$QA_VIDEO_BYTES" -lt 90000
+          export QA_VIDEO_BYTES
+          QA_VIDEO_EXPIRES="$(node -e 'process.stdout.write(String(Date.now()+120000))')"
+          export QA_VIDEO_EXPIRES
+          QA_VIDEO_UPLOAD_SIG="$(node -e 'const {createHmac}=require("node:crypto");const p=`ingest:video:${process.env.QA_VIDEO_ID}:video/mp4:${process.env.QA_VIDEO_BYTES}:${process.env.QA_VIDEO_EXPIRES}`;process.stdout.write(createHmac("sha256",process.env.QA_SECRET).update(p).digest("base64url"))')"
+          QA_VIDEO_STREAM_SIG="$(node -e 'const {createHmac}=require("node:crypto");const p=`video:${process.env.QA_VIDEO_ID}:stream:${process.env.QA_VIDEO_EXPIRES}`;process.stdout.write(createHmac("sha256",process.env.QA_SECRET).update(p).digest("base64url"))')"
+          QA_VIDEO_UPLOAD_URL="$QA_HOST/ingest/video/$QA_VIDEO_ID?b=$QA_VIDEO_BYTES&e=$QA_VIDEO_EXPIRES&s=$QA_VIDEO_UPLOAD_SIG"
+          QA_VIDEO_STREAM_URL="$QA_HOST/video/$QA_VIDEO_ID/stream?e=$QA_VIDEO_EXPIRES&s=$QA_VIDEO_STREAM_SIG"
+          [ "$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Type: video/mp4' --data-binary "@$RUNNER_TEMP/breezze-qa-video.mp4" "$QA_VIDEO_UPLOAD_URL")" = 201 ]
+          VIDEO_HEADERS="$(curl -fsSI --max-time 20 "$QA_VIDEO_STREAM_URL")"
+          printf '%s' "$VIDEO_HEADERS" | grep -qi '^content-type: video/mp4'
+          printf '%s' "$VIDEO_HEADERS" | grep -qi '^accept-ranges: bytes'
+          [ "$(curl -sS --max-time 20 -o "$RUNNER_TEMP/breezze-qa-video-range.bin" -w '%{http_code}' -H 'Range: bytes=128-1023' "$QA_VIDEO_STREAM_URL")" = 206 ]
+          head -c 1024 "$RUNNER_TEMP/breezze-qa-video.mp4" | tail -c 896 > "$RUNNER_TEMP/breezze-qa-video-range-expected.bin"
+          cmp "$RUNNER_TEMP/breezze-qa-video-range-expected.bin" "$RUNNER_TEMP/breezze-qa-video-range.bin"
+          [ "$(curl -sS --max-time 40 -o "$RUNNER_TEMP/breezze-qa-video-full.mp4" -w '%{http_code}' "$QA_VIDEO_STREAM_URL")" = 200 ]
+          cmp "$RUNNER_TEMP/breezze-qa-video.mp4" "$RUNNER_TEMP/breezze-qa-video-full.mp4"
+          QA_VIDEO_DURATION="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$RUNNER_TEMP/breezze-qa-video-full.mp4")"
+          awk -v seconds="$QA_VIDEO_DURATION" 'BEGIN { exit !(seconds > 3 && seconds < 5) }'
+          [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$QA_HOST/video/$QA_VIDEO_ID/download?e=$QA_VIDEO_EXPIRES&s=$QA_VIDEO_STREAM_SIG")" = 403 ]
+          [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$QA_VIDEO_STREAM_URL" -H 'Range: bytes=999999-')" = 416 ]
+          [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$QA_VIDEO_STREAM_URL" -H 'Range: bytes=-256')" = 206 ]
+          [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$QA_HOST/video/$QA_VIDEO_ID/stream?e=$QA_VIDEO_EXPIRES&s=forged")" = 403 ]
+          echo 'PASS: QA Worker/R2 signed original MP4 full delivery, 206 video seek, decoder duration, 403 forgery and purpose isolation'
+
