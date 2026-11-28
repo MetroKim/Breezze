@@ -200,6 +200,12 @@ class BreezzeApi {
   Future<Map<String, dynamic>> searchMusicCatalogs(String query) =>
       _get('/providers/music/search?q=${Uri.encodeQueryComponent(query)}');
 
+  /// Find only approved, currently available full songs from partner-owned
+  /// OpenSubsonic libraries. This endpoint returns no bearer media URLs.
+  /// The actual native player must still obtain a separate rights session.
+  Future<Map<String, dynamic>> searchAuthorizedAudio(String query) =>
+      _get('/catalog/authorized-audio/search?q=${Uri.encodeQueryComponent(query)}');
+
   /// Spotify-only artist discovery and discography. No Deezer artist data.
   Future<Map<String, dynamic>> searchSpotifyArtists(String query) =>
       _get('/providers/spotify/artists/search?q=${Uri.encodeQueryComponent(query)}');
