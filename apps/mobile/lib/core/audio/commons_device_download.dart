@@ -14,6 +14,7 @@ class CommonsDeviceMedia {
         kind = raw['kind'] as String? ?? '',
         mimeType = raw['mimeType'] as String? ?? '',
         bytes = raw['bytes'] as int? ?? 0,
+        durationSec = (raw['durationSec'] as num?)?.toDouble(),
         sourceUrl = raw['sourcePage'] as String? ?? '',
         license = raw['license'] as String? ?? '',
         licenseUrl = raw['licenseUrl'] as String? ?? '',
@@ -47,7 +48,8 @@ class CommonsDeviceMedia {
         !_isCommonsUpload(downloadUrl) ||
         (kind == 'audio' && !mimeType.startsWith('audio/') && !genericOgg) ||
         (kind == 'video' && !mimeType.startsWith('video/') && !genericOgg) ||
-        bytes <= 0 || bytes > maxBytes) {
+        bytes <= 0 || bytes > maxBytes ||
+        (durationSec != null && (!durationSec!.isFinite || durationSec! <= 0))) {
       throw const FormatException('OPEN_MEDIA_MANIFEST_INVALID');
     }
   }
@@ -57,6 +59,7 @@ class CommonsDeviceMedia {
   final String kind;
   final String mimeType;
   final int bytes;
+  final double? durationSec;
   final String sourceUrl;
   final String license;
   final String licenseUrl;
@@ -102,6 +105,7 @@ class CommonsDeviceMedia {
     'licenseUrl': licenseUrl,
     'creator': creator,
     'bytes': bytes,
+    'durationSec': durationSec,
     'savedAtUtc': DateTime.now().toUtc().toIso8601String(),
   };
 }
