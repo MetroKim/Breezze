@@ -233,13 +233,24 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
   }
 
   static validMediaResponse(response: Response, requestedRange: boolean): boolean {
-    if (!(response.status === 200 || response.status === 206)) return false;
-    if (requestedRange && response.status !== 206) return false;
+    // A full-song request may not silently accept an unsolicited partial body.
+    if (requestedRange ? response.status !== 206 : response.status !== 200) return false;
     if (!MIME.test(response.headers.get('content-type') ?? '')) return false;
     const size = response.headers.get('content-length');
-    if (size != null && (!/^\d+$/.test(size) || Number(size) <= 0)) return false;
-    if (response.status === 206 && !/^bytes \d+-\d+\/(\d+|\*)$/.test(
-      response.headers.get('content-range') ?? '')) return false;
+    if (size != null && (!/^\d+$/.test(size) ||
+        !Number.isSafeInteger(Number(size)) || Number(size) <= 0)) return false;
+    if (response.status === 206) {
+      const range = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(
+        response.headers.get('content-range') ?? '',
+      );
+      if (!range) return false;
+      const start = Number(range[1]), end = Number(range[2]);
+      const total = range[3] === '*' ? null : Number(range[3]);
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+          end < start || (total !== null &&
+          (!Number.isSafeInteger(total) || end >= total))) return false;
+      if (size !== null && Number(size) !== end - start + 1) return false;
+    }
     return response.body !== null;
   }
 }
