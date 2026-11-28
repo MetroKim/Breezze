@@ -6,10 +6,10 @@ const _publicAudioProofTrackId = 'bz:public_domain:promise';
 
 bool isPublicAudioProofTrackId(String id) => id == _publicAudioProofTrackId;
 
-/// A configured, independently rights-approved OpenSubsonic library. This ID
-/// only permits requesting a backend session; it is NOT a playback grant.
-final _openSubsonicTrackId = RegExp(r'^bz:opensubsonic:[A-Za-z0-9_-]{1,128}
-
+/// A server-approved OpenSubsonic track ID may *request* a playback session.
+/// A namespaced ID alone never grants streaming or offline download rights.
+final _openSubsonicTrackId =
+    RegExp(r'^bz:opensubsonic:[A-Za-z0-9_-]{1,128}
 final _spotifyTrackId = RegExp(r'^bz:spotify:[A-Za-z0-9]{22}$');
 final _deezerTrackId = RegExp(r'^bz:deezer:[0-9]{1,20}$');
 final _musicBrainzId = RegExp(r'^bz:musicbrainz:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$');
