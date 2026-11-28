@@ -30,3 +30,19 @@ Duration? nextStreamRecoveryDelay({
   if (delay.isNegative) return null;
   return delay;
 }
+
+/// Quality is reduced only after a failed authorized remote stream. This
+/// does not select a different recording, bypass a license, or convert a
+/// metadata provider's URL into playable media. The server still enforces
+/// the requested ceiling, territories, grant expiry and available encodings.
+///
+/// A first retry moves down one rendition; subsequent retries move lower
+/// until AAC_128. Fresh user-initiated playback resets the retry budget.
+String recoveryQualityForRetry(String requested, int retryCount) {
+  const order = <String>['AAC_128', 'AAC_256', 'LOSSLESS', 'HI_RES'];
+  if (retryCount <= 0) return requested;
+  final index = order.indexOf(requested);
+  if (index < 0) return requested; // Let the server reject invalid requests.
+  final target = index - retryCount;
+  return order[target < 0 ? 0 : target];
+}
