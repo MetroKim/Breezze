@@ -61,6 +61,24 @@ class BreezzeApi {
         if (accessToken != null) 'Authorization': 'Bearer $accessToken',
       };
 
+  /// On-demand Commons media discovery: no Breezze audio/video files on server.
+  Future<Map<String, dynamic>> searchOpenMedia({
+    required String query,
+    required String kind,
+  }) {
+    final encoded = Uri(queryParameters: {'q': query, 'kind': kind}).query;
+    return _get('/providers/open-media/commons/search?$encoded');
+  }
+
+  /// Revalidates the selected file's published license before play/download.
+  Future<Map<String, dynamic>> resolveOpenMedia({
+    required String fileTitle,
+    required String kind,
+  }) {
+    final encoded = Uri(queryParameters: {'title': fileTitle, 'kind': kind}).query;
+    return _get('/providers/open-media/commons/resolve?$encoded');
+  }
+
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body,
