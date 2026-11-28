@@ -11,6 +11,22 @@ bool isPublicAudioProofTrackId(String id) => id == _publicAudioProofTrackId;
 final _openSubsonicTrackId =
     RegExp(r'^bz:opensubsonic:[A-Za-z0-9_-]{1,128}$');
 bool isOpenSubsonicTrackId(String id) => _openSubsonicTrackId.hasMatch(id);
+/// Only resolved, explicitly permitted Commons files may enter the single
+/// global Flutter player as direct online audio. Never accept arbitrary URLs,
+/// provider preview metadata or video URLs as native music playback sources.
+bool isApprovedCommonsAudioUrl(String? raw) {
+  if (raw == null) return false;
+  final uri = Uri.tryParse(raw);
+  if (uri == null || uri.scheme != 'https' ||
+      uri.host != 'upload.wikimedia.org' ||
+      uri.userInfo.isNotEmpty || uri.query.isNotEmpty ||
+      uri.fragment.isNotEmpty ||
+      !uri.path.startsWith('/wikipedia/commons/')) return false;
+  final ext = uri.path.split('.').last.toLowerCase();
+  return const {'mp3', 'ogg', 'oga', 'flac', 'wav', 'm4a', 'aac', 'opus'}
+      .contains(ext);
+}
+
 
 final _spotifyTrackId = RegExp(r'^bz:spotify:[A-Za-z0-9]{22}$');
 final _deezerTrackId = RegExp(r'^bz:deezer:[0-9]{1,20}$');
