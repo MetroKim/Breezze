@@ -55,6 +55,27 @@ describe('PlaybackResolveService', () => {
     );
   });
 
+  it('requires an online provider instead of an R2 object in online-only mode', async () => {
+    const prior = process.env.BREEZZE_MEDIA_MODE;
+    process.env.BREEZZE_MEDIA_MODE = 'online_only';
+    try {
+      await expect(service.resolve('user-1', request, 'TZ'))
+        .rejects.toThrow('ONLINE_ONLY_REQUIRES_AUTHORIZED_PROVIDER');
+      expect(prisma.track.findUnique).not.toHaveBeenCalled();
+      expect(prisma.audioAssetVariant.findMany).not.toHaveBeenCalled();
+      expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+
+      // Authorized provider resolution is not disabled by online-only mode.
+      prisma.track.findUnique.mockResolvedValue(null);
+      await expect(service.resolveProvider('user-1', providerRequest, 'TZ'))
+        .rejects.toThrow('PROVIDER_TRACK_MISMATCH');
+      expect(prisma.track.findUnique).toHaveBeenCalled();
+    } finally {
+      if (prior === undefined) delete process.env.BREEZZE_MEDIA_MODE;
+      else process.env.BREEZZE_MEDIA_MODE = prior;
+    }
+  });
+
   it('fails closed when the trusted edge cannot determine a playback territory', async () => {
     await expect(service.resolve('user-1', request)).rejects.toThrow('PLAYBACK_TERRITORY_UNAVAILABLE');
     expect(rights.decide).not.toHaveBeenCalled();
