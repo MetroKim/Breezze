@@ -118,8 +118,12 @@ export function planV8Rendition(
       (master.bitDepth === null || master.bitDepth < 24 ||
        master.sampleRateHz <= 48_000)) return null;
 
+  // libopus in FFmpeg accepts 8/12/16/24/48 kHz, not arbitrary rates
+  // such as a 44.1 kHz source. Resampling lossy output does NOT create
+  // additional detail and must not affect a source-quality claim.
   const sampleRateHz = isFlac
     ? Math.min(master.sampleRateHz, 192_000)
+    : profile.codec === 'opus' ? 48_000
     : Math.min(master.sampleRateHz, 48_000);
   const maxBitDepth = master.bitDepth === null
     ? null : Math.min(master.bitDepth, 24);
