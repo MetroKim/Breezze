@@ -311,7 +311,8 @@ class LiveResolver implements PlaybackResolver {
       final preferences = await DownloadPreferencesStore().load();
       final session = await api.startPlaybackSession(
         trackId: catalogId,
-        requestedQuality: preferences.streamingQuality,
+        requestedQuality: _ref.read(playerControllerProvider.notifier)
+            .streamingQualityFor(track.id, preferences.streamingQuality),
       );
       final sessionId = session['id'] as String?;
       final playback = session['playback'];
