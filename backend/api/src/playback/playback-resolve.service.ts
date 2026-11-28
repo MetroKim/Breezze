@@ -170,6 +170,7 @@ export class PlaybackResolveService {
       throw new NotAcceptableException('PROVIDER_TRACK_UNAVAILABLE');
     }
     const result = await provider.resolvePlayback({
+      userId,
       providerTrackId: dto.providerTrackId,
       canonicalTrackId: dto.canonicalTrackId,
       territory,
