@@ -57,7 +57,10 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
   readonly adapterVersion = '8.4.0';
   readonly priority = 80;
   readonly capabilities: ProviderCapabilities = {
-    search: false, metadata: true, availability: true,
+    // Do not expose private partner song metadata via the generic public
+    // /providers/:id/tracks/:trackId route. Approved catalog rows live in
+    // Breezze's existing canonical catalog and account-safe lookup.
+    search: false, metadata: false, availability: true,
     playback: true, download: false,
   };
 
@@ -127,10 +130,8 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
     return providerUnsupported('OPEN_SUBSONIC_CURATED_CATALOG_ONLY');
   }
 
-  async getTrack(id: string): Promise<ProviderResult<ProviderTrack>> {
-    const song = await this.upstreamSong(id);
-    return song ? providerOk(song.track) :
-      providerError('OPEN_SUBSONIC_TRACK_UNAVAILABLE', 'Authorized audio unavailable', true);
+  async getTrack(_id: string): Promise<ProviderResult<ProviderTrack>> {
+    return providerUnsupported('OPEN_SUBSONIC_METADATA_PRIVATE');
   }
 
   async getAvailability(id: string, _territory: string): Promise<ProviderResult<{ available: boolean }>> {
