@@ -6,6 +6,7 @@ import { ProviderRegistry } from '../providers/provider-registry.service';
 import { validateProviderAudioSource } from './provider-stream-guard';
 import { verifySignedMediaObject } from './signed-media-presence';
 import { selectReadyAudioVariant } from './audio-variant-selection';
+import { isOnlineOnlyMediaMode } from './online-media-mode';
 
 @Injectable()
 export class PlaybackResolveService {
@@ -30,6 +31,11 @@ export class PlaybackResolveService {
     edgeCountry?: string,
   ) {
     const territory = this.requireTerritory(edgeCountry);
+    // Online-only source resolution never relies on an owned R2 audio object.
+    // Provider-resolved HTTPS media remains available through resolveProvider().
+    if (isOnlineOnlyMediaMode()) {
+      throw new NotAcceptableException('ONLINE_ONLY_REQUIRES_AUTHORIZED_PROVIDER');
+    }
     // A catalogue metadata record cannot authorize a Breezze-hosted media URL.
     // External providers must use the provider-specific resolver and deliver
     // their own authorized playback source; an internal rights row alone is
