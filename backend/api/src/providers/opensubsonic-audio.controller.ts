@@ -23,8 +23,20 @@ export class OpenSubsonicAudioController {
     private readonly rights: RightsDecisionService,
   ) {}
 
-  @Get(':id')
   @Head(':id')
+  async head(
+    @Param('id') id: string,
+    @Query('grant') token: string | undefined,
+    @Headers('range') range: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    // Nest method decorators overwrite the route method metadata; use a
+    // distinct handler so native audio HEAD probes cannot silently 404.
+    await this.stream(id, token, range, req, res);
+  }
+
+  @Get(':id')
   async stream(
     @Param('id') id: string,
     @Query('grant') token: string | undefined,
