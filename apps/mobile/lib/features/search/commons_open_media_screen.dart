@@ -180,6 +180,9 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
           title: resolved.title,
           artist: resolved.creator ?? 'Wikimedia Commons',
           approvedOnlineUrl: resolved.streamUrl,
+          duration: resolved.durationSec != null
+              ? Duration(milliseconds: (resolved.durationSec! * 1000).round())
+              : Duration.zero,
           origin: 'commons',
           sourceContext: 'Open media',
         );
