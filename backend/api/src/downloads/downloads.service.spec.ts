@@ -33,6 +33,30 @@ describe('DownloadsService', () => {
     );
   });
 
+  it('does not issue download grants or renew offline leases in online-only mode', async () => {
+    const prior = process.env.BREEZZE_MEDIA_MODE;
+    process.env.BREEZZE_MEDIA_MODE = 'online_only';
+    try {
+      await expect(service.authorizeAndRecord('user-1', {
+        trackId: 'track-1', territory: 'TZ',
+      })).resolves.toEqual({
+        allowed: false, reason: 'ONLINE_ONLY_DOWNLOAD_DISABLED', url: null,
+      });
+      await expect(service.revalidateOfflineLease('user-1', 'track-1', 'TZ'))
+        .resolves.toEqual({
+          allowed: false, reason: 'ONLINE_ONLY_DOWNLOAD_DISABLED',
+        });
+      await expect(service.list('user-1')).resolves.toEqual([]);
+      expect(prisma.track.findUnique).not.toHaveBeenCalled();
+      expect(prisma.audioAssetVariant.findUnique).not.toHaveBeenCalled();
+      expect(rights.decide).not.toHaveBeenCalled();
+      expect(signer.createPlaybackUrl).not.toHaveBeenCalled();
+    } finally {
+      if (prior === undefined) delete process.env.BREEZZE_MEDIA_MODE;
+      else process.env.BREEZZE_MEDIA_MODE = prior;
+    }
+  });
+
   it('fails closed when trusted edge territory is missing or invalid', async () => {
     await expect(service.authorizeAndRecord('user-1', {
       trackId: 'track-1',
