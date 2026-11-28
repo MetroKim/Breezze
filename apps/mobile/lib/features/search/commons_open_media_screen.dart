@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/audio/commons_device_download.dart';
 import '../../core/auth/auth_session.dart';
@@ -232,6 +233,12 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
     }
   }
 
+  Future<void> _openSourcePage(String raw) async {
+    final uri = Uri.tryParse(raw);
+    if (uri?.scheme != 'https' || uri?.host != 'commons.wikimedia.org') return;
+    await launchUrl(uri!, mode: LaunchMode.externalApplication);
+  }
+
   void _message(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -328,10 +335,20 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
                                 ? Icons.music_note : Icons.movie_outlined),
                             title: Text(item.title),
                             subtitle: Text('${item.license} · saved on this device'),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.play_arrow),
-                              tooltip: 'Play downloaded file offline',
-                              onPressed: () => _playSaved(item),
+                            trailing: Wrap(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.info_outline),
+                                  tooltip: 'Source and license information',
+                                  onPressed: () => _openSourcePage(item.sourcePage),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.play_arrow),
+                                  tooltip: 'Play downloaded file offline',
+                                  onPressed: () => _playSaved(item),
+                                ),
+                              ],
                             ),
                           );
                         },
@@ -363,6 +380,11 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
                             trailing: Wrap(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                IconButton(
+                                  tooltip: 'View creator and license source',
+                                  icon: const Icon(Icons.info_outline),
+                                  onPressed: () => _openSourcePage(item.sourceUrl),
+                                ),
                                 IconButton(
                                   tooltip: 'Play online',
                                   icon: const Icon(Icons.play_arrow),
@@ -479,7 +501,16 @@ class _CommonsVideoPlayerScreenState extends State<CommonsVideoPlayerScreen> {
               ),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: SelectableText('${widget.license} · ${widget.sourcePage}'),
+              child: TextButton(
+                onPressed: () async {
+                  final uri = Uri.tryParse(widget.sourcePage);
+                  if (uri?.scheme == 'https' &&
+                      uri?.host == 'commons.wikimedia.org') {
+                    await launchUrl(uri!, mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: Text('${widget.license} · View creator and license'),
+              ),
             ),
           ],
         ),
