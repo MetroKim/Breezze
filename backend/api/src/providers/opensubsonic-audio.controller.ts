@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { RightsDecisionService } from '../rights/rights-decision.service';
+import { PrismaService } from '../prisma.service';
 import { OpenSubsonicAdapter } from './opensubsonic.adapter';
 
 /**
@@ -21,6 +22,7 @@ export class OpenSubsonicAudioController {
   constructor(
     private readonly adapter: OpenSubsonicAdapter,
     private readonly rights: RightsDecisionService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Head(':id')
@@ -48,6 +50,18 @@ export class OpenSubsonicAudioController {
     if (!grant) throw new NotFoundException('AUDIO_GRANT_INVALID');
     if (range != null && !/^bytes=\d+-\d*$/.test(range)) {
       throw new BadRequestException('AUDIO_RANGE_INVALID');
+    }
+
+    // A previously issued bearer grant is not proof that the canonical track
+    // still maps to this upstream recording. A catalog correction or removal
+    // must take effect immediately, including on existing seek/HEAD requests.
+    const mapped = await this.prisma.track.findUnique({
+      where: { id: grant.canonicalTrackId },
+      select: { source: true, externalId: true },
+    });
+    if (mapped?.source !== 'opensubsonic' ||
+        mapped.externalId !== 'bz:opensubsonic:' + id) {
+      throw new NotFoundException('AUDIO_SOURCE_MAPPING_REVOKED');
     }
 
     const decision = await this.rights.decide({
