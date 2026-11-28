@@ -336,3 +336,45 @@ See the same-sha evidence links and outstanding blockers in [master issue #27](h
 - **Next:** complete exact-head CI and focused Flutter tests; verify one licensed real full song through rights gate -> encoded R2 object -> signed Worker -> mobile playback, 200/206 seeking, interruptions and fallback; separately test offline authorization/encryption and recommendation quality; retain draft PR and production/release freeze until independent acceptance.
 
 **Execution rule:** Every later Breezze work session appends or amends a dated **V8-only** checkpoint and propagates verified status to #78/#27; no new parallel implementation plan or false “100% working” declaration.
+
+## V8 media-platform acceptance expansion — 2026-11-28
+
+**Owner instruction and implementation authority:** Breezze must become an end-to-end, **full-length** music streaming platform inside its **existing** four-tab Apple Music-inspired Flutter UI. Spotify/Deezer/YouTube Music discovery metadata, previews and official YouTube videos are NOT native full-song rights. **No Audius, no Notion, no duplicate media engine, no V9, no public release or production deployment.** Retain the single `PlayerController`, NestJS/Prisma authorization source of truth, Supabase Auth, Redis, Cloudflare Workers/R2 and the existing rights gate.
+
+### Complete V8 media gateway boundaries
+
+| Stage | Owner and contract | Blockers and acceptance evidence |
+|---|---|---|
+| Input & provenance | Artist, label, distributor or approved independent provider submits the correct recording/master with **both recording and composition rights**, territory, duration, attribution, takedown and offline-scope evidence. No automatic extraction or source impersonation. | Commercial catalog remains unavailable until actual partner assets and licenses are provided. Test source identity and rights independently of metadata. |
+| Canonical identity / provider routing | The current NestJS/Prisma track graph owns canonical track IDs; ISRC plus validated artist/title/duration and recording provenance is matching evidence, not permission. `ProviderRegistry` and `RightsDecisionService` gate each candidate. Health/circuit breakers and failover must preserve exactly the same recording, rightsholder permission, country and approved playback format. | Multiple verified full-audio providers, health data and same-master failover E2E remain unverified. Never silently play a cover, remix or 30-second preview. Draft PR #93 adds disabled-by-default OpenSubsonic transport but does not supply a license. |
+| Encoding / storage | A privileged FFmpeg job consumes only verified local ingest assets, publishes FFprobe-verified codec/duration/bit depth and SHA-256 into protected R2 after rights approval. Prisma `AudioAssetVariant` is the current media registry; Supabase Postgres consolidation requires independent migration/rollback and RLS acceptance. Redis caches **non-bearer** resolution state with bounded TTL. | No real six-rendition full-song transcoding/R2 ingestion has been verified. Source quality must not be falsified. |
+| Media gateway / CDN | NestJS creates short-lived rights- and territory-constrained playback sessions, private Cloudflare media Worker checks signed capabilities, serves R2 range bytes. Private media is not publicly cached by user-invariant URL or indefinitely after takedown. | Actual 200/206 seek, signed HEAD, expiry, revocation, range integrity, cache invalidation and geographically distributed delivery must be proven. |
+| Adaptive delivery | HLS/CMAF (where decoders truly support it), stable segment alignment, encoder-specific alternate renditions, measured throughput/buffer ABR; progressive Range fallback, prebuffer next authorized track and bounded retry/re-resolution. | Current source has only quality selection and draft PR #92 downgrade on failure; neither constitutes seamless HLS adaptive streaming. Device/platform matrix is mandatory. |
+| Recommendations | Existing backend `RecommendationsModule` consumes consented and account-isolated listening history, follows, likes, skips, completion rates and legitimately available audio attributes/embeddings. Expose Daily Mixes, similar artists, new releases, Home rails and annual Replay only when measured. | Quality, event integrity, cold start, data provenance and real licensed track coverage remain unverified. |
+| Secure offline | Explicit per-recording `download` grant separate from `stream.full`; per-device/user authenticated AES-256 encryption with key custody, signed leases, renewal/revocation, resumable ranges and hash checks; local downloads unavailable after logout or rights expiry. | AES is not equivalent to FairPlay/Widevine/PlayReady DRM. Verify approved offline rights and device tests before claiming commercial DRM or downloads. |
+| One native player / six OS | Same `PlayerController`, `just_audio`/audio service route and queue; B-Lossless, B-Spatial, B-Mix, B-Upscale, B-Offline and B-Sync must use a shared rights-aware playback identity. | Full-gapless and legitimate two-deck AutoMix, focus/call/Bluetooth, lock screen, synchronized lyrics and accessibility checks required on Android, iOS, web, Linux, macOS and Windows. |
+
+### Six target audio profiles — **target, not deployed availability**
+
+| Display name | Profile key | Codec and nominal target | Storage/decoder status |
+|---|---|---|---|
+| Data Saver | `OPUS_64` | Ogg Opus, 64 kbps | New R2/Prisma/Worker key plus six-OS decoder/transport acceptance required |
+| Standard | `AAC_128` | AAC-in-M4A, 128 kbps | Existing V8 R2 key; valid audio asset still required |
+| High | `AAC_256` | AAC-in-M4A, 256 kbps | Existing V8 R2 key; valid audio asset still required |
+| Very High | `OPUS_320` | Ogg Opus, 320 kbps | New R2/Prisma/Worker key plus supported decoder; do **not** assume all HLS clients decode Opus |
+| B-Lossless | `LOSSLESS` | FLAC, source-dependent bitrate | Only from a verified genuine lossless master, with truthful FFprobe output |
+| Hi-Res | `HI_RES` | FLAC, up to 24 bit / 192 kHz where real | Never label source below 24-bit/high-rate as Hi-Res; transcode must not invent missing detail |
+
+**Compatibility note:** The live `AudioAssetVariant`, signing, CDN MIME and Flutter streaming preferences currently recognize only `AAC_128`, `AAC_256`, `LOSSLESS`, `HI_RES`. The two Opus profiles are not to be advertised or inserted into live catalogs until a coordinated database/Worker/client and offline versioned migration, correct signed MIME/range delivery and decoder tests succeed. Audio display quality must reflect the **actual** delivered codec, resolution and verified origin. B-Upscale output is never genuine lossless.
+
+### Initial executable contract slice — draft, unmerged
+
+**Baseline:** `main@e73e84c4b58c4e9d05f71feca54cff9e22fda478`. Branch: `feat/v8-audio-rendition-contract-20261128`. This slice is deliberately additive and does not touch production, existing user settings, live R2 signatures, schema, player route or stored audio.
+
+- `backend/api/src/playback/audio-rendition-contract.ts` defines all six metadata/encoder presets as a pure typed FFmpeg-argument contract. It bounds output sample rates and bit depth by source properties; refuses lossless from lossy inputs and prevents CD-quality 16/44.1 being declared Hi-Res. Opus encoding uses FFmpeg-supported 48 kHz output and is marked **not eligible** for legacy R2 registration.
+- `backend/api/src/playback/audio-rendition-contract.spec.ts` adds tests for six named profiles, AAC 128/256 and Opus 64/320, unsupported/missing inputs, true FLAC provenance, Hi-Res ceiling and the four-key storage compatibility boundary.
+- **Not done by this slice:** invoking FFmpeg, entitlement verification, ingest/encode/upload worker orchestration, HLS manifests, live ABR, any Opus media distribution, catalog rights, offline delivery, recommendations, six-platform decoding or a verified commercial full song. The pure policy is not a license check or an audio output probe.
+- **Security:** only a trusted ingest flow may instantiate encoding jobs after rights approval and authenticated master checks. Shell interpolation, untrusted network URLs and provider track metadata are not ingest inputs. Require output hash, codec/duration and rights evidence before marking R2 variants ready.
+- **Acceptance / rollback:** compile/test code on its exact SHA, independently prove valid FFmpeg encoding and signed R2 byte delivery with original/partner-licensed audio, then migrate all storage/Worker/Prisma/clients as one reviewed rollout. As only an unused pure module and tests, rollback is branch deletion with no schema or production data mutation. Maintain draft PR and release freeze.
+
+**Engineering record mandate:** Each follow-up action and test status must be appended to this same V8 plan and to issues #78/#27. Do not mark any of these end-to-end features complete without the correct exact-head CI and native evidence.
