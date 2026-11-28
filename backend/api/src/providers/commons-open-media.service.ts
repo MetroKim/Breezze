@@ -13,6 +13,7 @@ type Page = {
   imageinfo?: Array<{
     url?: string;
     mime?: string;
+    mediatype?: string;
     size?: number;
     extmetadata?: Record<string, MetadataValue>;
   }>;
@@ -58,10 +59,19 @@ function trustedMediaUrl(input: string | undefined): string | null {
   if (!input) return null;
   try {
     const u = new URL(input);
-    return u.protocol === 'https:' && u.hostname === 'upload.wikimedia.org' &&
-      u.port === '' && !u.username && !u.password && !u.hash && !u.search &&
-      u.pathname.startsWith('/wikipedia/commons/')
-      ? u.toString() : null;
+    if (u.protocol !== 'https:' || u.hostname !== 'upload.wikimedia.org' ||
+        u.port !== '' || u.username || u.password || u.hash ||
+        !u.pathname.startsWith('/wikipedia/commons/')) return null;
+    // Commons currently appends Wikimedia-controlled UTM markers to original
+    // URLs. These are NOT needed to request the media bytes. Strip them
+    // rather than rejecting every real API result; reject any other query
+    // parameter to avoid accepting untrusted redirect/transport options.
+    const known = new Set(['utm_source', 'utm_campaign', 'utm_content']);
+    for (const name of u.searchParams.keys()) {
+      if (!known.has(name)) return null;
+    }
+    u.search = '';
+    return u.toString();
   } catch {
     return null;
   }
@@ -72,11 +82,21 @@ function convertPage(page: Page, kind: MediaKind): OpenMediaFile | null {
   if (!page.title || !FILE_TITLE.test(page.title) || !info) return null;
   const url = trustedMediaUrl(info.url);
   const mime = info.mime?.toLowerCase() ?? '';
+  const mediaType = info.mediatype?.toUpperCase();
+  const extension = page.title.split('.').pop()?.toLowerCase();
+  // Wikimedia's real audio/Ogg uploads frequently report application/ogg
+  // and a URL containing UTM markers. iiprop=mediatype independently
+  // identifies AUDIO versus VIDEO so generic Ogg is never misrouted.
+  const genericOgg = mime === 'application/ogg' && (
+    kind === 'audio' ? extension === 'ogg' || extension === 'oga'
+      : extension === 'ogv'
+  );
   const matchesKind = kind === 'audio'
-    ? /^audio\/(?:mpeg|ogg|flac|x-flac|wav|x-wav|webm|mp4|aac)$/.test(mime)
-    : /^video\/(?:webm|ogg|mp4)$/.test(mime);
+    ? /^audio\/(?:mpeg|ogg|flac|x-flac|wav|x-wav|webm|mp4|aac)$/.test(mime) || genericOgg
+    : /^video\/(?:webm|ogg|mp4)$/.test(mime) || genericOgg;
   const maxBytes = kind === 'video' ? 1_000_000_000 : 250_000_000;
-  if (!url || !matchesKind || !Number.isSafeInteger(info.size) ||
+  if (mediaType && mediaType !== kind.toUpperCase()) return null;
+  if (!url || !matchesKind || !Number.isSafeInteger(info.size ?? NaN) ||
       (info.size ?? 0) <= 0 || (info.size ?? 0) > maxBytes) return null;
   const licenseUrl = info.extmetadata?.LicenseUrl?.value?.trim() ?? '';
   // Only specific CC licenses whose direct re-use and download terms are
@@ -125,7 +145,7 @@ export class CommonsOpenMediaService {
     const url = new URL(API);
     for (const [k, value] of Object.entries({
       action: 'query', format: 'json', formatversion: '2',
-      prop: 'imageinfo', iiprop: 'url|mime|size|extmetadata',
+      prop: 'imageinfo', iiprop: 'url|mime|mediatype|size|extmetadata',
       iiextmetadatafilter: 'LicenseUrl|LicenseShortName|Artist',
       ...params,
     })) url.searchParams.set(k, value);
