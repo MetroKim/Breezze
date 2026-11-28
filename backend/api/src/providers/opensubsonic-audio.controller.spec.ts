@@ -1,4 +1,5 @@
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { PassThrough } from 'node:stream';
 import { RequestMethod } from '@nestjs/common';
 import { OpenSubsonicAudioController } from './opensubsonic-audio.controller';
 import { OpenSubsonicAdapter } from './opensubsonic.adapter';
@@ -59,6 +60,45 @@ describe('OpenSubsonic native relay route and rights', () => {
       territory: 'TZ', action: 'stream.full',
     });
     expect(adapter.fetchAuthorizedBytes).not.toHaveBeenCalled();
+  });
+
+  it('streams real binary test bytes with backpressure and matching 206 headers', async () => {
+    const payload = Buffer.from([0xff, 0xfb, 0x90, 0x64]);
+    const upstream = new Response(payload, {
+      status: 206, headers: {
+        'content-type': 'audio/mpeg',
+        'content-range': 'bytes 64-67/128',
+        'content-length': '4',
+      },
+    });
+    const adapter = {
+      verifyGrant: jest.fn().mockReturnValue(validGrant),
+      fetchAuthorizedBytes: jest.fn().mockResolvedValue(upstream),
+    };
+    const rights = { decide: jest.fn().mockResolvedValue({
+      allowed: true, previewOnly: false, expiresAt: null,
+    }) };
+    const controller = new OpenSubsonicAudioController(
+      adapter as unknown as OpenSubsonicAdapter,
+      rights as unknown as RightsDecisionService,
+    );
+
+    const sink = new PassThrough() as PassThrough & {
+      status: jest.Mock; setHeader: jest.Mock; setTimeout: jest.Mock;
+    };
+    sink.status = jest.fn().mockReturnValue(sink);
+    sink.setHeader = jest.fn().mockReturnValue(sink);
+    sink.setTimeout = jest.fn().mockReturnValue(sink);
+    const chunks: Buffer[] = [];
+    sink.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    await controller.stream('original-song', 'signed', 'bytes=64-67',
+      { method: 'GET' } as never, sink as never);
+    expect(Buffer.concat(chunks)).toEqual(payload);
+    expect(sink.status).toHaveBeenCalledWith(206);
+    expect(sink.setHeader).toHaveBeenCalledWith('Content-Range', 'bytes 64-67/128');
+    expect(sink.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(adapter.fetchAuthorizedBytes).toHaveBeenCalledWith(
+      'original-song', 'bytes=64-67');
   });
 
   it('rejects malformed Range headers without contacting an upstream server', async () => {
