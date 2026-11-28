@@ -99,6 +99,16 @@ class PlayerController extends Notifier<PlayerState> {
       unawaited(_resolveAndPlay(selected, initialPosition: position));
     });
   }
+  /// Preserve the user's maximum quality for a fresh play. On a repeated
+  /// stream failure only, request a smaller licensed rendition for this
+  /// exact track. Every attempt re-resolves a fresh server-authorized URL.
+  String streamingQualityFor(String trackId, String preferredQuality) {
+    if (state.currentTrack?.id != trackId || _streamRecoveryAttempts <= 0) {
+      return preferredQuality;
+    }
+    return recoveryQualityForRetry(preferredQuality, _streamRecoveryAttempts);
+  }
+
   Future<void> _engineOperations = Future<void>.value();
 
   String? _playbackSessionId;
