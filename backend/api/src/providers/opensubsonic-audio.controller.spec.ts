@@ -4,8 +4,18 @@ import { RequestMethod } from '@nestjs/common';
 import { OpenSubsonicAudioController } from './opensubsonic-audio.controller';
 import { OpenSubsonicAdapter } from './opensubsonic.adapter';
 import { RightsDecisionService } from '../rights/rights-decision.service';
+import { PrismaService } from '../prisma.service';
 
 describe('OpenSubsonic native relay route and rights', () => {
+  const prisma = {
+    track: { findUnique: jest.fn() },
+  };
+
+  beforeEach(() => {
+    prisma.track.findUnique.mockReset().mockResolvedValue({
+      source: 'opensubsonic', externalId: 'bz:opensubsonic:original-song',
+    });
+  });
   const validGrant = {
     id: 'original-song',
     userId: 'user1',
@@ -34,12 +44,45 @@ describe('OpenSubsonic native relay route and rights', () => {
     const controller = new OpenSubsonicAudioController(
       adapter as unknown as OpenSubsonicAdapter,
       rights as unknown as RightsDecisionService,
+      prisma as unknown as PrismaService,
     );
     await expect(controller.stream('original-song', 'tampered', undefined,
       {} as never, {} as never)).rejects.toThrow('AUDIO_GRANT_INVALID');
     expect(rights.decide).not.toHaveBeenCalled();
+    expect(prisma.track.findUnique).not.toHaveBeenCalled();
     expect(adapter.fetchAuthorizedBytes).not.toHaveBeenCalled();
   });
+
+
+  it.each([
+    ['deleted', null],
+    ['moved to Spotify', { source: 'spotify', externalId: 'bz:spotify:another' }],
+    ['reassigned upstream ID', {
+      source: 'opensubsonic', externalId: 'bz:opensubsonic:different-song',
+    }],
+  ])('revokes an existing grant when the canonical mapping is %s',
+    async (_reason, mapping) => {
+      prisma.track.findUnique.mockResolvedValue(mapping);
+      const adapter = {
+        verifyGrant: jest.fn().mockReturnValue(validGrant),
+        fetchAuthorizedBytes: jest.fn(),
+      };
+      const rights = { decide: jest.fn() };
+      const controller = new OpenSubsonicAudioController(
+        adapter as unknown as OpenSubsonicAdapter,
+        rights as unknown as RightsDecisionService,
+        prisma as unknown as PrismaService,
+      );
+      await expect(controller.stream('original-song', 'signed', 'bytes=0-1023',
+        {} as never, {} as never)).rejects.toThrow('AUDIO_SOURCE_MAPPING_REVOKED');
+      expect(prisma.track.findUnique).toHaveBeenCalledWith({
+        where: { id: validGrant.canonicalTrackId },
+        select: { source: true, externalId: true },
+      });
+      expect(rights.decide).not.toHaveBeenCalled();
+      expect(adapter.fetchAuthorizedBytes).not.toHaveBeenCalled();
+    },
+  );
 
   it('rechecks a grant against live stream.full rights before upstream byte delivery', async () => {
     const adapter = {
@@ -52,6 +95,7 @@ describe('OpenSubsonic native relay route and rights', () => {
     const controller = new OpenSubsonicAudioController(
       adapter as unknown as OpenSubsonicAdapter,
       rights as unknown as RightsDecisionService,
+      prisma as unknown as PrismaService,
     );
     await expect(controller.stream('original-song', 'signed', 'bytes=64-127',
       {} as never, {} as never)).rejects.toThrow('AUDIO_RIGHTS_UNAVAILABLE');
@@ -81,6 +125,7 @@ describe('OpenSubsonic native relay route and rights', () => {
     const controller = new OpenSubsonicAudioController(
       adapter as unknown as OpenSubsonicAdapter,
       rights as unknown as RightsDecisionService,
+      prisma as unknown as PrismaService,
     );
 
     const sink = new PassThrough() as PassThrough & {
@@ -109,6 +154,7 @@ describe('OpenSubsonic native relay route and rights', () => {
     const controller = new OpenSubsonicAudioController(
       adapter as unknown as OpenSubsonicAdapter,
       { decide: jest.fn() } as unknown as RightsDecisionService,
+      prisma as unknown as PrismaService,
     );
     await expect(controller.stream('original-song', 'signed', 'bytes=0-1,20-30',
       {} as never, {} as never)).rejects.toThrow('AUDIO_RANGE_INVALID');
