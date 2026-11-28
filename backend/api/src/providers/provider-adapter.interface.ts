@@ -20,6 +20,8 @@ export interface ProviderCapabilities {
 }
 
 export interface ProviderPlaybackRequest {
+  /** Authenticated Breezze user, for scoped upstream relay grants. */
+  userId?: string;
   canonicalTrackId?: string;
   providerTrackId: string;
   territory: string;
