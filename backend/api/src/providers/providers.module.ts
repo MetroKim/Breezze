@@ -12,10 +12,11 @@ import { ArtistCatalogService } from './artist-catalog.service';
 import { RightsModule } from '../rights/rights.module';
 import { OpenSubsonicAdapter } from './opensubsonic.adapter';
 import { OpenSubsonicAudioController } from './opensubsonic-audio.controller';
+import { AuthorizedAudioCatalogController } from './authorized-audio-catalog.controller';
 
 @Module({
   imports: [RightsModule],
-  controllers: [ProvidersController, OpenSubsonicAudioController],
+  controllers: [ProvidersController, OpenSubsonicAudioController, AuthorizedAudioCatalogController],
   providers: [
     ProviderRegistry,
     ArtistCatalogService,
