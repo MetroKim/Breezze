@@ -41,6 +41,25 @@ describe('privileged audio catalogue provisioning', () => {
     prisma.contentTakedownCase.findFirst.mockResolvedValue(null);
   });
 
+  it('rejects all owned-audio ingest actions in online-only mode', async () => {
+    const prior = process.env.BREEZZE_MEDIA_MODE;
+    process.env.BREEZZE_MEDIA_MODE = 'online_only';
+    try {
+      await expect(service.issueIngestGrant('admin', 'recording', 'AAC_256',
+        'audio/mp4', 1024)).rejects.toThrow('ONLINE_ONLY_INGEST_DISABLED');
+      await expect(service.verifyAsset('admin', 'recording', 'AAC_256'))
+        .rejects.toThrow('ONLINE_ONLY_INGEST_DISABLED');
+      await expect(service.approveMatch('admin',
+        'bz:youtube_music:abcdefghijk', 'recording'))
+        .rejects.toThrow('ONLINE_ONLY_INGEST_DISABLED');
+      expect(prisma.track.findUnique).not.toHaveBeenCalled();
+      expect(signer.createAudioIngestUrl).not.toHaveBeenCalled();
+    } finally {
+      if (prior === undefined) delete process.env.BREEZZE_MEDIA_MODE;
+      else process.env.BREEZZE_MEDIA_MODE = prior;
+    }
+  });
+
   it('requires separate rights and internal recording before issuing upload', async () => {
     prisma.rightsUsagePermission.findUnique.mockResolvedValue(null);
     await expect(service.issueIngestGrant('admin','recording','AAC_256','audio/mp4',100))
