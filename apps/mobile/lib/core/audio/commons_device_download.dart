@@ -146,7 +146,8 @@ class CommonsDeviceDownload {
             fileTitle.length > 180 || mime == null ||
             (kind != 'audio' && kind != 'video') ||
             bytes is! int || bytes <= 0 ||
-            Uri.tryParse(sourcePage)?.host != 'commons.wikimedia.org') continue;
+            (Uri.tryParse(sourcePage)?.host != 'commons.wikimedia.org' ||
+             Uri.tryParse(sourcePage)?.scheme != 'https')) continue;
         final extension = switch (mime) {
           'audio/mpeg' => 'mp3',
           'audio/ogg' => 'ogg',
@@ -162,7 +163,7 @@ class CommonsDeviceDownload {
         };
         if (extension.isEmpty) continue;
         final key = sha256.convert(utf8.encode(fileTitle)).toString();
-        if (!entity.path.endsWith('/$key.json')) continue;
+        if (entity.uri.pathSegments.last != '$key.json') continue;
         final file = File('${dir.path}/$key.$extension');
         if (!await file.exists() || await file.length() != bytes) continue;
         result.add(CommonsSavedMedia(
