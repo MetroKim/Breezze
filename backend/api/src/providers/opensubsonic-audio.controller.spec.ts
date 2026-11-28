@@ -95,7 +95,7 @@ describe('OpenSubsonic native relay route and rights', () => {
       { method: 'GET' } as never, sink as never);
     expect(Buffer.concat(chunks)).toEqual(payload);
     expect(sink.status).toHaveBeenCalledWith(206);
-    expect(sink.setHeader).toHaveBeenCalledWith('Content-Range', 'bytes 64-67/128');
+    expect(sink.setHeader).toHaveBeenCalledWith('content-range', 'bytes 64-67/128');
     expect(sink.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
     expect(adapter.fetchAuthorizedBytes).toHaveBeenCalledWith(
       'original-song', 'bytes=64-67');
