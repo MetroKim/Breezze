@@ -53,6 +53,8 @@ describe('V8 opt-in OpenSubsonic full-song bridge', () => {
     for (const key of envKeys) delete process.env[key];
     const provider = new OpenSubsonicAdapter();
     expect(provider.enabled).toBe(false);
+    expect(provider.capabilities.metadata).toBe(false);
+    expect((await provider.getTrack('private-song')).kind).toBe('unsupported');
     expect((await provider.getAvailability('original-song', 'TZ')).kind).toBe('unsupported');
     expect((await provider.search('original-song')).kind).toBe('unsupported');
   });
