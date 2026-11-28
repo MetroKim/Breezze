@@ -9,13 +9,18 @@ import { MusicBrainzAdapter } from './musicbrainz.adapter';
 import { ProviderCacheService } from './provider-cache.service';
 import { OfficialYouTubeDataService } from './official-youtube-data.service';
 import { ArtistCatalogService } from './artist-catalog.service';
+import { RightsModule } from '../rights/rights.module';
+import { OpenSubsonicAdapter } from './opensubsonic.adapter';
+import { OpenSubsonicAudioController } from './opensubsonic-audio.controller';
 
 @Module({
-  controllers: [ProvidersController],
+  imports: [RightsModule],
+  controllers: [ProvidersController, OpenSubsonicAudioController],
   providers: [
     ProviderRegistry,
     ArtistCatalogService,
     InternalCatalogAdapter,
+    OpenSubsonicAdapter,
     YtMusicAdapter,
     DeezerAdapter,
     SpotifyAdapter,
