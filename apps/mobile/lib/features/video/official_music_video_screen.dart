@@ -256,7 +256,11 @@ class _OfficialMusicVideoScreenState
           onPressed: () => Navigator.of(context).maybePop(),
         ),
       ),
-      body: SafeArea(
+      // Provider artwork provides ambience behind the original foreground
+      // YouTube iframe, which is never hidden or altered.
+      body: BzAmbientBackdrop(
+        artworkUrl: _currentArtworkUrl,
+        child: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 920),
@@ -266,6 +270,33 @@ class _OfficialMusicVideoScreenState
                 BzBreakpoints.bottomClearance(context, compact: 36),
               ),
               children: [
+                Row(
+                  children: [
+                    const BzSvgIcon(name: 'music-note', size: 18),
+                    const SizedBox(width: 8),
+                    Text('Song', style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.bzText2,
+                    )),
+                    const SizedBox(width: 8),
+                    BzSvgIcon(
+                      name: 'chevron-right', size: 15,
+                      color: theme.bzText2,
+                    ),
+                    const SizedBox(width: 8),
+                    const BzSvgIcon(name: 'video', size: 18),
+                    const SizedBox(width: 6),
+                    Text('Video', style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.bzText1,
+                      fontWeight: FontWeight.w700,
+                    )),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      child: const Text('Back to music'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 if (embeddedPlayer != null)
                   embeddedPlayer
                 else
@@ -396,6 +427,7 @@ class _OfficialMusicVideoScreenState
             ),
           ),
         ),
+      ),
       ),
     );
   }

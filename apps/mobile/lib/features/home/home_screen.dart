@@ -10,6 +10,7 @@ import '../../app/bootstrap.dart';
 import '../../app/recent_store.dart';
 import '../../app/playlist_store.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/database/outbox_sync_service.dart';
 import '../../widgets/bz_brand_icons.dart';
 import '../../core/audio/playback_source_policy.dart';
 import '../video/open_youtube_player.dart';
@@ -21,6 +22,7 @@ import '../../widgets/bz_discovery_spotlight.dart';
 import '../../widgets/bz_morphing_brand_header.dart';
 import '../../widgets/bz_pinned_mood_rail.dart';
 import '../../widgets/bz_discovery_action_tile.dart';
+import '../../widgets/bz_release_shelf.dart';
 
 /// Listen Now home — real rails from persisted history (§03).
 ///
@@ -42,6 +44,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<FavoriteTrack> _favorites = [];
   List<TrackInfo> _madeForYou = [];
   List<TrackInfo> _deezerTrending = [];
+  List<Map<String, String>> _newReleases = [];
   Map<String, dynamic>? _replay;
   bool _loading = true;
   bool _localDataUnavailable = false;
@@ -82,6 +85,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Map<String, dynamic>? replay;
     var madeForYou = <TrackInfo>[];
     var deezerTrending = <TrackInfo>[];
+    var newReleases = <Map<String, String>>[];
     if (!mounted || version != _refreshVersion) return;
     if (auth is AuthSignedIn) {
       final api = ref.read(authSessionProvider.notifier).api;
@@ -152,6 +156,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       } catch (_) {
         // A Deezer outage must not hide saved Home content.
       }
+      try {
+        final territory = ref.read(outboxTerritoryProvider).toLowerCase();
+        final country = territory.length == 2 && territory != 'ww'
+            ? territory : 'us';
+        final response = await api.discoveryNewReleases(country: country);
+        final items = response['items'];
+        if (items is List) {
+          final seen = <String>{};
+          for (final raw in items) {
+            if (raw is! Map) continue;
+            final title = (raw['title'] as String?)?.trim() ?? '';
+            final artist = (raw['artist'] as String?)?.trim() ?? '';
+            final artwork = (raw['artworkUrl'] as String?)?.trim() ?? '';
+            final uri = Uri.tryParse(artwork);
+            if (title.isEmpty || artist.isEmpty ||
+                uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+                !seen.add('${title.toLowerCase()}|${artist.toLowerCase()}')) {
+              continue;
+            }
+            newReleases.add({
+              'title': title,
+              'artist': artist,
+              'artworkUrl': artwork,
+            });
+            if (newReleases.length >= 12) break;
+          }
+        }
+      } catch (_) {
+        // No placeholders when the regional new-release feed is unavailable.
+      }
     }
     if (!mounted || version != _refreshVersion) return;
     final currentAuth = ref.read(authSessionProvider);
@@ -163,6 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _favorites = favorites;
       _madeForYou = madeForYou;
       _deezerTrending = deezerTrending;
+      _newReleases = newReleases;
       _replay = replay;
       _loading = false;
       _localDataUnavailable = localDataUnavailable;
@@ -266,6 +301,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _favorites = [];
         _madeForYou = [];
         _deezerTrending = [];
+        _newReleases = [];
         _replay = null;
         _loading = true;
         _localDataUnavailable = false;
@@ -399,6 +435,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               title: 'Made for You',
               tracks: _madeForYou,
               onPlay: _play,
+            ),
+            const SizedBox(height: 24),
+          ],
+          if (!_loading && _newReleases.isNotEmpty) ...[
+            BzReleaseShelf(
+              items: _newReleases,
+              onOpen: (release) => Navigator.of(context).push(
+                breezzePageRoute<void>(
+                  context: context,
+                  builder: (_) => SearchScreen(
+                    initialQuery: '${release['title']} ${release['artist']}',
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 24),
           ],

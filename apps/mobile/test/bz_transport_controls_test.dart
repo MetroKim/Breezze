@@ -150,4 +150,41 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+
+  testWidgets('ten-second rewind and forward are independently tappable',
+      (tester) async {
+    var backwards = 0;
+    var forwards = 0;
+    var previous = 0;
+    var next = 0;
+    await tester.pumpWidget(MaterialApp(
+      theme: bzDarkTheme(),
+      home: Scaffold(
+        body: Center(child: SizedBox(
+          width: 260,
+          child: BzTransportControls(
+            playing: true,
+            onPrevious: () => previous++,
+            onNext: () => next++,
+            onTogglePlayPause: () {},
+            onShuffle: () {},
+            onRepeat: () {},
+            onRewindTen: () => backwards++,
+            onForwardTen: () => forwards++,
+          ),
+        )),
+      ),
+    ));
+    expect(find.byTooltip('Previous track'), findsOneWidget);
+    expect(find.byTooltip('Next track'), findsOneWidget);
+    expect(find.byTooltip('Rewind 10 seconds'), findsOneWidget);
+    expect(find.byTooltip('Forward 10 seconds'), findsOneWidget);
+    await tester.tap(find.byTooltip('Rewind 10 seconds'));
+    await tester.tap(find.byTooltip('Forward 10 seconds'));
+    expect(backwards, 1);
+    expect(forwards, 1);
+    expect(previous, 0);
+    expect(next, 0);
+    expect(tester.takeException(), isNull);
+  });
 }
