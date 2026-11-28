@@ -100,14 +100,91 @@ class CommonsDeviceMedia {
   };
 }
 
+/// Persisted open-licensed recording, accessible without an online API call.
+class CommonsSavedMedia {
+  const CommonsSavedMedia({
+    required this.file,
+    required this.fileTitle,
+    required this.title,
+    required this.kind,
+    required this.license,
+    required this.sourcePage,
+    this.creator,
+  });
+
+  final File file;
+  final String fileTitle;
+  final String title;
+  final String kind;
+  final String license;
+  final String sourcePage;
+  final String? creator;
+}
+
 /// File-by-file device downloads; bypasses the owned-R2 audio store.
 /// Do not call with search results: fetch a fresh /resolve result immediately
 /// before constructing CommonsDeviceMedia and saving a file.
 class CommonsDeviceDownload {
+  Future<List<CommonsSavedMedia>> listSaved({required String ownerId}) async {
+    if (ownerId.isEmpty || ownerId.length > 128) return [];
+    final base = await getApplicationSupportDirectory();
+    final ownerKey = sha256.convert(utf8.encode(ownerId)).toString();
+    final dir = Directory('${base.path}/Breezze/OpenMedia/$ownerKey');
+    if (!await dir.exists()) return [];
+    final result = <CommonsSavedMedia>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        final raw = jsonDecode(await entity.readAsString());
+        if (raw is! Map<String, dynamic>) continue;
+        final fileTitle = raw['fileTitle'] as String?;
+        final mime = raw['mimeType'] as String?;
+        final kind = raw['kind'] as String?;
+        final bytes = raw['bytes'];
+        final sourcePage = raw['sourcePage'] as String? ?? '';
+        if (fileTitle == null || !fileTitle.startsWith('File:') ||
+            fileTitle.length > 180 || mime == null ||
+            (kind != 'audio' && kind != 'video') ||
+            bytes is! int || bytes <= 0 ||
+            Uri.tryParse(sourcePage)?.host != 'commons.wikimedia.org') continue;
+        final extension = switch (mime) {
+          'audio/mpeg' => 'mp3',
+          'audio/ogg' => 'ogg',
+          'audio/flac' || 'audio/x-flac' => 'flac',
+          'audio/wav' || 'audio/x-wav' => 'wav',
+          'audio/webm' => 'webm',
+          'audio/mp4' => 'm4a',
+          'audio/aac' => 'aac',
+          'video/webm' => 'webm',
+          'video/ogg' => 'ogv',
+          'video/mp4' => 'mp4',
+          _ => '',
+        };
+        if (extension.isEmpty) continue;
+        final key = sha256.convert(utf8.encode(fileTitle)).toString();
+        if (!entity.path.endsWith('/$key.json')) continue;
+        final file = File('${dir.path}/$key.$extension');
+        if (!await file.exists() || await file.length() != bytes) continue;
+        result.add(CommonsSavedMedia(
+          file: file, fileTitle: fileTitle,
+          title: raw['title'] as String? ?? fileTitle,
+          kind: kind, sourcePage: sourcePage,
+          license: raw['license'] as String? ?? 'License details saved',
+          creator: raw['creator'] as String?,
+        ));
+      } catch (_) {
+        // Corrupt metadata or missing files are not displayed as playable.
+      }
+    }
+    result.sort((a, b) => a.title.compareTo(b.title));
+    return result;
+  }
+
   Future<File> save({
     required CommonsDeviceMedia media,
     required String ownerId,
     void Function(double)? onProgress,
+    bool Function()? stillAuthorizedOwner,
   }) async {
     if (ownerId.isEmpty || ownerId.length > 128) {
       throw const FormatException('OPEN_MEDIA_OWNER_INVALID');
@@ -141,6 +218,9 @@ class CommonsDeviceDownload {
       final sink = partial.openWrite();
       try {
         await for (final chunk in response) {
+          if (stillAuthorizedOwner?.call() == false) {
+            throw const HttpException('OPEN_MEDIA_ACCOUNT_CHANGED');
+          }
           transferred += chunk.length;
           if (transferred > media.bytes) {
             throw const HttpException('OPEN_MEDIA_DOWNLOAD_OVERSIZE');
@@ -151,6 +231,9 @@ class CommonsDeviceDownload {
         await sink.flush();
       } finally {
         await sink.close();
+      }
+      if (stillAuthorizedOwner?.call() == false) {
+        throw const HttpException('OPEN_MEDIA_ACCOUNT_CHANGED');
       }
       if (transferred != media.bytes) {
         throw const HttpException('OPEN_MEDIA_DOWNLOAD_INCOMPLETE');
