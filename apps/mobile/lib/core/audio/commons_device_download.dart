@@ -29,6 +29,11 @@ class CommonsDeviceMedia {
             RegExp(r'^/licenses/by(-sa)?/(2\.0|2\.5|3\.0|4\.0)/?$')
                 .hasMatch(licenseUri?.path ?? ''));
     final maxBytes = kind == 'video' ? 1000000000 : 250000000;
+    final lowerTitle = fileTitle.toLowerCase();
+    final genericOgg = mimeType == 'application/ogg' &&
+        (kind == 'audio'
+            ? lowerTitle.endsWith('.ogg') || lowerTitle.endsWith('.oga')
+            : lowerTitle.endsWith('.ogv'));
     if (raw['provider'] != 'wikimedia_commons' ||
         !downloadAllowed ||
         (kind != 'video' && kind != 'audio') ||
@@ -40,8 +45,8 @@ class CommonsDeviceMedia {
         source?.host != 'commons.wikimedia.org' ||
         !_isCommonsUpload(streamUrl) ||
         !_isCommonsUpload(downloadUrl) ||
-        (kind == 'audio' && !mimeType.startsWith('audio/')) ||
-        (kind == 'video' && !mimeType.startsWith('video/')) ||
+        (kind == 'audio' && !mimeType.startsWith('audio/') && !genericOgg) ||
+        (kind == 'video' && !mimeType.startsWith('video/') && !genericOgg) ||
         bytes <= 0 || bytes > maxBytes) {
       throw const FormatException('OPEN_MEDIA_MANIFEST_INVALID');
     }
@@ -74,6 +79,7 @@ class CommonsDeviceMedia {
   String get extension => switch (mimeType) {
     'audio/mpeg' => 'mp3',
     'audio/ogg' => 'ogg',
+    'application/ogg' => kind == 'video' ? 'ogv' : 'ogg',
     'audio/flac' || 'audio/x-flac' => 'flac',
     'audio/wav' || 'audio/x-wav' => 'wav',
     'audio/webm' => 'webm',
@@ -151,6 +157,7 @@ class CommonsDeviceDownload {
         final extension = switch (mime) {
           'audio/mpeg' => 'mp3',
           'audio/ogg' => 'ogg',
+          'application/ogg' => kind == 'video' ? 'ogv' : 'ogg',
           'audio/flac' || 'audio/x-flac' => 'flac',
           'audio/wav' || 'audio/x-wav' => 'wav',
           'audio/webm' => 'webm',
