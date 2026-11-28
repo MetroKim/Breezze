@@ -85,7 +85,7 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
     return url;
   }
 
-  private async upstreamSong(id: string): Promise<ProviderTrack | null> {
+  private async upstreamSong(id: string): Promise<{ track: ProviderTrack; mimeType: string } | null> {
     const config = this.config();
     if (!config || !SONG_ID.test(id)) return null;
     try {
@@ -110,8 +110,11 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
           (song.duration ?? 0) <= 0 ||
           !MIME.test(song.contentType ?? '')) return null;
       return {
-        providerTrackId: id, title: song.title.trim(),
-        artist: song.artist.trim(), durationSec: song.duration,
+        track: {
+          providerTrackId: id, title: song.title.trim(),
+          artist: song.artist.trim(), durationSec: song.duration,
+        },
+        mimeType: (song.contentType ?? '').split(';', 1)[0].toLowerCase(),
       };
     } catch {
       return null;
@@ -126,7 +129,7 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
 
   async getTrack(id: string): Promise<ProviderResult<ProviderTrack>> {
     const song = await this.upstreamSong(id);
-    return song ? providerOk(song) :
+    return song ? providerOk(song.track) :
       providerError('OPEN_SUBSONIC_TRACK_UNAVAILABLE', 'Authorized audio unavailable', true);
   }
 
@@ -203,8 +206,11 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
       url: url.toString(), expiresAt,
       // The source is already checked as audio via getSong.
       // The relay independently validates upstream content-type per request.
-      mimeType: 'audio/mpeg',
-      codec: 'mp3',
+      mimeType: song.mimeType,
+      codec: song.mimeType === 'audio/flac' || song.mimeType === 'audio/x-flac'
+        ? 'flac' : song.mimeType === 'audio/mp4' ? 'aac'
+        : song.mimeType === 'audio/ogg' || song.mimeType === 'audio/opus' ? 'opus'
+        : song.mimeType.includes('wav') ? 'wav' : 'mp3',
     });
   }
 
@@ -214,11 +220,15 @@ export class OpenSubsonicAdapter implements ProviderAdapter {
         (range != null && !/^bytes=\d+-\d*$/.test(range))) return null;
     const headers: Record<string, string> = { accept: 'audio/*', 'accept-encoding': 'identity' };
     if (range) headers.range = range;
+    const abort = new AbortController();
+    // Deadline covers only response headers. A song body can last hours.
+    const timer = setTimeout(() => abort.abort(), 15_000);
     try {
       return await fetch(this.upstreamUrl('stream', id, config), {
-        headers, redirect: 'error', signal: AbortSignal.timeout(25_000),
+        headers, redirect: 'error', signal: abort.signal,
       });
     } catch { return null; }
+    finally { clearTimeout(timer); }
   }
 
   static validMediaResponse(response: Response, requestedRange: boolean): boolean {
