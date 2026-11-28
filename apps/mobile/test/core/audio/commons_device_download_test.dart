@@ -40,6 +40,31 @@ void main() {
     expect(CommonsDeviceMedia.fromJson(item).extension, 'webm');
   });
 
+  test('recognizes actual Commons application/ogg AUDIO and VIDEO manifests', () {
+    final audio = valid()
+      ..['fileTitle'] = 'File:Commons concert.oga'
+      ..['title'] = 'Commons concert'
+      ..['mimeType'] = 'application/ogg'
+      ..['streamUrl'] =
+          'https://upload.wikimedia.org/wikipedia/commons/a/ab/Commons_concert.oga'
+      ..['downloadUrl'] =
+          'https://upload.wikimedia.org/wikipedia/commons/a/ab/Commons_concert.oga'
+      ..['durationSec'] = 292.596;
+    final recording = CommonsDeviceMedia.fromJson(audio);
+    expect(recording.extension, 'ogg');
+    expect(recording.durationSec, 292.596);
+    expect(recording.toLocalMetadata()['durationSec'], 292.596);
+
+    final video = Map<String, dynamic>.from(audio)
+      ..['kind'] = 'video'
+      ..['fileTitle'] = 'File:Commons film.ogv'
+      ..['streamUrl'] =
+          'https://upload.wikimedia.org/wikipedia/commons/a/ab/Commons_film.ogv'
+      ..['downloadUrl'] =
+          'https://upload.wikimedia.org/wikipedia/commons/a/ab/Commons_film.ogv';
+    expect(CommonsDeviceMedia.fromJson(video).extension, 'ogv');
+  });
+
   test('refuses unrelated hosts, restricted licenses and absent permissions', () {
     for (final bad in [
       {'streamUrl': 'https://stream-ripper.example.com/file.mp3'},
