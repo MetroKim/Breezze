@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma.service';
 import { MediaSigner } from '../playback/media-signer.service';
 import { inspectSignedMediaObject } from '../playback/signed-media-presence';
 import { AUDIO_QUALITY_ORDER } from '../playback/audio-variant-selection';
+import { isOnlineOnlyMediaMode } from '../playback/online-media-mode';
 
 @Injectable()
 export class AudioCatalogAdminService {
@@ -15,6 +16,9 @@ export class AudioCatalogAdminService {
    * track rights, and takedowns. It cannot activate an asset by itself. */
   async issueIngestGrant(actorId: string, trackId: string,
     quality: string, mimeType: string, sizeBytes: number) {
+    if (isOnlineOnlyMediaMode()) {
+      throw new NotAcceptableException('ONLINE_ONLY_INGEST_DISABLED');
+    }
     const track = await this.prisma.track.findUnique({
       where: { id: trackId }, select: { source: true, externalId: true },
     });
@@ -56,6 +60,9 @@ export class AudioCatalogAdminService {
    * A separate rights decision is still mandatory for every listener.
    */
   async verifyAsset(actorId: string, trackId: string, quality: string) {
+    if (isOnlineOnlyMediaMode()) {
+      throw new NotAcceptableException('ONLINE_ONLY_INGEST_DISABLED');
+    }
     if (!AUDIO_QUALITY_ORDER.includes(quality as typeof AUDIO_QUALITY_ORDER[number])) {
       throw new NotAcceptableException('INVALID_AUDIO_QUALITY');
     }
@@ -121,6 +128,9 @@ export class AudioCatalogAdminService {
   /** An admin must explicitly approve the identity match after an asset was
    * ingested; similarity or YouTube metadata cannot self-approve. */
   async approveMatch(actorId: string, externalTrackId: string, playableTrackId: string) {
+    if (isOnlineOnlyMediaMode()) {
+      throw new NotAcceptableException('ONLINE_ONLY_INGEST_DISABLED');
+    }
     if (!/^bz:youtube_music:[A-Za-z0-9_-]{11}$/.test(externalTrackId)) {
       throw new NotAcceptableException('INVALID_EXTERNAL_TRACK_ID');
     }
