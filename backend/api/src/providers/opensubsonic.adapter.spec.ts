@@ -134,7 +134,26 @@ describe('V8 opt-in OpenSubsonic full-song bridge', () => {
       headers: { 'content-type': 'audio/mpeg', 'content-range': 'bytes 0-1023/5000' },
     });
     expect(OpenSubsonicAdapter.validMediaResponse(ok, true)).toBe(true);
-    expect(OpenSubsonicAdapter.validMediaResponse(ok, false)).toBe(true);
+    expect(OpenSubsonicAdapter.validMediaResponse(ok, false)).toBe(false);
+    // Partial bodies are never accepted for an un-ranged full-track request.
+    expect(OpenSubsonicAdapter.validMediaResponse(
+      new Response(new Uint8Array(16), {
+        status: 206,
+        headers: { 'content-type': 'audio/mpeg',
+          'content-range': 'bytes 0-15/1000', 'content-length': '16' },
+      }), false,
+    )).toBe(false);
+    for (const headers of [
+      { 'content-range': 'bytes 20-10/100', 'content-length': '9' },
+      { 'content-range': 'bytes 90-101/100', 'content-length': '12' },
+      { 'content-range': 'bytes 0-15/100', 'content-length': '12' },
+    ]) {
+      expect(OpenSubsonicAdapter.validMediaResponse(
+        new Response(new Uint8Array(16), {
+          status: 206, headers: { 'content-type': 'audio/mpeg', ...headers },
+        }), true,
+      )).toBe(false);
+    }
     expect(OpenSubsonicAdapter.validMediaResponse(
       new Response('<html>login</html>', { headers: { 'content-type': 'text/html' } }), false,
     )).toBe(false);
