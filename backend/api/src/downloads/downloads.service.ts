@@ -8,6 +8,7 @@ import { RightsDecisionService } from '../rights/rights-decision.service';
 import { MediaSigner } from '../playback/media-signer.service';
 import { verifySignedMediaObject } from '../playback/signed-media-presence';
 import { ProviderRegistry } from '../providers/provider-registry.service';
+import { isOnlineOnlyMediaMode } from '../playback/online-media-mode';
 
 @Injectable()
 export class DownloadsService {
@@ -76,6 +77,10 @@ export class DownloadsService {
     userId: string,
     dto: { trackId: string; territory: string },
   ) {
+    // No offline media bytes or new download records in online-only mode.
+    if (isOnlineOnlyMediaMode()) {
+      return { allowed: false, reason: 'ONLINE_ONLY_DOWNLOAD_DISABLED', url: null };
+    }
     const territory = this.requireTerritory(dto.territory);
     const supported = await this.providerAllowsDownload(dto.trackId);
     if (!supported) {
@@ -148,6 +153,9 @@ export class DownloadsService {
   }
 
   async revalidateOfflineLease(userId: string, trackId: string, territoryInput: string) {
+    if (isOnlineOnlyMediaMode()) {
+      return { allowed: false, reason: 'ONLINE_ONLY_DOWNLOAD_DISABLED' };
+    }
     const territory = this.requireTerritory(territoryInput);
     const existing = await this.prisma.downloadRecord.findFirst({
       where: { userId, trackId, status: 'active' },
@@ -198,6 +206,8 @@ export class DownloadsService {
   }
 
   async list(userId: string) {
+    // Do not advertise legacy offline assets as usable when online-only.
+    if (isOnlineOnlyMediaMode()) return [];
     return this.prisma.downloadRecord.findMany({
       where: { userId, status: 'active' },
       orderBy: { createdAt: 'desc' },
