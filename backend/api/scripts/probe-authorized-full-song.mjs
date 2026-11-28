@@ -71,6 +71,10 @@ async function run() {
   const origin = new URL(rawOrigin).origin;
   const root = mustUrl(rawOrigin, origin);
   if (root.pathname !== '/' || root.search) fail('QA_ORIGIN_MUST_BE_BARE');
+  // Never exercise signed media against an accidentally selected production
+  // API from an engineer laptop without an explicit QA/staging hostname.
+  if (!/(^|[.-])(qa|staging|test|dev)([.-]|$)/i.test(root.hostname))
+    fail('QA_HOST_MUST_BE_NONPRODUCTION');
   const endpoint = (route) => new URL('/api/v1/' + route, origin);
   const auth = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
   const api = async (route, options = {}) => {
@@ -158,12 +162,13 @@ async function run() {
   // Never claim audible playback, gapless, licensing or device acceptance:
   // these are independent gates. This proves HTTP bytes, not a user's ears.
   console.log(JSON.stringify({
-    status: 'QA_HTTP_FULL_SONG_BYTES_PASS',
+    status: 'QA_HTTP_RANGE_AND_TRANSFER_PASS',
     kind: 'synthetic-or-approved-QA-only',
     mimeType: playback.mimeType,
     declaredDurationSec: song.durationSec,
     bytesRead: streamBytes, rangeStart: true, rangeSeek: true,
-    nativePlaybackVerified: false, commercialCatalogVerified: false,
+    decodedDurationVerified: false, nativePlaybackVerified: false,
+    commercialCatalogVerified: false,
   }));
 }
 
