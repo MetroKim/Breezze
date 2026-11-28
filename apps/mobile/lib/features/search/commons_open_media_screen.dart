@@ -31,12 +31,16 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
   String? _error;
   String? _busy;
   final Map<String, String> _downloadedPaths = {};
+  List<CommonsSavedMedia> _saved = [];
+  bool _showSaved = false;
   int _generation = 0;
+  int _savedGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _query = TextEditingController(text: widget.initialQuery);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreSaved());
     if (widget.initialQuery.trim().length >= 2) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _search());
     }
@@ -45,8 +49,60 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
   @override
   void dispose() {
     _generation++;
+    _savedGeneration++;
     _query.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreSaved() async {
+    final auth = ref.read(authSessionProvider);
+    final ownerId = auth is AuthSignedIn ? auth.userId : null;
+    final generation = ++_savedGeneration;
+    if (ownerId == null) {
+      if (mounted) setState(() => _saved = []);
+      return;
+    }
+    try {
+      final saved = await CommonsDeviceDownload().listSaved(ownerId: ownerId);
+      if (!mounted || generation != _savedGeneration) return;
+      final current = ref.read(authSessionProvider);
+      if (current is! AuthSignedIn || current.userId != ownerId) return;
+      setState(() => _saved = saved);
+    } catch (_) {
+      if (mounted && generation == _savedGeneration) {
+        setState(() => _saved = []);
+      }
+    }
+  }
+
+  Future<void> _playSaved(CommonsSavedMedia item) async {
+    final auth = ref.read(authSessionProvider);
+    if (auth is! AuthSignedIn || !_saved.any((m) => m.file.path == item.file.path)) {
+      return;
+    }
+    if (!await item.file.exists()) {
+      await _restoreSaved();
+      return;
+    }
+    if (item.kind == 'audio') {
+      final key = sha256.convert(utf8.encode(item.fileTitle)).toString();
+      await ref.read(playerControllerProvider.notifier).playTrack(
+        trackId: 'commons:$key',
+        title: item.title,
+        artist: item.creator ?? 'Wikimedia Commons',
+        localFilePath: item.file.path,
+        origin: 'open-media-downloads',
+        sourceContext: 'Downloaded open media',
+      );
+    } else {
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => CommonsVideoPlayerScreen(
+          source: item.file.uri, title: item.title,
+          sourcePage: item.sourcePage, license: item.license,
+        ),
+      ));
+    }
   }
 
   Future<void> _search() async {
@@ -155,6 +211,10 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
       final resolved = await _fresh(item);
       final saved = await CommonsDeviceDownload().save(
         media: resolved, ownerId: auth.userId,
+        stillAuthorizedOwner: () {
+          final latest = ref.read(authSessionProvider);
+          return latest is AuthSignedIn && latest.userId == auth.userId;
+        },
       );
       if (!mounted) return;
       final current = ref.read(authSessionProvider);
@@ -163,6 +223,7 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
         return;
       }
       setState(() => _downloadedPaths[item.fileTitle] = saved.path);
+      await _restoreSaved();
       _message('Saved on this device. License and source details retained.');
     } catch (_) {
       if (mounted) _message('Download failed or source permission changed.');
@@ -179,6 +240,21 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authSessionProvider, (previous, next) {
+      final before = previous is AuthSignedIn ? previous.userId : null;
+      final after = next is AuthSignedIn ? next.userId : null;
+      if (before != after) {
+        _generation++;
+        _savedGeneration++;
+        setState(() {
+          _items = [];
+          _saved = [];
+          _downloadedPaths.clear();
+          _loading = false;
+        });
+        _restoreSaved();
+      }
+    });
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Open media')),
@@ -209,6 +285,12 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
                     ),
                   ),
                   const SizedBox(height: 12),
+                  TextButton.icon(
+                    icon: const Icon(Icons.download_done_outlined),
+                    label: Text('Saved on device (${_saved.length})'),
+                    onPressed: () => setState(() => _showSaved = !_showSaved),
+                  ),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 10,
                     children: [
@@ -234,7 +316,27 @@ class _CommonsOpenMediaScreenState extends ConsumerState<CommonsOpenMediaScreen>
               ),
             ),
             Expanded(
-              child: _loading
+              child: _showSaved
+                ? (_saved.isEmpty
+                    ? const Center(child: Text('No open-media files saved on this device.'))
+                    : ListView.builder(
+                        itemCount: _saved.length,
+                        itemBuilder: (context, i) {
+                          final item = _saved[i];
+                          return ListTile(
+                            leading: Icon(item.kind == 'audio'
+                                ? Icons.music_note : Icons.movie_outlined),
+                            title: Text(item.title),
+                            subtitle: Text('${item.license} · saved on this device'),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.play_arrow),
+                              tooltip: 'Play downloaded file offline',
+                              onPressed: () => _playSaved(item),
+                            ),
+                          );
+                        },
+                      ))
+                : _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
                   ? Center(child: Text(_error!))
@@ -320,7 +422,9 @@ class _CommonsVideoPlayerScreenState extends State<CommonsVideoPlayerScreen> {
 
   Future<void> _initialize() async {
     try {
-      final player = VideoPlayerController.networkUrl(widget.source);
+      final player = widget.source.scheme == 'file'
+          ? VideoPlayerController.file(File.fromUri(widget.source))
+          : VideoPlayerController.networkUrl(widget.source);
       await player.initialize();
       if (!mounted) {
         await player.dispose();
