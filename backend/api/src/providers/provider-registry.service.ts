@@ -3,6 +3,7 @@ import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
 import { DeezerAdapter } from './deezer.adapter';
 import { MusicBrainzAdapter } from './musicbrainz.adapter';
+import { OpenSubsonicAdapter } from './opensubsonic.adapter';
 import { ProviderAdapter, ProviderTrack } from './provider-adapter.interface';
 import { ProviderResult } from './provider-result';
 import { unifiedMusicResults, UnifiedMusicTrack } from './unified-music-results';
@@ -19,11 +20,13 @@ export class ProviderRegistry {
     spotify: SpotifyAdapter,
     deezer: DeezerAdapter,
     musicbrainz: MusicBrainzAdapter,
+    opensubsonic: OpenSubsonicAdapter,
   ) {
     this.register(internal);
     this.register(spotify);
     this.register(deezer);
     this.register(musicbrainz);
+    this.register(opensubsonic);
   }
 
   register(adapter: ProviderAdapter) {

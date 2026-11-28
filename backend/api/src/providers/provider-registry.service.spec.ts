@@ -3,12 +3,14 @@ import { InternalCatalogAdapter } from './internal-catalog.adapter';
 import { SpotifyAdapter } from './spotify.adapter';
 import { DeezerAdapter } from './deezer.adapter';
 import { MusicBrainzAdapter } from './musicbrainz.adapter';
+import { OpenSubsonicAdapter } from './opensubsonic.adapter';
 
 describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     musicbrainz.enabled = false;
     spotify.enabled = true;
+    opensubsonic.enabled = false;
   });
   const makeAdapter = (providerId: string, priority: number, playback = false, availability = false) => ({
     providerId, displayName: providerId, adapterVersion: '1.0.0', priority, enabled: true,
@@ -19,12 +21,15 @@ describe('ProviderRegistry: Spotify and Deezer music / YouTube videos', () => {
   const spotify = makeAdapter('spotify', 220);
   const deezer = makeAdapter('deezer', 110);
   const musicbrainz = makeAdapter('musicbrainz', 70);
+  const opensubsonic = makeAdapter('opensubsonic', 80, true, true);
   musicbrainz.enabled = false;
+  opensubsonic.enabled = false;
   const registry = () => new ProviderRegistry(
     internal as unknown as InternalCatalogAdapter,
     spotify as unknown as SpotifyAdapter,
     deezer as unknown as DeezerAdapter,
     musicbrainz as unknown as MusicBrainzAdapter,
+    opensubsonic as unknown as OpenSubsonicAdapter,
   );
 
   it('searches Spotify and Deezer independently; YouTube stays video-only', async () => {
