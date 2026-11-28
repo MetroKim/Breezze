@@ -470,14 +470,17 @@ class PlayerController extends Notifier<PlayerState> {
     String? artist,
     String? artworkUrl,
     String? localFilePath,
+    String? approvedOnlineUrl,
     Duration duration = Duration.zero,
     List<TrackInfo> queue = const [],
     int startIndex = 0,
     String origin = 'manual',
     String sourceContext = 'Breezze',
   }) async {
-    if ((isMetadataOnlyTrackId(trackId) && localFilePath == null) ||
-        queue.any((item) => isMetadataOnlyTrackId(item.id) && item.localFilePath == null)) {
+    if (approvedOnlineUrl != null && !isApprovedCommonsAudioUrl(approvedOnlineUrl)) return;
+    if ((isMetadataOnlyTrackId(trackId) && localFilePath == null && approvedOnlineUrl == null) ||
+        queue.any((item) => isMetadataOnlyTrackId(item.id) &&
+            item.localFilePath == null && item.approvedOnlineUrl == null)) {
       return;
     }
     _cancelStreamRecovery();
@@ -516,6 +519,7 @@ class PlayerController extends Notifier<PlayerState> {
             artist: artist,
             artworkUrl: artworkUrl,
             localFilePath: localFilePath,
+            approvedOnlineUrl: approvedOnlineUrl,
             duration: duration,
           )
         : queue[startIndex.clamp(0, queue.length - 1)];
@@ -964,7 +968,10 @@ class PlayerController extends Notifier<PlayerState> {
     TrackInfo info, {
     Duration initialPosition = Duration.zero,
   }) async {
-    if (isMetadataOnlyTrackId(info.id) && info.localFilePath == null) return;
+    if (isMetadataOnlyTrackId(info.id) && info.localFilePath == null &&
+        info.approvedOnlineUrl == null) return;
+    if (info.approvedOnlineUrl != null &&
+        !isApprovedCommonsAudioUrl(info.approvedOnlineUrl)) return;
     if (_engine is CallInterruptionResumeSource) {
       (_engine! as CallInterruptionResumeSource).cancelPendingCallResume();
     }
@@ -999,6 +1006,13 @@ class PlayerController extends Notifier<PlayerState> {
               streamUrl: info.localFilePath!,
               expiresAtUtc: DateTime.utc(9999),
               isLocal: true,
+            )
+          : info.approvedOnlineUrl != null
+          ? PlayableSource(
+              trackId: info.id,
+              streamUrl: info.approvedOnlineUrl!,
+              expiresAtUtc: DateTime.now().toUtc().add(const Duration(minutes: 20)),
+              isLocal: false,
             )
           : await ref.read(playbackResolverProvider).resolve(info);
       if (!_isCurrentRequest(requestId)) {
@@ -1130,6 +1144,8 @@ class TrackInfo {
   final String? artist;
   final String? artworkUrl;
   final String? localFilePath;
+  /// Direct online audio URL validated by Breezze /commons/resolve.
+  final String? approvedOnlineUrl;
   final Duration duration;
 
   const TrackInfo({
@@ -1138,6 +1154,7 @@ class TrackInfo {
     this.artist,
     this.artworkUrl,
     this.localFilePath,
+    this.approvedOnlineUrl,
     this.duration = Duration.zero,
   });
 }
