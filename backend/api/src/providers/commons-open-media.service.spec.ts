@@ -55,6 +55,66 @@ describe('CommonsOpenMediaService — no server audio storage', () => {
     expect(request.searchParams.get('gsrnamespace')).toBe('6');
   });
 
+  it('accepts actual Commons Ogg audio MIME, media kind, URL UTM tags and duration', async () => {
+    response.mockResolvedValue(new Response(JSON.stringify({
+      query: { pages: [{
+        title: 'File:Beethoven Prometheus Creatures.oga',
+        imageinfo: [{
+          url: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Beethoven_Prometheus_Creatures.oga?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original',
+          mime: 'application/ogg',
+          mediatype: 'AUDIO',
+          duration: 292.596,
+          size: 8207409,
+          extmetadata: {
+            LicenseUrl: { value: 'https://creativecommons.org/licenses/by-sa/2.0' },
+            Artist: { value: 'Ludwig van Beethoven' },
+          },
+        }],
+      }] },
+    })));
+    const result = await service.search('Beethoven', 'audio');
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      mimeType: 'application/ogg', durationSec: 292.596,
+      downloadAllowed: true, saveTarget: 'listener_device',
+      streamUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Beethoven_Prometheus_Creatures.oga',
+      license: 'CC BY-SA 2.0',
+    });
+    const request = new URL(response.mock.calls[0][0] as string);
+    expect(request.searchParams.get('iiprop')).toContain('mediatype');
+  });
+
+  it('rejects suspicious Commons URL query parameters and misclassified Ogg video', async () => {
+    const audio = {
+      title: 'File:Not real audio.ogg',
+      imageinfo: [{
+        mime: 'application/ogg', mediatype: 'VIDEO', size: 1024,
+        url: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Not_real_audio.ogg',
+        extmetadata: {
+          LicenseUrl: { value: 'https://creativecommons.org/licenses/by/4.0/' },
+        },
+      }],
+    };
+    response.mockResolvedValue(new Response(JSON.stringify({
+      query: { pages: [audio] },
+    })));
+    await expect(service.search('Not real audio', 'audio'))
+      .resolves.toMatchObject({ items: [] });
+
+    response.mockResolvedValue(new Response(JSON.stringify({
+      query: { pages: [{
+        ...audio,
+        imageinfo: [{
+          ...audio.imageinfo[0],
+          mediatype: 'AUDIO',
+          url: audio.imageinfo[0].url + '?redirect=https://attacker.example/media',
+        }],
+      }] },
+    })));
+    await expect(service.search('Not real audio', 'audio'))
+      .resolves.toMatchObject({ items: [] });
+  });
+
   it('resolves an available CC0 video file and checks its license again', async () => {
     response.mockResolvedValue(new Response(JSON.stringify({
       query: { pages: [{
