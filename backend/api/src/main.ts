@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { AppModule } from './app.module';
 import { ResponseEnvelopeInterceptor } from './response-envelope.interceptor';
 import { PrismaService } from './prisma.service';
+import { shouldExposeSwaggerDocs } from './api-docs-policy';
 
 async function bootstrap() {
   const port = Number(process.env.PORT ?? 3000);
@@ -83,12 +84,17 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('Breezze API')
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
-  SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swagger));
+  // The public Cloudflare edge can forward /api/docs to an authenticated
+  // origin; hiding Swagger behind the edge's shared secret is insufficient.
+  // Developer documentation is intentionally absent from production routes.
+  if (shouldExposeSwaggerDocs(process.env.NODE_ENV)) {
+    const swagger = new DocumentBuilder()
+      .setTitle('Breezze API')
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swagger));
+  }
 
   // Lightweight health endpoint for container orchestration and deployment smoke tests.
   // It exposes no dependency state, credentials, or internal configuration.

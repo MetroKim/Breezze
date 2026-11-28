@@ -1,0 +1,141 @@
+name: Breezze V8 full-tree security and dependency audit
+
+on:
+  push:
+    branches: [main, develop, breezze]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '15 3 * * *'
+
+# Security scanners run without deployment credentials or permission to
+# publish packages, write code, create releases, or upload source artifacts.
+permissions:
+  contents: read
+
+concurrency:
+  group: breezze-v8-repository-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dependency-reproducibility:
+    name: Pinning and lockfile coverage (all package manifests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test inventory behavior
+        run: python3 -m unittest discover -s tools -p 'test_v8_dependency_inventory.py' -v
+      - name: Test hostile XML and native-manifest input boundaries
+        run: python3 -m unittest discover -s tools -p 'test_safe_xml.py' -v
+      - name: Block nondeterministic production dependencies
+        run: python3 tools/v8_dependency_inventory.py --root .
+
+  semgrep-source:
+    name: Source SAST (Dart, Python, TypeScript, Android and IaC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install a versioned local Semgrep scanner
+        run: python3 -m pip install --disable-pip-version-check 'semgrep==1.187.0'
+      - name: Scan complete tree without exporting source or findings
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          semgrep scan --config=p/security-audit --metrics=off \
+            --json --output="$RUNNER_TEMP/breezze-semgrep.json" \
+            --error . > "$RUNNER_TEMP/breezze-semgrep-out.log" \
+            2> "$RUNNER_TEMP/breezze-semgrep-err.log"
+          result=$?
+          set -e
+          python3 - "$RUNNER_TEMP/breezze-semgrep.json" <<'PYTHON'
+          import json, pathlib, sys
+          report = pathlib.Path(sys.argv[1])
+          if not report.is_file():
+              print('SEMGREP_SCAN_INCOMPLETE: no local report')
+              sys.exit(2)
+          obj = json.loads(report.read_text(encoding='utf-8'))
+          rows = obj.get('results', [])
+          errors = obj.get('errors', [])
+          print(f'SEMGREP_FINDINGS: {len(rows)}; SCAN_ERRORS: {len(errors)}')
+          # Only metadata needed for remediation. NEVER publish matched code,
+          # snippets, metavariables, request headers or secret values.
+          def safe(value):
+              return ''.join(
+                  ch if ch.isascii() and (ch.isalnum() or ch in '._/-:')
+                  else '_' for ch in str(value)
+              )[:180]
+          for item in rows:
+              start = item.get('start') or {}
+              print('SEMGREP_LOCATION:', safe(item.get('check_id', '?')),
+                    safe(item.get('path', '?')),
+                    safe(start.get('line', '?')))
+          for issue in errors:
+              if isinstance(issue, dict):
+                  print('SEMGREP_ERROR_TYPE:', safe(issue.get('type', 'unknown')))
+              else:
+                  print('SEMGREP_ERROR_TYPE: unknown')
+          if errors:
+              print('SEMGREP_SCAN_INCOMPLETE: errors require remediation')
+              sys.exit(2)
+          PYTHON
+          if (( result != 0 )); then
+            echo 'Source SAST is not clean. Triage results on a restricted runner; no code or finding artifact was published.'
+            exit "$result"
+          fi
+
+  osv-dependencies:
+    name: OSV known-vulnerability scan (complete dependency tree)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Scan all available manifests locally against OSV
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          docker run --rm \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/src,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP,dst=/out" \
+            ghcr.io/google/osv-scanner:v2.7.1 \
+            scan source --recursive /src --format=json \
+            --output-file=/out/breezze-osv.json --verbosity=error \
+            > "$RUNNER_TEMP/breezze-osv-out.log" \
+            2> "$RUNNER_TEMP/breezze-osv-err.log"
+          result=$?
+          set -e
+          python3 - "$RUNNER_TEMP/breezze-osv.json" <<'PYTHON'
+          import json, pathlib, sys
+          report = pathlib.Path(sys.argv[1])
+          if not report.is_file():
+              print('OSV_SCAN_INCOMPLETE: no local results')
+              sys.exit(2)
+          obj = json.loads(report.read_text(encoding='utf-8'))
+          rows = obj.get('results', [])
+          affected = sum(
+              len(package.get('vulnerabilities', []))
+              for row in rows for package in row.get('packages', [])
+          )
+          print(f'OSV_AFFECTED_DEPENDENCY_RECORDS: {affected}')
+          PYTHON
+          if (( result != 0 )); then
+            echo 'Known dependency vulnerabilities or scanner errors remain. Report is private to the runner.'
+            exit "$result"
+          fi
+
+# This workflow does not replace CodeQL, full-history Gitleaks, API fuzzing,
+# RLS/auth penetration testing, device QA, or a recording-level rights audit.
+# Missing lockfiles are an explicit blocker, never an implied scan PASS.

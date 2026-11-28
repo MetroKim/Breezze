@@ -54,7 +54,7 @@ export class ProviderRegistry {
     providers: Array<{
       providerId: string;
       displayName: string;
-      result: ProviderResult<import('./provider-adapter.interface').ProviderTrack[]>;
+      result: ProviderResult<ProviderTrack[]>;
     }>;
     partial: boolean;
     tracks: UnifiedMusicTrack[];
@@ -103,11 +103,11 @@ export class ProviderRegistry {
       // discovery, not playback. Spotify and Deezer clients impose their
       // own network abort deadlines and can finish cleanup after this bound.
       const result = await new Promise<ProviderResult<
-        import('./provider-adapter.interface').ProviderTrack[]
+        ProviderTrack[]
       >>(resolve => {
         let finished = false;
         const complete = (value: ProviderResult<
-          import('./provider-adapter.interface').ProviderTrack[]
+          ProviderTrack[]
         >) => {
           if (finished) return;
           finished = true;

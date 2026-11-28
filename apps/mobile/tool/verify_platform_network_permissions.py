@@ -7,8 +7,11 @@ not. Check main (shared) Android manifest and both macOS build entitlements.
 import argparse
 import plistlib
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'tools'))
+from safe_xml import SafeXmlError, parse_xml_bytes  # noqa: E402
 
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}name"
 ANDROID_PERMISSIONS = {
@@ -21,8 +24,8 @@ def check_android(root: Path) -> list[str]:
     if not manifest.is_file():
         return [f"Missing Android main release manifest: {manifest}"]
     try:
-        xml = ET.parse(manifest).getroot()
-    except (ET.ParseError, OSError) as error:
+        xml = parse_xml_bytes(manifest.read_bytes())
+    except (SafeXmlError, OSError) as error:
         return [f"Invalid Android main manifest: {error}"]
     present = {
         element.attrib.get(ANDROID_NS)

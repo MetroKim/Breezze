@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import runpy
-from xml.etree import ElementTree
+import sys
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "tools"))
+from safe_xml import parse_xml_bytes  # noqa: E402
 
 
 def verify() -> None:
@@ -24,7 +26,7 @@ def verify() -> None:
     # Keep the original active Breezze logo checks from this entrypoint.
     for variant in ("black", "white"):
         path = ROOT / f"apps/mobile/assets/icons/breezze-logo-{variant}.svg"
-        ElementTree.fromstring(path.read_bytes())
+        parse_xml_bytes(path.read_bytes())
         print(f"PASS Breezze monochrome {variant} SVG")
 
 

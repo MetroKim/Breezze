@@ -5,7 +5,7 @@ from __future__ import annotations
 from hashlib import sha256
 from pathlib import Path
 from zipfile import ZipFile, BadZipFile
-from xml.etree import ElementTree
+from safe_xml import parse_xml_bytes
 from pathlib import PurePosixPath
 import sys
 
@@ -76,7 +76,7 @@ def main() -> None:
             for name in sorted(EXPECTED_DESIGN):
                 if not name.endswith(".svg"):
                     continue
-                svg = ElementTree.fromstring(design.read(name))
+                svg = parse_xml_bytes(design.read(name))
                 if not svg.tag.endswith("}svg"):
                     raise AssertionError(f"{name}: not SVG XML")
                 expected = "0 0 1780 3850" if "Board" in name else "0 0 390 844"

@@ -151,9 +151,28 @@ class BreezzeApi {
   }
 
   Map<String, dynamic> _decode(http.Response response) {
-    final body = response.body.isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(response.body) as Map<String, dynamic>;
+    // Cloudflare/origin outages may return HTML, plain text or truncated
+    // JSON. Treat all non-object envelopes as a typed transport error rather
+    // than leaking upstream HTML or crashing a page with a FormatException.
+    Map<String, dynamic> body;
+    try {
+      final decoded = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Expected a JSON object');
+      }
+      body = decoded;
+    } on FormatException {
+      throw BreezzeApiException(
+        code: response.statusCode >= 400
+            ? 'HTTP_${response.statusCode}'
+            : 'API_RESPONSE_INVALID',
+        message: response.statusCode >= 400
+            ? 'The Breezze service is temporarily unavailable.'
+            : 'The Breezze service returned an invalid response.',
+      );
+    }
     if (response.statusCode >= 400) {
       final error = body['error'];
       // Nest HttpExceptions return a top-level machine-readable message.
