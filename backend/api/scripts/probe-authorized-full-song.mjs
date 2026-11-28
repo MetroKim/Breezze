@@ -11,8 +11,6 @@
  * This is not a catalog/license grant. It fails closed when the independent
  * legal/music-rights setup has not been completed. Do not run on production.
  */
-import { setTimeout as pause } from 'node:timers/promises';
-
 const { BREEZZE_QA_API_ORIGIN: rawOrigin,
   BREEZZE_QA_ACCESS_TOKEN: token,
   BREEZZE_QA_TRACK_QUERY: query,
@@ -109,21 +107,24 @@ async function run() {
   const playback = session.playback;
   if (!session.id || typeof playback?.streamUrl !== 'string')
     fail('QA_NO_PLAYBACK_SESSION');
-  const audioUrl = mustUrl(playback.streamUrl, origin);
-  if (!audioUrl.pathname.startsWith('/api/v1/providers/opensubsonic/audio/'))
-    fail('QA_UNEXPECTED_MEDIA_ROUTE');
-  // Never print the signed grant from the URL.
-  const audioReq = async (method, headers = {}, deadline = 180_000) =>
-    fetch(audioUrl, {
-      method, headers: { ...headers, Accept: 'audio/*' },
-      redirect: 'error', signal: AbortSignal.timeout(deadline),
-    });
   let streamBytes = 0, totalBytes = 0;
   try {
+    const audioUrl = mustUrl(playback.streamUrl, origin);
+    if (!audioUrl.pathname.startsWith('/api/v1/providers/opensubsonic/audio/'))
+      fail('QA_UNEXPECTED_MEDIA_ROUTE');
+    const expiresMs = Date.parse(playback.expiresAt);
+    if (!Number.isFinite(expiresMs) || expiresMs < Date.now() + 15_000)
+      fail('QA_PLAYBACK_LEASE_TOO_SHORT');
+    // Never print the signed grant from the URL.
+    const audioReq = async (method, headers = {}, deadline = 180_000) =>
+      fetch(audioUrl, {
+        method, headers: { ...headers, Accept: 'audio/*' },
+        redirect: 'error', signal: AbortSignal.timeout(deadline),
+      });
     const head = await audioReq('HEAD');
     mediaHeaders(head, 200);
     const len = Number(head.headers.get('content-length'));
-    if (!Number.isSafeInteger(len) || len < 1000 || len > 150_000_000)
+    if (!Number.isSafeInteger(len) || len < 8192 || len > 150_000_000)
       fail('QA_MEDIA_SIZE_INVALID');
     totalBytes = len;
     const first = await audioReq('GET', { Range: 'bytes=0-4095' });
