@@ -1,4 +1,5 @@
 import '../player/now_playing_screen.dart';
+import 'commons_open_media_screen.dart';
 import 'dart:async';
 import 'package:file_selector/file_selector.dart';
 
@@ -949,6 +950,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      breezzePageRoute<void>(
+                        context: context,
+                        builder: (_) => CommonsOpenMediaScreen(
+                          initialQuery: _controller.text.trim(),
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(Icons.cloud_download_outlined),
+                    label: const Text('Online open media · Play & download'),
+                  ),
+                ),
                 // BitChord-inspired behavior: source choices appear only
                 // after a search resolves, never on the empty search landing.
                 if (_searchScopesRevealed &&
