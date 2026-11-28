@@ -15,6 +15,7 @@ type Page = {
     mime?: string;
     mediatype?: string;
     size?: number;
+    duration?: number;
     extmetadata?: Record<string, MetadataValue>;
   }>;
 };
@@ -35,6 +36,7 @@ export interface OpenMediaFile {
   title: string;
   mimeType: string;
   bytes: number;
+  durationSec: number | null;
   streamUrl: string;
   downloadUrl: string;
   downloadAllowed: true;
@@ -114,6 +116,8 @@ function convertPage(page: Page, kind: MediaKind): OpenMediaFile | null {
     title,
     mimeType: mime,
     bytes: info.size!,
+    durationSec: Number.isFinite(info.duration) && (info.duration ?? 0) > 0
+      ? info.duration! : null,
     streamUrl: url,
     downloadUrl: url,
     downloadAllowed: true,
