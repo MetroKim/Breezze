@@ -133,7 +133,7 @@ export class CommonsOpenMediaService {
       const response = await fetch(url.toString(), {
         headers: {
           accept: 'application/json',
-          'user-agent': 'Breezze/8 (media metadata discovery; Wikimedia Commons API)',
+          'user-agent': 'Breezze/8 (https://github.com/MetroKim/Breezze; open media search)',
         },
         redirect: 'error',
         signal: AbortSignal.timeout(6000),
