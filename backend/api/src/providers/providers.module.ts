@@ -13,15 +13,18 @@ import { RightsModule } from '../rights/rights.module';
 import { OpenSubsonicAdapter } from './opensubsonic.adapter';
 import { OpenSubsonicAudioController } from './opensubsonic-audio.controller';
 import { AuthorizedAudioCatalogController } from './authorized-audio-catalog.controller';
+import { CommonsOpenMediaService } from './commons-open-media.service';
+import { CommonsOpenMediaController } from './commons-open-media.controller';
 
 @Module({
   imports: [RightsModule],
-  controllers: [ProvidersController, OpenSubsonicAudioController, AuthorizedAudioCatalogController],
+  controllers: [ProvidersController, OpenSubsonicAudioController, AuthorizedAudioCatalogController, CommonsOpenMediaController],
   providers: [
     ProviderRegistry,
     ArtistCatalogService,
     InternalCatalogAdapter,
     OpenSubsonicAdapter,
+    CommonsOpenMediaService,
     YtMusicAdapter,
     DeezerAdapter,
     SpotifyAdapter,
